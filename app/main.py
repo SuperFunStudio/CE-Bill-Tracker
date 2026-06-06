@@ -1,0 +1,56 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from app.api import bills, alerts, pipeline, health, federal, companies, webhooks
+from app.api.federal import litigation_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start scheduler
+    from app.scheduler.jobs import setup_scheduler
+    scheduler = setup_scheduler()
+    scheduler.start()
+    yield
+    scheduler.shutdown(wait=False)
+
+
+app = FastAPI(
+    title="SignalScout — Compliance Scout API",
+    description="Monitor US state-level EPR legislation and regulatory instruments",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://ce-bill-tracker.web.app",
+        "https://ce-bill-tracker.firebaseapp.com",
+        "http://localhost:3000",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    origin = request.headers.get("origin", "")
+    headers = {"Access-Control-Allow-Origin": origin} if origin else {}
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"}, headers=headers)
+
+
+app.include_router(health.router)
+app.include_router(bills.router)
+app.include_router(alerts.router)
+app.include_router(pipeline.router)
+app.include_router(federal.router)
+app.include_router(companies.router)
+app.include_router(companies.bills_exposure_router)
+app.include_router(companies.queue_router)
+app.include_router(webhooks.router)
+app.include_router(litigation_router)

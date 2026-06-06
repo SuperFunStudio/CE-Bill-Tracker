@@ -1,0 +1,12 @@
+[
+  {
+    "name": "keep-recent",
+    "action": { "type": "Keep" },
+    "mostRecentVersions": { "keepCount": 5 }
+  },
+  {
+    "name": "delete-untagged-old",
+    "action": { "type": "Delete" },
+    "condition": { "tagState": "untagged", "olderThan": "7d" }
+  }
+]

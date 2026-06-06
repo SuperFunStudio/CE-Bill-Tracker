@@ -1,0 +1,958 @@
+import structlog
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from app.config import settings
+
+log = structlog.get_logger()
+
+
+def setup_scheduler() -> AsyncIOScheduler:
+    scheduler = AsyncIOScheduler(timezone="UTC")
+
+    # Main ingestion + classification — daily at 2am UTC
+    scheduler.add_job(
+        run_ingestion_cycle,
+        "cron",
+        hour=2,
+        minute=0,
+        id="daily_ingestion",
+        replace_existing=True,
+    )
+
+    # Federal Register — every N hours
+    scheduler.add_job(
+        run_federal_cycle,
+        "interval",
+        hours=settings.federal_register_poll_interval_hours,
+        id="federal_register_poll",
+        replace_existing=True,
+    )
+
+    # Alert dispatch — every 30 min during business hours UTC
+    scheduler.add_job(
+        run_alert_dispatch,
+        "cron",
+        hour="8-18",
+        minute="*/30",
+        id="alert_dispatch",
+        replace_existing=True,
+    )
+
+    # Company impact scoring — daily at 3am UTC
+    scheduler.add_job(
+        run_scoring_cycle,
+        "cron",
+        hour=3,
+        minute=0,
+        id="daily_scoring",
+        replace_existing=True,
+    )
+
+    # Company data refresh — weekly Sunday at 4am UTC
+    scheduler.add_job(
+        run_company_refresh,
+        "cron",
+        day_of_week="sun",
+        hour=4,
+        minute=0,
+        id="weekly_company_refresh",
+        replace_existing=True,
+    )
+
+    # Exposure brief generation — daily at 4am UTC (runs after scoring at 3am)
+    scheduler.add_job(
+        run_interpretation_cycle,
+        "cron",
+        hour=4,
+        minute=0,
+        id="daily_interpretation",
+        replace_existing=True,
+    )
+
+    # CourtListener: weekly new case scan — Monday 6am UTC
+    # Avoids CL maintenance window (Thu 21:00–23:59 PT = Fri 05:00–07:59 UTC)
+    scheduler.add_job(
+        poll_courtlistener_new_cases,
+        "cron",
+        day_of_week="mon",
+        hour=6,
+        minute=0,
+        id="cl_new_cases",
+        replace_existing=True,
+    )
+
+    # CourtListener: daily active case refresh — 7:30am UTC
+    scheduler.add_job(
+        refresh_active_cases,
+        "cron",
+        hour=7,
+        minute=30,
+        id="cl_refresh_cases",
+        replace_existing=True,
+    )
+
+    # Bill-to-litigation matching reconciliation — nightly at 8am UTC
+    # Catches cases that had no bill match at ingest time (bill added later, or confidence improved)
+    scheduler.add_job(
+        reconcile_bill_matches,
+        "cron",
+        hour=8,
+        minute=0,
+        id="cl_bill_match_reconcile",
+        replace_existing=True,
+    )
+
+    return scheduler
+
+
+async def run_ingestion_cycle(state_filter: str | None = None) -> None:
+    """Main ingestion + classification cycle."""
+    from app.database import AsyncSessionLocal
+    from app.ingestion.coordinator import IngestionCoordinator
+
+    log.info("ingestion_cycle_start", state_filter=state_filter)
+    if settings.enable_legiscan_ingestion:
+        async with AsyncSessionLocal() as db:
+            coordinator = IngestionCoordinator()
+            summary = await coordinator.run_full_cycle(db, state_filter=state_filter)
+            log.info("legiscan_cycle_complete", **summary)
+    else:
+        log.info("legiscan_ingestion_skipped", reason="enable_legiscan_ingestion=false")
+
+    if settings.enable_openstates_ingestion:
+        from datetime import datetime, timedelta, timezone
+        updated_since = datetime.now(timezone.utc) - timedelta(
+            days=settings.openstates_recent_window_days
+        )
+        async with AsyncSessionLocal() as db:
+            coordinator = IngestionCoordinator()
+            os_summary = await coordinator.run_openstates_cycle(
+                db,
+                state_filter=state_filter,
+                updated_since=updated_since,
+            )
+            log.info("openstates_cycle_complete", **os_summary)
+
+    await run_classification_cycle()
+
+
+async def run_seed() -> None:
+    """DISABLED. The hand-curated seed (known_epr_laws.json) had wrong source URLs and was
+    replaced by the OpenStates v3 sync (migration 005 purged the seed rows). Kept as a no-op
+    so callers/imports don't break. To repopulate the dataset use run_openstates_full_sync().
+    """
+    log.info("seed_disabled", reason="seed replaced by OpenStates sync; see migration 005")
+    return
+
+
+async def _run_seed_legacy_disabled() -> None:
+    """Original seed loader, retained for reference only — not called. See run_seed()."""
+    import json
+    from datetime import date
+    from pathlib import Path
+
+    from sqlalchemy import select, update
+    from app.database import AsyncSessionLocal
+    from app.models import Bill, ComplianceDeadline
+
+    seed_path = Path(__file__).parent.parent.parent / "data" / "seed" / "known_epr_laws.json"
+    with open(seed_path) as f:
+        laws = json.load(f)
+
+    def _parse_date(val: str | None) -> date | None:
+        if not val:
+            return None
+        try:
+            return date.fromisoformat(val[:10])
+        except ValueError:
+            return None
+
+    async with AsyncSessionLocal() as db:
+        seeded = updated = 0
+        for law in laws:
+            existing = (await db.execute(
+                select(Bill).where(
+                    Bill.state == law["state"],
+                    Bill.bill_number == law.get("bill_number"),
+                )
+            )).scalar_one_or_none()
+
+            if existing:
+                await db.execute(
+                    update(Bill).where(Bill.id == existing.id).values(
+                        status=law.get("status"),
+                        compliance_details=law.get("compliance_details"),
+                        ai_summary=law.get("ai_summary"),
+                        confidence_score=1.0,
+                        epr_relevant=True,
+                        material_categories=law.get("material_categories", []),
+                        source_url=law.get("source_url"),
+                        urgency=law.get("urgency"),
+                        instrument_type=law.get("instrument_type"),
+                        title=law.get("title"),
+                    )
+                )
+                bill_obj = existing
+                updated += 1
+            else:
+                bill_obj = Bill(
+                    state=law["state"],
+                    bill_number=law.get("bill_number"),
+                    title=law.get("title"),
+                    description=law.get("ai_summary"),
+                    status=law.get("status"),
+                    status_date=_parse_date(law.get("enacted_date")),
+                    last_action_date=_parse_date(law.get("enacted_date")),
+                    source_url=law.get("source_url"),
+                    epr_relevant=True,
+                    confidence_score=1.0,
+                    material_categories=law.get("material_categories", []),
+                    instrument_type=law.get("instrument_type"),
+                    urgency=law.get("urgency"),
+                    ai_summary=law.get("ai_summary"),
+                    compliance_details=law.get("compliance_details"),
+                )
+                db.add(bill_obj)
+                await db.flush()
+                seeded += 1
+
+            compliance = law.get("compliance_details") or {}
+            for dl in compliance.get("deadlines", []):
+                dl_date = _parse_date(dl.get("date"))
+                if not dl_date or not bill_obj.id:
+                    continue
+                from sqlalchemy import and_
+                existing_dl = (await db.execute(
+                    select(ComplianceDeadline).where(
+                        and_(
+                            ComplianceDeadline.bill_id == bill_obj.id,
+                            ComplianceDeadline.deadline_date == dl_date,
+                            ComplianceDeadline.deadline_type == dl.get("type", "compliance"),
+                        )
+                    )
+                )).scalar_one_or_none()
+                if not existing_dl:
+                    db.add(ComplianceDeadline(
+                        bill_id=bill_obj.id,
+                        state=law["state"],
+                        deadline_type=dl.get("type", "compliance"),
+                        deadline_date=dl_date,
+                        description=dl.get("description"),
+                    ))
+
+        await db.commit()
+        log.info("seed_complete", seeded=seeded, updated=updated, total=len(laws))
+
+
+async def run_openstates_full_sync(state_filter: str | None = None) -> None:
+    """Full historical OpenStates sync — no updated_since filter."""
+    from app.database import AsyncSessionLocal
+    from app.ingestion.coordinator import IngestionCoordinator
+
+    log.info("openstates_full_sync_start", state_filter=state_filter)
+    async with AsyncSessionLocal() as db:
+        coordinator = IngestionCoordinator()
+        summary = await coordinator.run_openstates_cycle(db, state_filter=state_filter)
+        log.info("openstates_full_sync_complete", **summary)
+
+    from app.classification.pipeline import ClassificationPipeline
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from app.models import Bill
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Bill).where(Bill.confidence_score.is_(None)).limit(500)
+        )
+        unclassified = result.scalars().all()
+        if unclassified:
+            pipeline = ClassificationPipeline()
+            await pipeline.run(db, unclassified)
+            log.info("classification_complete", bill_count=len(unclassified))
+
+
+async def run_classification_cycle() -> None:
+    """Classify all unclassified bills already in the database.
+
+    Processes in batches of 500 until none remain.
+    Safe to call independently — makes no LegiScan API calls.
+    """
+    from app.classification.pipeline import ClassificationPipeline
+    from app.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from app.models import Bill
+
+    pipeline = ClassificationPipeline()
+    total_classified = 0
+    last_ids: tuple = ()
+    stall_count = 0
+    MAX_STALL_ITERATIONS = 3
+
+    while True:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Bill)
+                .where(
+                    (Bill.confidence_score.is_(None)) |
+                    (Bill.confidence_score == -1.0)
+                )
+                .limit(500)
+            )
+            unclassified = result.scalars().all()
+            if not unclassified:
+                break
+
+            # Genuine stall = the SAME bills come back unprocessed (e.g. persistent API
+            # failures). Compare bill identities, not the batch length: the batch stays
+            # capped at 500 while >500 remain, so a length check force-resolves real progress
+            # after 3 batches. A successful batch sets confidence on those bills, so the next
+            # query returns different ids and stall_count resets.
+            current_ids = tuple(b.id for b in unclassified)
+            if current_ids == last_ids:
+                stall_count += 1
+                if stall_count >= MAX_STALL_ITERATIONS:
+                    # Force-resolve genuinely stuck bills as not relevant so they exit the loop.
+                    for bill in unclassified:
+                        if bill.confidence_score is None or bill.confidence_score == -1.0:
+                            bill.confidence_score = 0.0
+                            bill.epr_relevant = False
+                    await db.commit()
+                    log.warning("classification_cycle_stalled_resolved",
+                                force_resolved=len(unclassified))
+                    break
+            else:
+                stall_count = 0
+            last_ids = current_ids
+
+            await pipeline.run(db, unclassified)
+            total_classified += len(unclassified)
+            log.info("classification_batch_complete", batch=len(unclassified), total=total_classified)
+
+    log.info("classification_cycle_complete", total_classified=total_classified)
+
+
+async def run_federal_cycle() -> None:
+    """Fetch new Federal Register documents."""
+    from app.database import AsyncSessionLocal
+    from app.ingestion.coordinator import IngestionCoordinator
+
+    log.info("federal_cycle_start")
+    async with AsyncSessionLocal() as db:
+        coordinator = IngestionCoordinator()
+        summary = await coordinator.run_federal_cycle(db)
+        log.info("federal_cycle_complete", **summary)
+
+
+async def run_scoring_cycle() -> None:
+    """Compute impact scores for all (company, EPR-relevant bill) pairs.
+
+    Detects composite_score deltas >= 10 points vs the previous run and
+    persists BillChange records for significant changes.
+    """
+    from sqlalchemy import delete, select
+    from sqlalchemy.orm import selectinload
+
+    from app.alerts.detector import ChangeDetector
+    from app.database import AsyncSessionLocal
+    from app.models import Bill, BillChange, Company, ImpactScore
+    from app.scoring.engine import make_engine
+
+    log.info("scoring_cycle_start")
+    engine = make_engine()
+    detector = ChangeDetector()
+
+    async with AsyncSessionLocal() as db:
+        # Load all companies with their materials and state presences
+        companies_result = await db.execute(
+            select(Company).options(
+                selectinload(Company.materials),
+                selectinload(Company.state_presences),
+            )
+        )
+        all_companies = companies_result.scalars().all()
+
+        # Load all EPR-relevant bills
+        bills_result = await db.execute(
+            select(Bill).where(Bill.epr_relevant == True)  # noqa: E712
+        )
+        all_bills = bills_result.scalars().all()
+
+        if not all_companies or not all_bills:
+            log.info("scoring_cycle_skipped", reason="no companies or bills")
+            return
+
+        # Pre-compute total volume per bill category across all companies
+        # Used for volume-weighted material scoring normalization
+        import uuid as _uuid
+
+        all_companies_volumes: dict[_uuid.UUID, float] = {}
+        for company in all_companies:
+            total = sum(
+                m.annual_volume_tonnes
+                for m in company.materials
+                if m.annual_volume_tonnes is not None
+            )
+            if total > 0:
+                all_companies_volumes[company.id] = total
+
+        # Load previous scores as a lookup for delta detection
+        prev_result = await db.execute(
+            select(ImpactScore.company_id, ImpactScore.bill_id,
+                   ImpactScore.composite_score, ImpactScore.estimated_annual_cost)
+        )
+        prev_scores: dict[tuple, tuple] = {
+            (row.company_id, row.bill_id): (row.composite_score, row.estimated_annual_cost)
+            for row in prev_result
+        }
+
+        scored = 0
+        delta_changes: list[BillChange] = []
+
+        for company in all_companies:
+            for bill in all_bills:
+                # Capture old score before deleting
+                old = prev_scores.get((company.id, bill.id))
+
+                await db.execute(
+                    delete(ImpactScore).where(
+                        ImpactScore.company_id == company.id,
+                        ImpactScore.bill_id == bill.id,
+                    )
+                )
+                new_score = engine.compute(
+                    company,
+                    bill,
+                    company.materials,
+                    company.state_presences,
+                    all_companies_volumes,
+                )
+                db.add(new_score)
+                scored += 1
+
+                # Detect significant score change
+                if old is not None:
+                    change = detector.detect_score_changes(
+                        company_id=company.id,
+                        bill_id=bill.id,
+                        old_score=old[0],
+                        new_score=new_score.composite_score,
+                        old_cost=old[1],
+                        new_cost=new_score.estimated_annual_cost,
+                    )
+                    if change is not None:
+                        delta_changes.append(change)
+
+        for change in delta_changes:
+            db.add(change)
+
+        await db.commit()
+        log.info("scoring_cycle_complete", scored=scored, score_deltas=len(delta_changes))
+
+
+async def run_interpretation_cycle() -> None:
+    """Generate Exposure Briefs for top (company, bill) pairs that lack a valid brief.
+
+    Gated by ENABLE_INTERPRETATION=true. Processes up to max_interpretation_calls_per_run
+    pairs per run, prioritising highest composite scores.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import and_, desc, or_, select
+    from sqlalchemy.orm import selectinload
+
+    from app.database import AsyncSessionLocal
+    from app.models import Bill, Company, ExposureBrief, ImpactScore
+    from app.scoring.interpreter import ExposureBriefGenerator
+
+    if not settings.enable_interpretation:
+        log.info("interpretation_cycle_skipped", reason="enable_interpretation=false")
+        return
+
+    log.info("interpretation_cycle_start", limit=settings.max_interpretation_calls_per_run)
+    generator = ExposureBriefGenerator()
+    now = datetime.now(timezone.utc)
+
+    async with AsyncSessionLocal() as db:
+        # Load top scores that have no valid (non-expired) brief
+        scores_result = await db.execute(
+            select(ImpactScore)
+            .outerjoin(
+                ExposureBrief,
+                and_(
+                    ExposureBrief.company_id == ImpactScore.company_id,
+                    ExposureBrief.bill_id == ImpactScore.bill_id,
+                ),
+            )
+            .where(
+                or_(
+                    ExposureBrief.id.is_(None),
+                    ExposureBrief.ttl_expires_at < now,
+                )
+            )
+            .options(
+                selectinload(ImpactScore.company).selectinload(Company.materials),
+                selectinload(ImpactScore.company).selectinload(Company.state_presences),
+                selectinload(ImpactScore.bill),
+            )
+            .order_by(desc(ImpactScore.composite_score))
+            .limit(settings.max_interpretation_calls_per_run)
+        )
+        scores_to_process = scores_result.scalars().all()
+
+        if not scores_to_process:
+            log.info("interpretation_cycle_skipped", reason="all briefs are current")
+            return
+
+        generated = 0
+        errors = 0
+
+        for impact_score in scores_to_process:
+            company = impact_score.company
+            bill = impact_score.bill
+            if company is None or bill is None:
+                continue
+
+            try:
+                brief_json = await generator.generate(
+                    company_name=company.name,
+                    hq_state=company.hq_state,
+                    materials=[
+                        {
+                            "material_category": m.material_category,
+                            "annual_volume_tonnes": m.annual_volume_tonnes,
+                            "volume_confidence": m.volume_confidence,
+                        }
+                        for m in company.materials
+                    ],
+                    state_presences=[
+                        {
+                            "state": p.state,
+                            "presence_type": p.presence_type,
+                            "is_primary": p.is_primary,
+                        }
+                        for p in company.state_presences
+                    ],
+                    bill_title=bill.title,
+                    bill_state=bill.state,
+                    bill_number=bill.bill_number,
+                    bill_status=bill.status,
+                    compliance_details=bill.compliance_details,
+                    composite_score=impact_score.composite_score,
+                    estimated_annual_cost=impact_score.estimated_annual_cost,
+                )
+
+                # Upsert: remove any stale/expired entry, insert fresh one
+                from sqlalchemy import delete as sql_delete
+                await db.execute(
+                    sql_delete(ExposureBrief).where(
+                        ExposureBrief.company_id == company.id,
+                        ExposureBrief.bill_id == bill.id,
+                    )
+                )
+                brief = ExposureBrief(
+                    company_id=company.id,
+                    bill_id=bill.id,
+                    brief_json=brief_json,
+                    ttl_expires_at=generator.ttl_timestamp(),
+                )
+                db.add(brief)
+                await db.commit()
+                generated += 1
+
+            except Exception as exc:
+                log.error(
+                    "interpretation_cycle_error",
+                    company=company.name,
+                    bill_id=bill.id,
+                    error=str(exc),
+                )
+                await db.rollback()
+                errors += 1
+
+    log.info("interpretation_cycle_complete", generated=generated, errors=errors)
+
+
+async def run_company_refresh() -> None:
+    """Refresh company data from EPA FRS, CAA registry, and SEC EDGAR."""
+    from app.company_intel.coordinator import CompanyIntelCoordinator
+    from app.database import AsyncSessionLocal
+
+    log.info("company_refresh_start")
+    async with AsyncSessionLocal() as db:
+        coordinator = CompanyIntelCoordinator()
+        stats = await coordinator.refresh_all(db)
+        await db.commit()
+    log.info("company_refresh_complete", **{k: v for k, v in stats.items() if not isinstance(v, dict)})
+
+
+async def run_alert_dispatch() -> None:
+    """Dispatch pending alerts for unsent BillChanges."""
+    from app.database import AsyncSessionLocal
+    from app.alerts.dispatcher import AlertDispatcher
+    from sqlalchemy import select
+    from app.models import BillChange
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(BillChange).where(BillChange.alert_sent == False).limit(200)
+        )
+        pending = result.scalars().all()
+        if pending:
+            dispatcher = AlertDispatcher()
+            await dispatcher.dispatch_changes(db, pending)
+            log.info("alerts_dispatched", count=len(pending))
+
+
+async def poll_courtlistener_new_cases() -> None:
+    """Weekly: search for new EPR-related federal cases filed in the last 7 days.
+
+    For each new case: fetch docket, get parties, classify initial filings,
+    score preemption risk, store in litigation_cases, create docket alert.
+    """
+    from datetime import date, timedelta
+
+    from sqlalchemy import select
+
+    from app.config import settings
+    from app.database import AsyncSessionLocal
+    from app.ingestion.courtlistener import (
+        CourtListenerClient,
+        EPR_LITIGATION_QUERIES,
+        classify_litigation_event,
+        infer_challenge_type,
+        infer_plaintiff_type,
+        score_preemption_risk,
+    )
+    from app.ingestion.bill_matcher import match_case_to_bill
+    from app.models import CLAlertSubscription, LitigationCase, LitigationEvent
+
+    if not settings.enable_courtlistener:
+        log.info("cl_new_cases_skipped", reason="enable_courtlistener=false")
+        return
+
+    log.info("cl_new_cases_start")
+    filed_after = date.today() - timedelta(days=7)
+    added = 0
+    errors = 0
+
+    import asyncio as _asyncio
+
+    async with CourtListenerClient() as cl:
+        async with AsyncSessionLocal() as db:
+            for query_name, query_str in EPR_LITIGATION_QUERIES:
+                try:
+                    cases = await cl.search_epr_cases(query_str, filed_after=filed_after)
+                except Exception as e:
+                    log.warning("cl_search_failed", query=query_name, error=str(e))
+                    errors += 1
+                    continue
+
+                for result in cases:
+                    docket_id = result.get("docket_id") or result.get("id")
+                    if not docket_id:
+                        continue
+
+                    existing = await db.execute(
+                        select(LitigationCase).where(
+                            LitigationCase.courtlistener_id == docket_id
+                        )
+                    )
+                    if existing.scalar_one_or_none():
+                        continue
+
+                    await _asyncio.sleep(1.5)
+
+                    try:
+                        docket = await cl.get_docket_details(docket_id)
+                        await _asyncio.sleep(1.0)
+                        parties = await cl.get_parties(docket_id)
+                        await _asyncio.sleep(1.0)
+
+                        court_url = docket.get("court", "") or ""
+                        court_id = court_url.rstrip("/").split("/")[-1] if court_url else ""
+                        case_name = docket.get("case_name") or result.get("caseName", "Unknown Case")
+                        challenge_type = infer_challenge_type(case_name, docket.get("cause", "") or "")
+                        plaintiff_type, key_plaintiffs = infer_plaintiff_type(parties)
+
+                        date_filed_str = docket.get("date_filed")
+                        date_filed = date.fromisoformat(date_filed_str) if date_filed_str else None
+                        cl_path = docket.get("absolute_url", "")
+                        cl_url = f"https://www.courtlistener.com{cl_path}" if cl_path else None
+
+                        entries = await cl.get_docket_entries(docket_id)
+                        await _asyncio.sleep(1.0)
+
+                        classified_events = []
+                        for entry in entries[:10]:
+                            cls = await classify_litigation_event(
+                                entry, case_name=case_name, court_id=court_id
+                            )
+                            classified_events.append((entry, cls))
+
+                        case_dict = {
+                            "case_name": case_name,
+                            "court_id": court_id,
+                            "challenge_type": challenge_type,
+                            "key_plaintiffs": key_plaintiffs,
+                            "date_filed": date_filed_str,
+                        }
+                        preemption_risk = await score_preemption_risk(
+                            case_dict,
+                            [{"date_filed": e.get("date_filed"), "description": e.get("description")} for e, _ in classified_events],
+                        )
+
+                        new_case = LitigationCase(
+                            courtlistener_id=docket_id,
+                            case_name=case_name,
+                            docket_number=docket.get("docket_number"),
+                            court_id=court_id,
+                            date_filed=date_filed,
+                            assigned_judge=docket.get("assigned_to_str"),
+                            case_status="active",
+                            challenge_type=challenge_type,
+                            plaintiff_type=plaintiff_type,
+                            key_plaintiffs=key_plaintiffs,
+                            preemption_risk=preemption_risk,
+                            cl_url=cl_url,
+                            last_activity_date=date_filed,
+                        )
+                        db.add(new_case)
+                        await db.flush()
+
+                        # Match to bill
+                        bill_id, inferred_state, _ = await match_case_to_bill(
+                            db, new_case, cause=docket.get("cause", "") or ""
+                        )
+                        new_case.related_state = inferred_state
+                        new_case.related_law_id = bill_id
+
+                        for entry, cls in classified_events:
+                            date_filed_entry_str = entry.get("date_filed")
+                            db.add(LitigationEvent(
+                                case_id=new_case.id,
+                                courtlistener_entry_id=entry.get("id"),
+                                event_type=cls["event_type"],
+                                date_filed=date.fromisoformat(date_filed_entry_str) if date_filed_entry_str else None,
+                                description=entry.get("description"),
+                                summary=cls["summary"],
+                                significance=cls["significance"],
+                            ))
+
+                        try:
+                            alert = await cl.create_docket_alert(docket_id)
+                            db.add(CLAlertSubscription(
+                                alert_type="docket_alert",
+                                cl_alert_id=alert.get("id"),
+                                docket_id=docket_id,
+                                active=True,
+                            ))
+                        except Exception as e:
+                            log.warning("cl_docket_alert_failed", docket_id=docket_id, error=str(e))
+
+                        await db.commit()
+                        added += 1
+                        log.info("cl_case_added", case_name=case_name, docket_id=docket_id)
+
+                    except Exception as e:
+                        log.error("cl_case_ingest_failed", docket_id=docket_id, error=str(e))
+                        await db.rollback()
+                        errors += 1
+
+    log.info("cl_new_cases_complete", added=added, errors=errors)
+
+
+async def refresh_active_cases() -> None:
+    """Daily: refresh all active litigation cases with new docket entries.
+
+    For each active case: fetch entries since last_activity_date, classify,
+    update case_status, re-score preemption_risk, update bills.litigation_risk.
+    Dispatches alerts for high/critical events.
+    """
+    from datetime import date, timedelta
+
+    from sqlalchemy import select
+
+    from app.config import settings
+    from app.database import AsyncSessionLocal
+    from app.ingestion.courtlistener import (
+        CourtListenerClient,
+        classify_litigation_event,
+        score_preemption_risk,
+    )
+    from app.models import Bill, LitigationCase, LitigationEvent
+    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.slack_sender import SlackSender
+    from app.models import AlertSubscription
+
+    if not settings.enable_courtlistener:
+        log.info("cl_refresh_skipped", reason="enable_courtlistener=false")
+        return
+
+    log.info("cl_refresh_start")
+    refreshed = 0
+    new_events = 0
+    errors = 0
+
+    import asyncio as _asyncio
+
+    async with CourtListenerClient() as cl:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(LitigationCase).where(LitigationCase.case_status == "active")
+            )
+            active_cases = result.scalars().all()
+
+            email_sender = SendGridSender()
+            slack_sender = SlackSender()
+
+            # Load subscriptions once
+            subs_result = await db.execute(
+                select(AlertSubscription).where(AlertSubscription.active == True)  # noqa: E712
+            )
+            subs = subs_result.scalars().all()
+
+            for case in active_cases:
+                try:
+                    after_date = case.last_activity_date or (date.today() - timedelta(days=30))
+                    entries = await cl.get_docket_entries(case.courtlistener_id, after_date=after_date)
+                    await _asyncio.sleep(1.0)
+
+                    case_events_for_scoring = []
+                    notable_events_for_alert = []
+
+                    for entry in entries:
+                        entry_id = entry.get("id")
+                        if entry_id:
+                            existing = await db.execute(
+                                select(LitigationEvent).where(
+                                    LitigationEvent.courtlistener_entry_id == entry_id
+                                )
+                            )
+                            if existing.scalar_one_or_none():
+                                continue
+
+                        cls = await classify_litigation_event(
+                            entry, case_name=case.case_name, court_id=case.court_id
+                        )
+
+                        date_filed_str = entry.get("date_filed")
+                        date_filed = date.fromisoformat(date_filed_str) if date_filed_str else None
+
+                        event = LitigationEvent(
+                            case_id=case.id,
+                            courtlistener_entry_id=entry_id,
+                            event_type=cls["event_type"],
+                            date_filed=date_filed,
+                            description=entry.get("description"),
+                            summary=cls["summary"],
+                            significance=cls["significance"],
+                        )
+                        db.add(event)
+                        new_events += 1
+
+                        if date_filed and (
+                            case.last_activity_date is None or date_filed > case.last_activity_date
+                        ):
+                            case.last_activity_date = date_filed
+
+                        case_events_for_scoring.append(
+                            {"date_filed": date_filed_str, "description": entry.get("description")}
+                        )
+
+                        # Detect injunctions/dismissals
+                        if cls["event_type"] == "injunction_ruling" and cls["significance"] == "critical":
+                            summary_lower = (cls.get("summary") or "").lower()
+                            if "granted" in summary_lower:
+                                case.case_status = "injunction_granted"
+                                if case.related_law_id:
+                                    bill_res = await db.execute(
+                                        select(Bill).where(Bill.id == case.related_law_id)
+                                    )
+                                    bill = bill_res.scalar_one_or_none()
+                                    if bill:
+                                        bill.litigation_risk = "injunction_stayed"
+                            elif "denied" in summary_lower:
+                                case.case_status = "injunction_denied"
+                        elif cls["event_type"] == "appeal":
+                            case.case_status = "appealed"
+
+                        if cls["significance"] in ("high", "critical"):
+                            notable_events_for_alert.append((case, event, cls))
+
+                    # Re-score preemption risk if there were new entries
+                    if case_events_for_scoring:
+                        case_dict = {
+                            "case_name": case.case_name,
+                            "court_id": case.court_id,
+                            "challenge_type": case.challenge_type,
+                            "key_plaintiffs": case.key_plaintiffs or [],
+                            "date_filed": case.date_filed.isoformat() if case.date_filed else None,
+                        }
+                        new_risk = await score_preemption_risk(case_dict, case_events_for_scoring)
+                        case.preemption_risk = new_risk
+                        if case.related_law_id and case.case_status == "active":
+                            bill_res = await db.execute(select(Bill).where(Bill.id == case.related_law_id))
+                            linked_bill = bill_res.scalar_one_or_none()
+                            if linked_bill and linked_bill.litigation_risk != "injunction_stayed":
+                                linked_bill.litigation_risk = (
+                                    "high" if new_risk >= 60 else "medium" if new_risk >= 30 else "low"
+                                )
+
+                    refreshed += 1
+
+                    # Dispatch alerts for notable events
+                    for notif_case, notif_event, notif_cls in notable_events_for_alert:
+                        sig_emoji = "🚨" if notif_cls["significance"] == "critical" else "⚠️"
+                        inj_prefix = "🚨 ENFORCEMENT STAYED — " if notif_case.case_status == "injunction_granted" else ""
+                        subject = f"{inj_prefix}{sig_emoji} EPR Litigation: {notif_case.case_name}"
+                        body = (
+                            f"{inj_prefix}*{notif_event.event_type.replace('_', ' ').title()}* in "
+                            f"_{notif_case.case_name}_\n"
+                            f"Significance: {notif_cls['significance'].upper()}\n"
+                            f"Summary: {notif_cls['summary'] or notif_event.description or '—'}\n"
+                        )
+                        if notif_case.cl_url:
+                            body += f"\nDocket: {notif_case.cl_url}"
+
+                        for sub in subs:
+                            states = sub.states or []
+                            if "ALL" not in states and notif_case.related_state and notif_case.related_state not in states:
+                                continue
+                            if sub.email and settings.sendgrid_api_key:
+                                try:
+                                    await email_sender.send_text_alert(sub.email, subject, body)
+                                except Exception as e:
+                                    log.warning("cl_refresh_email_failed", error=str(e))
+                            if sub.slack_webhook:
+                                try:
+                                    await slack_sender.send_text_alert(sub.slack_webhook, body)
+                                except Exception as e:
+                                    log.warning("cl_refresh_slack_failed", error=str(e))
+
+                    await db.commit()
+
+                except Exception as e:
+                    log.error("cl_refresh_case_failed", case_id=case.id, error=str(e))
+                    await db.rollback()
+                    errors += 1
+
+    log.info("cl_refresh_complete", refreshed=refreshed, new_events=new_events, errors=errors)
+
+
+async def reconcile_bill_matches() -> None:
+    """Nightly: re-run bill matching for all unlinked litigation cases.
+
+    Handles the case where a bill was ingested after the litigation case was
+    first discovered, or where the initial seed ran before bills were classified.
+    Also backfills related_state for cases that had court_id but no state yet.
+    """
+    from app.database import AsyncSessionLocal
+    from app.ingestion.bill_matcher import run_bill_matching_pass
+
+    log.info("cl_bill_match_reconcile_start")
+    try:
+        async with AsyncSessionLocal() as db:
+            stats = await run_bill_matching_pass(db)
+        log.info("cl_bill_match_reconcile_complete", **stats)
+    except Exception as e:
+        log.error("cl_bill_match_reconcile_failed", error=str(e))

@@ -1,0 +1,39 @@
+# ---- Build stage ----
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ---- Runtime stage ----
+FROM python:3.12-slim AS runtime
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /install /usr/local
+
+COPY app/ ./app/
+COPY alembic/ ./alembic/
+COPY alembic.ini .
+COPY data/ ./data/
+
+RUN useradd --no-create-home --shell /bin/false appuser
+USER appuser
+
+ENV PORT=8080
+EXPOSE 8080
+
+# --workers 1: APScheduler is AsyncIOScheduler bound to a single event loop.
+# Multiple workers would spawn duplicate scheduler instances firing duplicate jobs.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --loop uvloop --http h11"]

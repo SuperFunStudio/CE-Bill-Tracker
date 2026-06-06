@@ -1,0 +1,57 @@
+substitutions:
+  _PROJECT_ID: ce-bill-tracker
+  _REGION: us-central1
+  _JOB_IMAGE: us-central1-docker.pkg.dev/ce-bill-tracker/signalscout-images/signalscout-pipeline-job
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-job
+    args: [build, -f, Dockerfile.job, -t, "${_JOB_IMAGE}:latest", .]
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-job
+    waitFor: [build-job]
+    args: [push, "${_JOB_IMAGE}:latest"]
+
+  # Update ingestion job
+  - name: gcr.io/cloud-builders/gcloud
+    id: update-ingest-job
+    waitFor: [push-job]
+    args:
+      - run
+      - jobs
+      - update
+      - signalscout-pipeline
+      - --image=${_JOB_IMAGE}:latest
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+
+  # Create/update classification job (same image, MODE=classify)
+  - name: gcr.io/cloud-builders/gcloud
+    id: deploy-classify-job
+    waitFor: [push-job]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        JOB_FLAGS=(
+          --image=${_JOB_IMAGE}:latest
+          --region=${_REGION}
+          --service-account=signalscout-api@${_PROJECT_ID}.iam.gserviceaccount.com
+          --set-cloudsql-instances=ce-bill-tracker:us-central1:signalscout-pg
+          --set-secrets=DATABASE_URL=SIGNALSCOUT_DATABASE_URL:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
+          --set-env-vars=MODE=classify,ENABLE_LLM_CLASSIFICATION=true,ENABLE_SONNET_EXTRACTION=true
+          --task-timeout=3600
+          --max-retries=0
+          --memory=1Gi
+          --cpu=1
+        )
+        if gcloud run jobs describe signalscout-classify --region=${_REGION} --project=${_PROJECT_ID} &>/dev/null; then
+          gcloud run jobs update signalscout-classify "$${JOB_FLAGS[@]}" --project=${_PROJECT_ID}
+        else
+          gcloud run jobs create signalscout-classify "$${JOB_FLAGS[@]}" --project=${_PROJECT_ID}
+        fi
+
+options:
+  logging: CLOUD_LOGGING_ONLY

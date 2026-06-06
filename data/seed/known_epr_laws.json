@@ -1,0 +1,2087 @@
+[
+  {
+    "state": "ME",
+    "bill_number": "LD 1541",
+    "title": "An Act To Support and Improve the Maine Solid Waste Management Hierarchy and Save Taxpayer Money",
+    "status": "enacted",
+    "enacted_date": "2021-07-13",
+    "effective_date": "2024-07-01",
+    "material_categories": [
+      "plastic_packaging",
+      "paper_packaging",
+      "glass",
+      "metals"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "First US packaging EPR law. Municipal reimbursement model \u00e2\u20ac\u201d brands pay municipalities for recycling costs. Stewardship organization required.",
+    "source_url": "https://legislature.maine.gov/legis/bills/bills_130th/chapters/PUBLIC_519.asp",
+    "compliance_details": {
+      "covered_products": [
+        "Packaging supplied with products sold in Maine"
+      ],
+      "producer_definition": "Brand owners and licensees of brands that supply covered materials in Maine",
+      "producer_obligations": [
+        "Join stewardship organization",
+        "Report annual supply data",
+        "Pay fees based on material type and weight"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2024-07-01",
+          "description": "Program operational, producer registration required"
+        }
+      ],
+      "fees": {
+        "structure": "eco_modulated",
+        "details": "Fee rates vary by material type and recyclability",
+        "fee_per_ton": 180.0,
+        "registration_fee_usd": 1500.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Rates TBD by PRO. Estimate based on comparable enacted packaging EPR programs."
+      },
+      "exemptions": [
+        "Small producers below annual revenue threshold"
+      ],
+      "enforcement": {
+        "agency": "Maine DEP",
+        "penalties": "Civil penalties per violation"
+      },
+      "effective_date": "2024-07-01",
+      "preemption_risk": "Low",
+      "related_bills": []
+    }
+  },
+  {
+    "state": "OR",
+    "bill_number": "SB 582",
+    "title": "Plastic Pollution and Recycling Modernization Act",
+    "status": "enacted",
+    "enacted_date": "2021-07-27",
+    "effective_date": "2025-01-01",
+    "material_categories": [
+      "plastic_packaging",
+      "paper_packaging"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "First operational US packaging EPR with active fees. Single PRO model. Subject to NAW constitutional challenge (trial July 13 2026). Producers must register and pay eco-modulated fees.",
+    "source_url": "https://olis.oregonlegislature.gov/liz/2021R1/Measures/Overview/SB582",
+    "compliance_details": {
+      "covered_products": [
+        "Covered plastic and paper packaging distributed in Oregon"
+      ],
+      "producer_definition": "Brand owners or importers of covered packaging sold in Oregon with >$5M annual Oregon revenue",
+      "producer_obligations": [
+        "Register with Circular Action Alliance PRO",
+        "Report annual material supply data",
+        "Pay eco-modulated fees"
+      ],
+      "deadlines": [
+        {
+          "type": "registration",
+          "date": "2025-01-01",
+          "description": "Initial producer registration with PRO"
+        },
+        {
+          "type": "fee_payment",
+          "date": "2025-07-01",
+          "description": "First fee payment due"
+        }
+      ],
+      "fees": {
+        "structure": "eco_modulated",
+        "details": "Rates vary by recyclability, recycled content, and material type. ~$0.04-$0.34/lb depending on material.",
+        "fee_per_ton": 419.0,
+        "registration_fee_usd": 1500.0,
+        "fee_structure_source": "published_range_midpoint",
+        "fee_notes": "Published rate ~$0.04-$0.34/lb (~$88-$750/tonne). Using midpoint ~$0.19/lb (~$419/tonne)."
+      },
+      "exemptions": [
+        "Producers with <$5M Oregon annual revenue",
+        "Agricultural and produce packaging"
+      ],
+      "pro_requirements": "Must join DEQ-approved PRO (currently Circular Action Alliance)",
+      "enforcement": {
+        "agency": "Oregon DEQ",
+        "penalties": "$10,000/day per violation"
+      },
+      "effective_date": "2025-01-01",
+      "preemption_risk": "High",
+      "preemption_notes": "NAW (National Association of Wholesaler-Distributors) filed suit challenging OR SB 582 under Dormant Commerce Clause. Trial set July 13 2026.",
+      "related_bills": [
+        "OR-SB-543"
+      ]
+    }
+  },
+  {
+    "state": "CO",
+    "bill_number": "HB 22-1355",
+    "title": "Plastic Pollution Reduction",
+    "status": "enacted",
+    "enacted_date": "2022-06-01",
+    "effective_date": "2026-01-01",
+    "material_categories": [
+      "plastic_packaging",
+      "paper_packaging"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "Colorado packaging EPR. Colorado Circular Action Alliance (CAA) selected as PRO. Fees begin 2026. Covers all covered materials statewide.",
+    "source_url": "https://leg.colorado.gov/bills/hb22-1355",
+    "compliance_details": {
+      "covered_products": [
+        "Covered materials including packaging and paper products"
+      ],
+      "producer_definition": "Brand owners and importers selling covered materials in Colorado",
+      "producer_obligations": [
+        "Register with approved PRO",
+        "Annual supply data reporting",
+        "Pay eco-modulated fees"
+      ],
+      "deadlines": [
+        {
+          "type": "registration",
+          "date": "2025-01-01",
+          "description": "Producer registration opens"
+        },
+        {
+          "type": "fee_payment",
+          "date": "2026-01-01",
+          "description": "Fee obligations begin"
+        }
+      ],
+      "fees": {
+        "structure": "eco_modulated",
+        "details": "Eco-modulated based on recyclability and recycled content",
+        "fee_per_ton": 180.0,
+        "registration_fee_usd": 1500.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Rates TBD by PRO. Estimate based on comparable enacted packaging EPR programs."
+      },
+      "exemptions": [
+        "Small producers",
+        "Packaging used for export"
+      ],
+      "pro_requirements": "Must join CDPHE-approved PRO",
+      "enforcement": {
+        "agency": "Colorado CDPHE",
+        "penalties": "Civil penalties per violation"
+      },
+      "effective_date": "2026-01-01",
+      "preemption_risk": "Low",
+      "related_bills": []
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "SB 54",
+    "title": "Plastic Pollution Prevention and Packaging Producer Responsibility Act",
+    "status": "enacted",
+    "enacted_date": "2022-06-30",
+    "effective_date": "2027-01-01",
+    "material_categories": [
+      "plastic_packaging",
+      "paper_packaging",
+      "glass",
+      "metals"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "Largest US packaging EPR. ~$500M/yr producer fees. Requires 25% plastic packaging reduction by 2032, 65% recyclable/compostable by 2032. CalRecycle rulemaking still pending. Broadest covered material scope.",
+    "source_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202120220SB54",
+    "compliance_details": {
+      "covered_products": [
+        "All covered materials (packaging and paper products) sold in California"
+      ],
+      "producer_definition": "Brand owners, importers, and licensees of covered materials sold in California with >$1M annual California sales",
+      "producer_obligations": [
+        "Register with CalRecycle-approved PRO",
+        "Annual supply data reporting by material type",
+        "Pay fees based on material weight and type",
+        "Meet recyclability/compostability targets by 2032",
+        "25% plastic packaging source reduction by 2032"
+      ],
+      "deadlines": [
+        {
+          "type": "registration",
+          "date": "2027-01-01",
+          "description": "Initial producer registration"
+        },
+        {
+          "type": "compliance",
+          "date": "2032-01-01",
+          "description": "65% recyclable/compostable target; 25% plastic reduction target"
+        }
+      ],
+      "fees": {
+        "structure": "eco_modulated",
+        "details": "~$500M/yr total. Rates set by PRO based on CalRecycle-approved plan. Eco-modulation for recyclability, recycled content, toxicity.",
+        "fee_per_ton": 180.0,
+        "registration_fee_usd": 1500.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Aggregate ~$500M/yr target. Per-ton rate set by PRO. Estimate based on comparable programs."
+      },
+      "exemptions": [
+        "Producers with <$1M CA annual revenue",
+        "Certified B corporations meeting recycled content thresholds"
+      ],
+      "pro_requirements": "Must join CalRecycle-approved PRO or submit individual plan",
+      "enforcement": {
+        "agency": "CalRecycle",
+        "penalties": "$50,000/day per violation for large producers"
+      },
+      "effective_date": "2027-01-01",
+      "reporting_requirements": "Annual supply data report due March 31",
+      "preemption_risk": "Medium",
+      "preemption_notes": "PACK Act introduced December 2025 would preempt state packaging labeling requirements. DOJ RFI August 2025 seeking state laws adversely affecting national economy.",
+      "related_bills": [
+        "CA-SB-343",
+        "CA-AB-793",
+        "CA-AB-1201"
+      ]
+    }
+  },
+  {
+    "state": "MN",
+    "bill_number": "HF 3577",
+    "title": "Packaging Waste and Cost Reduction Act",
+    "status": "enacted",
+    "enacted_date": "2024-05-24",
+    "effective_date": "2025-01-01",
+    "material_categories": [
+      "plastic_packaging",
+      "paper_packaging",
+      "glass",
+      "metals"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "Minnesota packaging EPR enacted 2024. Program planning underway. PRO selection process ongoing. Multiple PRO model allowed.",
+    "source_url": "https://www.revisor.mn.gov/bills/bill.php?b=house&f=HF3577&ssn=0&y=2024",
+    "compliance_details": {
+      "covered_products": [
+        "Covered materials sold in Minnesota"
+      ],
+      "producer_definition": "Brand owners and importers of covered materials",
+      "producer_obligations": [
+        "Join approved PRO",
+        "Annual reporting",
+        "Pay fees"
+      ],
+      "deadlines": [
+        {
+          "type": "registration",
+          "date": "2026-01-01",
+          "description": "Producer registration deadline"
+        }
+      ],
+      "fees": {
+        "structure": "eco_modulated",
+        "details": "Eco-modulated fee structure, rates TBD by PRO",
+        "fee_per_ton": 180.0,
+        "registration_fee_usd": 1500.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Rates TBD by PRO. Estimate based on comparable enacted packaging EPR programs."
+      },
+      "effective_date": "2025-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "MD",
+    "bill_number": "SB 901",
+    "title": "Extended Producer Responsibility for Packaging and Paper Products",
+    "status": "enacted",
+    "enacted_date": "2024-05-16",
+    "effective_date": "2025-01-01",
+    "material_categories": [
+      "plastic_packaging",
+      "paper_packaging",
+      "glass",
+      "metals"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "Maryland packaging EPR. Allows multiple competing PROs \u00e2\u20ac\u201d unique structural approach. MDE rulemaking underway.",
+    "source_url": "https://mgaleg.maryland.gov/mgawebsite/Legislation/Details/sb0901",
+    "compliance_details": {
+      "covered_products": [
+        "Covered materials sold in Maryland"
+      ],
+      "producer_definition": "Brand owners and importers meeting revenue thresholds",
+      "producer_obligations": [
+        "Join an approved PRO",
+        "Annual supply reporting",
+        "Pay eco-modulated fees"
+      ],
+      "deadlines": [
+        {
+          "type": "registration",
+          "date": "2026-01-01",
+          "description": "Producer registration"
+        }
+      ],
+      "fees": {
+        "structure": "eco_modulated",
+        "details": "Multiple PRO competition expected to drive efficiency",
+        "fee_per_ton": 180.0,
+        "registration_fee_usd": 1500.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Rates TBD by PRO. Estimate based on comparable enacted packaging EPR programs."
+      },
+      "effective_date": "2025-01-01",
+      "preemption_risk": "Low",
+      "related_bills": []
+    }
+  },
+  {
+    "state": "WA",
+    "bill_number": "HB 1131",
+    "title": "Reducing Plastic Packaging Pollution Through Producer Responsibility",
+    "status": "enacted",
+    "enacted_date": "2025-04-27",
+    "effective_date": "2025-04-27",
+    "material_categories": [
+      "plastic_packaging",
+      "paper_packaging"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "Newest US packaging EPR (2025). Producer registration deadline December 2025. Ecology rulemaking to set fee rates.",
+    "source_url": "https://lawfilesext.leg.wa.gov/biennium/2025-26/Pdf/Bill%20Reports/Senate/5284%20SBR%20ENET%20TA%2025.pdf",
+    "compliance_details": {
+      "covered_products": [
+        "Covered packaging and paper products sold in Washington"
+      ],
+      "producer_definition": "Brand owners, importers, and licensees with >$1M WA annual revenue",
+      "producer_obligations": [
+        "Register with Ecology-approved PRO by Dec 2025",
+        "Annual supply reporting",
+        "Pay fees"
+      ],
+      "deadlines": [
+        {
+          "type": "registration",
+          "date": "2025-12-01",
+          "description": "Producer registration with PRO"
+        },
+        {
+          "type": "fee_payment",
+          "date": "2027-01-01",
+          "description": "Fee obligations begin"
+        }
+      ],
+      "fees": {
+        "structure": "eco_modulated",
+        "details": "Rates TBD through Ecology rulemaking",
+        "fee_per_ton": 180.0,
+        "registration_fee_usd": 1500.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Rates TBD through Ecology rulemaking. Estimate based on comparable enacted packaging EPR programs."
+      },
+      "exemptions": [
+        "Producers with <$1M WA annual revenue"
+      ],
+      "enforcement": {
+        "agency": "Washington Ecology",
+        "penalties": "Civil penalties"
+      },
+      "effective_date": "2025-04-27",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "SB 707",
+    "title": "Responsible Textile Producer Act",
+    "status": "enacted",
+    "enacted_date": "2024-09-28",
+    "effective_date": "2026-01-01",
+    "material_categories": [
+      "textiles"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "First US textile EPR law. Covers apparel and textile articles. PRO selection March 2026. California-only initially.",
+    "source_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202320240SB707",
+    "compliance_details": {
+      "covered_products": [
+        "Apparel and textile articles sold in California"
+      ],
+      "producer_definition": "Brand owners and retailers of apparel and textile articles",
+      "producer_obligations": [
+        "Join CalRecycle-approved textile PRO",
+        "Annual supply reporting",
+        "Pay fees"
+      ],
+      "deadlines": [
+        {
+          "type": "registration",
+          "date": "2026-03-01",
+          "description": "PRO selection and producer registration"
+        }
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "Fee structure TBD by PRO and CalRecycle",
+        "fee_per_ton": 80.0,
+        "registration_fee_usd": 500.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Fee structure TBD by PRO and CalRecycle. Estimate based on comparable textile EPR programs."
+      },
+      "effective_date": "2026-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "DC",
+    "bill_number": "Battery Stewardship Act",
+    "title": "Battery Stewardship and Recycling Act of 2021",
+    "status": "enacted",
+    "enacted_date": "2021-10-20",
+    "effective_date": "2022-07-01",
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "DC battery EPR. Covers primary and rechargeable batteries. Producers must join approved battery stewardship organization.",
+    "source_url": "https://code.dccouncil.gov/us/dc/council/code/titles/8/chapters/9C/",
+    "compliance_details": {
+      "covered_products": [
+        "All primary and rechargeable batteries sold in DC"
+      ],
+      "producer_obligations": [
+        "Join approved battery stewardship organization",
+        "Provide collection points"
+      ],
+      "effective_date": "2022-07-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "VT",
+    "bill_number": "Act 148 Battery",
+    "title": "Vermont Battery Stewardship Program",
+    "status": "enacted",
+    "enacted_date": "2020-01-01",
+    "effective_date": "2021-01-01",
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "Vermont battery EPR. Call2Recycle as approved stewardship organization.",
+    "source_url": "https://legislature.vermont.gov/",
+    "compliance_details": {
+      "covered_products": [
+        "Primary and rechargeable batteries"
+      ],
+      "producer_obligations": [
+        "Join Vermont ANR-approved battery stewardship program"
+      ],
+      "effective_date": "2021-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "SB 1215",
+    "title": "Batteries: Recycling",
+    "status": "enacted",
+    "enacted_date": "2022-09-29",
+    "effective_date": "2027-01-01",
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "urgency": "high",
+    "ai_summary": "California comprehensive battery EPR. Covers all battery types including EV batteries. CalRecycle oversight.",
+    "source_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202120220SB1215",
+    "compliance_details": {
+      "covered_products": [
+        "All batteries sold in California including EV batteries"
+      ],
+      "producer_obligations": [
+        "Join CalRecycle-approved battery stewardship organization",
+        "Fund collection and recycling"
+      ],
+      "effective_date": "2027-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "SB 343",
+    "title": "Solid Waste: Recyclability",
+    "status": "enacted",
+    "enacted_date": "2021-10-05",
+    "effective_date": "2024-01-01",
+    "material_categories": [
+      "plastic_packaging",
+      "paper_packaging"
+    ],
+    "instrument_type": "labeling",
+    "urgency": "high",
+    "ai_summary": "California recyclability labeling. Products can only use recycling symbol if material is truly recyclable in 60%+ of CA jurisdictions. Eliminates aspirational recycling labels.",
+    "source_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202120220SB343",
+    "compliance_details": {
+      "covered_products": [
+        "All products bearing recyclability claims or symbols sold in California"
+      ],
+      "producer_obligations": [
+        "Remove recyclability symbols from non-recyclable packaging",
+        "Comply with CalRecycle recyclability criteria"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2024-01-01",
+          "description": "Full compliance with recyclability labeling rules"
+        }
+      ],
+      "effective_date": "2024-01-01",
+      "enforcement": {
+        "agency": "CalRecycle / CA AG",
+        "penalties": "Injunctive relief, civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "WA",
+    "bill_number": "HB 1085",
+    "title": "Solar Panels: End-of-Life",
+    "status": "enacted",
+    "enacted_date": "2017-07-23",
+    "effective_date": "2017-07-23",
+    "material_categories": [
+      "solar_panels"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "First US solar panel EPR. Manufacturers must provide take-back and recycling program for solar panels sold in Washington.",
+    "source_url": "https://app.leg.wa.gov/billsummary?BillNumber=1085&Year=2017",
+    "compliance_details": {
+      "covered_products": [
+        "Photovoltaic solar panels sold in Washington"
+      ],
+      "producer_obligations": [
+        "Provide free take-back and recycling program",
+        "Register with Ecology"
+      ],
+      "effective_date": "2017-07-23",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "PaintCare CA",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d California",
+    "status": "enacted",
+    "enacted_date": "2010-01-01",
+    "effective_date": "2012-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "California paint stewardship via PaintCare. $0.35-$1.60 per container fee. Drop-off locations statewide.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship organization",
+        "Pay per-unit fee",
+        "Fund collection infrastructure"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$0.35 (<1 gal), $0.95 (1-5 gal), $1.60 (>5 gal)",
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average. ~263 units/tonne (1-gal avg ~3.8kg)."
+      },
+      "effective_date": "2012-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "OR",
+    "bill_number": "PaintCare OR",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d Oregon",
+    "status": "enacted",
+    "enacted_date": "2009-01-01",
+    "effective_date": "2010-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Oregon paint stewardship via PaintCare. One of earliest US paint EPR programs.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in Oregon"
+      ],
+      "producer_obligations": [
+        "Join PaintCare",
+        "Pay per-unit fee"
+      ],
+      "effective_date": "2010-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      }
+    }
+  },
+  {
+    "state": "CT",
+    "bill_number": "PaintCare CT",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d Connecticut",
+    "status": "enacted",
+    "enacted_date": "2011-01-01",
+    "effective_date": "2012-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Connecticut paint stewardship via PaintCare.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in Connecticut"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship program"
+      ],
+      "effective_date": "2012-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      }
+    }
+  },
+  {
+    "state": "MN",
+    "bill_number": "PaintCare MN",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d Minnesota",
+    "status": "enacted",
+    "enacted_date": "2013-01-01",
+    "effective_date": "2015-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Minnesota paint stewardship via PaintCare.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in Minnesota"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship program"
+      ],
+      "effective_date": "2015-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      }
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "AB 2901 Mattress",
+    "title": "Mattress Recycling Program \u00e2\u20ac\u201d California",
+    "status": "enacted",
+    "enacted_date": "2013-09-01",
+    "effective_date": "2016-01-01",
+    "material_categories": [
+      "mattresses"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "California mattress EPR. Bye Bye Mattress / MRC stewardship program. $16-26 eco-fee per mattress at retail.",
+    "source_url": "https://www.mattressrecyclingcouncil.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Mattresses and box springs sold in California"
+      ],
+      "producer_obligations": [
+        "Join Mattress Recycling Council (MRC) stewardship program",
+        "Display eco-fee at point of sale"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$16 (twin/full), $19 (queen), $26 (king/split-king)",
+        "fee_per_unit_usd": 19.0,
+        "units_per_tonne": 40,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "mrc_published",
+        "fee_notes": "Using queen size ($19) as representative average. Avg mattress ~25kg = 40/tonne."
+      },
+      "effective_date": "2016-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "CT",
+    "bill_number": "SB 422 Mattress",
+    "title": "Mattress Stewardship Program \u00e2\u20ac\u201d Connecticut",
+    "status": "enacted",
+    "enacted_date": "2013-01-01",
+    "effective_date": "2015-01-01",
+    "material_categories": [
+      "mattresses"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Connecticut mattress EPR via MRC/Bye Bye Mattress.",
+    "source_url": "https://www.mattressrecyclingcouncil.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Mattresses sold in Connecticut"
+      ],
+      "producer_obligations": [
+        "Join MRC stewardship program"
+      ],
+      "effective_date": "2015-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 19.0,
+        "units_per_tonne": 40,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "mrc_published",
+        "fee_notes": "Using queen size ($19) as representative average."
+      }
+    }
+  },
+  {
+    "state": "RI",
+    "bill_number": "Mattress RI",
+    "title": "Mattress Stewardship Program \u00e2\u20ac\u201d Rhode Island",
+    "status": "enacted",
+    "enacted_date": "2016-01-01",
+    "effective_date": "2017-01-01",
+    "material_categories": [
+      "mattresses"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Rhode Island mattress EPR via MRC.",
+    "source_url": "https://www.mattressrecyclingcouncil.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Mattresses sold in Rhode Island"
+      ],
+      "producer_obligations": [
+        "Join MRC stewardship program"
+      ],
+      "effective_date": "2017-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 19.0,
+        "units_per_tonne": 40,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "mrc_published",
+        "fee_notes": "Using queen size ($19) as representative average."
+      }
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "AB 2398 Carpet",
+    "title": "Carpet Stewardship Program \u00e2\u20ac\u201d California",
+    "status": "enacted",
+    "enacted_date": "2010-09-01",
+    "effective_date": "2011-01-01",
+    "material_categories": [
+      "carpet"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "California carpet EPR via CARE (Carpet America Recovery Effort). $0.25/sq yd assessment at point of sale.",
+    "source_url": "https://www.carpetrecovery.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Carpet and rugs sold in California"
+      ],
+      "producer_obligations": [
+        "Join CARE stewardship organization",
+        "Pay $0.25/sq yd assessment"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$0.25 per square yard",
+        "fee_per_unit_usd": 0.25,
+        "units_per_tonne": 714,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "calrecycle_published",
+        "fee_notes": "$0.25/sq yd. ~1.4kg/sq yd = ~714 sq yd/tonne."
+      },
+      "effective_date": "2011-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "SB 212 Pharma",
+    "title": "Drug Take-Back Program \u00e2\u20ac\u201d California",
+    "status": "enacted",
+    "enacted_date": "2018-09-01",
+    "effective_date": "2022-07-01",
+    "material_categories": [
+      "pharmaceuticals"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "California pharmaceutical EPR. Drug manufacturers must fund year-round drug take-back. Also covers sharps.",
+    "source_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=201720180SB212",
+    "compliance_details": {
+      "covered_products": [
+        "Covered drugs and sharps sold in California"
+      ],
+      "producer_definition": "Drug manufacturers selling covered drugs in California",
+      "producer_obligations": [
+        "Join CalRecycle-approved stewardship program",
+        "Fund collection sites",
+        "Annual reporting"
+      ],
+      "effective_date": "2022-07-01",
+      "enforcement": {
+        "agency": "CalRecycle",
+        "penalties": "$10,000/day"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "WA",
+    "bill_number": "SB 5676 Pharma",
+    "title": "Secure Drug Take-Back Act \u00e2\u20ac\u201d Washington",
+    "status": "enacted",
+    "enacted_date": "2016-01-01",
+    "effective_date": "2017-01-01",
+    "material_categories": [
+      "pharmaceuticals"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Washington state pharmaceutical take-back EPR. Manufacturers fund collection.",
+    "source_url": "https://app.leg.wa.gov/",
+    "compliance_details": {
+      "covered_products": [
+        "Covered drugs sold in Washington"
+      ],
+      "producer_obligations": [
+        "Fund and operate secure drug take-back program"
+      ],
+      "effective_date": "2017-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "AB 1268 E-Waste",
+    "title": "Electronic Waste Recycling Act \u00e2\u20ac\u201d California",
+    "status": "enacted",
+    "enacted_date": "2003-09-01",
+    "effective_date": "2005-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "California e-waste EPR. Covered electronic devices include TVs, monitors, laptops. Advance recovery fee at point of sale.",
+    "source_url": "https://www.calrecycle.ca.gov/Electronics/",
+    "compliance_details": {
+      "covered_products": [
+        "Covered electronic devices (TVs, monitors, laptops, tablets)"
+      ],
+      "producer_obligations": [
+        "Register with CalRecycle",
+        "Covered Electronic Waste Recycling Fee applies at retail"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$8-$25 depending on screen size",
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "calrecycle_published",
+        "fee_notes": "Using $14 midpoint of $8-$25 range. ~2kg avg device = 500 units/tonne."
+      },
+      "effective_date": "2005-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "NY",
+    "bill_number": "Electronic Equipment Recycling Act",
+    "title": "Electronic Equipment Recycling and Reuse Act \u00e2\u20ac\u201d New York",
+    "status": "enacted",
+    "enacted_date": "2010-05-28",
+    "effective_date": "2011-04-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "New York e-waste EPR. Manufacturer take-back program for covered electronics. Includes TVs, computers, peripherals, small electronics.",
+    "source_url": "https://www.dec.ny.gov/chemical/66872.html",
+    "compliance_details": {
+      "covered_products": [
+        "Covered electronic equipment sold in New York"
+      ],
+      "producer_obligations": [
+        "Register with NYSDEC",
+        "Meet annual collection weight targets",
+        "Fund take-back program"
+      ],
+      "effective_date": "2011-04-01",
+      "enforcement": {
+        "agency": "NYSDEC",
+        "penalties": "Civil penalties per violation"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Benchmark based on CA AB 1268 comparable program."
+      }
+    }
+  },
+  {
+    "state": "WA",
+    "bill_number": "E-Cycle WA",
+    "title": "E-Cycle Washington \u00e2\u20ac\u201d Electronic Stewardship Program",
+    "status": "enacted",
+    "enacted_date": "2006-03-01",
+    "effective_date": "2009-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Washington state e-waste EPR. Free drop-off program for computers, monitors, TVs. Manufacturer-funded.",
+    "source_url": "https://www.ecyclewashington.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Computers, monitors, and televisions"
+      ],
+      "producer_obligations": [
+        "Join E-Cycle Washington program",
+        "Fund collection and recycling"
+      ],
+      "effective_date": "2009-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Benchmark based on CA AB 1268 comparable program."
+      }
+    }
+  },
+  {
+    "state": "CT",
+    "bill_number": "E-Cycles CT",
+    "title": "E-Cycles Connecticut \u00e2\u20ac\u201d Electronic Recycling Program",
+    "status": "enacted",
+    "enacted_date": "2007-01-01",
+    "effective_date": "2008-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Connecticut e-waste EPR. Manufacturer-funded free drop-off for computers, monitors, printers, TVs.",
+    "source_url": "https://portal.ct.gov/DEEP/Waste-Management-and-Disposal/Electronics/Electronic-Waste-Recycling",
+    "compliance_details": {
+      "covered_products": [
+        "Computers, monitors, printers, and televisions"
+      ],
+      "producer_obligations": [
+        "Register with CT DEEP",
+        "Fund collection and recycling program"
+      ],
+      "effective_date": "2008-01-01",
+      "enforcement": {
+        "agency": "CT DEEP",
+        "penalties": "Civil penalties per violation"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Benchmark based on CA AB 1268 comparable program."
+      }
+    }
+  },
+  {
+    "state": "IL",
+    "bill_number": "E-Waste IL",
+    "title": "Illinois Computer and Electronic Product Recycling Act",
+    "status": "enacted",
+    "enacted_date": "2008-08-04",
+    "effective_date": "2009-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Illinois e-waste EPR. Covers computers, monitors, printers, and TVs. Manufacturer take-back and recycling obligation.",
+    "source_url": "https://www.illinoisEPA.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Computers, monitors, printers, and televisions sold in Illinois"
+      ],
+      "producer_obligations": [
+        "Register with Illinois EPA",
+        "Meet annual collection weight targets",
+        "Fund recycling"
+      ],
+      "effective_date": "2009-01-01",
+      "enforcement": {
+        "agency": "Illinois EPA",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Benchmark based on CA AB 1268 comparable program."
+      }
+    }
+  },
+  {
+    "state": "MN",
+    "bill_number": "E-Cycle MN",
+    "title": "Minnesota Electronics Recycling Act",
+    "status": "enacted",
+    "enacted_date": "2007-05-24",
+    "effective_date": "2008-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Minnesota e-waste EPR. Manufacturer-funded free collection for computers, TVs, and small electronics.",
+    "source_url": "https://www.pca.state.mn.us/",
+    "compliance_details": {
+      "covered_products": [
+        "Computers, monitors, TVs, and small electronics"
+      ],
+      "producer_obligations": [
+        "Register with MPCA",
+        "Fund collection infrastructure",
+        "Meet recycling targets"
+      ],
+      "effective_date": "2008-01-01",
+      "enforcement": {
+        "agency": "Minnesota PCA",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Benchmark based on CA AB 1268 comparable program."
+      }
+    }
+  },
+  {
+    "state": "OR",
+    "bill_number": "E-Cycles OR",
+    "title": "E-Cycles Oregon \u00e2\u20ac\u201d Electronic Stewardship Program",
+    "status": "enacted",
+    "enacted_date": "2007-08-08",
+    "effective_date": "2009-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Oregon e-waste EPR. Covers computers, monitors, and televisions. Manufacturer-funded free drop-off.",
+    "source_url": "https://www.oregon.gov/deq/ecycles",
+    "compliance_details": {
+      "covered_products": [
+        "Computers, monitors, and televisions"
+      ],
+      "producer_obligations": [
+        "Register with Oregon DEQ",
+        "Fund E-Cycles Oregon program"
+      ],
+      "effective_date": "2009-01-01",
+      "enforcement": {
+        "agency": "Oregon DEQ",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Benchmark based on CA AB 1268 comparable program."
+      }
+    }
+  },
+  {
+    "state": "NJ",
+    "bill_number": "E-Waste NJ",
+    "title": "New Jersey Electronic Waste Recycling Act",
+    "status": "enacted",
+    "enacted_date": "2008-11-13",
+    "effective_date": "2011-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "New Jersey e-waste EPR. Covers computers, monitors, TVs, and peripherals. Manufacturer take-back obligation.",
+    "source_url": "https://www.nj.gov/dep/dshw/ewaste/",
+    "compliance_details": {
+      "covered_products": [
+        "Computers, monitors, televisions, and peripherals"
+      ],
+      "producer_obligations": [
+        "Register with NJDEP",
+        "Fund collection and recycling"
+      ],
+      "effective_date": "2011-01-01",
+      "enforcement": {
+        "agency": "NJDEP",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Benchmark based on CA AB 1268 comparable program."
+      }
+    }
+  },
+  {
+    "state": "MA",
+    "bill_number": "E-Waste MA",
+    "title": "Massachusetts Electronic Device Stewardship Program",
+    "status": "enacted",
+    "enacted_date": "2014-01-01",
+    "effective_date": "2015-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Massachusetts e-waste EPR. Covers televisions and computers. Manufacturer-funded collection program.",
+    "source_url": "https://www.mass.gov/orgs/massdep",
+    "compliance_details": {
+      "covered_products": [
+        "Televisions and computers sold in Massachusetts"
+      ],
+      "producer_obligations": [
+        "Register with MassDEP",
+        "Fund collection and recycling"
+      ],
+      "effective_date": "2015-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 14.0,
+        "units_per_tonne": 500,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "industry_benchmark",
+        "fee_notes": "Benchmark based on CA AB 1268 comparable program."
+      }
+    }
+  },
+  {
+    "state": "IL",
+    "bill_number": "SB 3776 Battery",
+    "title": "Illinois Battery Stewardship Act",
+    "status": "enacted",
+    "enacted_date": "2022-06-10",
+    "effective_date": "2023-01-01",
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "Illinois battery EPR. Covers primary and rechargeable batteries. Producers must join approved battery stewardship organization (Call2Recycle or equivalent).",
+    "source_url": "https://www.ilga.gov/",
+    "compliance_details": {
+      "covered_products": [
+        "Primary and rechargeable batteries sold in Illinois"
+      ],
+      "producer_obligations": [
+        "Join IEPA-approved battery stewardship organization",
+        "Fund collection infrastructure"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2023-01-01",
+          "description": "Program operational, producer registration required"
+        }
+      ],
+      "effective_date": "2023-01-01",
+      "enforcement": {
+        "agency": "Illinois EPA",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "MD",
+    "bill_number": "HB 1415 Battery",
+    "title": "Maryland Battery Stewardship Program",
+    "status": "enacted",
+    "enacted_date": "2023-05-16",
+    "effective_date": "2024-01-01",
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "Maryland battery EPR. Part of Call2Recycle national network. Producers must join approved battery stewardship program.",
+    "source_url": "https://mgaleg.maryland.gov/",
+    "compliance_details": {
+      "covered_products": [
+        "Primary and rechargeable batteries sold in Maryland"
+      ],
+      "producer_obligations": [
+        "Join MDE-approved battery stewardship organization"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2024-01-01",
+          "description": "Program compliance required"
+        }
+      ],
+      "effective_date": "2024-01-01",
+      "enforcement": {
+        "agency": "Maryland MDE",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "WA",
+    "bill_number": "SB 5374 Battery",
+    "title": "Washington Battery Stewardship Program",
+    "status": "enacted",
+    "enacted_date": "2023-05-09",
+    "effective_date": "2024-01-01",
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "Washington state battery EPR. Covers primary and rechargeable batteries. Producers join Ecology-approved stewardship program.",
+    "source_url": "https://app.leg.wa.gov/",
+    "compliance_details": {
+      "covered_products": [
+        "Primary and rechargeable batteries sold in Washington"
+      ],
+      "producer_obligations": [
+        "Join Ecology-approved battery stewardship organization",
+        "Fund collection infrastructure"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2024-01-01",
+          "description": "Program compliance required"
+        }
+      ],
+      "effective_date": "2024-01-01",
+      "enforcement": {
+        "agency": "Washington Ecology",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "NJ",
+    "bill_number": "A4 Battery",
+    "title": "New Jersey Battery Stewardship Act",
+    "status": "enacted",
+    "enacted_date": "2023-01-10",
+    "effective_date": "2024-07-01",
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "New Jersey battery EPR. Covers primary and rechargeable batteries. Part of expanding northeast battery stewardship network.",
+    "source_url": "https://www.njleg.state.nj.us/",
+    "compliance_details": {
+      "covered_products": [
+        "Primary and rechargeable batteries sold in New Jersey"
+      ],
+      "producer_obligations": [
+        "Join NJDEP-approved battery stewardship organization"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2024-07-01",
+          "description": "Program operational"
+        }
+      ],
+      "effective_date": "2024-07-01",
+      "enforcement": {
+        "agency": "NJDEP",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "CO",
+    "bill_number": "PaintCare CO",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d Colorado",
+    "status": "enacted",
+    "enacted_date": "2014-01-01",
+    "effective_date": "2015-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Colorado paint stewardship via PaintCare. Drop-off locations statewide.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in Colorado"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship organization",
+        "Pay per-unit fee"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$0.35 (<1 gal), $0.95 (1-5 gal), $1.60 (>5 gal)",
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      },
+      "effective_date": "2015-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "ME",
+    "bill_number": "PaintCare ME",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d Maine",
+    "status": "enacted",
+    "enacted_date": "2010-01-01",
+    "effective_date": "2011-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Maine paint stewardship via PaintCare.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in Maine"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship program"
+      ],
+      "effective_date": "2011-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      }
+    }
+  },
+  {
+    "state": "RI",
+    "bill_number": "PaintCare RI",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d Rhode Island",
+    "status": "enacted",
+    "enacted_date": "2011-01-01",
+    "effective_date": "2012-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Rhode Island paint stewardship via PaintCare.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in Rhode Island"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship program"
+      ],
+      "effective_date": "2012-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      }
+    }
+  },
+  {
+    "state": "VT",
+    "bill_number": "PaintCare VT",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d Vermont",
+    "status": "enacted",
+    "enacted_date": "2010-01-01",
+    "effective_date": "2011-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Vermont paint stewardship via PaintCare.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in Vermont"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship program"
+      ],
+      "effective_date": "2011-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      }
+    }
+  },
+  {
+    "state": "WA",
+    "bill_number": "PaintCare WA",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d Washington",
+    "status": "enacted",
+    "enacted_date": "2009-01-01",
+    "effective_date": "2010-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Washington state paint stewardship via PaintCare.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in Washington"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship program"
+      ],
+      "effective_date": "2010-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      }
+    }
+  },
+  {
+    "state": "DC",
+    "bill_number": "PaintCare DC",
+    "title": "PaintCare Stewardship Program \u00e2\u20ac\u201d District of Columbia",
+    "status": "enacted",
+    "enacted_date": "2014-01-01",
+    "effective_date": "2015-01-01",
+    "material_categories": [
+      "paint"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "DC paint stewardship via PaintCare.",
+    "source_url": "https://www.paintcare.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Architectural and industrial maintenance paint sold in DC"
+      ],
+      "producer_obligations": [
+        "Join PaintCare stewardship program"
+      ],
+      "effective_date": "2015-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_unit_usd": 0.95,
+        "units_per_tonne": 263,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "paintcare_published",
+        "fee_notes": "Using 1-5 gal tier ($0.95) as representative average."
+      }
+    }
+  },
+  {
+    "state": "OR",
+    "bill_number": "Mattress OR",
+    "title": "Mattress Stewardship Program \u00e2\u20ac\u201d Oregon",
+    "status": "enacted",
+    "enacted_date": "2013-01-01",
+    "effective_date": "2016-01-01",
+    "material_categories": [
+      "mattresses"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Oregon mattress EPR via MRC/Bye Bye Mattress.",
+    "source_url": "https://www.mattressrecyclingcouncil.org/",
+    "compliance_details": {
+      "covered_products": [
+        "Mattresses and box springs sold in Oregon"
+      ],
+      "producer_obligations": [
+        "Join Mattress Recycling Council stewardship program",
+        "Display eco-fee at point of sale"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$16 (twin/full), $19 (queen), $26 (king/split-king)",
+        "fee_per_unit_usd": 19.0,
+        "units_per_tonne": 40,
+        "registration_fee_usd": 0.0,
+        "fee_structure_source": "mrc_published",
+        "fee_notes": "Using queen size ($19) as representative average."
+      },
+      "effective_date": "2016-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "NY",
+    "bill_number": "Pharma NY",
+    "title": "New York Drug Take-Back Program",
+    "status": "enacted",
+    "enacted_date": "2018-08-01",
+    "effective_date": "2019-01-01",
+    "material_categories": [
+      "pharmaceuticals"
+    ],
+    "instrument_type": "epr",
+    "urgency": "medium",
+    "ai_summary": "New York pharmaceutical take-back EPR. Drug manufacturers fund collection sites for unused medications.",
+    "source_url": "https://www.dec.ny.gov/",
+    "compliance_details": {
+      "covered_products": [
+        "Covered drugs sold in New York"
+      ],
+      "producer_obligations": [
+        "Fund and operate drug take-back collection program"
+      ],
+      "effective_date": "2019-01-01",
+      "enforcement": {
+        "agency": "NYSDEC",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "MA",
+    "bill_number": "Pharma MA",
+    "title": "Massachusetts Drug Take-Back Program",
+    "status": "enacted",
+    "enacted_date": "2020-01-01",
+    "effective_date": "2021-01-01",
+    "material_categories": [
+      "pharmaceuticals"
+    ],
+    "instrument_type": "epr",
+    "urgency": "low",
+    "ai_summary": "Massachusetts pharmaceutical take-back EPR. Manufacturer-funded drug disposal program.",
+    "source_url": "https://www.mass.gov/",
+    "compliance_details": {
+      "covered_products": [
+        "Covered drugs sold in Massachusetts"
+      ],
+      "producer_obligations": [
+        "Fund and operate drug take-back collection program"
+      ],
+      "effective_date": "2021-01-01",
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_per_ton": null,
+        "fee_structure_source": "no_fee_data"
+      }
+    }
+  },
+  {
+    "state": "CO",
+    "bill_number": "SB 23-290 R2R",
+    "title": "Right to Repair Agricultural Equipment \u00e2\u20ac\u201d Colorado",
+    "status": "enacted",
+    "enacted_date": "2023-05-22",
+    "effective_date": "2024-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "right_to_repair",
+    "urgency": "medium",
+    "ai_summary": "Colorado right-to-repair for agricultural equipment. Manufacturers must provide repair manuals, parts, and diagnostic tools to independent repair shops and owners.",
+    "source_url": "https://leg.colorado.gov/bills/sb23-290",
+    "compliance_details": {
+      "covered_products": [
+        "Agricultural equipment with embedded electronics"
+      ],
+      "producer_definition": "Manufacturers of agricultural equipment with embedded digital electronics",
+      "producer_obligations": [
+        "Provide repair documentation to independent shops",
+        "Supply replacement parts at fair price",
+        "Provide diagnostic tools"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2024-01-01",
+          "description": "Manufacturers must provide repair access"
+        }
+      ],
+      "effective_date": "2024-01-01",
+      "enforcement": {
+        "agency": "Colorado AG Office",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee"
+      }
+    }
+  },
+  {
+    "state": "MN",
+    "bill_number": "SF 1598 R2R",
+    "title": "Digital Fair Repair Act \u00e2\u20ac\u201d Minnesota",
+    "status": "enacted",
+    "enacted_date": "2023-05-17",
+    "effective_date": "2024-07-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "right_to_repair",
+    "urgency": "high",
+    "ai_summary": "Minnesota Digital Fair Repair Act \u00e2\u20ac\u201d broadest right-to-repair law enacted to date. Covers all digital electronic products. Manufacturers must provide repair documentation, parts, and tools to consumers and independent repair shops.",
+    "source_url": "https://www.revisor.mn.gov/bills/bill.php?b=senate&f=SF1598&ssn=0&y=2023",
+    "compliance_details": {
+      "covered_products": [
+        "All digital electronic products sold in Minnesota"
+      ],
+      "producer_definition": "Manufacturers of digital electronic products",
+      "producer_obligations": [
+        "Provide repair documentation",
+        "Supply parts and tools at fair price",
+        "No software locks preventing repair"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2024-07-01",
+          "description": "Full compliance required"
+        }
+      ],
+      "effective_date": "2024-07-01",
+      "enforcement": {
+        "agency": "Minnesota AG Office",
+        "penalties": "Injunctive relief, civil penalties"
+      },
+      "preemption_risk": "Medium",
+      "preemption_notes": "Industry lobbying for federal preemption of state right-to-repair laws. No federal law enacted yet.",
+      "fees": {
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee"
+      }
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "SB 244 R2R",
+    "title": "Right to Repair Act \u00e2\u20ac\u201d California",
+    "status": "enacted",
+    "enacted_date": "2023-10-13",
+    "effective_date": "2024-07-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "right_to_repair",
+    "urgency": "high",
+    "ai_summary": "California Right to Repair Act. Covers electronics and appliances $50-$99.99 for 3 years, $100+ for 7 years. Manufacturers must provide parts, tools, and repair documentation.",
+    "source_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=202320240SB244",
+    "compliance_details": {
+      "covered_products": [
+        "Electronics and appliances sold in California priced $50+"
+      ],
+      "producer_definition": "Manufacturers of covered electronics and appliances",
+      "producer_obligations": [
+        "Provide repair parts and tools",
+        "Supply repair documentation",
+        "Ensure software access for repair"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2024-07-01",
+          "description": "Manufacturers must provide repair access for covered products"
+        }
+      ],
+      "effective_date": "2024-07-01",
+      "enforcement": {
+        "agency": "California AG Office",
+        "penalties": "Civil penalties up to $1,000 per violation"
+      },
+      "preemption_risk": "Medium",
+      "preemption_notes": "PACK Act-style federal bills could preempt state repair mandates. Currently no enacted federal right-to-repair.",
+      "fees": {
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee"
+      }
+    }
+  },
+  {
+    "state": "OR",
+    "bill_number": "HB 2422 R2R",
+    "title": "Right to Repair Electronics \u00e2\u20ac\u201d Oregon",
+    "status": "enacted",
+    "enacted_date": "2023-07-31",
+    "effective_date": "2025-01-01",
+    "material_categories": [
+      "electronics"
+    ],
+    "instrument_type": "right_to_repair",
+    "urgency": "medium",
+    "ai_summary": "Oregon right-to-repair for consumer electronics. Manufacturers must provide repair parts, tools, and documentation to owners and independent repair shops.",
+    "source_url": "https://olis.oregonlegislature.gov/liz/2023R1/Measures/Overview/HB2422",
+    "compliance_details": {
+      "covered_products": [
+        "Consumer electronic devices sold in Oregon"
+      ],
+      "producer_obligations": [
+        "Provide repair documentation",
+        "Supply parts and tools at reasonable price"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2025-01-01",
+          "description": "Compliance required for covered products"
+        }
+      ],
+      "effective_date": "2025-01-01",
+      "enforcement": {
+        "agency": "Oregon DOJ",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee"
+      }
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "AB 793 Recycled Content",
+    "title": "Plastic Packaging: Recycled Content Requirements \u00e2\u20ac\u201d California",
+    "status": "enacted",
+    "enacted_date": "2020-09-29",
+    "effective_date": "2022-01-01",
+    "material_categories": [
+      "plastic_packaging"
+    ],
+    "instrument_type": "recycled_content",
+    "urgency": "high",
+    "ai_summary": "California plastic beverage container recycled content mandate. Requires 15% recycled content by 2022, 25% by 2025, 50% by 2030. Applies to plastic beverage containers.",
+    "source_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=201920200AB793",
+    "compliance_details": {
+      "covered_products": [
+        "Plastic beverage containers sold in California"
+      ],
+      "producer_obligations": [
+        "Meet recycled content thresholds by deadline",
+        "Report annually to CalRecycle"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2022-01-01",
+          "description": "15% recycled content required"
+        },
+        {
+          "type": "compliance",
+          "date": "2025-01-01",
+          "description": "25% recycled content required"
+        },
+        {
+          "type": "compliance",
+          "date": "2030-01-01",
+          "description": "50% recycled content required"
+        }
+      ],
+      "fees": {
+        "structure": "flat",
+        "details": "No fee \u00e2\u20ac\u201d mandated minimum content threshold",
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee"
+      },
+      "effective_date": "2022-01-01",
+      "enforcement": {
+        "agency": "CalRecycle",
+        "penalties": "$50,000/day per violation"
+      },
+      "preemption_risk": "Low",
+      "related_bills": [
+        "CA-SB-54",
+        "CA-SB-343"
+      ]
+    }
+  },
+  {
+    "state": "WA",
+    "bill_number": "SB 5022 Recycled Content",
+    "title": "Plastic Packaging Recycled Content and Recyclability \u00e2\u20ac\u201d Washington",
+    "status": "enacted",
+    "enacted_date": "2021-05-18",
+    "effective_date": "2023-01-01",
+    "material_categories": [
+      "plastic_packaging"
+    ],
+    "instrument_type": "recycled_content",
+    "urgency": "high",
+    "ai_summary": "Washington plastic packaging recycled content and recyclability standards. Covers plastic packaging and plastic film. Requires minimum recycled content and recyclability standards.",
+    "source_url": "https://app.leg.wa.gov/billsummary?BillNumber=5022&Year=2021",
+    "compliance_details": {
+      "covered_products": [
+        "Plastic packaging and plastic film sold in Washington"
+      ],
+      "producer_obligations": [
+        "Meet recycled content minimums",
+        "Meet recyclability standards",
+        "Annual reporting to Ecology"
+      ],
+      "deadlines": [
+        {
+          "type": "compliance",
+          "date": "2023-01-01",
+          "description": "Initial recycled content and recyclability requirements"
+        }
+      ],
+      "effective_date": "2023-01-01",
+      "enforcement": {
+        "agency": "Washington Ecology",
+        "penalties": "Civil penalties"
+      },
+      "preemption_risk": "Low",
+      "fees": {
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee"
+      }
+    }
+  },
+  {
+    "state": "MI",
+    "bill_number": "Bottle Bill MI",
+    "title": "Michigan Bottle Deposit Law",
+    "status": "enacted",
+    "enacted_date": "1976-12-01",
+    "effective_date": "1978-01-01",
+    "material_categories": [
+      "plastic_packaging",
+      "glass",
+      "metals"
+    ],
+    "instrument_type": "deposit_return",
+    "urgency": "low",
+    "ai_summary": "Michigan bottle bill \u00e2\u20ac\u201d highest deposit ($0.10) in the US. Covers beer, soft drinks, water, wine coolers, and juice. 97%+ return rate. Often cited as model for national deposit system.",
+    "source_url": "https://www.michigan.gov/egle/",
+    "compliance_details": {
+      "covered_products": [
+        "Carbonated and non-carbonated beverage containers"
+      ],
+      "producer_obligations": [
+        "Pay $0.10 deposit to retailer/distributor system",
+        "Accept returns at retail"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$0.10 deposit per container \u00e2\u20ac\u201d highest in the US",
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee",
+        "fee_notes": "Consumer-paid deposit system. Producer cost is administrative, not weight-based."
+      },
+      "effective_date": "1978-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "OR",
+    "bill_number": "Bottle Bill OR",
+    "title": "Oregon Bottle Bill \u00e2\u20ac\u201d Expanded Deposit Return System",
+    "status": "enacted",
+    "enacted_date": "1971-01-01",
+    "effective_date": "2018-01-01",
+    "material_categories": [
+      "plastic_packaging",
+      "glass",
+      "metals"
+    ],
+    "instrument_type": "deposit_return",
+    "urgency": "low",
+    "ai_summary": "Oregon's landmark bottle bill \u00e2\u20ac\u201d the first in the US (1971). Expanded in 2017 to include water and flavored water. $0.10 deposit. BottleDrop redemption network.",
+    "source_url": "https://www.oregon.gov/deq/lq/pages/bottlebill.aspx",
+    "compliance_details": {
+      "covered_products": [
+        "Beer, carbonated soft drinks, water, and flavored water containers"
+      ],
+      "producer_obligations": [
+        "Participate in BottleDrop redemption system",
+        "Pay handling fees"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$0.10 deposit per container",
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee",
+        "fee_notes": "Consumer-paid deposit system. Producer cost is administrative, not weight-based."
+      },
+      "effective_date": "2018-01-01",
+      "preemption_risk": "Low"
+    }
+  },
+  {
+    "state": "CA",
+    "bill_number": "Bottle Bill CA",
+    "title": "California Beverage Container Recycling and Litter Reduction Act",
+    "status": "enacted",
+    "enacted_date": "1986-01-01",
+    "effective_date": "1987-09-01",
+    "material_categories": [
+      "plastic_packaging",
+      "glass",
+      "metals"
+    ],
+    "instrument_type": "deposit_return",
+    "urgency": "low",
+    "ai_summary": "California CRV (California Redemption Value) deposit system. Covers most beverage containers. $0.05 for <24 oz, $0.10 for 24 oz+. CalRecycle oversight.",
+    "source_url": "https://www.calrecycle.ca.gov/BevContainer/",
+    "compliance_details": {
+      "covered_products": [
+        "Most beverage containers sold in California"
+      ],
+      "producer_obligations": [
+        "Pay CRV into state fund",
+        "Ensure dealer redemption"
+      ],
+      "fees": {
+        "structure": "per_unit",
+        "details": "$0.05 per container <24 oz, $0.10 per container 24 oz+",
+        "fee_structure": "no_monetary_fee",
+        "fee_structure_source": "no_monetary_fee",
+        "fee_notes": "Consumer-paid deposit system. Producer cost is administrative, not weight-based."
+      },
+      "effective_date": "1987-09-01",
+      "preemption_risk": "Low"
+    }
+  }
+]

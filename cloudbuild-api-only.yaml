@@ -1,0 +1,28 @@
+substitutions:
+  _PROJECT_ID: ce-bill-tracker
+  _REGION: us-central1
+  _API_IMAGE: us-central1-docker.pkg.dev/ce-bill-tracker/signalscout-images/signalscout-api
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: build-api
+    args: [build, -f, Dockerfile.api, -t, "${_API_IMAGE}:latest", .]
+
+  - name: gcr.io/cloud-builders/docker
+    id: push-api
+    waitFor: [build-api]
+    args: [push, "${_API_IMAGE}:latest"]
+
+  - name: gcr.io/cloud-builders/gcloud
+    id: deploy-api
+    waitFor: [push-api]
+    args:
+      - run
+      - deploy
+      - signalscout-api
+      - --image=${_API_IMAGE}:latest
+      - --region=${_REGION}
+      - --project=${_PROJECT_ID}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

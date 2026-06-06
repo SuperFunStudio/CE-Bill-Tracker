@@ -1,0 +1,53 @@
+# Secrets
+.env
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Tests
+.pytest_cache/
+tests/
+pytest.ini
+
+# Local data — exclude exports but include seed files needed in Docker image
+data/exports/
+
+# Development tooling
+.claude/
+
+# Firebase
+.firebase/
+firebase-public/
+.firebaserc
+
+# Git
+.git/
+.gitignore
+.gcloudignore
+
+# Node
+node_modules/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Project docs
+PROJECT_STATUS.md
+*.md

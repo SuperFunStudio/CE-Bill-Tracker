@@ -1,0 +1,235 @@
+substitutions:
+  _PROJECT_ID: ce-bill-tracker
+  _REGION: us-central1
+  _INSTANCE_CONNECTION_NAME: ce-bill-tracker:us-central1:signalscout-pg
+  _API_IMAGE: us-central1-docker.pkg.dev/ce-bill-tracker/signalscout-images/signalscout-api
+  _JOB_IMAGE: us-central1-docker.pkg.dev/ce-bill-tracker/signalscout-images/signalscout-pipeline-job
+  # Set _API_URL after first deploy: gcloud run services describe signalscout-api --region=us-central1 --format='value(status.url)'
+  _API_URL: https://signalscout-api-36712717703.us-central1.run.app
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # ── 1. Build API image ────────────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: build-api
+    args:
+      - build
+      - -f
+      - Dockerfile.api
+      - -t
+      - ${_API_IMAGE}:latest
+      - .
+
+  # ── 2. Build pipeline job image ───────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: build-job
+    args:
+      - build
+      - -f
+      - Dockerfile.job
+      - -t
+      - ${_JOB_IMAGE}:latest
+      - .
+
+  # ── 3. Push API image ─────────────────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: push-api
+    waitFor: [build-api]
+    args:
+      - push
+      - --all-tags
+      - ${_API_IMAGE}
+
+  # ── 3b. Push pipeline job image ───────────────────────────────────────────
+  - name: gcr.io/cloud-builders/docker
+    id: push-job
+    waitFor: [build-job]
+    args:
+      - push
+      - --all-tags
+      - ${_JOB_IMAGE}
+
+  # ── 4b. Download Cloud SQL Auth Proxy into /workspace ────────────────────
+  - name: gcr.io/cloud-builders/curl
+    id: download-proxy
+    waitFor: [push-api]
+    args:
+      - -fsSL
+      - -o
+      - /workspace/cloud-sql-proxy
+      - https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+  - name: bash
+    id: chmod-proxy
+    waitFor: [download-proxy]
+    entrypoint: bash
+    args: ["-c", "chmod +x /workspace/cloud-sql-proxy"]
+
+  # ── 5. Run Alembic migrations ─────────────────────────────────────────────
+  # Uses the API image itself as the builder (has alembic + all models).
+  # Cloud SQL Auth Proxy is already at /workspace/cloud-sql-proxy from prior step.
+  # Cloud Build SA needs: roles/cloudsql.client
+  - name: ${_API_IMAGE}:latest
+    id: run-migrations
+    waitFor: [chmod-proxy]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+
+        # Start proxy on localhost:5432 in background
+        /workspace/cloud-sql-proxy \
+          --address 127.0.0.1 \
+          --port 5432 \
+          ${_INSTANCE_CONNECTION_NAME} &
+        PROXY_PID=$$!
+
+        # Wait up to 20s for proxy to accept connections
+        for i in $$(seq 1 20); do
+          python3 -c "import socket,sys; s=socket.socket(); s.settimeout(1); sys.exit(s.connect_ex(('127.0.0.1',5432)))" 2>/dev/null && break
+          echo "Waiting for Cloud SQL proxy... ($${i}s)"
+          sleep 1
+        done
+
+        # Run migrations via proxy on 127.0.0.1:5432
+        DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
+          alembic upgrade head
+
+        # Seed known EPR laws (idempotent)
+        DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
+          python3 /workspace/scripts/seed_database.py
+
+        # Seed target companies (idempotent)
+        DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
+          python3 /workspace/scripts/seed_companies.py
+
+        # Re-compute all company impact scores
+        DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
+          python3 /workspace/scripts/rescore_companies.py
+
+        kill $${PROXY_PID} || true
+
+  # ── 6. Deploy API to Cloud Run ────────────────────────────────────────────
+  # min-instances=0: scale to zero when idle to save cost.
+  # Pipeline is triggered manually (POST /pipeline/run) or via Cloud Scheduler.
+  # --workers 1 is set in the Dockerfile CMD.
+  - name: gcr.io/cloud-builders/gcloud
+    id: deploy-api
+    waitFor: [run-migrations]
+    args:
+      - run
+      - deploy
+      - signalscout-api
+      - --image=${_API_IMAGE}:latest
+      - --region=${_REGION}
+      - --platform=managed
+      - --min-instances=0
+      - --max-instances=3
+      - --concurrency=80
+      - --cpu=1
+      - --memory=1Gi
+      - --timeout=300
+      - --add-cloudsql-instances=${_INSTANCE_CONNECTION_NAME}
+      - --service-account=signalscout-api@${_PROJECT_ID}.iam.gserviceaccount.com
+      - --set-secrets=DATABASE_URL=SIGNALSCOUT_DATABASE_URL:latest,LEGISCAN_API_KEY=LEGISCAN_API_KEY:latest,OPEN_STATES_API_KEY=OPEN_STATES_API_KEY:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,SENDGRID_API_KEY=SENDGRID_API_KEY:latest,SENDGRID_FROM_EMAIL=SENDGRID_FROM_EMAIL:latest,SLACK_WEBHOOK_URL=SLACK_WEBHOOK_URL:latest,COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest,COURTLISTENER_WEBHOOK_SECRET=COURTLISTENER_WEBHOOK_SECRET:latest
+      - --set-env-vars=ENABLE_LLM_CLASSIFICATION=true,ENABLE_SONNET_EXTRACTION=true,ENABLE_COURTLISTENER=true,ENABLE_INTERPRETATION=true,ENABLE_OPENSTATES_INGESTION=true,ENABLE_LEGISCAN_INGESTION=false,FEDERAL_REGISTER_POLL_INTERVAL_HOURS=6,LEGISCAN_POLL_INTERVAL_HOURS=24
+      - --allow-unauthenticated
+      - --port=8080
+
+  # ── 6b. Create/update Cloud Run Job for pipeline ─────────────────────────
+  # Task timeout 3600s: enough for all 51 states sequentially.
+  # max-retries=0: don't auto-retry (partial runs leave DB in valid state but
+  # retrying from scratch wastes LegiScan API quota).
+  # Grant signalscout-api SA run.invoker on this job so /pipeline/run can trigger it.
+  - name: gcr.io/cloud-builders/gcloud
+    id: deploy-pipeline-job
+    waitFor: [push-job, deploy-api]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        JOB_FLAGS=(
+          --image=${_JOB_IMAGE}:latest
+          --region=${_REGION}
+          --service-account=signalscout-api@${_PROJECT_ID}.iam.gserviceaccount.com
+          --set-cloudsql-instances=${_INSTANCE_CONNECTION_NAME}
+          --set-secrets=DATABASE_URL=SIGNALSCOUT_DATABASE_URL:latest,LEGISCAN_API_KEY=LEGISCAN_API_KEY:latest,OPEN_STATES_API_KEY=OPEN_STATES_API_KEY:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,SENDGRID_API_KEY=SENDGRID_API_KEY:latest,SENDGRID_FROM_EMAIL=SENDGRID_FROM_EMAIL:latest,SLACK_WEBHOOK_URL=SLACK_WEBHOOK_URL:latest,COURTLISTENER_API_TOKEN=COURTLISTENER_API_TOKEN:latest
+          --set-env-vars=ENABLE_LLM_CLASSIFICATION=true,ENABLE_SONNET_EXTRACTION=true,ENABLE_OPENSTATES_INGESTION=true,ENABLE_LEGISCAN_INGESTION=false,ENABLE_COURTLISTENER=false,ENABLE_INTERPRETATION=false
+          --task-timeout=3600
+          --max-retries=0
+          --memory=1Gi
+          --cpu=1
+        )
+        if gcloud run jobs describe signalscout-pipeline --region=${_REGION} --project=${_PROJECT_ID} &>/dev/null; then
+          gcloud run jobs update signalscout-pipeline "$${JOB_FLAGS[@]}" --project=${_PROJECT_ID}
+        else
+          gcloud run jobs create signalscout-pipeline "$${JOB_FLAGS[@]}" --project=${_PROJECT_ID}
+        fi
+        # Note: IAM binding (roles/run.invoker for signalscout-api SA) is a one-time
+        # manual step — Cloud Build SA lacks setIamPolicy on jobs.
+        # Run once: gcloud run jobs add-iam-policy-binding signalscout-pipeline \
+        #   --region=us-central1 --project=ce-bill-tracker \
+        #   --member=serviceAccount:signalscout-api@ce-bill-tracker.iam.gserviceaccount.com \
+        #   --role=roles/run.invoker
+
+  # ── 6c. Create/update Cloud Run Job for classification ────────────────────
+  # Same image as ingest job, MODE=classify env var switches behaviour.
+  # IAM binding is a one-time manual step (same as above):
+  # gcloud run jobs add-iam-policy-binding signalscout-classify \
+  #   --region=us-central1 --project=ce-bill-tracker \
+  #   --member=serviceAccount:signalscout-api@ce-bill-tracker.iam.gserviceaccount.com \
+  #   --role=roles/run.invoker
+  - name: gcr.io/cloud-builders/gcloud
+    id: deploy-classify-job
+    waitFor: [push-job]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        JOB_FLAGS=(
+          --image=${_JOB_IMAGE}:latest
+          --region=${_REGION}
+          --service-account=signalscout-api@${_PROJECT_ID}.iam.gserviceaccount.com
+          --set-cloudsql-instances=${_INSTANCE_CONNECTION_NAME}
+          --set-secrets=DATABASE_URL=SIGNALSCOUT_DATABASE_URL:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest
+          --set-env-vars=MODE=classify,ENABLE_LLM_CLASSIFICATION=true,ENABLE_SONNET_EXTRACTION=true
+          --task-timeout=3600
+          --max-retries=0
+          --memory=1Gi
+          --cpu=1
+        )
+        if gcloud run jobs describe signalscout-classify --region=${_REGION} --project=${_PROJECT_ID} &>/dev/null; then
+          gcloud run jobs update signalscout-classify "$${JOB_FLAGS[@]}" --project=${_PROJECT_ID}
+        else
+          gcloud run jobs create signalscout-classify "$${JOB_FLAGS[@]}" --project=${_PROJECT_ID}
+        fi
+
+  # ── 7. Build Next.js dashboard (static export) ───────────────────────────
+  # Runs in parallel with deploy-api (both wait on push-api).
+  # NEXT_PUBLIC_API_BASE_URL is baked into the bundle at build time.
+  - name: node:20
+    id: build-dashboard-next
+    waitFor: [push-api]
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        cd dashboard-next
+        npm ci
+        NEXT_PUBLIC_API_BASE_URL=${_API_URL} \
+        NEXT_PUBLIC_DEMO_MODE=false \
+        npm run build
+
+  # ── 8. Deploy to Firebase Hosting ────────────────────────────────────────
+  # Requires Cloud Build SA to have roles/firebasehosting.admin on the project.
+  - name: node:20
+    id: deploy-firebase
+    waitFor: [build-dashboard-next]
+    entrypoint: bash
+    args:
+      - -c
+      - npm install -g firebase-tools && firebase deploy --only hosting --project=${_PROJECT_ID} --non-interactive

@@ -1,0 +1,5545 @@
+[
+  {
+    "_comment": "Oregon Top 25 #1 — Major grocery retailer, packaging EPR",
+    "name": "Albertsons Companies, Inc.",
+    "duns_number": null,
+    "cik": "1646972",
+    "epa_registry_id": null,
+    "hq_state": "ID",
+    "naics_codes": [
+      "445110"
+    ],
+    "operating_states": [
+      "ID",
+      "OR",
+      "WA",
+      "CA",
+      "CO",
+      "AZ",
+      "NV",
+      "MT",
+      "TX",
+      "LA",
+      "AR",
+      "NM",
+      "WY",
+      "UT",
+      "SD",
+      "ND",
+      "NE",
+      "AK",
+      "HI",
+      "IL",
+      "VA",
+      "MD",
+      "DE",
+      "PA",
+      "CT",
+      "MA",
+      "NH",
+      "ME",
+      "RI",
+      "VT",
+      "NY",
+      "NJ",
+      "NC",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 241173.0,
+    "volume_source": "Proxy: US Rev $80,391M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Albertsons",
+      "Safeway",
+      "Vons",
+      "Jewel-Osco",
+      "Shaw's"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 120586.5,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 96469.2,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 12058.7,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 12058.7,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "ID",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      },
+      {
+        "state": "WA",
+        "presence_type": "retail",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "retail",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #2 — E-commerce giant, packaging + electronics + batteries EPR",
+    "name": "Amazon.com, Inc.",
+    "duns_number": null,
+    "cik": "1018724",
+    "epa_registry_id": null,
+    "hq_state": "WA",
+    "naics_codes": [
+      "454110"
+    ],
+    "operating_states": [
+      "WA",
+      "OR",
+      "CA",
+      "TX",
+      "VA",
+      "TN",
+      "KY",
+      "IN",
+      "OH",
+      "PA",
+      "NJ",
+      "NY",
+      "IL",
+      "GA",
+      "FL",
+      "AZ",
+      "CO",
+      "MN",
+      "MI",
+      "MD",
+      "NC",
+      "CT",
+      "MA",
+      "NV",
+      "AL",
+      "SC",
+      "MO",
+      "WI",
+      "IA",
+      "OK",
+      "KS",
+      "NE",
+      "UT",
+      "NM",
+      "AR",
+      "MS",
+      "LA",
+      "NH",
+      "DE",
+      "RI",
+      "WV",
+      "ID",
+      "MT",
+      "WY",
+      "SD",
+      "ND",
+      "ME",
+      "VT",
+      "HI",
+      "AK",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 1777500.0,
+    "volume_source": "Proxy: US Rev $395,000M x 4.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Amazon",
+      "Amazon.com Services LLC",
+      "Whole Foods Market"
+    ],
+    "epr_categories": [
+      "packaging",
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 533250.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 1155375.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "plastic_film",
+        "annual_volume_tonnes": 88875.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "WA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "distribution",
+        "is_primary": false
+      },
+      {
+        "state": "TX",
+        "presence_type": "distribution",
+        "is_primary": false
+      },
+      {
+        "state": "VA",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #3 — Packaging manufacturer",
+    "name": "Berry Global, Inc.",
+    "duns_number": null,
+    "cik": "1378992",
+    "epa_registry_id": null,
+    "hq_state": "IN",
+    "naics_codes": [
+      "326199"
+    ],
+    "operating_states": [
+      "IN",
+      "OR",
+      "CA",
+      "TX",
+      "PA",
+      "GA",
+      "IL",
+      "OH",
+      "NC",
+      "SC",
+      "VA",
+      "WI",
+      "MI",
+      "MO",
+      "KY",
+      "TN",
+      "AL",
+      "AR",
+      "IA",
+      "KS",
+      "MN"
+    ],
+    "total_annual_volume_tonnes": 305000.0,
+    "volume_source": "Proxy: US Rev $12,200M x 25.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Berry Global",
+      "Berry Plastics"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 183000.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 122000.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IN",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "IN",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #4 — Food CPG, packaging EPR",
+    "name": "Conagra Brands, Inc.",
+    "duns_number": null,
+    "cik": "23217",
+    "epa_registry_id": null,
+    "hq_state": "IL",
+    "naics_codes": [
+      "311999"
+    ],
+    "operating_states": [
+      "IL",
+      "OR",
+      "CA",
+      "IN",
+      "OH",
+      "PA",
+      "TN",
+      "AR",
+      "IA",
+      "MO",
+      "NC",
+      "TX",
+      "WI",
+      "GA",
+      "MN"
+    ],
+    "total_annual_volume_tonnes": 98710.0,
+    "volume_source": "Proxy: US Rev $11,613M x 8.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Conagra",
+      "Conagra Foods"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 44419.5,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 34548.5,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 9871.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 9871.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IL",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "IL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #5 — Unilever US subsidiary, CPG packaging EPR",
+    "name": "Conopco Inc. (Unilever US)",
+    "duns_number": null,
+    "cik": "110471",
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "325611"
+    ],
+    "operating_states": [
+      "NJ",
+      "OR",
+      "CA",
+      "TX",
+      "MO",
+      "AR",
+      "CT",
+      "PA",
+      "TN"
+    ],
+    "total_annual_volume_tonnes": 60000.0,
+    "volume_source": "Proxy: US Rev $12,000M x 5.0 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Conopco",
+      "Unilever US",
+      "Unilever United States"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 39000.0,
+        "volume_confidence": 0.18,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 18000.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 3000.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NJ",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #6 — Beverage company, packaging EPR",
+    "name": "Constellation Brands, Inc.",
+    "duns_number": null,
+    "cik": "16918",
+    "epa_registry_id": null,
+    "hq_state": "NY",
+    "naics_codes": [
+      "312130"
+    ],
+    "operating_states": [
+      "NY",
+      "OR",
+      "CA",
+      "WA",
+      "VA",
+      "IL"
+    ],
+    "total_annual_volume_tonnes": 122400.0,
+    "volume_source": "Proxy: US Rev $10,200M x 12.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Constellation Brands",
+      "Constellation"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 36720.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 18360.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 36720.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 30600.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NY",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #7 — Major retailer, packaging EPR",
+    "name": "Costco Wholesale Corporation",
+    "duns_number": null,
+    "cik": "909832",
+    "epa_registry_id": null,
+    "hq_state": "WA",
+    "naics_codes": [
+      "452910"
+    ],
+    "operating_states": [
+      "WA",
+      "OR",
+      "CA",
+      "TX",
+      "AZ",
+      "CO",
+      "FL",
+      "GA",
+      "IL",
+      "IN",
+      "KS",
+      "KY",
+      "LA",
+      "MD",
+      "MI",
+      "MN",
+      "MO",
+      "NC",
+      "NE",
+      "NJ",
+      "NM",
+      "NV",
+      "NY",
+      "OH",
+      "OK",
+      "PA",
+      "SC",
+      "TN",
+      "UT",
+      "VA",
+      "WI",
+      "CT",
+      "DE",
+      "HI",
+      "IA",
+      "ID",
+      "ME",
+      "MT",
+      "NH",
+      "ND",
+      "SD",
+      "VT",
+      "AL",
+      "AR",
+      "MS",
+      "WY",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 762000.0,
+    "volume_source": "Proxy: US Rev $254,000M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Costco",
+      "Costco Wholesale",
+      "Kirkland Signature"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 381000.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 304800.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 38100.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 38100.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "WA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "retail",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #8 — Private winery, packaging EPR",
+    "name": "E&J Gallo Winery",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "312130"
+    ],
+    "operating_states": [
+      "CA",
+      "OR",
+      "WA",
+      "NY"
+    ],
+    "total_annual_volume_tonnes": 66000.0,
+    "volume_source": "Proxy: US Rev $5,500M x 12.0 t/$M intensity factor",
+    "volume_confidence": 0.1,
+    "aliases": [
+      "Gallo Winery",
+      "Gallo",
+      "E&J Gallo"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 19800.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 9900.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 19800.0,
+        "volume_confidence": 0.09,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 16500.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #9 — Food CPG, packaging EPR",
+    "name": "General Mills, Inc.",
+    "duns_number": null,
+    "cik": "40704",
+    "epa_registry_id": null,
+    "hq_state": "MN",
+    "naics_codes": [
+      "311230"
+    ],
+    "operating_states": [
+      "MN",
+      "OR",
+      "NM",
+      "PA",
+      "CA",
+      "IL",
+      "MA",
+      "NY",
+      "IA",
+      "OH",
+      "GA",
+      "MD",
+      "MO",
+      "TN",
+      "IN",
+      "WI",
+      "MI",
+      "NJ",
+      "AZ",
+      "OK",
+      "MT"
+    ],
+    "total_annual_volume_tonnes": 169150.0,
+    "volume_source": "Proxy: US Rev $19,900M x 8.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "General Mills"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 76117.5,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 59202.5,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 16915.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 16915.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "MN",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "MN",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "NM",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "IL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #10 — Food service, packaging EPR (private sub)",
+    "name": "McDonald's USA, LLC",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "IL",
+    "naics_codes": [
+      "722513"
+    ],
+    "operating_states": [
+      "IL",
+      "OR",
+      "CA",
+      "TX",
+      "FL",
+      "NY",
+      "OH",
+      "PA",
+      "GA",
+      "NC",
+      "MI",
+      "NJ",
+      "VA",
+      "WA",
+      "AZ",
+      "MA",
+      "IN",
+      "TN",
+      "MO",
+      "MD",
+      "WI",
+      "MN",
+      "CO",
+      "AL",
+      "SC",
+      "LA",
+      "KY",
+      "OK",
+      "CT",
+      "IA",
+      "MS",
+      "AR",
+      "KS",
+      "NV",
+      "UT",
+      "NE",
+      "NM",
+      "WV",
+      "ID",
+      "HI",
+      "NH",
+      "ME",
+      "RI",
+      "MT",
+      "DE",
+      "SD",
+      "ND",
+      "AK",
+      "VT",
+      "WY",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 100000.0,
+    "volume_source": "Proxy: US Rev $25,000M x 4.0 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "McDonald's",
+      "McDonalds"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 55000.0,
+        "volume_confidence": 0.18,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 40000.0,
+        "volume_confidence": 0.18,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 5000.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IL",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #11 — Food/bev CPG, foreign parent, packaging EPR",
+    "name": "Nestlé USA, Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "VA",
+    "naics_codes": [
+      "311999"
+    ],
+    "operating_states": [
+      "VA",
+      "OR",
+      "CA",
+      "OH",
+      "PA",
+      "WI",
+      "IL",
+      "MO",
+      "GA",
+      "AZ",
+      "IN",
+      "TX"
+    ],
+    "total_annual_volume_tonnes": 221000.0,
+    "volume_source": "Proxy: US Rev $26,000M x 8.5 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Nestle USA",
+      "Nestlé",
+      "Nestle"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 99450.0,
+        "volume_confidence": 0.18,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 77350.0,
+        "volume_confidence": 0.18,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 22100.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 22100.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "VA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OH",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #12 — Paper manufacturer, private, packaging EPR",
+    "name": "North Pacific Paper Company",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "WA",
+    "naics_codes": [
+      "322121"
+    ],
+    "operating_states": [
+      "WA",
+      "OR"
+    ],
+    "total_annual_volume_tonnes": 10000.0,
+    "volume_source": "Proxy: US Rev $400M x 25.0 t/$M intensity factor",
+    "volume_confidence": 0.1,
+    "aliases": [
+      "NORPAC",
+      "North Pacific Paper"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 6000.0,
+        "volume_confidence": 0.09,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 4000.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "WA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "WA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #13 — Packaging manufacturer, packaging EPR",
+    "name": "Pactiv Evergreen, Inc.",
+    "duns_number": null,
+    "cik": "1527508",
+    "epa_registry_id": null,
+    "hq_state": "IL",
+    "naics_codes": [
+      "322211"
+    ],
+    "operating_states": [
+      "IL",
+      "OR",
+      "CA",
+      "TX",
+      "PA",
+      "GA",
+      "NC",
+      "OH",
+      "IN",
+      "MI",
+      "WI"
+    ],
+    "total_annual_volume_tonnes": 140000.0,
+    "volume_source": "Proxy: US Rev $5,600M x 25.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Pactiv Evergreen",
+      "Pactiv",
+      "Reynolds Group"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 84000.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 56000.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IL",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "IL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #14 — Bev/snacks CPG, packaging EPR. Confirmed DUNS: 032935413",
+    "name": "PepsiCo, Inc.",
+    "duns_number": "032935413",
+    "cik": "77476",
+    "epa_registry_id": null,
+    "hq_state": "NY",
+    "naics_codes": [
+      "312111",
+      "311919"
+    ],
+    "operating_states": [
+      "NY",
+      "OR",
+      "TX",
+      "CT",
+      "CA",
+      "GA",
+      "KS",
+      "PA",
+      "OH",
+      "NC",
+      "IN",
+      "VA",
+      "TN",
+      "AZ",
+      "FL",
+      "IL",
+      "MO",
+      "MI",
+      "WI",
+      "CO",
+      "SC",
+      "AL",
+      "AR",
+      "IA",
+      "ID",
+      "LA",
+      "MD",
+      "MN",
+      "MS",
+      "NE",
+      "NJ",
+      "NM",
+      "NV",
+      "OK",
+      "UT",
+      "WA",
+      "WV"
+    ],
+    "total_annual_volume_tonnes": 744000.0,
+    "volume_source": "Proxy: US Rev $62,000M x 12.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "PepsiCo",
+      "Pepsi",
+      "Frito-Lay"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 223200.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 111600.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 223200.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 186000.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NY",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "TX",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "CT",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "KS",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #15 — Office products retailer, private, packaging EPR",
+    "name": "Staples, Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "MA",
+    "naics_codes": [
+      "453210"
+    ],
+    "operating_states": [
+      "MA",
+      "OR",
+      "CA",
+      "TX",
+      "FL",
+      "NY",
+      "PA",
+      "IL",
+      "OH",
+      "NJ",
+      "GA",
+      "VA",
+      "NC",
+      "MI",
+      "MD",
+      "WA",
+      "CO",
+      "MN",
+      "AZ",
+      "CT",
+      "WI",
+      "IN",
+      "MO",
+      "TN",
+      "SC"
+    ],
+    "total_annual_volume_tonnes": 24000.0,
+    "volume_source": "Proxy: US Rev $8,000M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.1,
+    "aliases": [
+      "Staples"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 13200.0,
+        "volume_confidence": 0.09,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 9600.0,
+        "volume_confidence": 0.09,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "plastic_film",
+        "annual_volume_tonnes": 1200.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "MA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #16 — Foodservice distributor, packaging EPR",
+    "name": "Sysco Corporation",
+    "duns_number": null,
+    "cik": "823313",
+    "epa_registry_id": null,
+    "hq_state": "TX",
+    "naics_codes": [
+      "424410"
+    ],
+    "operating_states": [
+      "TX",
+      "OR",
+      "CA",
+      "FL",
+      "NY",
+      "PA",
+      "IL",
+      "OH",
+      "GA",
+      "NC",
+      "VA",
+      "NJ",
+      "MI",
+      "MD",
+      "WA",
+      "CO",
+      "MN",
+      "AZ",
+      "MA",
+      "IN",
+      "TN",
+      "MO",
+      "WI",
+      "SC",
+      "AL",
+      "LA",
+      "KY",
+      "OK",
+      "CT",
+      "IA",
+      "AR",
+      "KS",
+      "NV",
+      "UT",
+      "NE",
+      "NM",
+      "MS",
+      "ID",
+      "NH",
+      "ME",
+      "RI",
+      "MT",
+      "DE",
+      "WV",
+      "HI",
+      "SD",
+      "ND",
+      "AK",
+      "VT",
+      "WY",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 472800.0,
+    "volume_source": "Proxy: US Rev $78,800M x 6.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Sysco"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 236400.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 189120.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 47280.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "TX",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #17 — Major retailer, packaging EPR",
+    "name": "Target Corporation",
+    "duns_number": null,
+    "cik": "27419",
+    "epa_registry_id": null,
+    "hq_state": "MN",
+    "naics_codes": [
+      "452210"
+    ],
+    "operating_states": [
+      "MN",
+      "OR",
+      "CA",
+      "TX",
+      "FL",
+      "NY",
+      "PA",
+      "IL",
+      "OH",
+      "GA",
+      "NC",
+      "VA",
+      "NJ",
+      "MI",
+      "MD",
+      "WA",
+      "CO",
+      "AZ",
+      "MA",
+      "IN",
+      "TN",
+      "MO",
+      "WI",
+      "SC",
+      "AL",
+      "LA",
+      "KY",
+      "OK",
+      "CT",
+      "IA",
+      "AR",
+      "KS",
+      "NV",
+      "UT",
+      "NE",
+      "NM",
+      "MS",
+      "ID",
+      "NH",
+      "ME",
+      "RI",
+      "MT",
+      "DE",
+      "WV",
+      "HI",
+      "SD",
+      "ND",
+      "DC",
+      "WY",
+      "VT"
+    ],
+    "total_annual_volume_tonnes": 318000.0,
+    "volume_source": "Proxy: US Rev $106,000M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Target"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 159000.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 127200.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 15900.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 15900.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "MN",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      },
+      {
+        "state": "MN",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #18 — Food CPG, packaging EPR",
+    "name": "The Campbell's Company",
+    "duns_number": null,
+    "cik": "16732",
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "311999"
+    ],
+    "operating_states": [
+      "NJ",
+      "OR",
+      "CA",
+      "TX",
+      "OH",
+      "PA",
+      "NC",
+      "WI",
+      "GA",
+      "IL",
+      "CT",
+      "UT"
+    ],
+    "total_annual_volume_tonnes": 81600.0,
+    "volume_source": "Proxy: US Rev $9,600M x 8.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Campbell's",
+      "Campbell Soup",
+      "Campbells"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 36720.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 28560.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 8160.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 8160.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NJ",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #19 — Beverage CPG, packaging EPR",
+    "name": "The Coca-Cola Company",
+    "duns_number": null,
+    "cik": "21344",
+    "epa_registry_id": null,
+    "hq_state": "GA",
+    "naics_codes": [
+      "312111"
+    ],
+    "operating_states": [
+      "GA",
+      "OR",
+      "CA",
+      "TX",
+      "FL",
+      "NY",
+      "PA",
+      "IL",
+      "OH",
+      "NC",
+      "VA",
+      "NJ",
+      "MI",
+      "MD",
+      "WA",
+      "CO",
+      "MN",
+      "AZ",
+      "MA",
+      "IN",
+      "TN",
+      "MO",
+      "WI",
+      "SC",
+      "AL",
+      "LA",
+      "KY",
+      "OK",
+      "CT",
+      "IA",
+      "AR",
+      "KS",
+      "NV",
+      "UT",
+      "NE",
+      "NM",
+      "MS",
+      "ID",
+      "NH",
+      "ME",
+      "RI",
+      "MT",
+      "DE",
+      "WV",
+      "HI",
+      "SD",
+      "ND",
+      "AK",
+      "VT",
+      "WY",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 213600.0,
+    "volume_source": "Proxy: US Rev $17,800M x 12.0 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Coca-Cola",
+      "Coke"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 64080.0,
+        "volume_confidence": 0.18,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 32040.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 64080.0,
+        "volume_confidence": 0.18,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 53400.0,
+        "volume_confidence": 0.18,
+        "source": "oregon_top25_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "GA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #20 — Household CPG, packaging + batteries (embedded) EPR",
+    "name": "The Procter & Gamble Company",
+    "duns_number": null,
+    "cik": "80424",
+    "epa_registry_id": null,
+    "hq_state": "OH",
+    "naics_codes": [
+      "325611"
+    ],
+    "operating_states": [
+      "OH",
+      "OR",
+      "AZ",
+      "LA",
+      "MO",
+      "WV",
+      "IA",
+      "NC",
+      "IL",
+      "KS",
+      "GA",
+      "TX",
+      "CA",
+      "PA",
+      "WI",
+      "MD",
+      "MI",
+      "TN",
+      "KY"
+    ],
+    "total_annual_volume_tonnes": 421500.0,
+    "volume_source": "Proxy: US Rev $84,300M x 5.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Procter & Gamble",
+      "P&G",
+      "Procter and Gamble"
+    ],
+    "epr_categories": [
+      "packaging",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 273975.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 126450.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 21075.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "OH",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OH",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "AZ",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "LA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "MO",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "WV",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "IA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "NC",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "IL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "KS",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "TX",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "WI",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "MD",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "MI",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "TN",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "KY",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #21 — Regional grocer, private, packaging EPR",
+    "name": "Trader Joe's Company",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "445110"
+    ],
+    "operating_states": [
+      "CA",
+      "OR",
+      "WA",
+      "AZ",
+      "NV",
+      "CO",
+      "TX",
+      "IL",
+      "NY",
+      "PA",
+      "NJ",
+      "MA",
+      "CT",
+      "VA",
+      "MD",
+      "GA",
+      "NC",
+      "SC",
+      "TN",
+      "FL",
+      "OH",
+      "MI",
+      "MN",
+      "MO",
+      "IN",
+      "WI",
+      "KY",
+      "AL",
+      "NM",
+      "IA",
+      "NE",
+      "KS",
+      "OK",
+      "ID",
+      "UT",
+      "NH",
+      "ME",
+      "RI",
+      "DE",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 49500.0,
+    "volume_source": "Proxy: US Rev $16,500M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.1,
+    "aliases": [
+      "Trader Joe's",
+      "Trader Joes",
+      "TJs"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 24750.0,
+        "volume_confidence": 0.09,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 19800.0,
+        "volume_confidence": 0.09,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 2475.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 2475.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #22 — Foodservice distributor, packaging EPR",
+    "name": "US Foods, Inc.",
+    "duns_number": null,
+    "cik": "1665002",
+    "epa_registry_id": null,
+    "hq_state": "IL",
+    "naics_codes": [
+      "424410"
+    ],
+    "operating_states": [
+      "IL",
+      "OR",
+      "CA",
+      "TX",
+      "FL",
+      "NY",
+      "PA",
+      "OH",
+      "GA",
+      "NC",
+      "VA",
+      "NJ",
+      "MI",
+      "MD",
+      "WA",
+      "CO",
+      "MN",
+      "AZ",
+      "MA",
+      "IN",
+      "TN",
+      "MO",
+      "WI",
+      "SC",
+      "AL",
+      "LA",
+      "KY",
+      "OK",
+      "CT",
+      "IA",
+      "AR",
+      "NV",
+      "UT",
+      "NE",
+      "ID",
+      "NH",
+      "ME",
+      "DE",
+      "WV",
+      "MS"
+    ],
+    "total_annual_volume_tonnes": 227400.0,
+    "volume_source": "Proxy: US Rev $37,900M x 6.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "US Foods"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 113700.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 90960.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 22740.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IL",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #23 — Largest US retailer, packaging + electronics + batteries EPR",
+    "name": "Walmart Inc.",
+    "duns_number": null,
+    "cik": "104169",
+    "epa_registry_id": null,
+    "hq_state": "AR",
+    "naics_codes": [
+      "452210"
+    ],
+    "operating_states": [
+      "AR",
+      "OR",
+      "CA",
+      "TX",
+      "FL",
+      "NY",
+      "PA",
+      "IL",
+      "OH",
+      "GA",
+      "NC",
+      "VA",
+      "NJ",
+      "MI",
+      "MD",
+      "WA",
+      "CO",
+      "MN",
+      "AZ",
+      "MA",
+      "IN",
+      "TN",
+      "MO",
+      "WI",
+      "SC",
+      "AL",
+      "LA",
+      "KY",
+      "OK",
+      "CT",
+      "IA",
+      "MS",
+      "KS",
+      "NV",
+      "UT",
+      "NE",
+      "NM",
+      "WV",
+      "ID",
+      "HI",
+      "NH",
+      "ME",
+      "RI",
+      "MT",
+      "DE",
+      "SD",
+      "ND",
+      "AK",
+      "VT",
+      "WY",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 1706100.0,
+    "volume_source": "Proxy: US Rev $568,700M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Walmart",
+      "Wal-Mart",
+      "Sam's Club"
+    ],
+    "epr_categories": [
+      "packaging",
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 853050.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 682440.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 85305.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 85305.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "AR",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      },
+      {
+        "state": "AR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #24 — Packaging/paper manufacturer, packaging EPR",
+    "name": "WestRock Company",
+    "duns_number": null,
+    "cik": "1732845",
+    "epa_registry_id": null,
+    "hq_state": "GA",
+    "naics_codes": [
+      "322130"
+    ],
+    "operating_states": [
+      "GA",
+      "OR",
+      "CA",
+      "TX",
+      "PA",
+      "VA",
+      "NC",
+      "SC",
+      "AL",
+      "FL",
+      "IL",
+      "IN",
+      "OH",
+      "MI",
+      "WI",
+      "MN",
+      "NY",
+      "NJ",
+      "MD",
+      "KY",
+      "TN",
+      "AR",
+      "LA",
+      "MO",
+      "IA",
+      "KS",
+      "OK"
+    ],
+    "total_annual_volume_tonnes": 480000.0,
+    "volume_source": "Proxy: US Rev $19,200M x 25.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "WestRock"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 288000.0,
+        "volume_confidence": 0.27,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 192000.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "GA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Oregon Top 25 #25 — Regional grocer, private, packaging EPR",
+    "name": "WinCo Foods, LLC",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "ID",
+    "naics_codes": [
+      "445110"
+    ],
+    "operating_states": [
+      "ID",
+      "OR",
+      "WA",
+      "CA",
+      "NV",
+      "UT",
+      "AZ",
+      "TX",
+      "OK",
+      "MT"
+    ],
+    "total_annual_volume_tonnes": 24000.0,
+    "volume_source": "Proxy: US Rev $8,000M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.1,
+    "aliases": [
+      "WinCo",
+      "WinCo Foods"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 12000.0,
+        "volume_confidence": 0.09,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 9600.0,
+        "volume_confidence": 0.09,
+        "source": "oregon_top25_list"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 1200.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 1200.0,
+        "volume_confidence": 0.09,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "ID",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Major grocery chain, packaging EPR",
+    "name": "The Kroger Co.",
+    "duns_number": null,
+    "cik": "56873",
+    "epa_registry_id": null,
+    "hq_state": "OH",
+    "naics_codes": [
+      "445110"
+    ],
+    "operating_states": [
+      "OH",
+      "OR",
+      "CA",
+      "TX",
+      "GA",
+      "VA",
+      "NC",
+      "SC",
+      "TN",
+      "KY",
+      "IN",
+      "IL",
+      "MI",
+      "WI",
+      "CO",
+      "AZ",
+      "NV",
+      "UT",
+      "WA",
+      "WV",
+      "MS",
+      "AL",
+      "AR",
+      "KS",
+      "MO",
+      "NE",
+      "NM",
+      "WY",
+      "ID",
+      "MT",
+      "LA",
+      "AK",
+      "HI",
+      "PA",
+      "MD",
+      "DE"
+    ],
+    "total_annual_volume_tonnes": 450000.0,
+    "volume_source": "Proxy: US Rev $150,000M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Kroger",
+      "Fred Meyer",
+      "Ralphs",
+      "Harris Teeter",
+      "Smith's"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 225000.0,
+        "volume_confidence": 0.27,
+        "source": "master_table"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 180000.0,
+        "volume_confidence": 0.27,
+        "source": "master_table"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 22500.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 22500.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "OH",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "retail",
+        "is_primary": false
+      },
+      {
+        "state": "OH",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Food CPG, packaging EPR",
+    "name": "Kraft Heinz Company",
+    "duns_number": null,
+    "cik": "1637459",
+    "epa_registry_id": null,
+    "hq_state": "IL",
+    "naics_codes": [
+      "311999"
+    ],
+    "operating_states": [
+      "IL",
+      "PA",
+      "CA",
+      "NY",
+      "OH",
+      "WI",
+      "IA",
+      "MO",
+      "OR",
+      "TX",
+      "GA",
+      "IN",
+      "MI",
+      "MN"
+    ],
+    "total_annual_volume_tonnes": 219725.0,
+    "volume_source": "Proxy: US Rev $25,850M x 8.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Kraft Heinz",
+      "Kraft",
+      "Heinz"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 98876.2,
+        "volume_confidence": 0.27,
+        "source": "caa_board_member"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 76903.8,
+        "volume_confidence": 0.27,
+        "source": "caa_board_member"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 21972.5,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 21972.5,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IL",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "CPG, packaging EPR, CAA board member",
+    "name": "Colgate-Palmolive Company",
+    "duns_number": null,
+    "cik": "21665",
+    "epa_registry_id": null,
+    "hq_state": "NY",
+    "naics_codes": [
+      "325611"
+    ],
+    "operating_states": [
+      "NY",
+      "NJ",
+      "OH",
+      "IN",
+      "KS",
+      "MO",
+      "CA",
+      "OR"
+    ],
+    "total_annual_volume_tonnes": 42500.0,
+    "volume_source": "Proxy: US Rev $8,500M x 5.0 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Colgate-Palmolive",
+      "Colgate"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 27625.0,
+        "volume_confidence": 0.18,
+        "source": "caa_board_member"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 12750.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 2125.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NY",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Snacks CPG, packaging EPR, CAA board member",
+    "name": "Mondelēz International, Inc.",
+    "duns_number": null,
+    "cik": "1103982",
+    "epa_registry_id": null,
+    "hq_state": "IL",
+    "naics_codes": [
+      "311351"
+    ],
+    "operating_states": [
+      "IL",
+      "NJ",
+      "PA",
+      "VA",
+      "OR",
+      "CA",
+      "GA",
+      "IN",
+      "OH",
+      "TX"
+    ],
+    "total_annual_volume_tonnes": 76500.0,
+    "volume_source": "Proxy: US Rev $9,000M x 8.5 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Mondelez",
+      "Mondelēz",
+      "Mondelez International"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 34425.0,
+        "volume_confidence": 0.18,
+        "source": "caa_board_member"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 26775.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 7650.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 7650.0,
+        "volume_confidence": 0.18,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IL",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Household products, packaging EPR, CAA board member",
+    "name": "The Clorox Company",
+    "duns_number": null,
+    "cik": "21076",
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "325612"
+    ],
+    "operating_states": [
+      "CA",
+      "GA",
+      "OR"
+    ],
+    "total_annual_volume_tonnes": 35500.0,
+    "volume_source": "Proxy: US Rev $7,100M x 5.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Clorox"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 23075.0,
+        "volume_confidence": 0.27,
+        "source": "caa_board_member"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 10650.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 1775.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Beverage CPG, packaging EPR, CAA board member",
+    "name": "Keurig Dr Pepper Inc.",
+    "duns_number": null,
+    "cik": "1418135",
+    "epa_registry_id": null,
+    "hq_state": "TX",
+    "naics_codes": [
+      "312111"
+    ],
+    "operating_states": [
+      "TX",
+      "MA",
+      "CA",
+      "PA",
+      "IL",
+      "FL",
+      "OR",
+      "CO",
+      "VT"
+    ],
+    "total_annual_volume_tonnes": 183600.0,
+    "volume_source": "Proxy: US Rev $15,300M x 12.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Keurig Dr Pepper",
+      "KDP",
+      "Dr Pepper"
+    ],
+    "epr_categories": [
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 55080.0,
+        "volume_confidence": 0.27,
+        "source": "caa_board_member"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 27540.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "glass_packaging",
+        "annual_volume_tonnes": 55080.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 45900.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "TX",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR, all e-waste states",
+    "name": "Apple Inc.",
+    "duns_number": null,
+    "cik": "320193",
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "334111"
+    ],
+    "operating_states": [
+      "CA",
+      "TX",
+      "CO",
+      "NC",
+      "OR",
+      "WA",
+      "NY",
+      "AZ",
+      "IA",
+      "NV"
+    ],
+    "total_annual_volume_tonnes": 250500.0,
+    "volume_source": "Proxy: US Rev $167,000M x 1.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Apple"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 250500.0,
+        "volume_confidence": 0.27,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "TX",
+        "presence_type": "offices",
+        "is_primary": false
+      },
+      {
+        "state": "NC",
+        "presence_type": "offices",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "offices",
+        "is_primary": false
+      },
+      {
+        "state": "AZ",
+        "presence_type": "data_center",
+        "is_primary": false
+      },
+      {
+        "state": "IA",
+        "presence_type": "data_center",
+        "is_primary": false
+      },
+      {
+        "state": "NV",
+        "presence_type": "data_center",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR, foreign filer",
+    "name": "Samsung Electronics America, Inc.",
+    "duns_number": null,
+    "cik": "805676",
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "334310",
+      "334413"
+    ],
+    "operating_states": [
+      "NJ",
+      "TX",
+      "SC",
+      "NY",
+      "CA"
+    ],
+    "total_annual_volume_tonnes": 37500.0,
+    "volume_source": "Proxy: US Rev $25,000M x 1.5 t/$M intensity factor",
+    "volume_confidence": 0.1,
+    "aliases": [
+      "Samsung",
+      "Samsung Electronics"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 37500.0,
+        "volume_confidence": 0.09,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "TX",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "SC",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR",
+    "name": "Dell Technologies Inc.",
+    "duns_number": null,
+    "cik": "1571996",
+    "epa_registry_id": null,
+    "hq_state": "TX",
+    "naics_codes": [
+      "334111"
+    ],
+    "operating_states": [
+      "TX",
+      "TN",
+      "NC",
+      "MA",
+      "CA",
+      "WA",
+      "VA"
+    ],
+    "total_annual_volume_tonnes": 143850.0,
+    "volume_source": "Proxy: US Rev $95,900M x 1.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Dell",
+      "Dell Technologies",
+      "Dell Marketing USA LP"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 143850.0,
+        "volume_confidence": 0.27,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "TX",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "TN",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "NC",
+        "presence_type": "offices",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR",
+    "name": "HP Inc.",
+    "duns_number": null,
+    "cik": "47217",
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "334111",
+      "333316"
+    ],
+    "operating_states": [
+      "CA",
+      "TX",
+      "ID",
+      "OR",
+      "WA"
+    ],
+    "total_annual_volume_tonnes": 82950.0,
+    "volume_source": "Proxy: US Rev $55,300M x 1.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "HP",
+      "Hewlett-Packard"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 82950.0,
+        "volume_confidence": 0.27,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "TX",
+        "presence_type": "offices",
+        "is_primary": false
+      },
+      {
+        "state": "ID",
+        "presence_type": "offices",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Enterprise hardware, electronics EPR",
+    "name": "Hewlett Packard Enterprise Company",
+    "duns_number": null,
+    "cik": "1645590",
+    "epa_registry_id": null,
+    "hq_state": "TX",
+    "naics_codes": [
+      "334111"
+    ],
+    "operating_states": [
+      "TX",
+      "CA",
+      "WA",
+      "CO"
+    ],
+    "total_annual_volume_tonnes": 47550.0,
+    "volume_source": "Proxy: US Rev $31,700M x 1.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "HPE",
+      "Hewlett Packard Enterprise"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 47550.0,
+        "volume_confidence": 0.27,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "TX",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "CA",
+        "presence_type": "offices",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR, foreign parent",
+    "name": "Lenovo (United States) Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "NC",
+    "naics_codes": [
+      "334111"
+    ],
+    "operating_states": [
+      "NC"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Lenovo",
+      "Lenovo US"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NC",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NC",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR",
+    "name": "Microsoft Corporation",
+    "duns_number": null,
+    "cik": "789019",
+    "epa_registry_id": null,
+    "hq_state": "WA",
+    "naics_codes": [
+      "511210",
+      "334111"
+    ],
+    "operating_states": [
+      "WA",
+      "VA",
+      "CA",
+      "TX",
+      "NC",
+      "IA",
+      "AZ",
+      "IL"
+    ],
+    "total_annual_volume_tonnes": 225000.0,
+    "volume_source": "Proxy: US Rev $150,000M x 1.5 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Microsoft",
+      "MSFT"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 225000.0,
+        "volume_confidence": 0.18,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "WA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "VA",
+        "presence_type": "data_center",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "offices",
+        "is_primary": false
+      },
+      {
+        "state": "TX",
+        "presence_type": "offices",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR (via Alphabet)",
+    "name": "Google LLC",
+    "duns_number": null,
+    "cik": "1652044",
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "334111"
+    ],
+    "operating_states": [
+      "CA",
+      "NY",
+      "WA",
+      "TX",
+      "VA",
+      "NC",
+      "OR",
+      "IA",
+      "SC",
+      "GA",
+      "AL",
+      "NV",
+      "OH"
+    ],
+    "total_annual_volume_tonnes": 285000.0,
+    "volume_source": "Proxy: US Rev $190,000M x 1.5 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Google",
+      "Alphabet"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 285000.0,
+        "volume_confidence": 0.18,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NY",
+        "presence_type": "offices",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "distribution",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR, foreign parent",
+    "name": "Acer America Corporation",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "334111"
+    ],
+    "operating_states": [
+      "CA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Acer"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR, foreign parent",
+    "name": "ASUS Computer International",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "334111"
+    ],
+    "operating_states": [
+      "CA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "ASUS"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR, foreign filer",
+    "name": "Sony Electronics Inc.",
+    "duns_number": null,
+    "cik": "313838",
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "334310"
+    ],
+    "operating_states": [
+      "CA",
+      "NY",
+      "NJ"
+    ],
+    "total_annual_volume_tonnes": 12000.0,
+    "volume_source": "Proxy: US Rev $8,000M x 1.5 t/$M intensity factor",
+    "volume_confidence": 0.1,
+    "aliases": [
+      "Sony",
+      "Sony Electronics"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 12000.0,
+        "volume_confidence": 0.09,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics + batteries EPR, foreign parent",
+    "name": "LG Electronics USA, Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "335220",
+      "334310"
+    ],
+    "operating_states": [
+      "NJ",
+      "TN",
+      "AL"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "LG",
+      "LG Electronics"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "TN",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "AL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR, MRM co-founder, foreign parent",
+    "name": "Panasonic Corporation of North America",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "334310",
+      "335220"
+    ],
+    "operating_states": [
+      "NJ",
+      "NV",
+      "CA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Panasonic",
+      "Panasonic NA"
+    ],
+    "epr_categories": [
+      "electronics",
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR (TVs), private",
+    "name": "TTE Technology, Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "334310"
+    ],
+    "operating_states": [
+      "CA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "TCL",
+      "TTE Technology"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR, private",
+    "name": "Hisense USA Corporation",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "GA",
+    "naics_codes": [
+      "334310"
+    ],
+    "operating_states": [
+      "GA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Hisense"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "GA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR (printers), foreign filer",
+    "name": "Canon U.S.A., Inc.",
+    "duns_number": null,
+    "cik": "16988",
+    "epa_registry_id": null,
+    "hq_state": "NY",
+    "naics_codes": [
+      "333316"
+    ],
+    "operating_states": [
+      "NY",
+      "VA"
+    ],
+    "total_annual_volume_tonnes": 18000.0,
+    "volume_source": "Proxy: US Rev $6,000M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.1,
+    "aliases": [
+      "Canon",
+      "Canon USA"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 18000.0,
+        "volume_confidence": 0.09,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NY",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "VA",
+        "presence_type": "offices",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR (printers), foreign parent",
+    "name": "Epson America, Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "333316"
+    ],
+    "operating_states": [
+      "CA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Epson"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR (printers), private",
+    "name": "Brother International Corporation",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "333316"
+    ],
+    "operating_states": [
+      "NJ"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Brother"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR",
+    "name": "Xerox Corporation",
+    "duns_number": null,
+    "cik": "108772",
+    "epa_registry_id": null,
+    "hq_state": "CT",
+    "naics_codes": [
+      "333316"
+    ],
+    "operating_states": [
+      "CT",
+      "NY"
+    ],
+    "total_annual_volume_tonnes": 19200.0,
+    "volume_source": "Proxy: US Rev $6,400M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Xerox"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": 19200.0,
+        "volume_confidence": 0.27,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CT",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NY",
+        "presence_type": "offices",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR (game consoles), foreign parent",
+    "name": "Nintendo of America Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "WA",
+    "naics_codes": [
+      "339930"
+    ],
+    "operating_states": [
+      "WA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Nintendo"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "WA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Electronics EPR, MRM co-founder, foreign parent (Foxconn)",
+    "name": "Sharp Electronics Corporation",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "334310"
+    ],
+    "operating_states": [
+      "NJ"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Sharp"
+    ],
+    "epr_categories": [
+      "electronics"
+    ],
+    "materials": [
+      {
+        "material_category": "electronics",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "ewaste_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Paint EPR — largest US paint company, PaintCare participant",
+    "name": "The Sherwin-Williams Company",
+    "duns_number": null,
+    "cik": "89800",
+    "epa_registry_id": null,
+    "hq_state": "OH",
+    "naics_codes": [
+      "325510"
+    ],
+    "operating_states": [
+      "OH",
+      "NC",
+      "PA",
+      "TX",
+      "IL",
+      "CA",
+      "GA",
+      "FL",
+      "NJ",
+      "OR",
+      "WA",
+      "CO",
+      "MN",
+      "AZ",
+      "MA",
+      "IN",
+      "TN",
+      "MO",
+      "WI",
+      "SC",
+      "AL",
+      "LA",
+      "KY",
+      "OK",
+      "CT",
+      "IA",
+      "AR",
+      "KS",
+      "NV",
+      "UT",
+      "NE",
+      "NM",
+      "MS",
+      "ID",
+      "NH",
+      "ME",
+      "RI",
+      "MT",
+      "DE",
+      "WV",
+      "HI",
+      "SD",
+      "ND",
+      "AK",
+      "VT",
+      "WY",
+      "VA",
+      "MI",
+      "MD",
+      "NY",
+      "NJ",
+      "DC"
+    ],
+    "total_annual_volume_tonnes": 346500.0,
+    "volume_source": "Proxy: US Rev $23,100M x 15.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Sherwin-Williams",
+      "Valspar",
+      "Masterchem Industries"
+    ],
+    "epr_categories": [
+      "paint"
+    ],
+    "materials": [
+      {
+        "material_category": "paint",
+        "annual_volume_tonnes": 346500.0,
+        "volume_confidence": 0.27,
+        "source": "paintcare_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "OH",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OH",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "NC",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "TX",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "IL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "FL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Paint EPR — global coatings leader",
+    "name": "PPG Industries, Inc.",
+    "duns_number": null,
+    "cik": "79879",
+    "epa_registry_id": null,
+    "hq_state": "PA",
+    "naics_codes": [
+      "325510"
+    ],
+    "operating_states": [
+      "PA",
+      "OH",
+      "TX",
+      "CA",
+      "NC",
+      "IL",
+      "GA"
+    ],
+    "total_annual_volume_tonnes": 120000.0,
+    "volume_source": "Proxy: US Rev $8,000M x 15.0 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "PPG",
+      "PPG Industries",
+      "Pittsburgh Paints"
+    ],
+    "epr_categories": [
+      "paint"
+    ],
+    "materials": [
+      {
+        "material_category": "paint",
+        "annual_volume_tonnes": 120000.0,
+        "volume_confidence": 0.18,
+        "source": "paintcare_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "PA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Paint EPR — Berkshire Hathaway subsidiary",
+    "name": "Benjamin Moore & Co.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "325510"
+    ],
+    "operating_states": [
+      "NJ"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Benjamin Moore"
+    ],
+    "epr_categories": [
+      "paint"
+    ],
+    "materials": [
+      {
+        "material_category": "paint",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "paintcare_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NJ",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Paint EPR — parent of Rust-Oleum, DAP, Zinsser",
+    "name": "RPM International Inc.",
+    "duns_number": null,
+    "cik": "110621",
+    "epa_registry_id": null,
+    "hq_state": "OH",
+    "naics_codes": [
+      "325510"
+    ],
+    "operating_states": [
+      "OH",
+      "IL"
+    ],
+    "total_annual_volume_tonnes": 109500.0,
+    "volume_source": "Proxy: US Rev $7,300M x 15.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "RPM International",
+      "RPM",
+      "Rust-Oleum",
+      "DAP",
+      "Zinsser"
+    ],
+    "epr_categories": [
+      "paint"
+    ],
+    "materials": [
+      {
+        "material_category": "paint",
+        "annual_volume_tonnes": 109500.0,
+        "volume_confidence": 0.27,
+        "source": "paintcare_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "OH",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "IL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Paint EPR — Masco subsidiary, sold at Home Depot",
+    "name": "Behr Process LLC",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "325510"
+    ],
+    "operating_states": [
+      "CA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Behr",
+      "Behr Paint"
+    ],
+    "epr_categories": [
+      "paint"
+    ],
+    "materials": [
+      {
+        "material_category": "paint",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "paintcare_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Paint EPR — Southwest regional",
+    "name": "Dunn-Edwards Corporation",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CA",
+    "naics_codes": [
+      "325510"
+    ],
+    "operating_states": [
+      "CA",
+      "AZ",
+      "NV",
+      "NM",
+      "TX"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Dunn-Edwards"
+    ],
+    "epr_categories": [
+      "paint"
+    ],
+    "materials": [
+      {
+        "material_category": "paint",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "paintcare_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Paint EPR — Midwest/West regional",
+    "name": "Diamond Vogel Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "IA",
+    "naics_codes": [
+      "325510"
+    ],
+    "operating_states": [
+      "IA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Diamond Vogel"
+    ],
+    "epr_categories": [
+      "paint"
+    ],
+    "materials": [
+      {
+        "material_category": "paint",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "paintcare_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "IA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Mattress EPR — #1 US mattress company, acquired Mattress Firm",
+    "name": "Somnigroup International, Inc.",
+    "duns_number": null,
+    "cik": "1206264",
+    "epa_registry_id": null,
+    "hq_state": "KY",
+    "naics_codes": [
+      "337910"
+    ],
+    "operating_states": [
+      "KY",
+      "NC",
+      "IN",
+      "MN",
+      "NM",
+      "CA",
+      "TX",
+      "AZ",
+      "GA"
+    ],
+    "total_annual_volume_tonnes": 10400.0,
+    "volume_source": "Proxy: US Rev $5,200M x 2.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Somnigroup",
+      "Tempur-Sealy",
+      "Tempur Sealy International",
+      "Mattress Firm"
+    ],
+    "epr_categories": [
+      "mattress"
+    ],
+    "materials": [
+      {
+        "material_category": "mattress",
+        "annual_volume_tonnes": 10400.0,
+        "volume_confidence": 0.27,
+        "source": "mrc_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "KY",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NC",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "IN",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Mattress EPR — #2 US, post-Chapter 11, private",
+    "name": "Serta Simmons Bedding, LLC",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "GA",
+    "naics_codes": [
+      "337910"
+    ],
+    "operating_states": [
+      "GA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Serta Simmons",
+      "Serta",
+      "Beautyrest",
+      "Tuft & Needle"
+    ],
+    "epr_categories": [
+      "mattress"
+    ],
+    "materials": [
+      {
+        "material_category": "mattress",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "mrc_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "GA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Mattress EPR — #3 US, DTC with 672 retail stores",
+    "name": "Sleep Number Corporation",
+    "duns_number": null,
+    "cik": "827187",
+    "epa_registry_id": null,
+    "hq_state": "MN",
+    "naics_codes": [
+      "337910"
+    ],
+    "operating_states": [
+      "MN"
+    ],
+    "total_annual_volume_tonnes": 3600.0,
+    "volume_source": "Proxy: US Rev $1,800M x 2.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Sleep Number"
+    ],
+    "epr_categories": [
+      "mattress"
+    ],
+    "materials": [
+      {
+        "material_category": "mattress",
+        "annual_volume_tonnes": 3600.0,
+        "volume_confidence": 0.27,
+        "source": "mrc_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "MN",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "MN",
+        "presence_type": "retail",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Mattress EPR — DTC innovator",
+    "name": "Purple Innovation, Inc.",
+    "duns_number": null,
+    "cik": "1643953",
+    "epa_registry_id": null,
+    "hq_state": "UT",
+    "naics_codes": [
+      "337910"
+    ],
+    "operating_states": [
+      "UT",
+      "GA"
+    ],
+    "total_annual_volume_tonnes": 1000.0,
+    "volume_source": "Proxy: US Rev $500M x 2.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Purple",
+      "Purple Innovation"
+    ],
+    "epr_categories": [
+      "mattress"
+    ],
+    "materials": [
+      {
+        "material_category": "mattress",
+        "annual_volume_tonnes": 1000.0,
+        "volume_confidence": 0.27,
+        "source": "mrc_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "UT",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "UT",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Mattress EPR — furniture conglomerate, private",
+    "name": "Ashley Furniture Industries, LLC",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "WI",
+    "naics_codes": [
+      "337910"
+    ],
+    "operating_states": [
+      "WI",
+      "MS",
+      "NC",
+      "PA",
+      "CA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Ashley Furniture",
+      "Ashley"
+    ],
+    "epr_categories": [
+      "mattress"
+    ],
+    "materials": [
+      {
+        "material_category": "mattress",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "mrc_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "WI",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "WI",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Mattress EPR — DTC, now private",
+    "name": "Casper Sleep Inc.",
+    "duns_number": null,
+    "cik": "1598014",
+    "epa_registry_id": null,
+    "hq_state": "NY",
+    "naics_codes": [
+      "337910"
+    ],
+    "operating_states": [
+      "NY"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Casper"
+    ],
+    "epr_categories": [
+      "mattress"
+    ],
+    "materials": [
+      {
+        "material_category": "mattress",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "mrc_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NY",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Carpet EPR — largest US carpet mfg, Berkshire Hathaway subsidiary",
+    "name": "Shaw Industries Group, Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "GA",
+    "naics_codes": [
+      "314110"
+    ],
+    "operating_states": [
+      "GA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Shaw Industries",
+      "Shaw Floors"
+    ],
+    "epr_categories": [
+      "carpet"
+    ],
+    "materials": [
+      {
+        "material_category": "carpet",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "care_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "GA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Carpet EPR — ~$10.8B revenue flooring company",
+    "name": "Mohawk Industries, Inc.",
+    "duns_number": null,
+    "cik": "851968",
+    "epa_registry_id": null,
+    "hq_state": "GA",
+    "naics_codes": [
+      "314110"
+    ],
+    "operating_states": [
+      "GA",
+      "AL",
+      "SC",
+      "NC",
+      "VA",
+      "TN",
+      "TX",
+      "CA",
+      "OK",
+      "PA"
+    ],
+    "total_annual_volume_tonnes": 21600.0,
+    "volume_source": "Proxy: US Rev $10,800M x 2.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Mohawk",
+      "Mohawk Industries"
+    ],
+    "epr_categories": [
+      "carpet"
+    ],
+    "materials": [
+      {
+        "material_category": "carpet",
+        "annual_volume_tonnes": 21600.0,
+        "volume_confidence": 0.27,
+        "source": "care_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "GA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "AL",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "SC",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Carpet EPR — sustainable flooring pioneer",
+    "name": "Interface Americas, Inc.",
+    "duns_number": null,
+    "cik": "715787",
+    "epa_registry_id": null,
+    "hq_state": "GA",
+    "naics_codes": [
+      "314110"
+    ],
+    "operating_states": [
+      "GA"
+    ],
+    "total_annual_volume_tonnes": 1200.0,
+    "volume_source": "Proxy: US Rev $600M x 2.0 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Interface",
+      "Interface Americas"
+    ],
+    "epr_categories": [
+      "carpet"
+    ],
+    "materials": [
+      {
+        "material_category": "carpet",
+        "annual_volume_tonnes": 1200.0,
+        "volume_confidence": 0.18,
+        "source": "care_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "GA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Carpet EPR — specialty carpet manufacturer",
+    "name": "The Dixie Group, Inc.",
+    "duns_number": null,
+    "cik": "29332",
+    "epa_registry_id": null,
+    "hq_state": "GA",
+    "naics_codes": [
+      "314110"
+    ],
+    "operating_states": [
+      "GA"
+    ],
+    "total_annual_volume_tonnes": 600.0,
+    "volume_source": "Proxy: US Rev $300M x 2.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Dixie Group"
+    ],
+    "epr_categories": [
+      "carpet"
+    ],
+    "materials": [
+      {
+        "material_category": "carpet",
+        "annual_volume_tonnes": 600.0,
+        "volume_confidence": 0.27,
+        "source": "care_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "GA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Battery EPR — primary alkaline, Berkshire Hathaway subsidiary",
+    "name": "Duracell Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "CT",
+    "naics_codes": [
+      "335912"
+    ],
+    "operating_states": [
+      "CT"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Duracell"
+    ],
+    "epr_categories": [
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "batteries_alkaline",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "call2recycle_steward_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "CT",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Battery EPR — primary alkaline, also Rayovac and Eveready brands",
+    "name": "Energizer Holdings, Inc.",
+    "duns_number": null,
+    "cik": "1632790",
+    "epa_registry_id": null,
+    "hq_state": "MO",
+    "naics_codes": [
+      "335912"
+    ],
+    "operating_states": [
+      "MO",
+      "OH",
+      "VT",
+      "GA"
+    ],
+    "total_annual_volume_tonnes": 8700.0,
+    "volume_source": "Proxy: US Rev $2,900M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Energizer",
+      "Rayovac",
+      "Eveready"
+    ],
+    "epr_categories": [
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "batteries_alkaline",
+        "annual_volume_tonnes": 8700.0,
+        "volume_confidence": 0.27,
+        "source": "call2recycle_steward_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "MO",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OH",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "VT",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Battery EPR — Li-ion, foreign parent",
+    "name": "Panasonic Energy of North America",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "335911"
+    ],
+    "operating_states": [
+      "NJ",
+      "NV"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Panasonic Energy"
+    ],
+    "epr_categories": [
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "batteries_lithium",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "call2recycle_steward_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NV",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Battery EPR — EV Li-ion, JVs with GM, foreign parent",
+    "name": "LG Energy Solution Michigan, Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "MI",
+    "naics_codes": [
+      "335911"
+    ],
+    "operating_states": [
+      "MI",
+      "OH",
+      "TN"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "LG Energy Solution",
+      "LGES"
+    ],
+    "epr_categories": [
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "batteries_lithium",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "call2recycle_steward_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "MI",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OH",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "TN",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Battery EPR — energy storage, Gigafactories",
+    "name": "Tesla, Inc.",
+    "duns_number": null,
+    "cik": "1318605",
+    "epa_registry_id": null,
+    "hq_state": "TX",
+    "naics_codes": [
+      "335911",
+      "336111"
+    ],
+    "operating_states": [
+      "TX",
+      "NV",
+      "CA",
+      "NY"
+    ],
+    "total_annual_volume_tonnes": 234000.0,
+    "volume_source": "Proxy: US Rev $78,000M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Tesla"
+    ],
+    "epr_categories": [
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "batteries_lithium",
+        "annual_volume_tonnes": 163800.0,
+        "volume_confidence": 0.27,
+        "source": "call2recycle_steward_list"
+      },
+      {
+        "material_category": "batteries_lead_acid",
+        "annual_volume_tonnes": 70200.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "TX",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "TX",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "NV",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "NY",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Battery EPR — automotive lead-acid, private (Brookfield)",
+    "name": "Clarios International Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "WI",
+    "naics_codes": [
+      "335911"
+    ],
+    "operating_states": [
+      "WI",
+      "OH",
+      "PA",
+      "MO",
+      "GA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "Clarios",
+      "Johnson Controls batteries"
+    ],
+    "epr_categories": [
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "batteries_lead_acid",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "call2recycle_steward_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "WI",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "WI",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OH",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "MO",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "GA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Battery EPR — industrial batteries",
+    "name": "EnerSys",
+    "duns_number": null,
+    "cik": "1289308",
+    "epa_registry_id": null,
+    "hq_state": "PA",
+    "naics_codes": [
+      "335911"
+    ],
+    "operating_states": [
+      "PA",
+      "KY",
+      "CA"
+    ],
+    "total_annual_volume_tonnes": 10500.0,
+    "volume_source": "Proxy: US Rev $3,500M x 3.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "EnerSys"
+    ],
+    "epr_categories": [
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "batteries_lithium",
+        "annual_volume_tonnes": 7350.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "batteries_lead_acid",
+        "annual_volume_tonnes": 3150.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "PA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "KY",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "CA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Battery EPR — one of world's largest single-site battery plants, private",
+    "name": "East Penn Manufacturing Co., Inc.",
+    "duns_number": null,
+    "cik": null,
+    "epa_registry_id": null,
+    "hq_state": "PA",
+    "naics_codes": [
+      "335911"
+    ],
+    "operating_states": [
+      "PA"
+    ],
+    "total_annual_volume_tonnes": null,
+    "volume_source": null,
+    "volume_confidence": null,
+    "aliases": [
+      "East Penn",
+      "East Penn Manufacturing",
+      "Deka Batteries"
+    ],
+    "epr_categories": [
+      "batteries"
+    ],
+    "materials": [
+      {
+        "material_category": "batteries_lead_acid",
+        "annual_volume_tonnes": null,
+        "volume_confidence": null,
+        "source": "call2recycle_steward_list"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "PA",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Pharmaceutical EPR — major pharma",
+    "name": "Pfizer Inc.",
+    "duns_number": null,
+    "cik": "78003",
+    "epa_registry_id": null,
+    "hq_state": "NY",
+    "naics_codes": [
+      "325412"
+    ],
+    "operating_states": [
+      "NY",
+      "CT",
+      "MA",
+      "NC",
+      "PA",
+      "MI",
+      "KS",
+      "OH"
+    ],
+    "total_annual_volume_tonnes": 42000.0,
+    "volume_source": "Proxy: US Rev $42,000M x 1.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Pfizer"
+    ],
+    "epr_categories": [
+      "pharmaceuticals"
+    ],
+    "materials": [
+      {
+        "material_category": "pharmaceuticals",
+        "annual_volume_tonnes": 42000.0,
+        "volume_confidence": 0.27,
+        "source": "pharma_epr_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NY",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "CT",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "NC",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Pharmaceutical EPR + packaging EPR",
+    "name": "Johnson & Johnson",
+    "duns_number": null,
+    "cik": "200406",
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "325412",
+      "339112"
+    ],
+    "operating_states": [
+      "NJ",
+      "PA",
+      "CA",
+      "TX",
+      "GA",
+      "IN",
+      "MA",
+      "FL"
+    ],
+    "total_annual_volume_tonnes": 55000.0,
+    "volume_source": "Proxy: US Rev $55,000M x 1.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "J&J",
+      "Johnson and Johnson"
+    ],
+    "epr_categories": [
+      "pharmaceuticals",
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 35750.0,
+        "volume_confidence": 0.27,
+        "source": "master_table"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 16500.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 2750.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "NJ",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Pharmaceutical EPR — major pharma",
+    "name": "Merck & Co., Inc.",
+    "duns_number": null,
+    "cik": "310158",
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "325412"
+    ],
+    "operating_states": [
+      "NJ",
+      "PA",
+      "NC"
+    ],
+    "total_annual_volume_tonnes": 33000.0,
+    "volume_source": "Proxy: US Rev $33,000M x 1.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Merck",
+      "MSD"
+    ],
+    "epr_categories": [
+      "pharmaceuticals"
+    ],
+    "materials": [
+      {
+        "material_category": "pharmaceuticals",
+        "annual_volume_tonnes": 33000.0,
+        "volume_confidence": 0.27,
+        "source": "pharma_epr_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Pharmaceutical EPR — major pharma",
+    "name": "AbbVie Inc.",
+    "duns_number": null,
+    "cik": "1551152",
+    "epa_registry_id": null,
+    "hq_state": "IL",
+    "naics_codes": [
+      "325412"
+    ],
+    "operating_states": [
+      "IL"
+    ],
+    "total_annual_volume_tonnes": 41000.0,
+    "volume_source": "Proxy: US Rev $41,000M x 1.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "AbbVie"
+    ],
+    "epr_categories": [
+      "pharmaceuticals"
+    ],
+    "materials": [
+      {
+        "material_category": "pharmaceuticals",
+        "annual_volume_tonnes": 41000.0,
+        "volume_confidence": 0.27,
+        "source": "pharma_epr_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "IL",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Pharmaceutical EPR — ex-J&J consumer health",
+    "name": "Kenvue Inc.",
+    "duns_number": null,
+    "cik": "1944048",
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "325412"
+    ],
+    "operating_states": [
+      "NJ"
+    ],
+    "total_annual_volume_tonnes": 7500.0,
+    "volume_source": "Proxy: US Rev $7,500M x 1.0 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Kenvue"
+    ],
+    "epr_categories": [
+      "pharmaceuticals",
+      "packaging"
+    ],
+    "materials": [
+      {
+        "material_category": "plastic_packaging",
+        "annual_volume_tonnes": 4875.0,
+        "volume_confidence": 0.27,
+        "source": "master_table"
+      },
+      {
+        "material_category": "paper_packaging",
+        "annual_volume_tonnes": 2250.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      },
+      {
+        "material_category": "aluminum_packaging",
+        "annual_volume_tonnes": 375.0,
+        "volume_confidence": 0.27,
+        "source": "proxy_revenue_intensity"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      }
+    ]
+  },
+  {
+    "_comment": "Pharmaceutical EPR — generic pharma, foreign parent",
+    "name": "Teva Pharmaceutical Industries Ltd.",
+    "duns_number": null,
+    "cik": "818686",
+    "epa_registry_id": null,
+    "hq_state": "NJ",
+    "naics_codes": [
+      "325412"
+    ],
+    "operating_states": [
+      "NJ",
+      "PA"
+    ],
+    "total_annual_volume_tonnes": 7000.0,
+    "volume_source": "Proxy: US Rev $7,000M x 1.0 t/$M intensity factor",
+    "volume_confidence": 0.2,
+    "aliases": [
+      "Teva",
+      "Teva Pharmaceuticals"
+    ],
+    "epr_categories": [
+      "pharmaceuticals"
+    ],
+    "materials": [
+      {
+        "material_category": "pharmaceuticals",
+        "annual_volume_tonnes": 7000.0,
+        "volume_confidence": 0.18,
+        "source": "pharma_epr_registry"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "NJ",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "PA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  },
+  {
+    "_comment": "Tire EPR (CT) — major US tire manufacturer",
+    "name": "The Goodyear Tire & Rubber Company",
+    "duns_number": null,
+    "cik": "42582",
+    "epa_registry_id": null,
+    "hq_state": "OH",
+    "naics_codes": [
+      "326211"
+    ],
+    "operating_states": [
+      "OH",
+      "NC",
+      "OK",
+      "VA",
+      "KS",
+      "MS",
+      "AR",
+      "TX"
+    ],
+    "total_annual_volume_tonnes": 6250.0,
+    "volume_source": "Proxy: US Rev $12,500M x 0.5 t/$M intensity factor",
+    "volume_confidence": 0.3,
+    "aliases": [
+      "Goodyear",
+      "Goodyear Tire"
+    ],
+    "epr_categories": [
+      "tires"
+    ],
+    "materials": [
+      {
+        "material_category": "tires",
+        "annual_volume_tonnes": 6250.0,
+        "volume_confidence": 0.27,
+        "source": "ct_tire_epr"
+      }
+    ],
+    "state_presences": [
+      {
+        "state": "OH",
+        "presence_type": "headquarters",
+        "is_primary": true
+      },
+      {
+        "state": "OH",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "NC",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "OK",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "VA",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "KS",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "MS",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "AR",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      },
+      {
+        "state": "TX",
+        "presence_type": "manufacturing",
+        "is_primary": false
+      }
+    ]
+  }
+]

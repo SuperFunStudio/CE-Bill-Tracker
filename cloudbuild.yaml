@@ -97,9 +97,9 @@ steps:
         DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
           alembic upgrade head
 
-        # Seed known EPR laws (idempotent)
-        DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
-          python3 /workspace/scripts/seed_database.py
+        # NOTE: the known-EPR-laws seed (scripts/seed_database.py) is intentionally NOT run.
+        # Its source URLs were wrong; bill data now comes from the OpenStates dump import
+        # (scripts/import_openstates_pgdump.py) and migration 005 purges the old seed rows.
 
         # Seed target companies (idempotent)
         DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \

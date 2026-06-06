@@ -148,5 +148,13 @@ async def seed_known_laws():
         print("Spot-check: run 'SELECT state, bill_number, status FROM bills ORDER BY state;' in psql")
 
 
+async def _disabled() -> None:
+    """The known-EPR-laws seed is retired. Its source URLs were wrong (broken dashboard
+    links); bill data now comes from the OpenStates dump import
+    (scripts/import_openstates_pgdump.py), and migration 005 purges the old seed rows."""
+    print("seed_database.py is DISABLED — use scripts/import_openstates_pgdump.py "
+          "(seed replaced by OpenStates dump import; see migration 005)")
+
+
 if __name__ == "__main__":
-    asyncio.run(seed_known_laws())
+    asyncio.run(_disabled())

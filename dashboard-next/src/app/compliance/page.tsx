@@ -5,6 +5,7 @@ import { useBills } from '@/hooks/useBills';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { DeadlineTimeline } from '@/components/compliance/DeadlineTimeline';
 import { formatDate, daysUntil, downloadCsv, STATE_NAMES } from '@/lib/utils';
 import type { DeadlineSummary } from '@/lib/types';
 
@@ -64,7 +65,7 @@ function DeadlineCard({ deadline }: { deadline: DeadlineSummary }) {
 }
 
 export default function CompliancePage() {
-  const [daysAhead, setDaysAhead] = useState(365);
+  const [daysAhead, setDaysAhead] = useState(1095);
   const [stateFilter, setStateFilter] = useState('');
   const [includePast, setIncludePast] = useState(false);
 
@@ -130,6 +131,12 @@ export default function CompliancePage() {
       .sort((a, b) => a.deadline_date.localeCompare(b.deadline_date));
   }, [apiDeadlines, bills, stateFilter, includePast, daysAhead]);
 
+  // Timeline shows only upcoming deadlines (today onward), regardless of the include-past toggle.
+  const timelineDeadlines = useMemo(
+    () => allDeadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0; }),
+    [allDeadlines],
+  );
+
   const within30 = allDeadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0 && n <= 30; }).length;
   const within90 = allDeadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0 && n <= 90; }).length;
   const nextDeadline = allDeadlines.find(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0; });
@@ -173,8 +180,14 @@ export default function CompliancePage() {
             onChange={e => setDaysAhead(Number(e.target.value))}
             className="bg-bg-primary border border-border-default rounded px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-green-accent"
           >
-            {[30, 90, 180, 365, 730].map(d => (
-              <option key={d} value={d}>{d} days</option>
+            {[
+              { v: 90, l: '90 days' },
+              { v: 180, l: '6 months' },
+              { v: 365, l: '1 year' },
+              { v: 730, l: '2 years' },
+              { v: 1095, l: '3 years' },
+            ].map(o => (
+              <option key={o.v} value={o.v}>{o.l}</option>
             ))}
           </select>
         </div>
@@ -204,6 +217,14 @@ export default function CompliancePage() {
           </button>
         </div>
       </div>
+
+      {/* Timeline */}
+      {timelineDeadlines.length > 0 && (
+        <div>
+          <SectionHeader title={`Timeline — next 3 years (${timelineDeadlines.length})`} />
+          <DeadlineTimeline deadlines={timelineDeadlines} />
+        </div>
+      )}
 
       {/* Deadline list */}
       <div>

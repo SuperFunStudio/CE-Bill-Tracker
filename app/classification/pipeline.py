@@ -87,8 +87,10 @@ class ClassificationPipeline:
             classified_ids.add(bill_obj.id)
 
             bill_obj.confidence_score = hr.confidence
-            # In scope if the classifier judged it EPR-relevant OR tagged it with a tracked
-            # policy instrument (right-to-repair, deposit-return, etc.), at decent confidence.
+            # In scope if the classifier judged it EPR-relevant, OR it's tagged with an instrument
+            # that's circular-economy policy by definition (right-to-repair, deposit-return, etc.),
+            # at decent confidence. labeling/preemption are intentionally NOT in TRACKED_INSTRUMENTS
+            # — they're generic and ride in only via is_epr_relevant (see haiku_classifier.py).
             bill_obj.epr_relevant = hr.confidence >= 0.4 and (
                 hr.is_epr_relevant or hr.instrument_type in TRACKED_INSTRUMENTS
             )
@@ -96,6 +98,8 @@ class ClassificationPipeline:
             bill_obj.instrument_type = hr.instrument_type
             bill_obj.urgency = hr.urgency
             bill_obj.ai_summary = hr.reasoning
+            bill_obj.policy_stance = hr.stance
+            bill_obj.stance_source = "ai"
 
             if hr.confidence >= 0.7 and hr.is_epr_relevant:
                 high_confidence_bills.append(bill_obj)

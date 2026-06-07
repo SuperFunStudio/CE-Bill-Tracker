@@ -17,6 +17,8 @@ class BillSummary(BaseModel):
     instrument_type: str | None
     urgency: str | None
     ai_summary: str | None
+    policy_stance: str | None = None
+    stance_source: str | None = None
     source_url: str | None
     compliance_details: dict | None
     litigation_case_count: int = 0

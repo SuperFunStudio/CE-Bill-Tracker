@@ -11,19 +11,26 @@ log = structlog.get_logger()
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
-# Instrument types that put a bill in scope for the tracker, independent of the narrow
-# "is_epr_relevant" judgment. Right-to-repair, deposit-return, etc. are tracked policy
-# instruments even though they aren't EPR in the strict sense, so a bill the classifier
-# tagged with one of these counts as relevant. Excludes "other" (no real instrument).
+# Instruments that are circular-economy policy by definition. A bill the classifier tags with
+# one of these is in scope on its own, independent of the narrow "is_epr_relevant" judgment:
+# right-to-repair, deposit-return, etc. are tracked policy instruments even though they aren't
+# EPR in the strict sense (e.g. CA SB-244 "Right to Repair Act").
 TRACKED_INSTRUMENTS = frozenset({
     "epr", "right_to_repair", "recycled_content", "deposit_return",
-    "labeling", "preemption",
 })
-# "chemical_restriction", "budget" (generic appropriations), and "other" are intentionally
-# excluded: they're not circular-economy policy instruments and pull tangential bills into the
-# tracker. chemical_restriction in particular surfaced chemical-safety/health bills like CA
-# SB-236 (hair relaxer ingredients) that aren't EPR/stewardship/circularity. The classifier may
-# still tag a bill chemical_restriction; it just won't count as in-scope on that basis alone.
+# "labeling" and "preemption" are deliberately NOT here. Both are generic instruments that apply
+# far outside circular-economy policy — ingredient/nutrition/country-of-origin labeling, or
+# preemption of tobacco, firearm, employment, and tax rules. Counting them in scope on the tag
+# alone forced obvious non-EPR bills into the tracker (WV HB-4985 foreign-ownership preemption,
+# WI AB-1213 menstrual-product labeling, OK firearm preemption) whose own reasoning said "not
+# product stewardship, EPR, or circular economy policy". So a labeling/preemption bill now
+# counts as in scope only when the classifier independently set is_epr_relevant=True (recycling-
+# label mandates, preemption of bottle-bill / EPR laws). scripts/hide_negated_labeling_preemption.py
+# applies the same correction to existing rows.
+# "chemical_restriction", "budget" (generic appropriations), and "other" are excluded for the
+# same reason: not circular-economy instruments. chemical_restriction surfaced chemical-safety
+# bills like CA SB-236 (hair relaxer ingredients). The classifier may still tag a bill with any
+# of these; it just won't count as in-scope on that basis alone.
 
 SYSTEM_PROMPT = """\
 You are an expert in US environmental policy and Extended Producer Responsibility (EPR) legislation. \
@@ -47,12 +54,24 @@ Return this exact JSON structure:
   "confidence": <float 0.0-1.0>,
   "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","pharmaceuticals","solar_panels","textiles","organics","other"]>,
   "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","labeling","chemical_restriction","preemption","budget","other">,
+  "stance": <one of: "advances","weakens","neutral">,
   "urgency": <one of: "high","medium","low">,
   "reasoning": "<1 sentence max>"
 }}
 
+Stance = the bill's direction relative to its instrument, NOT whether you favor it:
+  - "advances": establishes, strengthens, broadens, or funds the policy (e.g. creates a
+    repair mandate or EPR program), OR repeals/limits a preemption that blocked it.
+  - "weakens": exempts or carves out products/entities from the policy, narrows its scope,
+    repeals it, or newly preempts local authority to enact it. A small-producer carve-out
+    inside an otherwise-establishing bill is still "advances" — judge the bill's net effect.
+  - "neutral": study/task-force/appropriations-only/administrative, or genuinely unclear.
+
 Urgency guide: high = enrolled/passed/enacted or imminent deadline; medium = passed committee or floor vote scheduled; low = introduced/early committee.
 """
+
+
+_VALID_STANCES = frozenset({"advances", "weakens", "neutral"})
 
 
 @dataclass
@@ -63,6 +82,7 @@ class HaikuResult:
     instrument_type: str
     urgency: str
     reasoning: str
+    stance: str = "neutral"
     raw_response: str = ""
 
 
@@ -117,6 +137,9 @@ class HaikuClassifier:
                     reasoning="parse_error",
                     raw_response=raw,
                 )
+        stance = str(data.get("stance", "neutral")).lower()
+        if stance not in _VALID_STANCES:
+            stance = "neutral"
         return HaikuResult(
             is_epr_relevant=data.get("is_epr_relevant", False),
             confidence=float(data.get("confidence", 0.0)),
@@ -124,6 +147,7 @@ class HaikuClassifier:
             instrument_type=data.get("instrument_type", "other"),
             urgency=data.get("urgency", "low"),
             reasoning=data.get("reasoning", ""),
+            stance=stance,
             raw_response=raw,
         )
 

@@ -47,6 +47,11 @@ class Bill(Base):
     instrument_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     urgency: Mapped[str | None] = mapped_column(String(10), nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Direction of the bill relative to its instrument: "advances" (establishes/strengthens),
+    # "weakens" (exempts/narrows/repeals/preempts), or "neutral" (admin/study/ambiguous).
+    # stance_source is "ai" (Haiku) or "heuristic" (text backfill) — see migration 006.
+    policy_stance: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    stance_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Full compliance extraction (Sonnet output)
     compliance_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -68,6 +73,7 @@ class Bill(Base):
         Index("idx_bills_state_status", "state", "status"),
         Index("idx_bills_last_action", "last_action_date"),
         Index("idx_bills_relevant", "epr_relevant"),
+        Index("idx_bills_policy_stance", "policy_stance"),
         Index("idx_bills_material_categories", "material_categories", postgresql_using="gin"),
     )
 

@@ -18,6 +18,44 @@ _TEXT_MEDIA_PREFERENCE = ("text/plain", "text/html", "application/pdf")
 _TAG_RE = re.compile(r"<[^>]+>")
 
 
+# Some state legislature sites reject the default httpx User-Agent or serve
+# incomplete TLS chains; a browser UA plus an SSL-verification fallback recovers them.
+_DOC_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    )
+}
+
+
+async def _fetch_document(url: str) -> "httpx.Response | None":
+    """GET a public legislative document. Returns None on failure.
+
+    Retries once with TLS verification disabled — many state sites serve public
+    bill PDFs over a misconfigured/incomplete certificate chain. These are public
+    documents with no credentials attached, so the fallback is acceptable.
+    """
+    for verify in (True, False):
+        try:
+            async with httpx.AsyncClient(
+                timeout=30.0, follow_redirects=True, headers=_DOC_HEADERS, verify=verify
+            ) as doc_client:
+                resp = await doc_client.get(url)
+                resp.raise_for_status()
+                return resp
+        except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+            # Likely a TLS/connection issue — retry without verification.
+            if verify:
+                log.info("openstates_doc_ssl_retry", url=url, error=str(e))
+                continue
+            log.warning("openstates_doc_fetch_error", url=url, error=str(e))
+            return None
+        except Exception as e:
+            log.warning("openstates_doc_fetch_error", url=url, error=str(e))
+            return None
+    return None
+
+
 def _extract_pdf_text(data: bytes) -> str:
     """Extract plain text from a PDF byte string. Returns '' on any failure.
 
@@ -137,26 +175,22 @@ class OpenStatesClient:
             return ""
 
         # Fetch the document from the state legislature / OpenStates-hosted URL.
-        # No API key header — these are public document links, not the v3 API.
-        try:
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as doc_client:
-                resp = await doc_client.get(chosen_url)
-                resp.raise_for_status()
-                content = resp.content
-        except Exception as e:
-            log.warning("openstates_text_fetch_failed",
-                        bill_id=bill_id, url=chosen_url, error=str(e))
+        resp = await _fetch_document(chosen_url)
+        if resp is None:
+            log.warning("openstates_text_fetch_failed", bill_id=bill_id, url=chosen_url)
             return ""
+        content = resp.content
 
-        # PDF, either declared by media type or sniffed from the magic bytes.
-        if chosen_media == "application/pdf" or content[:5] == b"%PDF-":
+        # Detect PDF by magic bytes, not the declared media type — some states label an
+        # XHTML viewer page as application/pdf (and vice versa).
+        if content[:5] == b"%PDF-":
             text = _extract_pdf_text(content)
             if not text:
                 log.info("openstates_pdf_extract_empty", bill_id=bill_id, url=chosen_url)
             return text
 
         text = resp.text
-        if chosen_media == "text/html" or "<html" in text[:2000].lower():
+        if chosen_media in ("text/html", "application/pdf") or "<" in text[:2000]:
             text = html.unescape(_TAG_RE.sub(" ", text))
             text = re.sub(r"\s+", " ", text).strip()
         return text

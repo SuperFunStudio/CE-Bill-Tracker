@@ -1,6 +1,7 @@
 import html
 import io
 import re
+import urllib.parse
 from datetime import datetime
 
 import httpx
@@ -26,6 +27,25 @@ _DOC_HEADERS = {
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     )
 }
+
+
+def _canonical_doc_url(url: str) -> str:
+    """Rewrite known JavaScript-shell document URLs to a server-rendered text endpoint.
+
+    California's leginfo links (billNavClient / billPdf) return a JS app shell with no
+    bill text, so extraction got nothing for every CA bill. billTextClient.xhtml serves
+    the full text inline in the page for the same bill_id, so rewrite to that.
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return url
+    if parsed.netloc.endswith("leginfo.legislature.ca.gov"):
+        bill_id = urllib.parse.parse_qs(parsed.query).get("bill_id", [None])[0]
+        if bill_id:
+            return ("https://leginfo.legislature.ca.gov/faces/"
+                    f"billTextClient.xhtml?bill_id={bill_id}")
+    return url
 
 
 async def _fetch_document(url: str) -> "httpx.Response | None":
@@ -175,6 +195,7 @@ class OpenStatesClient:
             return ""
 
         # Fetch the document from the state legislature / OpenStates-hosted URL.
+        chosen_url = _canonical_doc_url(chosen_url)
         resp = await _fetch_document(chosen_url)
         if resp is None:
             log.warning("openstates_text_fetch_failed", bill_id=bill_id, url=chosen_url)

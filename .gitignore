@@ -11,3 +11,6 @@ build/
 .DS_Store
 data/exports/
 *.log
+
+# Firebase deploy cache
+.firebase/

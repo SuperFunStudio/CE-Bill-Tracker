@@ -22,11 +22,8 @@ export default function AboutPage() {
       {/* Intro */}
       <header className="space-y-3">
         <h1 className="font-serif uppercase tracking-[0.06em] text-text-primary text-3xl sm:text-4xl">
-          About <span className="text-green-accent">Battle of the Bills</span>
+          About 
         </h1>
-        <p className="font-serif italic text-text-secondary text-base sm:text-lg">
-          Tracking circularity-aligned legislation across the USA.
-        </p>
       </header>
 
       {/* Mission */}
@@ -34,12 +31,19 @@ export default function AboutPage() {
         <SectionTitle>Why this exists</SectionTitle>
         <p className="text-text-secondary leading-relaxed">
           Battle of the Bills is a tool designed by{' '}
-          <span className="text-text-primary font-medium">Kenny Arnold</span> to make it visible
+          <span className="text-text-primary font-medium"> <a
+            href="https://www.kennyarnold.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-green-accent hover:underline"
+          >
+            Kenny Arnold
+          </a> </span> to make it visible
           where there are supportive markets for enabling a{' '}
           <span className="text-text-primary font-medium">circular economy</span> in the United
           States. By tracking Extended Producer Responsibility, right-to-repair, deposit-return,
           recycled-content, labeling, and related legislation across all 50 states, it surfaces
-          where the policy momentum — and the market opportunity — is building.
+          where the policy momentum and the market opportunity is building.
         </p>
       </section>
 
@@ -56,7 +60,7 @@ export default function AboutPage() {
           >
             OpenStates
           </a>{' '}
-          (Plural Policy). This project is built on their openly available{' '}
+          (Plural Policy). This project is built on their publicly available{' '}
           <a
             href="https://open.pluralpolicy.com/data/"
             target="_blank"

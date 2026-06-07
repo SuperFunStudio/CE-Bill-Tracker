@@ -1,4 +1,5 @@
 import html
+import io
 import re
 from datetime import datetime
 
@@ -15,6 +16,25 @@ BASE_URL = "https://v3.openstates.org"
 # Preference order for which bill-version document to feed the Sonnet extractor.
 _TEXT_MEDIA_PREFERENCE = ("text/plain", "text/html", "application/pdf")
 _TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _extract_pdf_text(data: bytes) -> str:
+    """Extract plain text from a PDF byte string. Returns '' on any failure.
+
+    Many state legislatures expose bill text only as PDF, so without this the Sonnet
+    compliance extractor gets empty text and produces no deadlines. pypdf is pure-python
+    and handles the text-layer PDFs these sites serve; scanned/image PDFs yield ''.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        return ""
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        parts = [page.extract_text() or "" for page in reader.pages]
+    except Exception:
+        return ""
+    return re.sub(r"\s+", " ", " ".join(parts)).strip()
 
 
 class OpenStatesClient:
@@ -116,22 +136,26 @@ class OpenStatesClient:
         if not chosen_url:
             return ""
 
-        if chosen_media == "application/pdf":
-            log.info("openstates_text_unavailable_pdf", bill_id=bill_id, url=chosen_url)
-            return ""
-
         # Fetch the document from the state legislature / OpenStates-hosted URL.
         # No API key header — these are public document links, not the v3 API.
         try:
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as doc_client:
                 resp = await doc_client.get(chosen_url)
                 resp.raise_for_status()
-                text = resp.text
+                content = resp.content
         except Exception as e:
             log.warning("openstates_text_fetch_failed",
                         bill_id=bill_id, url=chosen_url, error=str(e))
             return ""
 
+        # PDF, either declared by media type or sniffed from the magic bytes.
+        if chosen_media == "application/pdf" or content[:5] == b"%PDF-":
+            text = _extract_pdf_text(content)
+            if not text:
+                log.info("openstates_pdf_extract_empty", bill_id=bill_id, url=chosen_url)
+            return text
+
+        text = resp.text
         if chosen_media == "text/html" or "<html" in text[:2000].lower():
             text = html.unescape(_TAG_RE.sub(" ", text))
             text = re.sub(r"\s+", " ", text).strip()

@@ -101,11 +101,20 @@ async def main() -> None:
             return
 
         extractor = SonnetExtractor()
-        processed = deadlines_written = 0
+        processed = deadlines_written = skipped = 0
         async with OpenStatesClient() as os_client:
             for b in bills:
+                # Capture identity up front: a rollback below expires ORM attributes, and
+                # re-reading them outside the greenlet would raise MissingGreenlet.
+                tag = f"{b.state} {b.bill_number}"
                 try:
                     full_text = await os_client.get_bill_text(b.openstates_id) if b.openstates_id else ""
+                    if not full_text:
+                        # No usable text (e.g. scanned/image PDF) — leave the bill as a future
+                        # candidate rather than writing empty compliance_details.
+                        skipped += 1
+                        print(f"  [skip] {tag}: no extractable text")
+                        continue
                     extraction = await extractor.extract(
                         state=b.state, bill_number=b.bill_number or "", title=b.title or "",
                         full_text=full_text,
@@ -145,13 +154,13 @@ async def main() -> None:
 
                     await db.commit()
                     processed += 1
-                    print(f"  ✓ {b.state} {b.bill_number}: {len(seen)} deadline(s)"
-                          f"{' [no text]' if not full_text else ''}")
+                    print(f"  [ok]   {tag}: {len(seen)} deadline(s)")
                 except Exception as e:
                     await db.rollback()
-                    print(f"  ✗ {b.state} {b.bill_number}: {type(e).__name__}: {e}")
+                    print(f"  [fail] {tag}: {type(e).__name__}: {e}")
 
-        print(f"\nprocessed {processed}/{len(bills)} bills, wrote {deadlines_written} deadline rows")
+        print(f"\nprocessed {processed}/{len(bills)} bills "
+              f"({skipped} skipped, no text), wrote {deadlines_written} deadline rows")
     await engine.dispose()
 
 

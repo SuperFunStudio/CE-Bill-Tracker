@@ -92,7 +92,7 @@ class SonnetExtractor:
         )
         resp = await self._client.messages.create(
             model=SONNET_MODEL,
-            max_tokens=1500,
+            max_tokens=3000,  # compliance JSON for large bills overflows a smaller budget
             temperature=0,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
@@ -103,9 +103,10 @@ class SonnetExtractor:
         except json.JSONDecodeError:
             import re
             match = re.search(r"\{.*\}", raw, re.DOTALL)
-            if match:
-                data = json.loads(match.group())
-            else:
+            try:
+                data = json.loads(match.group()) if match else {}
+            except json.JSONDecodeError:
+                # Truncated or malformed JSON (e.g. response cut off mid-object).
                 log.warning("sonnet_json_parse_failed", bill_number=bill_number, raw=raw[:200])
                 data = {}
 

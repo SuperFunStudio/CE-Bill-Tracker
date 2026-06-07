@@ -29,14 +29,19 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import select, text
+import json
+
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.classification.sonnet_extractor import SonnetExtractor  # noqa: E402
 from app.ingestion.openstates import OpenStatesClient  # noqa: E402
-from app.models import Bill, ComplianceDeadline  # noqa: E402
+
+# Deliberately raw SQL, not the ORM Bill model: prod's schema may lag the model (new
+# columns like policy_stance), and selecting the full entity would fail there. This script
+# only touches columns that have long existed (compliance_details, compliance_deadlines).
 
 
 def _normalize_dsn(dsn: str) -> str:
@@ -59,14 +64,20 @@ def _parse_date(value) -> date | None:
         return None
 
 
-async def _candidates(db: AsyncSession, status: str | None, only_missing: bool, limit: int) -> list[Bill]:
-    q = select(Bill).where(Bill.epr_relevant == True)  # noqa: E712
+async def _candidates(db: AsyncSession, status: str | None, only_missing: bool, limit: int) -> list:
+    clauses = ["epr_relevant = true", "openstates_id IS NOT NULL"]
+    params: dict = {"limit": limit}
     if status:
-        q = q.where(Bill.status == status)
+        clauses.append("status = :status")
+        params["status"] = status
     if only_missing:
-        q = q.where(Bill.compliance_details.is_(None))
-    q = q.where(Bill.openstates_id.isnot(None)).order_by(Bill.status_date.desc().nullslast()).limit(limit)
-    return list((await db.execute(q)).scalars().all())
+        clauses.append("compliance_details IS NULL")
+    sql = (
+        "SELECT id, state, bill_number, title, openstates_id, source_url, status "
+        f"FROM bills WHERE {' AND '.join(clauses)} "
+        "ORDER BY status_date DESC NULLS LAST LIMIT :limit"
+    )
+    return list((await db.execute(text(sql), params)).all())
 
 
 async def main() -> None:
@@ -104,8 +115,6 @@ async def main() -> None:
         processed = deadlines_written = skipped = 0
         async with OpenStatesClient() as os_client:
             for b in bills:
-                # Capture identity up front: a rollback below expires ORM attributes, and
-                # re-reading them outside the greenlet would raise MissingGreenlet.
                 tag = f"{b.state} {b.bill_number}"
                 try:
                     full_text = await os_client.get_bill_text(b.openstates_id) if b.openstates_id else ""
@@ -119,7 +128,11 @@ async def main() -> None:
                         state=b.state, bill_number=b.bill_number or "", title=b.title or "",
                         full_text=full_text,
                     )
-                    b.compliance_details = extraction.raw_json
+                    await db.execute(
+                        text("UPDATE bills SET compliance_details = CAST(:cd AS jsonb), "
+                             "updated_at = now() WHERE id = :id"),
+                        {"cd": json.dumps(extraction.raw_json), "id": b.id},
+                    )
 
                     # Replace any existing deadline rows for this bill.
                     await db.execute(
@@ -146,10 +159,13 @@ async def main() -> None:
                         if key in seen:
                             continue
                         seen.add(key)
-                        db.add(ComplianceDeadline(
-                            bill_id=b.id, state=b.state, deadline_type=dtype,
-                            deadline_date=ddate, description=desc, source_url=b.source_url,
-                        ))
+                        await db.execute(
+                            text("INSERT INTO compliance_deadlines "
+                                 "(bill_id, state, deadline_type, deadline_date, description, source_url) "
+                                 "VALUES (:bid, :state, :dtype, :ddate, :desc, :src)"),
+                            {"bid": b.id, "state": b.state, "dtype": dtype, "ddate": ddate,
+                             "desc": desc, "src": b.source_url},
+                        )
                         deadlines_written += 1
 
                     await db.commit()

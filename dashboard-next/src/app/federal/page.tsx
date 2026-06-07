@@ -4,6 +4,7 @@ import { useFederalActions, useLitigationCases, useLitigationCase } from '@/hook
 import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { formatDate, daysUntil, fixEncoding } from '@/lib/utils';
 import type { FederalActionSummary, LitigationCaseSummary } from '@/lib/types';
@@ -153,11 +154,8 @@ export default function FederalPage() {
   const actionTypes = Array.from(new Set(actions.map(a => a.action_type).filter(Boolean)));
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-text-primary mb-1">Federal Actions</h1>
-        <p className="text-text-muted text-sm">Federal Register actions, preemption risk, and EPR litigation tracking</p>
-      </div>
+    <div className="p-6 space-y-6 max-w-5xl mx-auto">
+      <GazetteHeader title="Federal Actions" subtitle="Federal Register actions, preemption risk, and EPR litigation" />
 
       {/* Preemption banner */}
       <div className="bg-red-100 dark:bg-red-950/50 border border-red-400 dark:border-red-800 rounded-lg p-4 space-y-1">

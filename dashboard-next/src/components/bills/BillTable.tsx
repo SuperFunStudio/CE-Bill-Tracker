@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { BillSummary } from '@/lib/types';
-import { fixEncoding, formatDate, formatInstrumentType } from '@/lib/utils';
+import { fixEncoding, formatDate, formatInstrumentType, statusBadge } from '@/lib/utils';
 import { BillModal } from '@/components/ui/BillModal';
 
 interface BillTableProps {
@@ -12,16 +12,15 @@ interface BillTableProps {
   intervalMs?: number;
 }
 
-function StatusBadge({ status }: { status: string | null }) {
+function StatusBadge({ status, stance }: { status: string | null; stance: string | null }) {
   if (!status) return <span className="text-text-muted text-xs">—</span>;
-  const s = status.toLowerCase();
-  const cls = s === 'enacted'
-    ? 'bg-green-100 dark:bg-green-900/40 border-green-400 dark:border-green-700/50 text-green-700 dark:text-green-300'
-    : s === 'failed' || s === 'tabled'
-      ? 'bg-gray-100 dark:bg-gray-800 border-border-default text-text-muted'
-      : 'bg-bg-primary border-border-default text-text-secondary';
+  const { cls, marker, markerCls, label } = statusBadge(status, stance);
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
+    <span
+      title={label || undefined}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${cls}`}
+    >
+      {marker && <span className={`leading-none ${markerCls}`}>{marker}</span>}
       {status.replace(/\b\w/g, c => c.toUpperCase())}
     </span>
   );
@@ -125,7 +124,7 @@ export function BillTable({ bills, maxRows, autoPageSize, intervalMs = 6000 }: B
                   {formatInstrumentType(bill.instrument_type)}
                 </td>
                 <td className="px-3 py-2">
-                  <StatusBadge status={bill.status} />
+                  <StatusBadge status={bill.status} stance={bill.policy_stance} />
                 </td>
                 <td className="px-3 py-2 text-text-muted text-xs">
                   {formatDate(bill.last_action_date)}
@@ -176,7 +175,7 @@ export function BillTable({ bills, maxRows, autoPageSize, intervalMs = 6000 }: B
             )}
             {/* Row 4: status + last action + expand indicator */}
             <div className="flex items-center justify-between text-xs">
-              <StatusBadge status={bill.status} />
+              <StatusBadge status={bill.status} stance={bill.policy_stance} />
               <div className="flex items-center gap-3 text-text-muted">
                 <span>{formatDate(bill.last_action_date)}</span>
                 <span>›</span>

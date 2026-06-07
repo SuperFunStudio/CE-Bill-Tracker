@@ -40,6 +40,10 @@ export interface BillSummary {
   instrument_type: string | null;
   urgency: string | null;
   ai_summary: string | null;
+  /** "advances" | "weakens" | "neutral" — direction relative to the instrument. */
+  policy_stance: string | null;
+  /** "ai" | "heuristic" — how policy_stance was derived. */
+  stance_source: string | null;
   source_url: string | null;
   compliance_details: ComplianceDetails | null;
   litigation_case_count: number;

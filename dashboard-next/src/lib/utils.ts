@@ -36,6 +36,40 @@ export function formatDate(dateStr: string | null | undefined): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+const STATUS_GREEN = 'bg-green-100 dark:bg-green-900/40 border-green-400 dark:border-green-700/50 text-green-700 dark:text-green-300';
+const STATUS_GRAY = 'bg-gray-100 dark:bg-gray-800 border-border-default text-text-muted';
+const STATUS_DEFAULT = 'bg-bg-primary border-border-default text-text-secondary';
+const STATUS_RED = 'bg-red-100 dark:bg-red-950/50 border-red-400 dark:border-red-700 text-red-700 dark:text-red-300';
+
+/**
+ * Visual treatment for a bill's status badge, tinted by policy stance.
+ *
+ * A "weakens" bill (exempts/narrows/repeals/preempts the policy) is tinted red with a ▼ marker
+ * regardless of status, so an enacted *exemption* is unmistakably distinct from an enacted
+ * *grant*. "advances" keeps the status color (enacted stays green) and adds a green ▲ marker.
+ * Neutral/unknown stance falls back to plain status coloring — preserving enacted=green.
+ */
+export function statusBadge(
+  status: string | null | undefined,
+  stance: string | null | undefined,
+): { cls: string; marker: string; markerCls: string; label: string } {
+  const s = (status ?? '').toLowerCase();
+  const statusCls = s === 'enacted'
+    ? STATUS_GREEN
+    : s === 'failed' || s === 'tabled'
+      ? STATUS_GRAY
+      : STATUS_DEFAULT;
+
+  switch (stance?.toLowerCase()) {
+    case 'weakens':
+      return { cls: STATUS_RED, marker: '▼', markerCls: '', label: 'Weakens / exempts this policy' };
+    case 'advances':
+      return { cls: statusCls, marker: '▲', markerCls: 'text-green-accent', label: 'Advances this policy' };
+    default:
+      return { cls: statusCls, marker: '', markerCls: '', label: '' };
+  }
+}
+
 /** Tailwind class for urgency level */
 export function urgencyTextClass(urgency: string | null | undefined): string {
   switch (urgency?.toLowerCase()) {

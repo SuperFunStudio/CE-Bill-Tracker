@@ -78,7 +78,7 @@ export function TopNav() {
               scrolled ? 'text-lg sm:text-xl' : 'text-3xl sm:text-5xl'
             }`}
           >
-            Battle of the <span className="text-green-accent">Bills</span>
+            Battle of the Bills
           </h1>
           <p
             className={`font-serif italic text-text-secondary overflow-hidden transition-all duration-300 ${

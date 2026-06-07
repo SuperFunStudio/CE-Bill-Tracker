@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 /* ── Light mode (default) ── */
+/* The brand accent (`--green-accent` & friends) is BLUE in light mode and PINK
+   in dark mode. The names are kept for compatibility with existing `*-green-*`
+   utility classes. Accent tokens are stored as space-separated RGB channels so
+   Tailwind opacity modifiers (e.g. `text-green-accent/60`) resolve correctly. */
 :root {
   --bg-primary:     #f8f9fa;
   --bg-secondary:   #ffffff;
@@ -11,10 +15,10 @@
   --text-primary:   #1a1a2e;
   --text-secondary: #495057;
   --text-muted:     #868e96;
-  --green-accent:   #16a34a;
-  --green-light:    #86efac;
-  --green-dark:     #dcfce7;
-  --green-hero:     #f0fdf4;
+  --green-accent:   30 106 233;   /* #1e6ae9 — matches the State map */
+  --green-light:    96 165 250;   /* blue-400 */
+  --green-dark:     219 234 254;  /* blue-100 — subtle accent background */
+  --green-hero:     239 246 255;  /* blue-50  */
   --scrollbar-track: #e9ecef;
   --scrollbar-thumb: #ced4da;
 }
@@ -28,10 +32,10 @@
   --text-primary:   #f3f4f6;
   --text-secondary: #9ca3af;
   --text-muted:     #6b7280;
-  --green-accent:   #22c55e;
-  --green-light:    #6ee7b7;
-  --green-dark:     #14532d;
-  --green-hero:     #0f2b1d;
+  --green-accent:   243 188 195;  /* #f3bcc3 — matches the State map */
+  --green-light:    249 210 216;  /* paler pink for pills/highlights */
+  --green-dark:     74 39 49;     /* #4a2731 — subtle accent background */
+  --green-hero:     42 19 24;     /* near-black pink */
   --scrollbar-track: #1f2937;
   --scrollbar-thumb: #374151;
 }
@@ -65,4 +69,19 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* ── Auto-scrolling "ticker" marquee (Top States line) ──
+   The track duplicates its content, so translating by -50% loops seamlessly.
+   Duration is set per-instance via the `animation-duration` inline style. */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee linear infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee { animation: none; }
 }

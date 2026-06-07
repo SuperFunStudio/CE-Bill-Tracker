@@ -2,6 +2,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { useBills } from '@/hooks/useBills';
+import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { STATE_NAMES } from '@/lib/utils';
 
 export default function StatesPage() {
@@ -24,14 +25,7 @@ export default function StatesPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <header className="text-center pt-1 pb-4 border-b-2 border-text-primary/80">
-        <div className="border-t border-b border-text-primary/30 py-3">
-          <h1 className="font-serif uppercase tracking-[0.06em] text-2xl sm:text-3xl text-text-primary">State Standings</h1>
-        </div>
-        <p className="mt-2 font-serif italic text-text-secondary text-sm">
-          Who&rsquo;s winning the Battle of the Bills
-        </p>
-      </header>
+      <GazetteHeader title="State Standings" subtitle="Who’s winning the Battle of the Bills" />
 
       <Link href="/" className="inline-block text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
 

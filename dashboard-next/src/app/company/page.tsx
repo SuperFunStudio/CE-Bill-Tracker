@@ -4,6 +4,7 @@ import { useBills } from '@/hooks/useBills';
 import { useCompanies, useCompany, useExposureRanking, useExposureBrief } from '@/hooks/useCompanies';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { ScoreBadge } from '@/components/ui/ScoreBadge';
 import { DemoBanner } from '@/components/ui/DemoBanner';
 import { formatCost, fixEncoding, scoreColor } from '@/lib/utils';
@@ -478,13 +479,10 @@ export default function CompanyImpactPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 max-w-5xl mx-auto">
       <DemoBanner />
 
-      <div>
-        <h1 className="text-2xl font-bold text-text-primary mb-1">Company Impact</h1>
-        <p className="text-text-muted text-sm">Estimated EPR compliance exposure by company and bill</p>
-      </div>
+      <GazetteHeader title="Company Impact" subtitle="Estimated EPR compliance exposure by company and bill" />
 
       {/* Tab switcher */}
       <div className="flex gap-1 bg-bg-secondary border border-border-default rounded-lg p-1 w-fit">

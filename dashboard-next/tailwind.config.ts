@@ -21,10 +21,12 @@ const config: Config = {
         'text-primary':   'var(--text-primary)',
         'text-secondary': 'var(--text-secondary)',
         'text-muted':     'var(--text-muted)',
-        'green-accent':   'var(--green-accent)',
-        'green-light':    'var(--green-light)',
-        'green-dark':     'var(--green-dark)',
-        'green-hero':     'var(--green-hero)',
+        // Brand accent (blue in light mode, pink in dark — see globals.css).
+        // Defined with the <alpha-value> placeholder so opacity modifiers work.
+        'green-accent':   'rgb(var(--green-accent) / <alpha-value>)',
+        'green-light':    'rgb(var(--green-light) / <alpha-value>)',
+        'green-dark':     'rgb(var(--green-dark) / <alpha-value>)',
+        'green-hero':     'rgb(var(--green-hero) / <alpha-value>)',
         'urgency-high':   '#ef4444',
         'urgency-medium': '#f59e0b',
         'urgency-low':    '#6b7280',

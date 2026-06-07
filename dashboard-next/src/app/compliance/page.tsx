@@ -5,62 +5,45 @@ import { useBills } from '@/hooks/useBills';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { DeadlineTimeline } from '@/components/compliance/DeadlineTimeline';
+import { DeadlineModal } from '@/components/compliance/DeadlineModal';
+import { deadlineAccentText } from '@/lib/deadlineStyle';
 import { formatDate, daysUntil, downloadCsv, STATE_NAMES } from '@/lib/utils';
 import type { DeadlineSummary } from '@/lib/types';
 
-const DEADLINE_TYPE_COLORS: Record<string, string> = {
-  registration: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-400 dark:border-blue-700',
-  reporting:    'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border-purple-400 dark:border-purple-700',
-  compliance:   'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-400 dark:border-amber-700',
-  effective:    'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 border-rose-400 dark:border-rose-700',
-  fee:          'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-400 dark:border-green-700',
-  labeling:     'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border-cyan-400 dark:border-cyan-700',
-};
-
+/** Single-accent type chip (hue is the brand accent; see deadlineStyle). */
 function DeadlineTypeBadge({ type }: { type: string }) {
-  const cls = DEADLINE_TYPE_COLORS[type.toLowerCase()] ?? 'bg-gray-100 dark:bg-gray-800 text-text-muted border-border-default';
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border bg-green-accent/10 text-green-accent border-green-accent/30 shrink-0">
       {type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
     </span>
   );
 }
 
-function DeadlineCard({ deadline }: { deadline: DeadlineSummary }) {
+/** Compact, clickable "brief headline" row — opens the detail modal. */
+function DeadlineRow({ deadline, onSelect }: { deadline: DeadlineSummary; onSelect: (d: DeadlineSummary) => void }) {
   const days = daysUntil(deadline.deadline_date);
-  const urgentClass = days !== null && days <= 30 ? 'border-urgency-high' :
-    days !== null && days <= 90 ? 'border-urgency-medium' :
+  const urgentClass = days !== null && days >= 0 && days <= 30 ? 'border-urgency-high' :
+    days !== null && days >= 0 && days <= 90 ? 'border-urgency-medium' :
       'border-border-default';
+  const headline = deadline.bill_title || deadline.description || `${deadline.deadline_type} deadline`;
 
   return (
-    <div className={`bg-bg-secondary border rounded-lg p-4 ${urgentClass}`}>
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-green-accent font-mono font-bold text-sm">{deadline.state}</span>
-          <DeadlineTypeBadge type={deadline.deadline_type} />
-          {days !== null && days <= 30 && (
-            <span className="text-urgency-high text-xs font-bold">{days}d remaining</span>
-          )}
-        </div>
-        <div className="text-text-primary font-mono text-sm shrink-0">
-          {formatDate(deadline.deadline_date)}
-        </div>
-      </div>
-
-      {deadline.description && (
-        <p className="text-text-secondary text-sm mb-2">{deadline.description}</p>
+    <button
+      type="button"
+      onClick={() => onSelect(deadline)}
+      className={`w-full text-left bg-bg-secondary border rounded-lg p-3 flex items-center gap-3 hover:bg-bg-primary/40 transition-colors ${urgentClass}`}
+    >
+      <span className={`font-mono font-bold text-sm shrink-0 w-8 ${deadlineAccentText(days)}`}>{deadline.state}</span>
+      <DeadlineTypeBadge type={deadline.deadline_type} />
+      <span className="text-text-primary text-sm truncate flex-1 min-w-0">{headline}</span>
+      {days !== null && days >= 0 && days <= 30 && (
+        <span className="text-urgency-high text-xs font-bold shrink-0">{days}d</span>
       )}
-
-      <div className="flex flex-wrap gap-3 text-xs text-text-muted">
-        {deadline.bill_number && (
-          <span>Bill: <span className="text-text-secondary">{deadline.bill_number}</span></span>
-        )}
-        {deadline.who_affected && (
-          <span>Affects: <span className="text-text-secondary">{deadline.who_affected}</span></span>
-        )}
-      </div>
-    </div>
+      <span className="text-text-muted font-mono text-xs shrink-0 hidden sm:inline">{formatDate(deadline.deadline_date)}</span>
+      <span className="text-text-muted text-xs shrink-0">›</span>
+    </button>
   );
 }
 
@@ -68,6 +51,7 @@ export default function CompliancePage() {
   const [daysAhead, setDaysAhead] = useState(1095);
   const [stateFilter, setStateFilter] = useState('');
   const [includePast, setIncludePast] = useState(false);
+  const [selected, setSelected] = useState<DeadlineSummary | null>(null);
 
   const { data: apiDeadlines = [], isLoading } = useDeadlines({ days_ahead: daysAhead, state: stateFilter || undefined });
   const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
@@ -141,6 +125,12 @@ export default function CompliancePage() {
   const within90 = allDeadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0 && n <= 90; }).length;
   const nextDeadline = allDeadlines.find(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0; });
 
+  // The bill behind the selected deadline (if it's in the loaded set) powers the modal.
+  const selectedBill = useMemo(
+    () => (selected?.bill_id != null ? bills.find(b => b.id === selected.bill_id) ?? null : null),
+    [selected, bills],
+  );
+
   function handleExport() {
     downloadCsv('signalscout_deadlines.csv', allDeadlines.map(d => ({
       State: d.state,
@@ -153,11 +143,8 @@ export default function CompliancePage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-text-primary mb-1">Upcoming Deadlines</h1>
-        <p className="text-text-muted text-sm">Upcoming EPR compliance deadlines across all states</p>
-      </div>
+    <div className="p-6 space-y-6 max-w-5xl mx-auto">
+      <GazetteHeader title="Upcoming Deadlines" subtitle="EPR compliance deadlines across all states" />
 
       {/* Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -222,23 +209,25 @@ export default function CompliancePage() {
       {timelineDeadlines.length > 0 && (
         <div>
           <SectionHeader title={`Timeline — next 3 years (${timelineDeadlines.length})`} />
-          <DeadlineTimeline deadlines={timelineDeadlines} />
+          <DeadlineTimeline deadlines={timelineDeadlines} onSelect={setSelected} />
         </div>
       )}
 
-      {/* Deadline list */}
+      {/* Deadline list — brief headlines; tap any to open its detail */}
       <div>
         <SectionHeader title={`Deadlines (${allDeadlines.length})`} />
         {isLoading ? (
-          <div className="space-y-3">{[...Array(5)].map((_, i) => <div key={i} className="h-24 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
+          <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
         ) : allDeadlines.length === 0 ? (
           <div className="text-center text-text-muted py-12">No deadlines found for the selected filters.</div>
         ) : (
-          <div className="space-y-3">
-            {allDeadlines.map((d, i) => <DeadlineCard key={`${d.id}-${i}`} deadline={d} />)}
+          <div className="space-y-2">
+            {allDeadlines.map((d, i) => <DeadlineRow key={`${d.id}-${i}`} deadline={d} onSelect={setSelected} />)}
           </div>
         )}
       </div>
+
+      <DeadlineModal deadline={selected} bill={selectedBill} onClose={() => setSelected(null)} />
     </div>
   );
 }

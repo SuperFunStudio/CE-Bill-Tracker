@@ -72,9 +72,11 @@ export function scoreColor(score: number): string {
 
 const INSTRUMENT_DISPLAY: Record<string, string> = {
   epr: 'EPR',
-  bottle_bill: 'Bottle Bill',
+  deposit_return: 'Deposit Return',
   recycled_content: 'Recycled Content',
   right_to_repair: 'Right to Repair',
+  labeling: 'Labeling',
+  preemption: 'Preemption',
   other: 'Other',
 };
 

@@ -11,6 +11,20 @@ log = structlog.get_logger()
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
+# Instrument types that put a bill in scope for the tracker, independent of the narrow
+# "is_epr_relevant" judgment. Right-to-repair, deposit-return, etc. are tracked policy
+# instruments even though they aren't EPR in the strict sense, so a bill the classifier
+# tagged with one of these counts as relevant. Excludes "other" (no real instrument).
+TRACKED_INSTRUMENTS = frozenset({
+    "epr", "right_to_repair", "recycled_content", "deposit_return",
+    "labeling", "preemption",
+})
+# "chemical_restriction", "budget" (generic appropriations), and "other" are intentionally
+# excluded: they're not circular-economy policy instruments and pull tangential bills into the
+# tracker. chemical_restriction in particular surfaced chemical-safety/health bills like CA
+# SB-236 (hair relaxer ingredients) that aren't EPR/stewardship/circularity. The classifier may
+# still tag a bill chemical_restriction; it just won't count as in-scope on that basis alone.
+
 SYSTEM_PROMPT = """\
 You are an expert in US environmental policy and Extended Producer Responsibility (EPR) legislation. \
 Analyze legislative bills and classify their relevance to EPR, product stewardship, circular economy policy, \

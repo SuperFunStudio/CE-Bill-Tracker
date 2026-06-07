@@ -5,7 +5,7 @@ import { useBills } from '@/hooks/useBills';
 import { STATE_NAMES } from '@/lib/utils';
 
 export default function StatesPage() {
-  const { data: bills = [], isLoading } = useBills({ epr_relevant: true, limit: 500 });
+  const { data: bills = [], isLoading } = useBills({ epr_relevant: true, limit: 5000 });
 
   const ranking = useMemo(() => {
     const counts: Record<string, number> = {};

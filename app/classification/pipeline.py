@@ -4,7 +4,7 @@ from datetime import date
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.classification.haiku_classifier import HaikuClassifier
+from app.classification.haiku_classifier import TRACKED_INSTRUMENTS, HaikuClassifier
 from app.classification.keywords import KeywordFilter
 from app.classification.sonnet_extractor import SonnetExtractor
 from app.config import settings
@@ -87,7 +87,11 @@ class ClassificationPipeline:
             classified_ids.add(bill_obj.id)
 
             bill_obj.confidence_score = hr.confidence
-            bill_obj.epr_relevant = hr.is_epr_relevant and hr.confidence >= 0.4
+            # In scope if the classifier judged it EPR-relevant OR tagged it with a tracked
+            # policy instrument (right-to-repair, deposit-return, etc.), at decent confidence.
+            bill_obj.epr_relevant = hr.confidence >= 0.4 and (
+                hr.is_epr_relevant or hr.instrument_type in TRACKED_INSTRUMENTS
+            )
             bill_obj.material_categories = hr.material_categories
             bill_obj.instrument_type = hr.instrument_type
             bill_obj.urgency = hr.urgency

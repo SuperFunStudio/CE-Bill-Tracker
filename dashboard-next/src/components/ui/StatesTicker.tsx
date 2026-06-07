@@ -1,10 +1,12 @@
 'use client';
 import Link from 'next/link';
+import { useRef } from 'react';
 
 /**
  * "Top States" leaderboard line, styled like a subheading under the masthead.
- * The current top 5 loop continuously (slow marquee, pauses on hover); fixed label
- * and "The rest →" link bookend the scroll so neither gets clipped.
+ * Shows every ranked state in a full-width, horizontally scrollable strip.
+ * Drag (or wheel/trackpad) to scroll; a fixed label and "The rest →" link
+ * bookend the scroller so neither gets clipped.
  */
 export function StatesTicker({
   data,
@@ -17,38 +19,60 @@ export function StatesTicker({
     .filter(([, c]) => c > 0)
     .sort((a, b) => b[1] - a[1]);
 
+  const scroller = useRef<HTMLDivElement>(null);
+  // Track an in-progress drag so a drag-release doesn't fire the underlying button click.
+  const drag = useRef({ active: false, startX: 0, startLeft: 0, moved: false });
+
   if (ranked.length === 0) return null;
 
-  const top5 = ranked.slice(0, 5);
-  const REPEAT = 5; // repeat the top-5 enough to fill wide screens for a seamless loop
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = scroller.current;
+    if (!el) return;
+    drag.current = { active: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
+    el.setPointerCapture(e.pointerId);
+  };
 
-  const copy = (prefix: string) =>
-    Array.from({ length: REPEAT }).flatMap((_, r) =>
-      top5.map(([abbr], i) => (
-        <button
-          key={`${prefix}-${r}-${i}`}
-          onClick={() => onStateClick?.(abbr)}
-          className="inline-flex items-baseline gap-1.5 px-5 whitespace-nowrap hover:text-green-accent transition-colors"
-        >
-          <span className="text-text-muted">{i + 1}.</span>
-          <span className="font-mono font-bold text-text-primary">{abbr}</span>
-        </button>
-      )),
-    );
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = scroller.current;
+    if (!el || !drag.current.active) return;
+    const dx = e.clientX - drag.current.startX;
+    if (Math.abs(dx) > 3) drag.current.moved = true;
+    el.scrollLeft = drag.current.startLeft - dx;
+  };
+
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = scroller.current;
+    if (el?.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    drag.current.active = false;
+  };
 
   return (
     <div className="flex items-center gap-3 border-y border-text-primary/20">
       <span className="shrink-0 pl-1 font-serif text-xs uppercase tracking-wider text-green-accent">
         Top States
       </span>
-      <div className="flex-1 overflow-hidden group">
-        <div
-          className="flex w-max animate-marquee py-2 group-hover:[animation-play-state:paused]"
-          style={{ animationDuration: '70s' }}
-        >
-          {copy('a')}
-          {copy('b')}
-        </div>
+      <div
+        ref={scroller}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        className="flex flex-1 select-none cursor-grab items-center overflow-x-auto py-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden active:cursor-grabbing"
+      >
+        {ranked.map(([abbr], i) => (
+          <button
+            key={abbr}
+            onClick={() => {
+              // Suppress the click that ends a drag gesture.
+              if (drag.current.moved) return;
+              onStateClick?.(abbr);
+            }}
+            className="inline-flex items-baseline gap-1.5 px-4 whitespace-nowrap hover:text-green-accent transition-colors"
+          >
+            <span className="text-text-muted">{i + 1}.</span>
+            <span className="font-mono font-bold text-text-primary">{abbr}</span>
+          </button>
+        ))}
       </div>
       <Link
         href="/states"

@@ -12,6 +12,7 @@ const DEADLINE_TYPE_COLORS: Record<string, string> = {
   registration: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-400 dark:border-blue-700',
   reporting:    'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border-purple-400 dark:border-purple-700',
   compliance:   'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-400 dark:border-amber-700',
+  effective:    'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 border-rose-400 dark:border-rose-700',
   fee:          'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-400 dark:border-green-700',
   labeling:     'bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border-cyan-400 dark:border-cyan-700',
 };
@@ -68,7 +69,7 @@ export default function CompliancePage() {
   const [includePast, setIncludePast] = useState(false);
 
   const { data: apiDeadlines = [], isLoading } = useDeadlines({ days_ahead: daysAhead, state: stateFilter || undefined });
-  const { data: bills = [] } = useBills({ epr_relevant: true, limit: 500 });
+  const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
 
   // Merge API deadlines with compliance_details.deadlines from bills
   const allDeadlines = useMemo(() => {
@@ -83,28 +84,40 @@ export default function CompliancePage() {
       }
     }
 
-    // Extract from compliance_details
+    // Extract from compliance_details: explicit deadlines plus the key implementation/
+    // enforcement dates (effective_date, compliance_date) that the bulk classifier pulled
+    // out of each bill but that don't live in the `deadlines` array.
+    const pushDeadline = (
+      bill: (typeof bills)[number],
+      type: string,
+      date: string | null | undefined,
+      description: string | null | undefined,
+    ) => {
+      if (!date) return;
+      const key = `${bill.state}|${date}|${type}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      merged.push({
+        id: -1,
+        state: bill.state,
+        deadline_type: type,
+        deadline_date: date,
+        description: description ?? null,
+        who_affected: null,
+        bill_id: bill.id,
+        bill_number: bill.bill_number,
+        bill_title: bill.title,
+      });
+    };
+
     for (const bill of bills) {
       if (stateFilter && bill.state !== stateFilter) continue;
-      const deadlines = bill.compliance_details?.deadlines ?? [];
-      for (const cd of deadlines) {
-        if (!cd.date) continue;
-        const key = `${bill.state}|${cd.date}|${cd.type}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          merged.push({
-            id: -1,
-            state: bill.state,
-            deadline_type: cd.type ?? 'compliance',
-            deadline_date: cd.date,
-            description: cd.description ?? null,
-            who_affected: null,
-            bill_id: bill.id,
-            bill_number: bill.bill_number,
-            bill_title: bill.title,
-          });
-        }
+      const details = bill.compliance_details;
+      for (const cd of details?.deadlines ?? []) {
+        pushDeadline(bill, cd.type ?? 'compliance', cd.date, cd.description);
       }
+      pushDeadline(bill, 'effective', details?.effective_date, `${bill.bill_number ?? 'Bill'} takes effect`);
+      pushDeadline(bill, 'compliance', details?.compliance_date, `${bill.bill_number ?? 'Bill'} compliance date`);
     }
 
     return merged

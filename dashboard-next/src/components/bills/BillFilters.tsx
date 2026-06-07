@@ -25,12 +25,25 @@ export const DEFAULT_FILTERS: BillFilterState = {
   hasLitigation: false,
 };
 
-const STATUSES = ['Introduced', 'In Committee', 'Passed Chamber', 'Enacted', 'Failed', 'Tabled'];
-const INSTRUMENT_TYPES = ['epr', 'bottle_bill', 'recycled_content', 'right_to_repair', 'other'];
-const MATERIAL_CATEGORIES = [
-  'packaging', 'electronics', 'batteries', 'paint', 'mattresses',
-  'carpet', 'pharmaceuticals', 'motor_oil', 'tires', 'sharps',
+// Values must match the canonical statuses stored on bills (see app/ingestion/coordinator.py).
+const STATUSES = [
+  { value: 'introduced',     label: 'Introduced' },
+  { value: 'in_committee',   label: 'In Committee' },
+  { value: 'passed_chamber', label: 'Passed Chamber' },
+  { value: 'passed',         label: 'Passed' },
+  { value: 'enacted',        label: 'Enacted' },
+  { value: 'vetoed',         label: 'Vetoed' },
+  { value: 'failed',         label: 'Failed' },
 ];
+// Values must match the classifier instrument_type enum (see app/classification/haiku_classifier.py).
+// chemical_restriction and budget are omitted: neither is a tracked circular-economy instrument
+// (see TRACKED_INSTRUMENTS); budget is generic appropriations and pulls in tangential bills.
+const INSTRUMENT_TYPES = ['epr', 'deposit_return', 'right_to_repair', 'recycled_content',
+  'labeling', 'preemption', 'other'];
+// Values must match the material categories in data/seed/epr_keywords.json.
+const MATERIAL_CATEGORIES = ['plastic_packaging', 'paper_packaging', 'glass', 'metals',
+  'electronics', 'batteries', 'paint', 'carpet', 'mattresses', 'tires',
+  'pharmaceuticals', 'solar_panels', 'textiles', 'organics', 'other'];
 const URGENCY_LEVELS = ['high', 'medium', 'low'];
 
 interface BillFiltersProps {
@@ -113,7 +126,7 @@ export function BillFilters({ filters, onChange }: BillFiltersProps) {
           label="Status"
           value={filters.status}
           onChange={v => set({ status: v })}
-          options={STATUSES.map(s => ({ value: s, label: s }))}
+          options={STATUSES}
           placeholder="All Statuses"
         />
         <Select

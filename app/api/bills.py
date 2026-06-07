@@ -33,7 +33,7 @@ async def list_bills(
     min_confidence: float = 0.0,
     urgency: str | None = None,
     instrument_type: str | None = None,
-    limit: int = Query(default=100, le=500),
+    limit: int = Query(default=100, le=5000),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ):

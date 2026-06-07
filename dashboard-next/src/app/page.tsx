@@ -7,7 +7,6 @@ import { useFederalActions, useLitigationCases } from '@/hooks/useFederal';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { FederalWatchBanner } from '@/components/ui/FederalWatchBanner';
-import { Masthead } from '@/components/ui/Masthead';
 import { StatesTicker } from '@/components/ui/StatesTicker';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillFilters, DEFAULT_FILTERS, applyBillFilters, type BillFilterState } from '@/components/bills/BillFilters';
@@ -22,7 +21,7 @@ const StateMap = dynamic(
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
 
-  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ epr_relevant: true, limit: 500 });
+  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ epr_relevant: true, limit: 5000 });
   const { data: deadlines = [] } = useDeadlines({ days_ahead: 365 });
   const { data: federal = [] } = useFederalActions({ limit: 50 });
   const { data: litigationCases = [] } = useLitigationCases();
@@ -73,11 +72,8 @@ export default function HomePage() {
   }
 
   return (
-    <div className="p-6 space-y-8 max-w-6xl">
-      {/* Masthead — gazette, condenses on scroll */}
-      <Masthead />
-
-      {/* Top-states leaderboard line, right under the subhead */}
+    <div className="p-6 space-y-8 max-w-6xl mx-auto">
+      {/* Top-states leaderboard line, right under the nav */}
       <StatesTicker
         data={mapData}
         onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}

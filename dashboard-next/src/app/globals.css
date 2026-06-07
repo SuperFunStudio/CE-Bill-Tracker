@@ -39,7 +39,13 @@
 body {
   color: var(--text-primary);
   background: var(--bg-primary);
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--font-sans), Inter, system-ui, sans-serif;
+}
+
+/* Editorial serif for headings/masthead (New Yorker-inspired). Apply via `font-serif`. */
+.font-serif {
+  font-feature-settings: 'liga' 1, 'onum' 1;
+  letter-spacing: -0.01em;
 }
 
 /* Scrollbar styling */
@@ -59,4 +65,16 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* Leaderboard ticker marquee (two copies side by side → seamless loop at -50%) */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 45s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee { animation: none; }
 }

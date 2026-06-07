@@ -36,7 +36,6 @@ const URGENCY_LEVELS = ['high', 'medium', 'low'];
 interface BillFiltersProps {
   filters: BillFilterState;
   onChange: (f: BillFilterState) => void;
-  showEprToggle?: boolean;
 }
 
 function Select({
@@ -50,22 +49,25 @@ function Select({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-text-muted text-xs uppercase">{label}</label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="bg-bg-secondary border border-border-default rounded px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-green-accent"
-      >
-        <option value="">{placeholder}</option>
-        {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <label className="font-serif text-text-muted text-[11px] uppercase tracking-wider">{label}</label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="w-full appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-text-primary focus:outline-none focus:border-green-accent"
+        >
+          <option value="">{placeholder}</option>
+          {options.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-[10px]">▾</span>
+      </div>
     </div>
   );
 }
 
-export function BillFilters({ filters, onChange, showEprToggle = false }: BillFiltersProps) {
+export function BillFilters({ filters, onChange }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
 
   const stateOptions = Object.entries(STATE_NAMES).map(([abbr, name]) => ({
@@ -74,17 +76,17 @@ export function BillFilters({ filters, onChange, showEprToggle = false }: BillFi
   }));
 
   return (
-    <div className="bg-bg-secondary border border-border-default rounded-lg p-4 space-y-4">
+    <div className="space-y-4 border-y border-text-primary/15 py-4">
       {/* Search */}
       <div className="flex flex-col gap-1">
-        <label className="text-text-muted text-xs uppercase">Search</label>
+        <label className="font-serif text-text-muted text-[11px] uppercase tracking-wider">Search</label>
         <div className="relative">
           <input
             type="text"
             value={filters.search}
             onChange={e => set({ search: e.target.value })}
-            placeholder="Search title, summary..."
-            className="w-full bg-bg-primary border border-border-default rounded px-3 py-1.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent pr-8"
+            placeholder="Search title, summary…"
+            className="w-full rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent pr-8"
           />
           {filters.search && (
             <button
@@ -136,40 +138,11 @@ export function BillFilters({ filters, onChange, showEprToggle = false }: BillFi
         />
       </div>
 
-      {/* Toggles */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <label className="flex items-center gap-2 cursor-pointer text-sm text-text-secondary">
-          <input
-            type="checkbox"
-            checked={filters.enactedOnly}
-            onChange={e => set({ enactedOnly: e.target.checked })}
-            className="accent-green-accent"
-          />
-          Enacted only
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer text-sm text-text-secondary">
-          <input
-            type="checkbox"
-            checked={filters.hasLitigation}
-            onChange={e => set({ hasLitigation: e.target.checked })}
-            className="accent-green-accent"
-          />
-          Active litigation only
-        </label>
-        {showEprToggle && (
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-text-secondary">
-            <input
-              type="checkbox"
-              checked={filters.eprOnly}
-              onChange={e => set({ eprOnly: e.target.checked })}
-              className="accent-green-accent"
-            />
-            EPR-relevant only
-          </label>
-        )}
+      {/* Reset */}
+      <div className="flex justify-end">
         <button
           onClick={() => onChange(DEFAULT_FILTERS)}
-          className="text-green-accent text-xs hover:underline sm:ml-auto"
+          className="text-green-accent text-xs hover:underline"
         >
           Reset filters
         </button>

@@ -3,9 +3,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeContext';
+import { useScrolled } from '@/hooks/useScrolled';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Signal Dashboard', icon: '🏠' },
+  { href: '/', label: 'Bill Explorer', icon: '🏠' },
   { href: '/compliance', label: 'Upcoming Deadlines', icon: '📅' },
   { href: '/federal', label: 'Federal Actions', icon: '🏛️' },
   { href: '/company', label: 'Company Impact', icon: '🏭' },
@@ -28,6 +29,7 @@ function ThemeToggle() {
 export function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const scrolled = useScrolled();
 
   const navLinks = NAV_ITEMS.map(({ href, label, icon }) => {
     const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
@@ -53,26 +55,32 @@ export function Sidebar() {
       {/* ── Desktop sidebar (hidden below md) ── */}
       <aside className="hidden md:flex w-56 min-h-screen bg-bg-secondary border-r border-border-default flex-col shrink-0">
         <div className="p-4 border-b border-border-default">
-          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <span className="text-green-accent text-xl font-bold">⚡</span>
-            <div>
-              <div className="text-text-primary font-bold text-sm leading-tight">SignalScout</div>
-              <div className="text-text-muted text-xs">Compliance Intelligence</div>
+          <Link href="/" className="block hover:opacity-80 transition-opacity">
+            <div className="font-serif text-text-primary text-lg leading-tight">
+              Battle of the <span className="text-green-accent">Bills</span>
+            </div>
+            <div className="text-text-muted text-xs mt-0.5 flex items-center gap-1.5">
+              Circularity legislation
+              <span className="text-[10px] uppercase tracking-wide text-green-accent border border-green-accent/40 rounded px-1 leading-tight">Beta</span>
             </div>
           </Link>
         </div>
         <nav className="flex-1 p-3 space-y-1">{navLinks}</nav>
         <div className="p-3 border-t border-border-default space-y-1">
           <ThemeToggle />
-          <div className="text-text-muted text-xs text-center pt-1">EPR Legislative Intelligence</div>
+          <div className="text-text-muted text-xs text-center pt-1">Circularity legislation tracker</div>
         </div>
       </aside>
 
-      {/* ── Mobile top bar (visible below md) ── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-bg-secondary border-b border-border-default flex items-center justify-between px-4 h-12">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <span className="text-green-accent text-lg font-bold">⚡</span>
-          <span className="text-text-primary font-bold text-sm">SignalScout</span>
+      {/* ── Mobile top bar (visible below md) — sun + menu, brand appears on scroll ── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-bg-secondary border-b border-border-default flex items-center justify-between gap-2 px-4 h-12">
+        <Link
+          href="/"
+          className={`font-serif text-text-primary text-base tracking-wide transition-opacity duration-300 ${
+            scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          Battle of the Bills
         </Link>
         <div className="flex items-center gap-2">
           <MobileThemeToggle />

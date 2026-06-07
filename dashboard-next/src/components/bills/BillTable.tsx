@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType } from '@/lib/utils';
 import { BillModal } from '@/components/ui/BillModal';
@@ -7,6 +7,9 @@ import { BillModal } from '@/components/ui/BillModal';
 interface BillTableProps {
   bills: BillSummary[];
   maxRows?: number;
+  /** When set, show this many rows and auto-advance through the list in pages. */
+  autoPageSize?: number;
+  intervalMs?: number;
 }
 
 function StatusBadge({ status }: { status: string | null }) {
@@ -24,9 +27,27 @@ function StatusBadge({ status }: { status: string | null }) {
   );
 }
 
-export function BillTable({ bills, maxRows }: BillTableProps) {
+export function BillTable({ bills, maxRows, autoPageSize, intervalMs = 6000 }: BillTableProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const displayBills = maxRows ? bills.slice(0, maxRows) : bills;
+  const [page, setPage] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const pageCount = autoPageSize ? Math.max(1, Math.ceil(bills.length / autoPageSize)) : 1;
+
+  // Reset to the first page whenever the filtered list changes.
+  useEffect(() => { setPage(0); }, [bills.length]);
+
+  // Auto-advance, paused on hover or while a bill is open for reading.
+  useEffect(() => {
+    if (!autoPageSize || pageCount <= 1 || paused || selectedId != null) return;
+    const id = setInterval(() => setPage(p => (p + 1) % pageCount), intervalMs);
+    return () => clearInterval(id);
+  }, [autoPageSize, pageCount, paused, selectedId, intervalMs]);
+
+  const safePage = page % pageCount;
+  const displayBills = autoPageSize
+    ? bills.slice(safePage * autoPageSize, safePage * autoPageSize + autoPageSize)
+    : maxRows ? bills.slice(0, maxRows) : bills;
   const selectedBill = bills.find(b => b.id === selectedId) ?? null;
 
   function LitigationBadge({ bill }: { bill: BillSummary }) {
@@ -45,7 +66,11 @@ export function BillTable({ bills, maxRows }: BillTableProps) {
   }
 
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
       {/* ── Desktop table (hidden below sm) ── */}
       <div className="hidden sm:block overflow-x-auto rounded-lg border border-border-default">
         <table className="w-full text-sm">
@@ -78,8 +103,13 @@ export function BillTable({ bills, maxRows }: BillTableProps) {
                 <td className="px-3 py-2">
                   <span className="text-green-accent font-mono font-bold">{bill.state}</span>
                 </td>
-                <td className="px-3 py-2 text-text-muted font-mono text-xs">
-                  {bill.bill_number ?? '—'}
+                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
+                  <span className="text-text-muted">{bill.bill_number ?? '—'}</span>
+                  {bill.last_action_date && (
+                    <span className="text-text-muted/60 ml-1" title={`${bill.last_action_date} session`}>
+                      &rsquo;{bill.last_action_date.slice(2, 4)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <div className="text-text-primary truncate max-w-xs" title={fixEncoding(bill.title) ?? ''}>
@@ -127,7 +157,10 @@ export function BillTable({ bills, maxRows }: BillTableProps) {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-green-accent font-mono font-bold text-sm">{bill.state}</span>
               {bill.bill_number && (
-                <span className="text-text-muted font-mono text-xs">{bill.bill_number}</span>
+                <span className="text-text-muted font-mono text-xs">
+                  {bill.bill_number}
+                  {bill.last_action_date && <span className="text-text-muted/60">&nbsp;&rsquo;{bill.last_action_date.slice(2, 4)}</span>}
+                </span>
               )}
               <LitigationBadge bill={bill} />
             </div>
@@ -153,11 +186,22 @@ export function BillTable({ bills, maxRows }: BillTableProps) {
         ))}
       </div>
 
-      {bills.length > (maxRows ?? Infinity) && (
+      {autoPageSize && pageCount > 1 ? (
+        <div className="flex items-center justify-between text-xs text-text-muted">
+          <span className="tabular-nums">
+            {safePage * autoPageSize + 1}&ndash;{Math.min((safePage + 1) * autoPageSize, bills.length)} of {bills.length}
+          </span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setPage(p => (p - 1 + pageCount) % pageCount)} className="hover:text-text-primary" aria-label="Previous">&lsaquo; Prev</button>
+            <span className="text-text-muted/60 w-10 text-center">{paused || selectedId != null ? 'paused' : 'auto'}</span>
+            <button onClick={() => setPage(p => (p + 1) % pageCount)} className="hover:text-text-primary" aria-label="Next">Next &rsaquo;</button>
+          </div>
+        </div>
+      ) : bills.length > (maxRows ?? Infinity) ? (
         <div className="text-text-muted text-xs text-right">
           Showing {maxRows} of {bills.length} bills
         </div>
-      )}
+      ) : null}
 
       <BillModal bill={selectedBill} onClose={() => setSelectedId(null)} />
     </div>

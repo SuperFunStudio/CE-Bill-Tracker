@@ -6,7 +6,9 @@ import { useDeadlines } from '@/hooks/useDeadlines';
 import { useFederalActions, useLitigationCases } from '@/hooks/useFederal';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
-import { SectionHeader } from '@/components/ui/SectionHeader';
+import { FederalWatchBanner } from '@/components/ui/FederalWatchBanner';
+import { Masthead } from '@/components/ui/Masthead';
+import { StatesTicker } from '@/components/ui/StatesTicker';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillFilters, DEFAULT_FILTERS, applyBillFilters, type BillFilterState } from '@/components/bills/BillFilters';
 import { STATE_NAMES, formatDate, downloadCsv } from '@/lib/utils';
@@ -46,19 +48,13 @@ export default function HomePage() {
   const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
   const activeLitigation = useMemo(() => litigationCases.filter(c => c.case_status === 'active').length, [litigationCases]);
 
+  // Map honors every active filter EXCEPT state, so all states stay visible/clickable.
   const mapData = useMemo(() => {
-    let filtered = bills;
-    if (billFilters.enactedOnly) filtered = filtered.filter(b => b.status === 'enacted');
-    if (billFilters.instrumentType) filtered = filtered.filter(b => b.instrument_type === billFilters.instrumentType);
+    const filtered = applyBillFilters(bills, { ...billFilters, state: '' });
     const counts: Record<string, number> = {};
     filtered.forEach(b => { counts[b.state] = (counts[b.state] ?? 0) + 1; });
     return counts;
-  }, [bills, billFilters.enactedOnly, billFilters.instrumentType]);
-
-  const topStates = useMemo(() =>
-    Object.entries(mapData).sort((a, b) => b[1] - a[1]).slice(0, 5),
-    [mapData]
-  );
+  }, [bills, billFilters]);
 
   const tableBills = useMemo(() => applyBillFilters(bills, billFilters), [bills, billFilters]);
 
@@ -77,39 +73,43 @@ export default function HomePage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Hero */}
-      <div className="rounded-xl p-8 border border-green-accent/30 bg-green-hero">
-        <h1 className="text-3xl font-bold text-text-primary mb-2">Signal Dashboard</h1>
-        <p className="text-text-secondary text-lg">
-          US EPR legislative intelligence — monitoring all 50 states + DC across 10+ material categories
-        </p>
-      </div>
+    <div className="p-6 space-y-8 max-w-6xl">
+      {/* Masthead — gazette, condenses on scroll */}
+      <Masthead />
 
-      {/* Federal Preemption Alert */}
-      <AlertBanner
-        variant="amber"
-        message={
-          highPreemption > 0
-            ? `⚠ Federal Preemption Watch: ${highPreemption} high-risk federal action(s) tracked. The Oregon NAW constitutional challenge (trial July 13, 2026) could set precedent for Dormant Commerce Clause attacks on all state packaging EPR programs.`
-            : '⚠ Federal Preemption Watch: The Oregon NAW case (trial July 13, 2026) could set precedent for Dormant Commerce Clause attacks on all state packaging EPR programs. Monitor the Federal Actions page for updates.'
-        }
+      {/* Top-states leaderboard line, right under the subhead */}
+      <StatesTicker
+        data={mapData}
+        onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
       />
 
-      {/* Bill Explorer — filters + map */}
-      <div>
-        <h2 className="text-lg font-semibold text-text-primary mb-3">Bill Explorer</h2>
+      {/* Map */}
+      <section>
+        <StateMap
+          data={mapData}
+          selectedState={billFilters.state || null}
+          onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
+          height={380}
+        />
+      </section>
 
-        <BillFilters filters={billFilters} onChange={setBillFilters} showEprToggle />
-
-        <div className="mt-4">
-          <StateMap
-            data={mapData}
-            selectedState={billFilters.state || null}
-            onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
-            height={380}
-          />
+      {/* 2 ── Bill Explorer: filters + auto-advancing results */}
+      <section>
+        <div className="flex items-baseline justify-between mb-3 gap-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="font-serif text-2xl text-text-primary">Bill Explorer</h2>
+            <span className="text-text-muted text-sm">{tableBills.length} bills</span>
+          </div>
+          <button
+            onClick={handleExport}
+            disabled={tableBills.length === 0}
+            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0"
+          >
+            ↓ Export CSV
+          </button>
         </div>
+
+        <BillFilters filters={billFilters} onChange={setBillFilters} />
 
         {billFilters.state && (
           <div className="mt-2 text-sm text-text-muted">
@@ -119,29 +119,22 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Top States widget — shown when no state selected */}
-        {!billFilters.state && topStates.length > 0 && (
+        {billsError && <AlertBanner variant="red" message="⚠ Could not load bill data. Ensure the API is running." className="mt-3" />}
+        {billsLoading ? (
+          <div className="space-y-2 mt-4">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-bg-secondary rounded animate-pulse" />)}</div>
+        ) : (
           <div className="mt-4">
-            <div className="text-text-muted text-xs uppercase tracking-wider mb-3">Most Active States</div>
-            <div className="grid grid-cols-5 gap-3">
-              {topStates.map(([abbr, count]) => (
-                <button
-                  key={abbr}
-                  onClick={() => setBillFilters(prev => ({ ...prev, state: abbr }))}
-                  className="bg-bg-secondary border border-border-default rounded-lg p-3 text-center hover:border-green-accent/50 transition-colors"
-                >
-                  <div className="text-green-accent font-bold text-lg">{abbr}</div>
-                  <div className="text-text-muted text-xs">{count} bills</div>
-                </button>
-              ))}
-            </div>
+            <BillTable bills={tableBills} autoPageSize={5} />
           </div>
         )}
-      </div>
+      </section>
+
+      {/* 3 ── Federal watch (pithy, dismissible) */}
+      <FederalWatchBanner highRiskCount={highPreemption} />
 
       {/* Metrics */}
       <div className="hidden sm:grid grid-cols-5 gap-4">
-        <MetricCard label="Enacted EPR Laws" value={billsLoading ? '…' : enactedCount} sublabel={`${packagingStates} packaging EPR states`} accent />
+        <MetricCard label="Enacted Laws" value={billsLoading ? '…' : enactedCount} sublabel={`${packagingStates} packaging EPR states`} accent />
         <MetricCard label="States With Activity" value={billsLoading ? '…' : activeStates} sublabel="across all instrument types" />
         <MetricCard label="Material Categories" value={billsLoading ? '…' : materialCount} sublabel="packaging · e-waste · batteries · more" />
         <MetricCard label="Upcoming Deadlines" value={deadlines.length} sublabel="within next 365 days" />
@@ -153,45 +146,36 @@ export default function HomePage() {
         <MetricCard label="Deadlines" value={deadlines.length} compact />
       </div>
 
-      {/* Bill Tracker */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-baseline gap-3">
-            <SectionHeader title="Bill Tracker" />
-            <span className="text-text-muted text-sm">{tableBills.length} bills</span>
-          </div>
-          <button
-            onClick={handleExport}
-            disabled={tableBills.length === 0}
-            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline"
-          >
-            ↓ Export CSV
-          </button>
-        </div>
-
-        {billsError && <AlertBanner variant="red" message="⚠ Could not load bill data. Ensure the API is running." className="mt-3" />}
-        {billsLoading ? (
-          <div className="space-y-2 mt-4">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-bg-secondary rounded animate-pulse" />)}</div>
-        ) : (
-          <div className="mt-4">
-            <BillTable bills={tableBills} maxRows={50} />
-          </div>
-        )}
-      </div>
-
       {/* Quick nav */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {[
-          { href: '/compliance', label: '📅 Upcoming Deadlines', desc: 'Compliance deadlines' },
-          { href: '/federal', label: '🏛️ Federal Actions', desc: 'Federal Register + litigation' },
-          { href: '/company', label: '🏭 Company Impact', desc: 'Exposure scoring & briefs' },
+          { href: '/compliance', label: 'Upcoming Deadlines', desc: 'Compliance deadlines' },
+          { href: '/federal', label: 'Federal Actions', desc: 'Federal Register + litigation' },
+          { href: '/company', label: 'Company Impact', desc: 'Exposure scoring & briefs' },
         ].map(({ href, label, desc }) => (
           <Link key={href} href={href} className="bg-bg-secondary border border-border-default rounded-lg p-4 hover:border-green-accent/50 transition-colors">
-            <div className="font-medium text-text-primary text-sm">{label}</div>
+            <div className="font-serif text-text-primary text-base">{label}</div>
             <div className="text-text-muted text-xs mt-1">{desc}</div>
           </Link>
         ))}
       </div>
+
+      {/* Federal preemption context — target of the banner's "Learn more" */}
+      <section id="federal-context" className="scroll-mt-6 border-t border-border-default pt-6">
+        <h2 className="font-serif text-2xl text-text-primary mb-2">Federal preemption watch</h2>
+        <p className="text-text-secondary text-sm sm:text-base max-w-3xl leading-relaxed">
+          The Oregon NAW constitutional challenge — trial <span className="text-text-primary font-medium">July 13, 2026</span> —
+          argues that state packaging EPR programs violate the Dormant Commerce Clause. A ruling for the
+          plaintiffs could set precedent for challenges to packaging laws in every state, which is why it&rsquo;s
+          the single most important thing to watch this year.
+          {highPreemption > 0 && (
+            <> Right now <span className="text-text-primary font-medium">{highPreemption}</span> high-risk federal action(s) are tracked.</>
+          )}
+        </p>
+        <Link href="/federal" className="inline-block mt-3 text-sm text-green-accent hover:underline">
+          View Federal Actions &rarr;
+        </Link>
+      </section>
     </div>
   );
 }

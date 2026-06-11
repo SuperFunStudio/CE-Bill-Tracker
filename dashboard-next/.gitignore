@@ -13,6 +13,9 @@
 /.next/
 /out/
 
+# generated at build time by scripts/build-snapshot.mjs (CDN data baseline)
+/public/data/
+
 # production
 /build
 

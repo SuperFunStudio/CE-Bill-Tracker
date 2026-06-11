@@ -1,0 +1,42 @@
+# Daily snapshot refresh — regenerates the CDN data baseline and redeploys Hosting.
+#
+# Firebase Hosting deploys are whole-site atomic (no single-file overwrite), so the
+# "daily JSON refresh" is implemented as a trimmed rebuild + hosting-only redeploy:
+# no image builds, no migrations, no API redeploy. Runs ~2-3 min.
+#
+# Trigger this once a day via Cloud Scheduler (see the run commands at the bottom of
+# this file / the PR description). The main cloudbuild.yaml already bakes a fresh
+# snapshot on every full deploy; this keeps it current between code deploys.
+
+substitutions:
+  _PROJECT_ID: ce-bill-tracker
+  _API_URL: https://signalscout-api-36712717703.us-central1.run.app
+
+timeout: 900s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # Regenerate public/data/*.json from the live API, then static-export the site.
+  - name: node:20
+    id: build-dashboard-next
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        cd dashboard-next
+        npm ci
+        NEXT_PUBLIC_API_BASE_URL=${_API_URL} node scripts/build-snapshot.mjs || echo "snapshot generation failed — redeploying with last build's data"
+        NEXT_PUBLIC_API_BASE_URL=${_API_URL} \
+        NEXT_PUBLIC_DEMO_MODE=false \
+        npm run build
+
+  # Hosting-only redeploy (out/ now carries the fresh data baseline).
+  - name: node:20
+    id: deploy-firebase
+    waitFor: [build-dashboard-next]
+    entrypoint: bash
+    args:
+      - -c
+      - npm install -g firebase-tools && firebase deploy --only hosting --project=${_PROJECT_ID} --non-interactive

@@ -7,6 +7,11 @@ substitutions:
   # Set _API_URL after first deploy: gcloud run services describe signalscout-api --region=us-central1 --format='value(status.url)'
   _API_URL: https://signalscout-api-36712717703.us-central1.run.app
 
+# The full pipeline (build 2 images, migrate, deploy API, build+deploy dashboard) runs ~10-11 min,
+# right at the default 10-min ceiling. Give it a generous margin so a slow step doesn't TIMEOUT.
+# 2700s (45 min): the snapshot step adds a few min and npm ci/next build can be slow.
+timeout: 2700s
+
 options:
   logging: CLOUD_LOGGING_ONLY
 
@@ -93,9 +98,28 @@ steps:
           sleep 1
         done
 
-        # Run migrations via proxy on 127.0.0.1:5432
-        DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
-          alembic upgrade head
+        # Run migrations via proxy on 127.0.0.1:5432.
+        # Retry a few times: schema changes (ALTER TABLE ADD COLUMN) need an
+        # ACCESS EXCLUSIVE lock that the live API may momentarily hold. env.py sets
+        # lock_timeout=15s so a blocked migration fails fast instead of hanging the
+        # whole build; retrying lets it catch a clean window (the column adds are
+        # sub-second once the lock is held).
+        MIGRATE_OK=0
+        for attempt in $$(seq 1 5); do
+          echo "alembic upgrade head — attempt $${attempt}/5"
+          if DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
+              alembic upgrade head; then
+            MIGRATE_OK=1
+            break
+          fi
+          echo "migration attempt $${attempt} failed (likely lock contention) — retrying in 15s"
+          sleep 15
+        done
+        if [ "$${MIGRATE_OK}" != "1" ]; then
+          echo "ERROR: migrations failed after 5 attempts" >&2
+          kill $${PROXY_PID} || true
+          exit 1
+        fi
 
         # NOTE: the known-EPR-laws seed (scripts/seed_database.py) is intentionally NOT run.
         # Its source URLs were wrong; bill data now comes from the OpenStates dump import
@@ -112,7 +136,11 @@ steps:
         kill $${PROXY_PID} || true
 
   # ── 6. Deploy API to Cloud Run ────────────────────────────────────────────
-  # min-instances=0: scale to zero when idle to save cost.
+  # min-instances=1: keep one warm instance so visitors never hit a cold start
+  # (container boot + SQLAlchemy/anthropic imports + Cloud SQL connect = 5-15s).
+  # The static dashboard reads a CDN snapshot for first paint, but detail pages,
+  # company search, and exposure briefs still call this API live — a warm
+  # instance keeps those sub-second. --cpu-boost speeds the rare scale-up.
   # Pipeline is triggered manually (POST /pipeline/run) or via Cloud Scheduler.
   # --workers 1 is set in the Dockerfile CMD.
   - name: gcr.io/cloud-builders/gcloud
@@ -125,7 +153,8 @@ steps:
       - --image=${_API_IMAGE}:latest
       - --region=${_REGION}
       - --platform=managed
-      - --min-instances=0
+      - --min-instances=1
+      - --cpu-boost
       - --max-instances=3
       - --concurrency=80
       - --cpu=1
@@ -209,8 +238,14 @@ steps:
         fi
 
   # ── 7. Build Next.js dashboard (static export) ───────────────────────────
-  # Runs in parallel with deploy-api (both wait on push-api).
-  # NEXT_PUBLIC_API_BASE_URL is baked into the bundle at build time.
+  # Runs in PARALLEL with deploy-api (both wait on push-api) to keep the critical
+  # path short. NEXT_PUBLIC_API_BASE_URL is baked into the bundle at build time.
+  # build-snapshot.mjs pre-renders the list endpoints to public/data/*.json so the
+  # CDN serves a data baseline — first paint and bill search never hit the API or
+  # show "0 bills". It calls ${_API_URL}, which routes to the currently-serving
+  # (old, warm) revision while the new one rolls out — fine, since bill data lives
+  # in the DB, not the image. A snapshot failure must NOT fail the deploy (the
+  # frontend falls back to live + localStorage), so it is tolerated with `|| echo`.
   - name: node:20
     id: build-dashboard-next
     waitFor: [push-api]
@@ -220,6 +255,7 @@ steps:
       - |
         cd dashboard-next
         npm ci
+        NEXT_PUBLIC_API_BASE_URL=${_API_URL} node scripts/build-snapshot.mjs || echo "snapshot generation failed — shipping without a baked snapshot"
         NEXT_PUBLIC_API_BASE_URL=${_API_URL} \
         NEXT_PUBLIC_DEMO_MODE=false \
         npm run build

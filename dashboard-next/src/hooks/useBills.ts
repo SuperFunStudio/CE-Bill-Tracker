@@ -1,14 +1,16 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import { fetchBills, fetchBill, fetchMapSummary, fetchBillLitigationCases } from '@/lib/api';
-import type { BillParams } from '@/lib/types';
+import { resilient, getSnapshot } from '@/lib/snapshot';
+import type { BillParams, BillSummary, StateMapSummary } from '@/lib/types';
 
 const STALE = 5 * 60 * 1000; // 5 min — mirrors Streamlit ttl=300
 
 export function useBills(params?: BillParams) {
   return useQuery({
     queryKey: ['bills', params],
-    queryFn: () => fetchBills(params),
+    queryFn: () => resilient('bills', () => fetchBills(params)),
+    placeholderData: () => getSnapshot<BillSummary[]>('bills') ?? undefined,
     staleTime: STALE,
   });
 }
@@ -25,7 +27,8 @@ export function useBill(id: number | null) {
 export function useMapSummary() {
   return useQuery({
     queryKey: ['mapSummary'],
-    queryFn: fetchMapSummary,
+    queryFn: () => resilient('map-summary', fetchMapSummary),
+    placeholderData: () => getSnapshot<StateMapSummary[]>('map-summary') ?? undefined,
     staleTime: STALE,
   });
 }

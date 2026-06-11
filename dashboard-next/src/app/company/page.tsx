@@ -540,7 +540,8 @@ function AccessGate({ onUnlock }: { onUnlock: () => void }) {
 
   function handleAdminUnlock(e: React.FormEvent) {
     e.preventDefault();
-    if (password === 'scout2026') {
+    // Forgiving match: trim stray whitespace (copy-paste) and ignore case.
+    if (password.trim().toLowerCase() === 'scout2026') {
       onUnlock();
     } else {
       setPasswordError('Incorrect password');

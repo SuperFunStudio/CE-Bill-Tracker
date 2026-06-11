@@ -17,15 +17,16 @@ interface Tier {
   highlight?: boolean;
 }
 
-// Prices are hypotheses to validate — the "Request access & pricing" clicks (who, what org, which
-// tier) set the real numbers before any billing is built. See app/api/access.py.
+// Pro shows one confident price ($39); Free is $0 and Enterprise is Custom. The "Request access &
+// pricing" clicks (who, org, tier) still set the real numbers before any billing is built — Pro's
+// CTA stays request-access until self-serve checkout exists. See app/api/access.py.
 const TIERS: Tier[] = [
   {
     id: 'free',
     name: 'Free',
     price: '$0',
     cadence: 'always',
-    who: 'Advocates, nonprofits, researchers, journalists, students',
+    who: 'For advocates, nonprofits, researchers, journalists, and students.',
     features: [
       'Full Bill Explorer, map & timeline',
       'National deadline dashboard',
@@ -37,11 +38,11 @@ const TIERS: Tier[] = [
   {
     id: 'pro',
     name: 'Pro',
-    price: '$29–49',
-    cadence: '/mo',
-    who: 'Sustainability / compliance managers, solo consultants',
+    price: '$39',
+    cadence: '/mo · per seat',
+    who: 'For sustainability and compliance managers, and solo consultants.',
     features: [
-      'Everything in Free',
+      'Everything in Free, plus:',
       'Personal watch lists & saved views',
       'Portfolio-scoped deadline dashboard',
       'Bill change-tracking & diffs',
@@ -51,31 +52,20 @@ const TIERS: Tier[] = [
     highlight: true,
   },
   {
-    id: 'team',
-    name: 'Team',
-    price: '$199–399',
-    cadence: '/mo',
-    who: 'Small compliance, legal & consulting teams',
-    features: [
-      'Everything in Pro',
-      'Multi-seat, shared watch lists',
-      'Weekly team exposure digest',
-      'Advanced filters',
-    ],
-    cta: 'Request access & pricing',
-  },
-  {
     id: 'enterprise',
-    name: 'Enterprise / API',
+    name: 'Enterprise',
     price: 'Custom',
-    who: 'Large producers, law firms, PROs',
+    who: 'For large producers, law firms, and PROs that need to prove coverage across an organization.',
     features: [
-      'API / data feed access',
-      'Custom classifications',
+      'Everything in Pro, plus:',
+      'Seats for your whole team',
+      'API & data-feed access',
+      'Custom bill classifications',
+      'Organization-wide exposure reporting',
       'SSO & white-glove onboarding',
       'SLA & priority support',
     ],
-    cta: 'Request access & pricing',
+    cta: 'Talk to us',
   },
 ];
 
@@ -89,7 +79,7 @@ export default function PricingPage() {
         subtitle="Start free. Upgrade when a missed deadline would cost you more than a subscription."
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
         {TIERS.map(tier => (
           <div
             key={tier.id}
@@ -141,13 +131,14 @@ export default function PricingPage() {
         ))}
       </div>
 
-      {/* API standalone note + the headline experiment CTA */}
+      {/* Developers strip — its own section below the grid (different buyer, usage-based metric) */}
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="max-w-2xl">
-          <h3 className="font-serif text-lg text-text-primary mb-1">Building on SignalScout?</h3>
+          <h3 className="font-serif text-lg text-text-primary mb-1">Developers — build on the data.</h3>
           <p className="text-text-secondary text-sm leading-relaxed">
-            A rate-limited free dev tier for non-commercial use, with paid commercial tiers by volume.
-            The data feed covers bills, deadlines, classifications, and federal actions.
+            Tap the circularity-legislation dataset directly: bills, statuses, deadlines, and
+            classifications across all 50 states, kept current. Free developer tier (rate-limited) ·
+            paid plans by usage.
           </p>
         </div>
         <button
@@ -158,9 +149,20 @@ export default function PricingPage() {
         </button>
       </section>
 
-      <p className="text-text-muted text-xs text-center">
-        Prices shown are early-access estimates while we finalize plans — your request helps set them.
-      </p>
+      {/* Consulting line — footer of the pricing page */}
+      <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <p className="text-text-secondary text-sm leading-relaxed max-w-2xl">
+          Tracking the deadline is step one. Turning it into a compliance and design roadmap is the work.
+        </p>
+        <a
+          href="https://calendar.app.google/QPXh1qXWhNWxXo9n6"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity"
+        >
+          Have a worthy challenge? →
+        </a>
+      </section>
 
       {modal && (
         <RequestAccessModal

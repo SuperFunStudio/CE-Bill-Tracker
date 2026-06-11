@@ -102,6 +102,53 @@ def setup_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Monthly subscriber digest — 1st of month, 13:00 UTC (morning US). Dormant unless enabled,
+    # so previews via scripts/send_digest.py can be reviewed before any real send.
+    if settings.enable_digest:
+        scheduler.add_job(
+            run_digest_cycle,
+            "cron",
+            day=1,
+            hour=13,
+            minute=0,
+            id="monthly_digest",
+            replace_existing=True,
+        )
+
+    # Weekly subscriber digest — Monday 13:00 UTC. The habit-cadence half of the alert loop.
+    if settings.enable_weekly_digest:
+        scheduler.add_job(
+            run_weekly_digest_cycle,
+            "cron",
+            day_of_week="mon",
+            hour=13,
+            minute=0,
+            id="weekly_digest",
+            replace_existing=True,
+        )
+
+    # Event-triggered deadline reminders — daily 12:00 UTC. The loss-triggered half of the alert loop.
+    if settings.enable_deadline_alerts:
+        scheduler.add_job(
+            run_deadline_alert_cycle,
+            "cron",
+            hour=12,
+            minute=0,
+            id="deadline_alerts",
+            replace_existing=True,
+        )
+
+    # Event-triggered "new bill" alerts — daily 11:30 UTC. The "something moved" trigger.
+    if settings.enable_new_bill_alerts:
+        scheduler.add_job(
+            run_new_bill_alert_cycle,
+            "cron",
+            hour=11,
+            minute=30,
+            id="new_bill_alerts",
+            replace_existing=True,
+        )
+
     return scheduler
 
 
@@ -603,6 +650,150 @@ async def run_alert_dispatch() -> None:
             log.info("alerts_dispatched", count=len(pending))
 
 
+async def run_digest_cycle(
+    window_days: int | None = None, period_label: str = "monthly"
+) -> None:
+    """Email each active subscriber a roundup of recent movement over a window.
+
+    Scoped per subscriber to the topics (instrument_types) + jurisdictions (states) they signed up
+    for. Subscribers with no matching movement get no email. The monthly job calls this with the
+    defaults; the weekly job passes window_days=7, period_label="weekly" (build/render are already
+    window- and label-parameterized, so there's one code path for both cadences).
+    """
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from app.alerts.digest import build_digests, render_digest_html, render_digest_subject
+    from app.alerts.sendgrid_sender import SendGridSender
+    from app.database import AsyncSessionLocal
+
+    if not settings.sendgrid_api_key:
+        log.warning("digest_skipped_no_sendgrid_key", period=period_label)
+        return
+
+    days = window_days if window_days is not None else settings.digest_window_days
+    sender = SendGridSender()
+    async with AsyncSessionLocal() as db:
+        now = (await db.execute(select(func.now()))).scalar_one()
+        since = now - timedelta(days=days)
+        digests = await build_digests(db, since)
+
+    sent = 0
+    for sub, content in digests:
+        subject = render_digest_subject(content, period_label)
+        html = render_digest_html(sub, content, period_label)
+        if await sender.send_html(sub.email, subject, html):
+            sent += 1
+    log.info("digest_cycle_complete", period=period_label, recipients=len(digests), sent=sent)
+
+
+async def run_weekly_digest_cycle() -> None:
+    """Weekly cadence wrapper around run_digest_cycle (7-day window). Gated by enable_weekly_digest."""
+    await run_digest_cycle(
+        window_days=settings.weekly_digest_window_days, period_label="weekly"
+    )
+
+
+async def run_deadline_alert_cycle() -> None:
+    """Daily: email subscribers when a compliance deadline they follow comes within the lead window.
+
+    Gated by settings.enable_deadline_alerts. Marks reminder_sent only on the deadlines actually
+    emailed, so an unmatched deadline stays eligible if someone subscribes before it passes.
+    """
+    from sqlalchemy import func, select, update
+
+    from app.alerts.deadline_alerts import (
+        build_deadline_alerts,
+        render_deadline_alert_html,
+        render_deadline_alert_subject,
+    )
+    from app.alerts.sendgrid_sender import SendGridSender
+    from app.database import AsyncSessionLocal
+    from app.models import ComplianceDeadline
+
+    if not settings.sendgrid_api_key:
+        log.warning("deadline_alerts_skipped_no_sendgrid_key")
+        return
+
+    lead_days = max(settings.deadline_reminder_days) if settings.deadline_reminder_days else 30
+    sender = SendGridSender()
+    async with AsyncSessionLocal() as db:
+        today = (await db.execute(select(func.current_date()))).scalar_one()
+        alerts = await build_deadline_alerts(db, today, lead_days)
+
+        sent = 0
+        sent_deadline_ids: set[int] = set()
+        for sub, content in alerts:
+            subject = render_deadline_alert_subject(content)
+            html = render_deadline_alert_html(sub, content)
+            if await sender.send_html(sub.email, subject, html):
+                sent += 1
+                sent_deadline_ids.update(it.deadline.id for it in content.items)
+
+        if sent_deadline_ids:
+            await db.execute(
+                update(ComplianceDeadline)
+                .where(ComplianceDeadline.id.in_(sent_deadline_ids))
+                .values(reminder_sent=True)
+            )
+            await db.commit()
+    log.info(
+        "deadline_alert_cycle_complete",
+        recipients=len(alerts),
+        sent=sent,
+        marked=len(sent_deadline_ids),
+    )
+
+
+async def run_new_bill_alert_cycle() -> None:
+    """Daily: email subscribers when a newly-tracked relevant bill matches their topics + states.
+
+    Gated by settings.enable_new_bill_alerts. Marks new_bill_alert_sent only on bills actually
+    emailed, so an unmatched new bill stays eligible until it ages out of the window.
+    """
+    from sqlalchemy import func, select, update
+
+    from app.alerts.new_bill_alerts import (
+        build_new_bill_alerts,
+        render_new_bill_alert_html,
+        render_new_bill_alert_subject,
+    )
+    from app.alerts.sendgrid_sender import SendGridSender
+    from app.database import AsyncSessionLocal
+    from app.models import Bill
+
+    if not settings.sendgrid_api_key:
+        log.warning("new_bill_alerts_skipped_no_sendgrid_key")
+        return
+
+    sender = SendGridSender()
+    async with AsyncSessionLocal() as db:
+        today = (await db.execute(select(func.current_date()))).scalar_one()
+        alerts = await build_new_bill_alerts(db, today, settings.new_bill_alert_window_days)
+
+        sent = 0
+        sent_bill_ids: set[int] = set()
+        for sub, content in alerts:
+            subject = render_new_bill_alert_subject(content)
+            html = render_new_bill_alert_html(sub, content)
+            if await sender.send_html(sub.email, subject, html):
+                sent += 1
+                sent_bill_ids.update(b.id for b in content.bills)
+
+        if sent_bill_ids:
+            await db.execute(
+                update(Bill).where(Bill.id.in_(sent_bill_ids)).values(new_bill_alert_sent=True)
+            )
+            await db.commit()
+    log.info(
+        "new_bill_alert_cycle_complete",
+        recipients=len(alerts),
+        sent=sent,
+        marked=len(sent_bill_ids),
+    )
+
+
 async def poll_courtlistener_new_cases() -> None:
     """Weekly: search for new EPR-related federal cases filed in the last 7 days.
 
@@ -639,7 +830,10 @@ async def poll_courtlistener_new_cases() -> None:
 
     async with CourtListenerClient() as cl:
         async with AsyncSessionLocal() as db:
-            for query_name, query_str in EPR_LITIGATION_QUERIES:
+            for _qi, (query_name, query_str) in enumerate(EPR_LITIGATION_QUERIES):
+                # Space the /search/ calls — firing the seed queries back-to-back trips 429.
+                if _qi > 0 and settings.courtlistener_request_delay_seconds > 0:
+                    await _asyncio.sleep(settings.courtlistener_request_delay_seconds)
                 try:
                     cases = await cl.search_epr_cases(query_str, filed_after=filed_after)
                 except Exception as e:

@@ -8,6 +8,7 @@ SignalScout ingestion clients.
 Rate limits: use retry_with_backoff; avoid pagination past page 100 (use date filters).
 Maintenance window: CourtListener is offline Thu 21:00–23:59 PT.
 """
+import asyncio
 import json
 import re
 from datetime import date
@@ -73,7 +74,11 @@ class CourtListenerClient:
         if self._client is None:
             raise RuntimeError("Use as async context manager")
 
-    @retry_with_backoff(max_attempts=3, base_delay=2.0)
+    # CL's /search/ endpoint has a strict rolling-window rate limit (separate from and lower
+    # than the rest of the API). One of six back-to-back seed queries reliably 429s, and the
+    # window is longer than a 3x/2s backoff can ride out — so retry more patiently here: up to
+    # 5 attempts with 5s→30s waits (~65s total) clears the window.
+    @retry_with_backoff(max_attempts=5, base_delay=5.0)
     async def search_epr_cases(
         self,
         query: str,
@@ -168,10 +173,16 @@ class CourtListenerClient:
     async def search_all_epr_cases(
         self, filed_after: date | None = None
     ) -> list[dict]:
-        """Search all EPR seed queries and deduplicate by docket ID."""
+        """Search all EPR seed queries and deduplicate by docket ID.
+
+        Spaces successive queries by courtlistener_request_delay_seconds — running the
+        sweep back-to-back trips HTTP 429 (rate limit) on CourtListener.
+        """
         seen: set[int] = set()
         results: list[dict] = []
-        for name, query in EPR_LITIGATION_QUERIES:
+        for i, (name, query) in enumerate(EPR_LITIGATION_QUERIES):
+            if i > 0 and settings.courtlistener_request_delay_seconds > 0:
+                await asyncio.sleep(settings.courtlistener_request_delay_seconds)
             try:
                 cases = await self.search_epr_cases(query, filed_after=filed_after)
                 for case in cases:

@@ -14,3 +14,9 @@ data/exports/
 
 # Firebase deploy cache
 .firebase/
+
+# Local scratch — dry-run alert/digest preview HTML, etc.
+tmp/
+
+# Local scheduler lock
+.claude/scheduled_tasks.lock

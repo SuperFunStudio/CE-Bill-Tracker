@@ -6,7 +6,7 @@ Three routers exported from this module:
   - queue_router    → /entity-match-queue
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -16,15 +16,27 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database import get_db
-from app.models import Bill, Company, EntityMatchQueue, ExposureBrief, ImpactScore
+from app.models import (
+    Bill,
+    Company,
+    ComplianceDeadline,
+    EntityMatchQueue,
+    ExposureBrief,
+    ImpactScore,
+)
 from app.schemas import (
     CompanyDetail,
+    CompanyObligation,
+    CompanyObligationDeadline,
+    CompanyObligationsResponse,
     CompanySummary,
     EntityMatchQueueItem,
     ExposureBriefResponse,
     ExposureRanking,
     ImpactScoreResponse,
 )
+
+ENACTED_STATUSES = ("enacted", "signed")
 
 log = structlog.get_logger()
 
@@ -259,6 +271,154 @@ async def get_company_impact_scores(
         .order_by(desc(ImpactScore.composite_score))
     )
     return result.scalars().all()  # type: ignore[return-value]
+
+
+@router.get("/{company_id}/obligations", response_model=CompanyObligationsResponse)
+async def get_company_obligations(
+    company_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> CompanyObligationsResponse:
+    """'Are you affected, and what's your next deadline' for one company.
+
+    A company is *affected* by an enacted law when it has a material in the
+    bill's `material_categories` AND an operational presence in the bill's
+    state. This is the high-confidence half of exposure — it relies only on the
+    company's own materials/footprint and the bill's enacted status, NOT on the
+    proxy-derived volumes or synthetic cost estimates. Each affected law is
+    returned with its next upcoming compliance deadline (from the PDF-extracted
+    `compliance_deadlines`), so the lead is an obligation, not a dollar guess.
+    """
+    company_result = await db.execute(
+        select(Company)
+        .where(Company.id == company_id)
+        .options(
+            selectinload(Company.materials),
+            selectinload(Company.state_presences),
+        )
+    )
+    company = company_result.scalar_one_or_none()
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    material_categories = {m.material_category for m in company.materials}
+    # state -> set of presence types (manufacturing, headquarters, …)
+    presence_by_state: dict[str, set[str]] = {}
+    for p in company.state_presences:
+        presence_by_state.setdefault(p.state, set()).add(p.presence_type)
+
+    # No footprint or no materials → nothing to be affected by.
+    if not material_categories or not presence_by_state:
+        return CompanyObligationsResponse(
+            company_id=company.id,
+            company_name=company.name,
+            affected_bill_count=0,
+            affected_states=[],
+            upcoming_deadline_count=0,
+            next_deadline_date=None,
+            obligations=[],
+        )
+
+    # Enacted EPR-relevant bills in any state the company operates in.
+    # Material filtering happens in Python — the candidate set is tiny (only
+    # enacted laws in the company's states), so a JSONB overlap operator buys
+    # nothing and is easy to get subtly wrong.
+    bills_result = await db.execute(
+        select(Bill).where(
+            Bill.status.in_(ENACTED_STATUSES),
+            Bill.epr_relevant.is_(True),
+            Bill.state.in_(list(presence_by_state.keys())),
+        )
+    )
+    candidate_bills = bills_result.scalars().all()
+
+    affected: list[tuple[Bill, list[str]]] = []
+    for bill in candidate_bills:
+        bill_cats = set(bill.material_categories or [])
+        matched = material_categories & bill_cats
+        if matched:
+            affected.append((bill, sorted(matched)))
+
+    if not affected:
+        return CompanyObligationsResponse(
+            company_id=company.id,
+            company_name=company.name,
+            affected_bill_count=0,
+            affected_states=sorted(presence_by_state.keys()),
+            upcoming_deadline_count=0,
+            next_deadline_date=None,
+            obligations=[],
+        )
+
+    # Pull every deadline for the affected bills in one query, grouped by bill.
+    bill_ids = [b.id for b, _ in affected]
+    deadlines_result = await db.execute(
+        select(ComplianceDeadline)
+        .where(ComplianceDeadline.bill_id.in_(bill_ids))
+        .order_by(ComplianceDeadline.deadline_date)
+    )
+    deadlines_by_bill: dict[int, list[ComplianceDeadline]] = {}
+    for d in deadlines_result.scalars().all():
+        if d.bill_id is not None:
+            deadlines_by_bill.setdefault(d.bill_id, []).append(d)
+
+    today = date.today()
+    obligations: list[CompanyObligation] = []
+    total_upcoming = 0
+    for bill, matched in affected:
+        bill_deadlines = deadlines_by_bill.get(bill.id, [])
+        upcoming = [d for d in bill_deadlines if d.deadline_date >= today]
+        total_upcoming += len(upcoming)
+        next_dl = (
+            CompanyObligationDeadline(
+                deadline_date=upcoming[0].deadline_date,
+                deadline_type=upcoming[0].deadline_type,
+                description=upcoming[0].description,
+                who_affected=upcoming[0].who_affected,
+                source_url=upcoming[0].source_url,
+            )
+            if upcoming
+            else None
+        )
+        obligations.append(
+            CompanyObligation(
+                bill_id=bill.id,
+                state=bill.state,
+                bill_number=bill.bill_number,
+                bill_title=bill.title,
+                status=bill.status,
+                source_url=bill.source_url,
+                matched_materials=matched,
+                presence_types=sorted(presence_by_state.get(bill.state, set())),
+                next_deadline=next_dl,
+                upcoming_deadline_count=len(upcoming),
+                total_deadline_count=len(bill_deadlines),
+            )
+        )
+
+    # Sort: laws with an upcoming deadline first (soonest first), then the rest
+    # (enacted but no future deadline) by state / bill number.
+    obligations.sort(
+        key=lambda o: (
+            o.next_deadline is None,
+            o.next_deadline.deadline_date if o.next_deadline else date.max,
+            o.state,
+            o.bill_number or "",
+        )
+    )
+
+    next_overall = next(
+        (o.next_deadline.deadline_date for o in obligations if o.next_deadline), None
+    )
+
+    return CompanyObligationsResponse(
+        company_id=company.id,
+        company_name=company.name,
+        affected_bill_count=len(obligations),
+        affected_states=sorted({o.state for o in obligations}),
+        upcoming_deadline_count=total_upcoming,
+        next_deadline_date=next_overall,
+        obligations=obligations,
+    )
 
 
 # ---------------------------------------------------------------------------

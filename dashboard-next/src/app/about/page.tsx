@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { SubscribeSection } from '@/components/about/SubscribeSection';
+import { HeartIcon } from '@/components/ui/icons';
 
 export const metadata: Metadata = {
   title: 'About — Battle of the Bills',
@@ -89,12 +91,15 @@ export default function AboutPage() {
         </p>
       </section>
 
+      {/* Free updates sign-up */}
+      <SubscribeSection className="border-t border-border-default pt-8" />
+
       {/* Support */}
       <section className="border-t border-border-default pt-8">
         <SectionTitle>Support this project</SectionTitle>
         <p className="text-text-secondary leading-relaxed mb-4">
           Battle of the Bills is independently built and maintained. If it&apos;s useful to you,
-          you can help cover the data, infrastructure, and AI-analysis costs that keep it running.
+          consider donating to cover costs to help keep it running.
         </p>
         <a
           href={DONATE_URL}
@@ -102,7 +107,7 @@ export default function AboutPage() {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-lg border border-green-accent bg-green-dark px-5 py-2.5 text-green-accent font-medium hover:opacity-90 transition-opacity"
         >
-          ♥ Donate to support this project
+          <HeartIcon className="text-base" /> Donate to support this project!
         </a>
       </section>
     </div>

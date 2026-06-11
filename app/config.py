@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     courtlistener_webhook_secret: str = ""
     enable_courtlistener: bool = False
     max_cl_cases_per_seed_run: int = 50
+    # Spacing between successive CourtListener /search/ calls, to reduce how often the seed
+    # sweep trips CL's strict search rate limit. Spacing alone can't fully avoid 429s (the
+    # throttle window is long), so search_epr_cases also retries patiently on 429; this just
+    # thins the burst.
+    courtlistener_request_delay_seconds: float = 5.0
 
     # GCP project config (used to trigger Cloud Run Jobs)
     google_cloud_project: str = "ce-bill-tracker"
@@ -84,6 +89,33 @@ class Settings(BaseSettings):
     # Scheduler intervals
     legiscan_poll_interval_hours: int = 24
     federal_register_poll_interval_hours: int = 6
+
+    # Monthly subscriber digest. Dormant until previewed via scripts/send_digest.py and
+    # explicitly enabled (DIGEST_ENABLED=true). When on, run_digest_cycle emails each active
+    # subscriber a roundup of the prior month's movement on their topics + jurisdictions.
+    enable_digest: bool = False
+    digest_window_days: int = 30
+
+    # Weekly digest — the habit-cadence half of the alert loop. Same builder/renderer as the monthly
+    # digest, just a 7-day window on a weekly schedule. Independent flag so the predictable weekly
+    # roundup can run without (or alongside) the monthly one. Dormant by default.
+    enable_weekly_digest: bool = False
+    weekly_digest_window_days: int = 7
+
+    # Event-triggered deadline alerts — the loss-triggered half of the alert loop. When on,
+    # run_deadline_alert_cycle emails subscribers when a compliance deadline they follow falls within
+    # one of the reminder thresholds (days out), once per deadline (reminder_sent guards re-send).
+    # Dormant by default; preview via scripts/send_deadline_alerts.py before enabling.
+    enable_deadline_alerts: bool = False
+    deadline_reminder_days: list[int] = [30, 7]
+
+    # Event-triggered "new bill" alerts — the "something moved" trigger. When on,
+    # run_new_bill_alert_cycle emails subscribers when a newly-tracked, relevant bill matches their
+    # topics + jurisdictions, once per bill (new_bill_alert_sent guards re-send). Bounded to bills
+    # created in the last new_bill_alert_window_days so flipping the flag can't blast a backfill.
+    # Dormant by default; preview via scripts/send_new_bill_alerts.py before enabling.
+    enable_new_bill_alerts: bool = False
+    new_bill_alert_window_days: int = 7
 
     model_config = SettingsConfigDict(
         env_file=".env",

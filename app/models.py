@@ -52,6 +52,14 @@ class Bill(Base):
     # stance_source is "ai" (Haiku) or "heuristic" (text backfill) — see migration 006.
     policy_stance: Mapped[str | None] = mapped_column(String(20), nullable=True)
     stance_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Classification transparency: every relevance call is auto-classified by default; `reviewed`
+    # flips true once a human has spot-checked it. Surfaced as the "auto-classified · reviewed"
+    # marker on each bill (see /methodology).
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Event-triggered "new bill" alert idempotency — set once a newly-tracked relevant bill has been
+    # emailed to matching subscribers (see app/alerts/new_bill_alerts.py).
+    new_bill_alert_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Full compliance extraction (Sonnet output)
     compliance_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -101,15 +109,42 @@ class AlertSubscription(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    organization: Mapped[str | None] = mapped_column(String(255), nullable=True)
     slack_webhook: Mapped[str | None] = mapped_column(Text, nullable=True)
     states: Mapped[list] = mapped_column(JSONB, default=list)  # ["CA", "OR"] or ["ALL"]
     material_categories: Mapped[list] = mapped_column(JSONB, default=list)  # or ["ALL"]
+    instrument_types: Mapped[list] = mapped_column(
+        JSONB, default=lambda: ["ALL"]
+    )  # policy topics: ["epr", "right_to_repair", ...] or ["ALL"]
     min_confidence: Mapped[float] = mapped_column(Float, default=0.7)
     alert_on: Mapped[list] = mapped_column(
         JSONB, default=lambda: ["status_change", "new_bill", "deadline"]
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AccessRequest(Base):
+    """A captured "request access / pricing" click — the willingness-to-pay field experiment.
+
+    Each paid tier's CTA (and the Company Impact gate) records who's interested, from what org, and
+    in which tier, before any billing exists. Watching these tells us the real segment and price
+    ceiling. Purely a lead-capture log; no behavioural effect.
+    """
+    __tablename__ = "access_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    organization: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Which tier they asked about: "pro" | "team" | "enterprise" | "api" | "company_impact".
+    plan_interest: Mapped[str] = mapped_column(String(50), nullable=False)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Where the click came from: "pricing" | "company_gate" — for funnel attribution.
+    source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("idx_access_requests_created", "created_at"),)
 
 
 class FederalAction(Base):

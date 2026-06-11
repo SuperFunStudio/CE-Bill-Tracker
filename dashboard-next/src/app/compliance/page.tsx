@@ -9,6 +9,9 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { DeadlineTimeline } from '@/components/compliance/DeadlineTimeline';
 import { DeadlineModal } from '@/components/compliance/DeadlineModal';
 import { deadlineAccentText } from '@/lib/deadlineStyle';
+import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
+import { deadlineInScope } from '@/lib/scope';
+import { formatMaterial } from '@/components/scope/ScopeOnboarding';
 import { formatDate, daysUntil, downloadCsv, STATE_NAMES } from '@/lib/utils';
 import type { DeadlineSummary } from '@/lib/types';
 
@@ -56,8 +59,11 @@ export default function CompliancePage() {
   const { data: apiDeadlines = [], isLoading } = useDeadlines({ days_ahead: daysAhead, state: stateFilter || undefined });
   const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
 
+  const { scope } = useScope();
+  const scopeActive = useScopeActive();
+
   // Merge API deadlines with compliance_details.deadlines from bills
-  const allDeadlines = useMemo(() => {
+  const mergedDeadlines = useMemo(() => {
     const seen = new Set<string>();
     const merged: DeadlineSummary[] = [];
 
@@ -115,6 +121,24 @@ export default function CompliancePage() {
       .sort((a, b) => a.deadline_date.localeCompare(b.deadline_date));
   }, [apiDeadlines, bills, stateFilter, includePast, daysAhead]);
 
+  // Default the whole page to the reader's personalization scope (materials live on the linked bill).
+  // The global "Show everything" toggle in the ScopeBar turns this off.
+  const billMaterials = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const b of bills) map.set(b.id, b.material_categories ?? []);
+    return map;
+  }, [bills]);
+
+  const allDeadlines = useMemo(
+    () =>
+      scopeActive
+        ? mergedDeadlines.filter(d =>
+            deadlineInScope(d, scope, dl => (dl.bill_id != null ? billMaterials.get(dl.bill_id) : null)),
+          )
+        : mergedDeadlines,
+    [mergedDeadlines, scopeActive, scope, billMaterials],
+  );
+
   // Timeline shows only upcoming deadlines (today onward), regardless of the include-past toggle.
   const timelineDeadlines = useMemo(
     () => allDeadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0; }),
@@ -146,6 +170,19 @@ export default function CompliancePage() {
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
       <GazetteHeader title="Upcoming Deadlines" subtitle="EPR compliance deadlines across all states" />
 
+      {scopeActive && (
+        <p className="text-xs text-text-muted -mt-2">
+          Filtered to your scope
+          {scope.materials.length > 0 && (
+            <> · <span className="text-text-secondary">{scope.materials.map(formatMaterial).join(', ')}</span></>
+          )}
+          {scope.states.length > 0 && (
+            <> · <span className="text-text-secondary">{scope.states.join(', ')}</span></>
+          )}
+          . Use “Show everything” above to see all deadlines.
+        </p>
+      )}
+
       {/* Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Total Deadlines" value={allDeadlines.length} accent />
@@ -155,7 +192,7 @@ export default function CompliancePage() {
       </div>
 
       {within30 > 0 && (
-        <AlertBanner variant="red" message={`⚠ ${within30} deadline(s) within the next 30 days require immediate attention.`} />
+        <AlertBanner variant="red" message={`${within30} deadline(s) within the next 30 days require immediate attention.`} />
       )}
 
       {/* Filters */}

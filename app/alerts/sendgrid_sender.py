@@ -64,6 +64,24 @@ class SendGridSender:
     def __init__(self):
         self._sg = SendGridAPIClient(api_key=settings.sendgrid_api_key)
 
+    async def send_html(self, to_email: str, subject: str, html: str) -> bool:
+        """Send a fully-rendered HTML email (e.g. the monthly digest)."""
+        message = Mail(
+            from_email=settings.sendgrid_from_email,
+            to_emails=to_email,
+            subject=subject,
+            html_content=html,
+        )
+        try:
+            response = self._sg.send(message)
+            success = response.status_code in (200, 202)
+            if not success:
+                log.warning("sendgrid_html_failed", status=response.status_code, to=to_email)
+            return success
+        except Exception as e:
+            log.error("sendgrid_html_exception", error=str(e), to=to_email)
+            return False
+
     async def send_text_alert(self, to_email: str, subject: str, body_text: str) -> bool:
         """Send a plain-text/HTML alert not tied to a Bill object (e.g., litigation events)."""
         html = f"""

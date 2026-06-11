@@ -7,9 +7,8 @@ import { BillModal } from '@/components/ui/BillModal';
 interface BillTableProps {
   bills: BillSummary[];
   maxRows?: number;
-  /** When set, show this many rows and auto-advance through the list in pages. */
+  /** When set, show this many rows per page with manual Prev/Next paging. */
   autoPageSize?: number;
-  intervalMs?: number;
 }
 
 function StatusBadge({ status, stance }: { status: string | null; stance: string | null }) {
@@ -26,22 +25,14 @@ function StatusBadge({ status, stance }: { status: string | null; stance: string
   );
 }
 
-export function BillTable({ bills, maxRows, autoPageSize, intervalMs = 6000 }: BillTableProps) {
+export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [page, setPage] = useState(0);
-  const [paused, setPaused] = useState(false);
 
   const pageCount = autoPageSize ? Math.max(1, Math.ceil(bills.length / autoPageSize)) : 1;
 
   // Reset to the first page whenever the filtered list changes.
   useEffect(() => { setPage(0); }, [bills.length]);
-
-  // Auto-advance, paused on hover or while a bill is open for reading.
-  useEffect(() => {
-    if (!autoPageSize || pageCount <= 1 || paused || selectedId != null) return;
-    const id = setInterval(() => setPage(p => (p + 1) % pageCount), intervalMs);
-    return () => clearInterval(id);
-  }, [autoPageSize, pageCount, paused, selectedId, intervalMs]);
 
   const safePage = page % pageCount;
   const displayBills = autoPageSize
@@ -65,11 +56,7 @@ export function BillTable({ bills, maxRows, autoPageSize, intervalMs = 6000 }: B
   }
 
   return (
-    <div
-      className="space-y-3"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
+    <div className="space-y-3">
       {/* ── Desktop table (hidden below sm) ── */}
       <div className="hidden sm:block overflow-x-auto rounded-lg border border-border-default">
         <table className="w-full text-sm">
@@ -191,9 +178,23 @@ export function BillTable({ bills, maxRows, autoPageSize, intervalMs = 6000 }: B
             {safePage * autoPageSize + 1}&ndash;{Math.min((safePage + 1) * autoPageSize, bills.length)} of {bills.length}
           </span>
           <div className="flex items-center gap-3">
-            <button onClick={() => setPage(p => (p - 1 + pageCount) % pageCount)} className="hover:text-text-primary" aria-label="Previous">&lsaquo; Prev</button>
-            <span className="text-text-muted/60 w-10 text-center">{paused || selectedId != null ? 'paused' : 'auto'}</span>
-            <button onClick={() => setPage(p => (p + 1) % pageCount)} className="hover:text-text-primary" aria-label="Next">Next &rsaquo;</button>
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+              className="hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Previous"
+            >
+              &lsaquo; Prev
+            </button>
+            <span className="tabular-nums">Page {safePage + 1} / {pageCount}</span>
+            <button
+              onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+              disabled={safePage >= pageCount - 1}
+              className="hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Next"
+            >
+              Next &rsaquo;
+            </button>
           </div>
         </div>
       ) : bills.length > (maxRows ?? Infinity) ? (

@@ -1,3 +1,5 @@
+import { AlertIcon } from './icons';
+
 interface AlertBannerProps {
   message: string;
   variant?: 'red' | 'amber' | 'green' | 'blue';
@@ -11,10 +13,14 @@ const VARIANTS = {
   blue:  'bg-blue-100  border-blue-400  text-blue-800  dark:bg-blue-900/50  dark:border-blue-700  dark:text-blue-200',
 };
 
+// Warning variants lead with the line alert icon; green/blue read as success/info, so no icon.
+const WARNS = new Set(['red', 'amber']);
+
 export function AlertBanner({ message, variant = 'amber', className = '' }: AlertBannerProps) {
   return (
-    <div className={`border rounded-lg p-3 text-sm ${VARIANTS[variant]} ${className}`}>
-      {message}
+    <div className={`flex items-start gap-2 border rounded-lg p-3 text-sm ${VARIANTS[variant]} ${className}`}>
+      {WARNS.has(variant) && <AlertIcon className="text-base shrink-0 mt-0.5" />}
+      <span>{message}</span>
     </div>
   );
 }

@@ -44,6 +44,8 @@ export interface BillSummary {
   policy_stance: string | null;
   /** "ai" | "heuristic" — how policy_stance was derived. */
   stance_source: string | null;
+  /** Classification transparency: false = auto-classified only, true = human spot-checked. */
+  reviewed?: boolean;
   source_url: string | null;
   compliance_details: ComplianceDetails | null;
   litigation_case_count: number;
@@ -190,6 +192,39 @@ export interface ExposureBriefResponse {
   brief_json: Record<string, unknown> | null;
   generated_at: string;
   ttl_expires_at: string | null;
+}
+
+// ─── Company obligations ("are you affected + next deadline") ──────────────
+export interface CompanyObligationDeadline {
+  deadline_date: string;
+  deadline_type: string;
+  description: string | null;
+  who_affected: string | null;
+  source_url: string | null;
+}
+
+export interface CompanyObligation {
+  bill_id: number;
+  state: string;
+  bill_number: string | null;
+  bill_title: string | null;
+  status: string | null;
+  source_url: string | null;
+  matched_materials: string[];
+  presence_types: string[];
+  next_deadline: CompanyObligationDeadline | null;
+  upcoming_deadline_count: number;
+  total_deadline_count: number;
+}
+
+export interface CompanyObligationsResponse {
+  company_id: string;
+  company_name: string;
+  affected_bill_count: number;
+  affected_states: string[];
+  upcoming_deadline_count: number;
+  next_deadline_date: string | null;
+  obligations: CompanyObligation[];
 }
 
 // Query param types

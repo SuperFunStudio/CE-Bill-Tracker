@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import bills, alerts, pipeline, health, federal, companies, webhooks
+from app.api import access, bills, alerts, pipeline, health, federal, companies, webhooks
 from app.api.federal import litigation_router
 
 
@@ -33,7 +33,7 @@ app.add_middleware(
         "http://localhost:3000",
     ],
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -47,6 +47,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(health.router)
 app.include_router(bills.router)
 app.include_router(alerts.router)
+app.include_router(access.router)
 app.include_router(pipeline.router)
 app.include_router(federal.router)
 app.include_router(companies.router)

@@ -4,20 +4,23 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeContext';
 import { useScrolled } from '@/hooks/useScrolled';
+import {
+  HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, SunIcon, MoonIcon,
+} from '@/components/ui/icons';
 
 const NAV_ITEMS = [
-  { href: '/', label: 'Bill Explorer', icon: '🏠' },
-  { href: '/compliance', label: 'Upcoming Deadlines', icon: '📅' },
-  { href: '/federal', label: 'Federal Actions', icon: '🏛️' },
-  { href: '/company', label: 'Company Impact', icon: '🏭' },
-  { href: '/about', label: 'About', icon: 'ℹ️' },
+  { href: '/', label: 'Bill Explorer', Icon: HomeIcon },
+  { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon },
+  { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon },
+  { href: '/company', label: 'Portfolio Exposure', Icon: FactoryIcon },
+  { href: '/pricing', label: 'Pricing', Icon: TagIcon },
+  { href: '/about', label: 'About', Icon: InfoIcon },
 ];
 
 /**
- * Single unified top nav across all screen sizes.
- * At the top of the page the "BATTLE OF THE BILLS" brand is large and centered,
- * with the hamburger (left) and theme toggle (right) pinned to the corners.
- * On scroll the brand shrinks onto the same compact row as those two buttons.
+ * Top nav with the "BATTLE OF THE BILLS" masthead centered, theme toggle pinned right.
+ * At sm+ an inline section bar (newspaper-style) shows every destination; on mobile that
+ * collapses behind the left hamburger into a dropdown. On scroll the brand shrinks.
  */
 export function TopNav() {
   const pathname = usePathname();
@@ -25,24 +28,31 @@ export function TopNav() {
   const scrolled = useScrolled(80);
   const { theme, toggle } = useTheme();
 
-  const navLinks = NAV_ITEMS.map(({ href, label, icon }) => {
-    const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
-    return (
-      <Link
-        key={href}
-        href={href}
-        onClick={() => setMenuOpen(false)}
-        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-          isActive
-            ? 'bg-green-dark text-green-accent font-medium'
-            : 'text-text-secondary hover:bg-bg-primary hover:text-text-primary'
-        }`}
-      >
-        <span>{icon}</span>
-        <span>{label}</span>
-      </Link>
-    );
-  });
+  const isActive = (href: string) =>
+    pathname === href || (href !== '/' && pathname.startsWith(href));
+
+  // 'bar' = horizontal desktop section strip; 'menu' = stacked mobile dropdown rows.
+  const renderLinks = (variant: 'bar' | 'menu') =>
+    NAV_ITEMS.map(({ href, label, Icon }) => {
+      const active = isActive(href);
+      const cls = variant === 'bar'
+        ? `inline-flex items-center gap-1.5 px-2 py-1 font-serif text-sm tracking-wide border-b-2 transition-colors ${
+            active
+              ? 'border-green-accent text-green-accent'
+              : 'border-transparent text-text-secondary hover:text-text-primary'
+          }`
+        : `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+            active
+              ? 'bg-green-dark text-green-accent font-medium'
+              : 'text-text-secondary hover:bg-bg-primary hover:text-text-primary'
+          }`;
+      return (
+        <Link key={href} href={href} onClick={() => setMenuOpen(false)} className={cls}>
+          <Icon className={variant === 'bar' ? 'text-[1rem] shrink-0 opacity-70' : 'text-[1.15rem] shrink-0 opacity-80'} />
+          <span>{label}</span>
+        </Link>
+      );
+    });
 
   return (
     <header className="sticky top-0 z-40 bg-bg-secondary/95 backdrop-blur border-b border-border-default">
@@ -51,10 +61,10 @@ export function TopNav() {
           scrolled ? 'py-2.5' : 'py-5 sm:py-7'
         }`}
       >
-        {/* Hamburger — left corner */}
+        {/* Hamburger — left corner, mobile only (desktop uses the inline bar below) */}
         <button
           onClick={() => setMenuOpen(o => !o)}
-          className={`absolute left-3 p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${
+          className={`sm:hidden absolute left-3 p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${
             scrolled ? 'top-1/2 -translate-y-1/2' : 'top-3'
           }`}
           aria-label="Toggle navigation"
@@ -92,20 +102,25 @@ export function TopNav() {
         {/* Theme toggle — right corner */}
         <button
           onClick={toggle}
-          className={`absolute right-3 p-2 text-base text-text-secondary hover:text-text-primary transition-all duration-300 ${
+          className={`absolute right-3 p-2 text-lg text-text-secondary hover:text-text-primary transition-all duration-300 ${
             scrolled ? 'top-1/2 -translate-y-1/2' : 'top-3'
           }`}
           aria-label="Toggle theme"
         >
-          {theme === 'light' ? '🌙' : '☀️'}
+          {theme === 'light' ? <MoonIcon /> : <SunIcon />}
         </button>
       </div>
 
-      {/* Dropdown nav menu (opened by the hamburger, all screen sizes) */}
+      {/* Desktop section bar — visible at sm+ */}
+      <nav className="hidden sm:flex items-center justify-center flex-wrap gap-x-5 gap-y-1 border-t border-border-default px-4 py-2">
+        {renderLinks('bar')}
+      </nav>
+
+      {/* Mobile dropdown menu (opened by the hamburger) */}
       {menuOpen && (
-        <nav className="absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
+        <nav className="sm:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
           <div className="max-w-6xl mx-auto p-3 space-y-1">
-            {navLinks}
+            {renderLinks('menu')}
             <div className="text-text-muted text-xs text-center pt-2 border-t border-border-default mt-2">
               Circularity legislation tracker · Beta
             </div>

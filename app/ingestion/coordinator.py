@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.ingestion.federal_register import FederalRegisterClient
 from app.ingestion.legiscan import ALL_STATES, LegiScanClient, compute_bill_hash
 from app.ingestion.openstates import OpenStatesClient
@@ -575,6 +576,7 @@ class IngestionCoordinator:
 
     async def run_federal_cycle(self, db: AsyncSession) -> dict:
         new_count = 0
+        new_actions: list[FederalAction] = []
         async with FederalRegisterClient() as fr:
             docs = await fr.search_all_epr_terms()
 
@@ -606,7 +608,43 @@ class IngestionCoordinator:
                 raw_data=doc,
             )
             db.add(action)
+            new_actions.append(action)
             new_count += 1
 
+        # Enrich the new actions: filter feed noise and score federal friction
+        # (preemption_risk). Gated by the same flag as bill classification so dev
+        # without an API key still ingests raw rows.
+        classified = 0
+        if new_actions and settings.enable_llm_classification:
+            classified = await self._classify_federal_actions(new_actions)
+
         await db.commit()
-        return {"new_federal_actions": new_count}
+        return {"new_federal_actions": new_count, "classified_federal_actions": classified}
+
+    async def _classify_federal_actions(self, actions: list[FederalAction]) -> int:
+        """Populate epr_relevant / preemption_risk / ai_summary / material_categories
+        on newly-ingested federal actions. Returns the number classified."""
+        from app.classification.federal_classifier import FederalClassifier
+
+        classifier = FederalClassifier()
+        classified = 0
+        for action in actions[: settings.max_haiku_calls_per_run]:
+            try:
+                abstract = (action.raw_data or {}).get("abstract", "") if action.raw_data else ""
+                fr = await classifier.classify(
+                    title=action.title or "",
+                    agency=action.agency or "",
+                    action_type=action.action_type or "",
+                    abstract=abstract,
+                )
+            except Exception as e:
+                log.error("federal_classify_failed", doc=action.federal_register_document_number,
+                          error=str(e), error_type=type(e).__name__)
+                continue
+            action.epr_relevant = fr.is_relevant
+            action.preemption_risk = fr.preemption_risk
+            action.ai_summary = fr.summary
+            action.material_categories = fr.material_categories
+            classified += 1
+        log.info("federal_classify_done", total=len(actions), classified=classified)
+        return classified

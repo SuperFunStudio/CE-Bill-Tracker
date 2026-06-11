@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.detector import ChangeDetector
+from app.alerts.digest import subscription_matches_bill
 from app.alerts.sendgrid_sender import SendGridSender
 from app.alerts.slack_sender import SlackSender
 from app.config import settings
@@ -107,14 +108,8 @@ class AlertDispatcher:
         )
         all_subs = result.scalars().all()
 
-        matching = []
-        for sub in all_subs:
-            states = sub.states or []
-            if "ALL" not in states and bill.state not in states:
-                continue
-            mat_cats = sub.material_categories or []
-            bill_cats = bill.material_categories or []
-            if "ALL" not in mat_cats and not any(c in mat_cats for c in bill_cats):
-                continue
-            matching.append(sub)
-        return matching
+        # Single source of truth with the digest: matches on states + instrument_types (topics) +
+        # materials + confidence floor. Previously this filtered only on states + materials — so it
+        # ignored the topic every real subscriber actually picks, and an empty material list wrongly
+        # excluded every bill (an empty filter should mean "all", which _matches_list handles).
+        return [sub for sub in all_subs if subscription_matches_bill(sub, bill)]

@@ -41,7 +41,8 @@ const STATUSES = [
 const INSTRUMENT_TYPES = ['epr', 'deposit_return', 'right_to_repair', 'recycled_content',
   'labeling', 'preemption', 'other'];
 // Values must match the material categories in data/seed/epr_keywords.json.
-const MATERIAL_CATEGORIES = ['plastic_packaging', 'paper_packaging', 'glass', 'metals',
+// Exported so the personalization onboarding (src/components/scope) shares one canonical list.
+export const MATERIAL_CATEGORIES = ['plastic_packaging', 'paper_packaging', 'glass', 'metals',
   'electronics', 'batteries', 'paint', 'carpet', 'mattresses', 'tires',
   'pharmaceuticals', 'solar_panels', 'textiles', 'organics', 'other'];
 const URGENCY_LEVELS = ['high', 'medium', 'low'];

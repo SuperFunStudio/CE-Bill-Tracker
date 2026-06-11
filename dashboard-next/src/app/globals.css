@@ -14,7 +14,7 @@
   --border-default: #dee2e6;
   --text-primary:   #1a1a2e;
   --text-secondary: #495057;
-  --text-muted:     #868e96;
+  --text-muted:     #6b7280;       /* darkened from #868e96 to clear WCAG AA (4.5:1) on bg */
   --green-accent:   30 106 233;   /* #1e6ae9 — matches the State map */
   --green-light:    96 165 250;   /* blue-400 */
   --green-dark:     219 234 254;  /* blue-100 — subtle accent background */
@@ -31,7 +31,7 @@
   --border-default: #374151;
   --text-primary:   #f3f4f6;
   --text-secondary: #9ca3af;
-  --text-muted:     #6b7280;
+  --text-muted:     #8b95a1;       /* lightened from #6b7280 to clear WCAG AA (4.5:1) on dark bg */
   --green-accent:   243 188 195;  /* #f3bcc3 — matches the State map */
   --green-light:    249 210 216;  /* paler pink for pills/highlights */
   --green-dark:     74 39 49;     /* #4a2731 — subtle accent background */
@@ -50,6 +50,22 @@ body {
 .font-serif {
   font-feature-settings: 'liga' 1, 'onum' 1;
   letter-spacing: -0.01em;
+}
+
+/* Visible keyboard focus for every interactive element. Mouse clicks don't trigger
+   :focus-visible, so this only shows for keyboard/AT users. */
+@layer base {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role='button']:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid rgb(var(--green-accent));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
 }
 
 /* Scrollbar styling */

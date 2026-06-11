@@ -11,6 +11,7 @@ import type {
   LitigationCaseDetail,
   CompanySummary,
   CompanyDetail,
+  CompanyObligationsResponse,
   ExposureRanking,
   ExposureBriefResponse,
 } from './types';
@@ -33,6 +34,57 @@ async function apiFetch<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`API error ${res.status}: ${url}`);
   return res.json();
+}
+
+export interface SubscribePayload {
+  email: string;
+  /** Optional — the subscriber's organization. */
+  organization?: string;
+  /** Two-letter state codes, or ["ALL"] for every jurisdiction. */
+  states: string[];
+  /** Policy instrument slugs (epr, right_to_repair, …), or ["ALL"] for every topic. */
+  instrument_types: string[];
+  /** Optional material_category slugs to narrow alerts; omit/["ALL"] for every material. */
+  material_categories?: string[];
+}
+
+/** Public "get free updates" sign-up — creates an alert subscription. */
+export async function subscribe(payload: SubscribePayload): Promise<void> {
+  const res = await fetch(buildUrl('/subscriptions'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Subscribe failed (${res.status})${detail ? `: ${detail}` : ''}`);
+  }
+}
+
+/** Which paid tier a visitor expressed interest in — the willingness-to-pay experiment. */
+export type PlanInterest = 'pro' | 'team' | 'enterprise' | 'api' | 'company_impact';
+
+export interface AccessRequestPayload {
+  email: string;
+  name?: string;
+  organization?: string;
+  plan_interest: PlanInterest;
+  message?: string;
+  /** Funnel attribution: "pricing" | "company_gate". */
+  source?: string;
+}
+
+/** Capture a "request access / pricing" click. No billing — just records interest + segment. */
+export async function requestAccess(payload: AccessRequestPayload): Promise<void> {
+  const res = await fetch(buildUrl('/access-requests'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Request failed (${res.status})${detail ? `: ${detail}` : ''}`);
+  }
 }
 
 export async function fetchBills(params?: BillParams): Promise<BillSummary[]> {
@@ -87,4 +139,8 @@ export async function fetchExposureRanking(billId?: number, limit = 50): Promise
 
 export async function fetchExposureBrief(companyId: string, billId: number): Promise<ExposureBriefResponse> {
   return apiFetch<ExposureBriefResponse>(buildUrl(`/companies/${companyId}/exposure-brief`, { bill_id: billId }));
+}
+
+export async function fetchCompanyObligations(companyId: string): Promise<CompanyObligationsResponse> {
+  return apiFetch<CompanyObligationsResponse>(buildUrl(`/companies/${companyId}/obligations`));
 }

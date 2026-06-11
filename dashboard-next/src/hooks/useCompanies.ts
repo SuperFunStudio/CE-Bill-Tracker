@@ -1,13 +1,20 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
-import { fetchCompanies, fetchCompany, fetchExposureRanking, fetchExposureBrief } from '@/lib/api';
+import { fetchCompanies, fetchCompany, fetchExposureRanking, fetchExposureBrief, fetchCompanyObligations } from '@/lib/api';
+import { resilient, getSnapshot } from '@/lib/snapshot';
+import type { CompanySummary } from '@/lib/types';
 
 const STALE = 5 * 60 * 1000;
 
 export function useCompanies(search?: string) {
   return useQuery({
     queryKey: ['companies', search],
-    queryFn: () => fetchCompanies({ search, limit: 200 }),
+    // Only the unfiltered list is snapshotted; a search term needs the live API.
+    queryFn: () =>
+      search
+        ? fetchCompanies({ search, limit: 200 })
+        : resilient('companies', () => fetchCompanies({ limit: 200 })),
+    placeholderData: () => (search ? undefined : getSnapshot<CompanySummary[]>('companies') ?? undefined),
     staleTime: STALE,
   });
 }
@@ -26,6 +33,15 @@ export function useExposureRanking(billId?: number, limit = 50) {
     queryKey: ['exposureRanking', billId, limit],
     queryFn: () => fetchExposureRanking(billId, limit),
     enabled: billId !== undefined,
+    staleTime: STALE,
+  });
+}
+
+export function useCompanyObligations(companyId: string | null) {
+  return useQuery({
+    queryKey: ['companyObligations', companyId],
+    queryFn: () => fetchCompanyObligations(companyId!),
+    enabled: companyId !== null,
     staleTime: STALE,
   });
 }

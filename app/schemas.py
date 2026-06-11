@@ -19,6 +19,7 @@ class BillSummary(BaseModel):
     ai_summary: str | None
     policy_stance: str | None = None
     stance_source: str | None = None
+    reviewed: bool = False
     source_url: str | None
     compliance_details: dict | None
     litigation_case_count: int = 0
@@ -74,9 +75,11 @@ class FederalActionSummary(BaseModel):
 
 class SubscriptionCreate(BaseModel):
     email: str | None = None
+    organization: str | None = None
     slack_webhook: str | None = None
     states: list[str] = ["ALL"]
     material_categories: list[str] = ["ALL"]
+    instrument_types: list[str] = ["ALL"]
     min_confidence: float = 0.7
     alert_on: list[str] = ["status_change", "new_bill", "deadline"]
 
@@ -84,6 +87,24 @@ class SubscriptionCreate(BaseModel):
 class SubscriptionResponse(SubscriptionCreate):
     id: int
     active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AccessRequestCreate(BaseModel):
+    """A 'request access / pricing' capture. plan_interest is one of:
+    pro | team | enterprise | api | company_impact."""
+    email: str
+    name: str | None = None
+    organization: str | None = None
+    plan_interest: str
+    message: str | None = None
+    source: str | None = None
+
+
+class AccessRequestResponse(AccessRequestCreate):
+    id: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -157,6 +178,46 @@ class ExposureRanking(BaseModel):
     """Manually constructed — no from_attributes needed."""
     company: CompanySummary
     impact_score: ImpactScoreResponse
+
+
+class CompanyObligationDeadline(BaseModel):
+    """A single upcoming compliance deadline for an affected bill."""
+    deadline_date: date
+    deadline_type: str
+    description: str | None
+    who_affected: str | None
+    source_url: str | None
+
+
+class CompanyObligation(BaseModel):
+    """One enacted law a company is affected by, plus its next deadline.
+
+    "Affected" is high-confidence: the company has a material in the bill's
+    categories AND an operational presence in the bill's state. No proxy
+    volumes or synthetic cost are involved.
+    """
+    bill_id: int
+    state: str
+    bill_number: str | None
+    bill_title: str | None
+    status: str | None
+    source_url: str | None
+    matched_materials: list[str]
+    presence_types: list[str]
+    next_deadline: CompanyObligationDeadline | None
+    upcoming_deadline_count: int
+    total_deadline_count: int
+
+
+class CompanyObligationsResponse(BaseModel):
+    """'Are you affected, and what's your next deadline' for one company."""
+    company_id: uuid.UUID
+    company_name: str
+    affected_bill_count: int
+    affected_states: list[str]
+    upcoming_deadline_count: int
+    next_deadline_date: date | None
+    obligations: list[CompanyObligation]
 
 
 class ExposureBriefResponse(BaseModel):

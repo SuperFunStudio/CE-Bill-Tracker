@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, statusBadge } from '@/lib/utils';
 import { useBillLitigationCases } from '@/hooks/useBills';
+import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
 
 interface BillDetailPanelProps {
   bill: BillSummary;
@@ -78,6 +79,9 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
           </span></span>
         )}
       </div>
+
+      {/* Classification transparency — auto-classified vs reviewed, linked to methodology */}
+      <ClassificationBadge bill={bill} showLink className="border-t border-border-default pt-3" />
 
       {/* Material category pills */}
       {bill.material_categories && bill.material_categories.length > 0 && (

@@ -6,6 +6,7 @@ import { AlertBanner } from '@/components/ui/AlertBanner';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { RiskBadge } from '@/components/ui/RiskBadge';
+import { AlertIcon } from '@/components/ui/icons';
 import { formatDate, daysUntil, fixEncoding } from '@/lib/utils';
 import type { FederalActionSummary, LitigationCaseSummary } from '@/lib/types';
 
@@ -159,7 +160,9 @@ export default function FederalPage() {
 
       {/* Preemption banner */}
       <div className="bg-red-100 dark:bg-red-950/50 border border-red-400 dark:border-red-800 rounded-lg p-4 space-y-1">
-        <div className="text-red-700 dark:text-red-300 font-semibold text-sm">⚠ Federal Preemption Context</div>
+        <div className="flex items-center gap-2 text-red-700 dark:text-red-300 font-semibold text-sm">
+          <AlertIcon className="text-base shrink-0" /> Federal Preemption Context
+        </div>
         <p className="text-red-700/80 dark:text-red-200/80 text-sm">
           <strong>Oregon NAW v. Oregon DEQ</strong> (trial July 13, 2026) challenges Oregon's packaging EPR law under the Dormant Commerce Clause.
           A ruling could set precedent affecting all state EPR programs.

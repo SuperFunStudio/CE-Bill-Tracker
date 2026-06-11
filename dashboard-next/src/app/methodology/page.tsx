@@ -47,6 +47,39 @@ export default function MethodologyPage() {
       </section>
 
       <section className="space-y-3">
+        <h2 className="font-serif text-xl text-text-primary">How a bill gets classified</h2>
+        <ol className="space-y-3 text-sm text-text-secondary">
+          <li>
+            <span className="text-text-primary font-medium">1. Ingest.</span> Every bill from all 50
+            states and D.C. is pulled from Open States and refreshed as it moves.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">2. Pre-screen.</span> A curated
+            circular-economy lexicon narrows the full legislative universe to plausible candidates,
+            so deeper analysis is spent only on bills that might be relevant.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">3. Classify.</span> Each candidate is
+            evaluated against the fixed criteria above and either flagged relevant — with a
+            confidence score, policy instrument, and material tags — or set aside.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">4. Extract.</span> Relevant bills have
+            their compliance specifics pulled from the bill text: deadlines, covered products,
+            producer obligations, fees, and preemption signals.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">5. Review.</span> A growing subset is
+            spot-checked by a human, which flips the bill&apos;s <span className="text-green-accent">reviewed</span> marker.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">6. Re-screen.</span> As a bill advances
+            or its text changes, it&apos;s re-evaluated so the record stays current.
+          </li>
+        </ol>
+      </section>
+
+      <section className="space-y-3">
         <h2 className="font-serif text-xl text-text-primary">Auto-classified vs. reviewed</h2>
         <p className="text-text-secondary text-sm leading-relaxed">
           Each bill is first <strong className="text-text-primary">auto-classified</strong>: a language

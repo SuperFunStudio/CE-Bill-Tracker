@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     enable_new_bill_alerts: bool = False
     new_bill_alert_window_days: int = 7
 
+    # Where "request access / pricing" lead notifications go. Each capture also auto-replies to the
+    # requester. Both sends are best-effort and require sendgrid_api_key + a verified from-address.
+    access_request_notify_email: str = "kenny@superfun.studio"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

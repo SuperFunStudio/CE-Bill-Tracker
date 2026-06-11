@@ -1,16 +1,14 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
-import { HeartIcon } from '@/components/ui/icons';
 
 export const metadata: Metadata = {
   title: 'About — Battle of the Bills',
   description:
-    'Battle of the Bills tracks circularity-aligned legislation across the United States, ' +
-    'designed by Kenny Arnold to make supportive markets for a circular economy visible.',
+    'Battle of the Bills tracks circularity-aligned legislation across all 50 states — Extended ' +
+    'Producer Responsibility, right-to-repair, deposit-return, recycled-content, and labeling — so ' +
+    'producers and advocates can see where policy and market opportunity are building.',
 };
-
-// TODO: replace with the real donation URL once available.
-const DONATE_URL = '#';
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -24,54 +22,21 @@ export default function AboutPage() {
       {/* Intro */}
       <header className="space-y-3">
         <h1 className="font-serif uppercase tracking-[0.06em] text-text-primary text-3xl sm:text-4xl">
-          About 
+          About
         </h1>
       </header>
 
-      {/* Mission */}
+      {/* Mission — product voice */}
       <section>
         <SectionTitle>Why this exists</SectionTitle>
         <p className="text-text-secondary leading-relaxed">
-          Battle of the Bills is a tool designed by{' '}
-          <span className="text-text-primary font-medium"> <a
-            href="https://www.kennyarnold.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-accent hover:underline"
-          >
-            Kenny Arnold
-          </a> </span> to make it visible
-          where there are supportive markets for enabling a{' '}
-          <span className="text-text-primary font-medium">circular economy</span> in the United
-          States. By tracking Extended Producer Responsibility, right-to-repair, deposit-return,
-          recycled-content, labeling, and related legislation across all 50 states, it surfaces
-          where the policy momentum and the market opportunity is building.
-        </p>
-      </section>
-
-      {/* Data credit */}
-      <section>
-        <SectionTitle>Made possible by OpenStates</SectionTitle>
-        <p className="text-text-secondary leading-relaxed">
-          Legislative data is sourced from{' '}
-          <a
-            href="https://openstates.org"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-accent hover:underline"
-          >
-            OpenStates
-          </a>{' '}
-          (Plural Policy). This project is built on their publicly available{' '}
-          <a
-            href="https://open.pluralpolicy.com/data/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-green-accent hover:underline"
-          >
-            bulk legislative dataset
-          </a>
-          , without which none of this would be possible.
+          Battle of the Bills tracks circularity-aligned legislation across all 50 states. By
+          following Extended Producer Responsibility, right-to-repair, deposit-return,
+          recycled-content, labeling, and related laws in one place, it makes visible where the
+          policy momentum — and the market opportunity for a{' '}
+          <span className="text-text-primary font-medium">circular economy</span> — is building, and
+          turns a firehose of legislative activity into the handful of bills and deadlines that
+          actually affect you.
         </p>
       </section>
 
@@ -79,37 +44,72 @@ export default function AboutPage() {
       <section>
         <SectionTitle>How the analysis works</SectionTitle>
         <p className="text-text-secondary leading-relaxed">
-          In the interest of transparency: bills are classified for relevance and policy
-          instrument using{' '}
-          <span className="text-text-primary font-medium">Claude Haiku</span>, and compliance
-          details are extracted with Claude Sonnet. This project was created in collaboration with{' '}
-          <span className="text-text-primary font-medium">Claude Opus 4.6</span> and, to date, has
-          cost approximately{' '}
-          <span className="text-text-primary font-medium">4,000,000 tokens</span> of AI analysis.
-          Classifications are automated and may contain errors; always verify against the primary
-          source before relying on any result.
+          Every bill is screened against a fixed set of circularity criteria, then auto-classified
+          for relevance, policy instrument, and the material streams it touches — with a confidence
+          score on each call. Relevant bills get their compliance details (deadlines, covered
+          products, producer obligations) extracted from the bill text, and a growing set is
+          spot-reviewed by a human. Each bill shows whether its relevance call is auto-classified or
+          reviewed, so you always know what you&apos;re looking at.
+        </p>
+        <p className="text-text-secondary leading-relaxed mt-3">
+          Legislative data is sourced from{' '}
+          <a
+            href="https://openstates.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-green-accent hover:underline"
+          >
+            Open States
+          </a>{' '}
+          (Plural Policy). Classifications are automated and may contain errors; always verify
+          against the primary source before relying on any result.{' '}
+          <Link href="/methodology" className="text-green-accent hover:underline">
+            See the full methodology →
+          </Link>
         </p>
       </section>
 
       {/* Free updates sign-up */}
       <SubscribeSection className="border-t border-border-default pt-8" />
 
-      {/* Support */}
+      {/* Plans — replaces the old donation ask now that pricing exists */}
       <section className="border-t border-border-default pt-8">
-        <SectionTitle>Support this project</SectionTitle>
+        <SectionTitle>Plans</SectionTitle>
         <p className="text-text-secondary leading-relaxed mb-4">
-          Battle of the Bills is independently built and maintained. If it&apos;s useful to you,
-          consider donating to cover costs to help keep it running.
+          The bill explorer, map, deadline dashboard, and email alerts are free, and they stay free.
+          Paid plans — personal watch lists, portfolio-scoped exposure, team features, and API
+          access — are how the project stays independent and keeps improving.
         </p>
-        <a
-          href={DONATE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          href="/pricing"
           className="inline-flex items-center gap-2 rounded-lg border border-green-accent bg-green-dark px-5 py-2.5 text-green-accent font-medium hover:opacity-90 transition-opacity"
         >
-          <HeartIcon className="text-base" /> Donate to support this project!
-        </a>
+          See plans &amp; pricing →
+        </Link>
       </section>
+
+      {/* Footer byline */}
+      <footer className="border-t border-border-default pt-8 text-center text-sm text-text-muted">
+        Developed by{' '}
+        <a
+          href="https://www.kennyarnold.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-green-accent hover:underline"
+        >
+          Kenny Arnold Design
+        </a>{' '}
+        and made possible by{' '}
+        <a
+          href="https://openstates.org"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-green-accent hover:underline"
+        >
+          Open States
+        </a>
+        .
+      </footer>
     </div>
   );
 }

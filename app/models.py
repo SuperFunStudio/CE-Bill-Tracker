@@ -104,6 +104,94 @@ class BillChange(Base):
     __table_args__ = (Index("idx_bill_changes_bill_id", "bill_id"),)
 
 
+class BillDesignSignal(Base):
+    """One cited design implication derived from a bill's compliance_details.
+
+    The atom of the Design-for-EPR synthesis (app/synthesis/design_levers.py): a `lever`
+    (recyclability, recycled_content, repairability_durability, …) plus an `obligation_type`
+    (required / rewarded / penalized / banned / exempted / named) and the VERBATIM
+    `source_excerpt` it was extracted from. Principles are aggregated over these rows, so the
+    excerpt is the chain of custody — every principle traces to a real clause on a real bill.
+    `reviewed` mirrors Bill.reviewed (auto-extracted until a human spot-checks it).
+    """
+    __tablename__ = "bill_design_signal"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bills.id", ondelete="CASCADE"), nullable=False
+    )
+    lever: Mapped[str] = mapped_column(String(40), nullable=False)
+    obligation_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    design_action: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_excerpt: Mapped[str] = mapped_column(Text, nullable=False)
+    threshold_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    threshold_unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extractor_model: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    bill: Mapped["Bill"] = relationship("Bill", foreign_keys=[bill_id])
+
+    __table_args__ = (
+        Index("idx_design_signal_bill_id", "bill_id"),
+        Index("idx_design_signal_lever", "lever"),
+        Index("idx_design_signal_lever_obligation", "lever", "obligation_type"),
+    )
+
+
+class BillProductCoverage(Base):
+    """One (product, obligation) the bill scopes — the atom behind the product-coverage grid.
+
+    Where BillDesignSignal answers "what design levers does this bill pull", this answers "which
+    specific products does it cover, and how". The controlled product vocabulary lives in
+    app/synthesis/product_taxonomy.py (slug, label, icon, grid group); a slug absent from a bill's
+    rows means "not mentioned" — only covered / exempt / conditional products get a row.
+
+    `relationship` disambiguates the obligation (Phase 0 found the electronics bucket is ~half EPR /
+    half right-to-repair, which scope products differently): stewarded | repairable | disposal_banned
+    | deposit_return. `defined_by_reference` flags products the bill covers only by pointing at an
+    existing statute rather than enumerating them. `source_excerpt` is the verbatim provenance, the
+    same chain-of-custody guarantee design signals use; `reviewed` mirrors Bill.reviewed.
+    """
+    __tablename__ = "bill_product_coverage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bills.id", ondelete="CASCADE"), nullable=False
+    )
+    # Controlled vocab — validated against app/synthesis/product_taxonomy.py, not a DB FK.
+    product_slug: Mapped[str] = mapped_column(String(60), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)  # electronics | batteries
+    relationship_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # covered | exempt | conditional
+    defined_by_reference: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    source_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    threshold_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    threshold_unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extractor_model: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    bill: Mapped["Bill"] = relationship("Bill", foreign_keys=[bill_id])
+
+    __table_args__ = (
+        UniqueConstraint(
+            "bill_id", "product_slug", "relationship_type", name="uq_coverage_bill_product_rel"
+        ),
+        Index("idx_product_coverage_bill_id", "bill_id"),
+        Index("idx_product_coverage_category_slug", "category", "product_slug"),
+        Index("idx_product_coverage_slug", "product_slug"),
+    )
+
+
 class AlertSubscription(Base):
     __tablename__ = "alert_subscriptions"
 

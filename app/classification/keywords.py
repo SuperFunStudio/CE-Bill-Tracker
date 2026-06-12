@@ -57,6 +57,14 @@ MATERIAL_HINT_MAP = {
     "bottle bill": "deposit_return",
     "right to repair": "right_to_repair",
     "repair": "right_to_repair",
+    "bio-based": "biobased",
+    "biobased": "biobased",
+    "biopolymer": "biobased",
+    "bioplastic": "biobased",
+    "compost": "organics",
+    "soil": "agriculture",
+    "regenerative": "agriculture",
+    "cover crop": "agriculture",
 }
 
 
@@ -68,9 +76,16 @@ class KeywordFilter:
         # Tier 1 — near-certain relevance signals
         self._tier1 = self._compile(kw["primary_keywords"])
 
-        # Tier 2 — strong domain signals with some ambiguity
+        # Tier 2 — strong domain signals with some ambiguity. The biomaterials/regen-ag terms
+        # are the biological cycle of the circular economy (bio-based materials, soil health);
+        # they're specific enough that a single match should clear the threshold, like materials.
+        # Generic economic terms from those domains (e.g. "feedstock", "biomass", "investment
+        # tax credit", "economic development", "innovation grant") were deliberately NOT added —
+        # they'd swamp the filter with false positives and waste a Haiku call per passing bill.
         tier2_keys = [
             "material_keywords",
+            "biomaterials_keywords",
+            "soil_health_and_regenerative_ag_keywords",
             "recycled_content_keywords",
             "deposit_return_keywords",
             "right_to_repair_keywords",

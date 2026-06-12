@@ -18,6 +18,15 @@ HAIKU_MODEL = "claude-haiku-4-5-20251001"
 TRACKED_INSTRUMENTS = frozenset({
     "epr", "right_to_repair", "recycled_content", "deposit_return",
 })
+# The biological cycle of the circular economy — bio-based / biomanufactured materials,
+# regenerative agriculture & soil health, organics recycling / composting — is in scope too,
+# but it's modeled on the MATERIAL axis (material_categories: "biobased", "agriculture",
+# "organics"), not as instruments. Those bills use ordinary policy levers (grants, incentives,
+# standards, disposal bans), so their instrument_type is whatever mechanism applies (often
+# "other"). They ride into scope via is_epr_relevant=True — the system prompt explicitly names
+# the biological cycle as relevant — rather than a tracked-instrument tag. (We don't auto-track
+# on material because material_categories is a loose multi-value tag and would over-capture,
+# e.g. a pesticide bill tagged "agriculture".)
 # "labeling" and "preemption" are deliberately NOT here. Both are generic instruments that apply
 # far outside circular-economy policy — ingredient/nutrition/country-of-origin labeling, or
 # preemption of tobacco, firearm, employment, and tax rules. Counting them in scope on the tag
@@ -35,7 +44,11 @@ TRACKED_INSTRUMENTS = frozenset({
 SYSTEM_PROMPT = """\
 You are an expert in US environmental policy and Extended Producer Responsibility (EPR) legislation. \
 Analyze legislative bills and classify their relevance to EPR, product stewardship, circular economy policy, \
-right-to-repair, recycled content mandates, deposit return schemes, or federal preemption of such laws.\
+right-to-repair, recycled content mandates, deposit return schemes, or federal preemption of such laws. \
+Circular economy scope includes both the technical cycle (the above) and the biological cycle: \
+bio-based / biomanufactured materials (biopolymers, bioplastics, compostable materials), regenerative \
+agriculture & soil health (healthy soils, cover crops, carbon farming, biochar), and organics recycling / \
+composting infrastructure (source-separated organics, anaerobic digestion, compost market development).\
 """
 
 USER_TEMPLATE = """\
@@ -52,7 +65,7 @@ Return this exact JSON structure:
 {{
   "is_epr_relevant": <true or false>,
   "confidence": <float 0.0-1.0>,
-  "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","pharmaceuticals","solar_panels","textiles","organics","other"]>,
+  "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","other"]>,
   "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","labeling","chemical_restriction","preemption","budget","other">,
   "stance": <one of: "advances","weakens","neutral">,
   "urgency": <one of: "high","medium","low">,
@@ -68,6 +81,13 @@ Stance = the bill's direction relative to its instrument, NOT whether you favor 
   - "neutral": study/task-force/appropriations-only/administrative, or genuinely unclear.
 
 Urgency guide: high = enrolled/passed/enacted or imminent deadline; medium = passed committee or floor vote scheduled; low = introduced/early committee.
+
+Biological cycle: bills on bio-based / biomanufactured materials (biopolymers, bioplastics,
+compostable materials), regenerative agriculture & soil health (healthy soils, cover crops,
+carbon farming, biochar), or organics recycling / composting (source-separated organics,
+anaerobic digestion, compost market development) ARE circular-economy relevant — set
+is_epr_relevant=true. Tag their material as "biobased", "agriculture", or "organics"; set
+instrument_type to the actual policy lever (grant/incentive/standard → "other" if none fits).
 """
 
 

@@ -76,6 +76,35 @@ async def _fetch_document(url: str) -> "httpx.Response | None":
     return None
 
 
+async def _document_text(url: str, media_hint: str = "") -> str:
+    """Fetch a legislative document URL and return its extracted plain text ('' on failure).
+
+    Shared by get_bill_text (API-discovered version link) and get_text_from_source (the
+    source_url we already hold from the bulk dump). Detects PDF by magic bytes and strips
+    HTML markup so the Sonnet extractor receives clean text either way.
+    """
+    if not url:
+        return ""
+    url = _canonical_doc_url(url)
+    resp = await _fetch_document(url)
+    if resp is None:
+        log.warning("openstates_text_fetch_failed", url=url)
+        return ""
+    content = resp.content
+    # Detect PDF by magic bytes, not the declared media type — some states label an
+    # XHTML viewer page as application/pdf (and vice versa).
+    if content[:5] == b"%PDF-":
+        text = _extract_pdf_text(content)
+        if not text:
+            log.info("openstates_pdf_extract_empty", url=url)
+        return text
+    text = resp.text
+    if media_hint in ("text/html", "application/pdf") or "<" in text[:2000]:
+        text = html.unescape(_TAG_RE.sub(" ", text))
+        text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
 def _extract_pdf_text(data: bytes) -> str:
     """Extract plain text from a PDF byte string. Returns '' on any failure.
 
@@ -195,23 +224,13 @@ class OpenStatesClient:
             return ""
 
         # Fetch the document from the state legislature / OpenStates-hosted URL.
-        chosen_url = _canonical_doc_url(chosen_url)
-        resp = await _fetch_document(chosen_url)
-        if resp is None:
-            log.warning("openstates_text_fetch_failed", bill_id=bill_id, url=chosen_url)
-            return ""
-        content = resp.content
+        return await _document_text(chosen_url, chosen_media or "")
 
-        # Detect PDF by magic bytes, not the declared media type — some states label an
-        # XHTML viewer page as application/pdf (and vice versa).
-        if content[:5] == b"%PDF-":
-            text = _extract_pdf_text(content)
-            if not text:
-                log.info("openstates_pdf_extract_empty", bill_id=bill_id, url=chosen_url)
-            return text
+    async def get_text_from_source(self, source_url: str) -> str:
+        """Extract bill text straight from a state-legislature source URL.
 
-        text = resp.text
-        if chosen_media in ("text/html", "application/pdf") or "<" in text[:2000]:
-            text = html.unescape(_TAG_RE.sub(" ", text))
-            text = re.sub(r"\s+", " ", text).strip()
-        return text
+        Uses the source_url we already hold from the bulk dump, so it skips the
+        rate-limited OpenStates versions API entirely (the document fetch goes to the
+        state site, not v3.openstates.org). Returns '' on failure.
+        """
+        return await _document_text(source_url)

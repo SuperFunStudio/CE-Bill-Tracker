@@ -67,6 +67,10 @@ def _build_openstates_queries() -> list[str]:
         "remanufacturing_keywords",
         "buy_clean_and_embodied_carbon_keywords",
         "repairability_and_durability_keywords",
+        # Biological cycle of the circular economy — multi-word phrases are specific enough
+        # to make good legislative search terms (e.g. "regenerative agriculture", "biopolymer").
+        "biomaterials_keywords",
+        "soil_health_and_regenerative_ag_keywords",
     ]
 
     seen: set[str] = set()

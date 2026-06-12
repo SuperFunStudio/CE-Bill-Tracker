@@ -41,10 +41,13 @@ const STATUSES = [
 const INSTRUMENT_TYPES = ['epr', 'deposit_return', 'right_to_repair', 'recycled_content',
   'labeling', 'preemption', 'other'];
 // Values must match the material categories in data/seed/epr_keywords.json.
+// biobased / agriculture are the biological cycle of the circular economy (bio-based materials,
+// regenerative ag & soil health); composting/organics-recycling bills tag "organics". These live
+// on the material axis, not as policy instruments.
 // Exported so the personalization onboarding (src/components/scope) shares one canonical list.
 export const MATERIAL_CATEGORIES = ['plastic_packaging', 'paper_packaging', 'glass', 'metals',
   'electronics', 'batteries', 'paint', 'carpet', 'mattresses', 'tires',
-  'pharmaceuticals', 'solar_panels', 'textiles', 'organics', 'other'];
+  'pharmaceuticals', 'solar_panels', 'textiles', 'organics', 'biobased', 'agriculture', 'other'];
 const URGENCY_LEVELS = ['high', 'medium', 'low'];
 
 interface BillFiltersProps {

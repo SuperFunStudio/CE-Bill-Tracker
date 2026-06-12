@@ -64,7 +64,8 @@ def _parse_date(value) -> date | None:
         return None
 
 
-async def _candidates(db: AsyncSession, status: str | None, only_missing: bool, limit: int) -> list:
+async def _candidates(db: AsyncSession, status: str | None, only_missing: bool, limit: int,
+                      materials: list[str] | None = None) -> list:
     clauses = ["epr_relevant = true", "openstates_id IS NOT NULL"]
     params: dict = {"limit": limit}
     if status:
@@ -72,6 +73,10 @@ async def _candidates(db: AsyncSession, status: str | None, only_missing: bool, 
         params["status"] = status
     if only_missing:
         clauses.append("compliance_details IS NULL")
+    if materials:
+        # jsonb_exists_any() — the ?| operator clashes with asyncpg's parameter parsing.
+        clauses.append("jsonb_exists_any(material_categories, :materials)")
+        params["materials"] = materials
     sql = (
         "SELECT id, state, bill_number, title, openstates_id, source_url, status "
         f"FROM bills WHERE {' AND '.join(clauses)} "
@@ -86,8 +91,12 @@ async def main() -> None:
     ap.add_argument("--status", default="enacted", help="Bill status to target ('' = any).")
     ap.add_argument("--limit", type=int, default=20, help="Max bills to process.")
     ap.add_argument("--all", action="store_true", help="Reprocess even bills that already have compliance_details.")
+    ap.add_argument("--materials", default=None,
+                    help="Comma-separated material_categories to restrict to (e.g. "
+                         "'biobased,agriculture,organics'). Default: all materials.")
     ap.add_argument("--dry-run", action="store_true", help="List candidates; no API calls or writes.")
     args = ap.parse_args()
+    materials = [m.strip() for m in args.materials.split(",")] if args.materials else None
 
     dsn = args.dsn
     if not dsn:
@@ -100,9 +109,10 @@ async def main() -> None:
     only_missing = not args.all
 
     async with Session() as db:
-        bills = await _candidates(db, status, only_missing, args.limit)
+        bills = await _candidates(db, status, only_missing, args.limit, materials)
         print(f"{len(bills)} candidate bills (status={status or 'any'}, "
-              f"{'missing-details only' if only_missing else 'all'}, limit={args.limit})")
+              f"{'missing-details only' if only_missing else 'all'}, "
+              f"materials={materials or 'all'}, limit={args.limit})")
         for b in bills:
             print(f"  {b.state} {b.bill_number or '?':12s} {b.status:14s} {b.title[:60] if b.title else ''}")
 
@@ -117,7 +127,12 @@ async def main() -> None:
             for b in bills:
                 tag = f"{b.state} {b.bill_number}"
                 try:
-                    full_text = await os_client.get_bill_text(b.openstates_id) if b.openstates_id else ""
+                    # Prefer the source_url we already hold from the bulk dump — fetching the
+                    # state-site document directly skips the rate-limited OpenStates versions API.
+                    # Fall back to the API version lookup only when source_url yields no text.
+                    full_text = await os_client.get_text_from_source(b.source_url) if b.source_url else ""
+                    if not full_text and b.openstates_id:
+                        full_text = await os_client.get_bill_text(b.openstates_id)
                     if not full_text:
                         # No usable text (e.g. scanned/image PDF) — leave the bill as a future
                         # candidate rather than writing empty compliance_details.

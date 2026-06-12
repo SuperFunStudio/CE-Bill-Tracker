@@ -43,7 +43,9 @@ function readConfig(): EmbedConfig {
   if (p.get('state')) preset.state = p.get('state')!.toUpperCase();
   if (p.get('status')) preset.status = p.get('status')!;
   if (p.get('instrument')) preset.instrumentType = p.get('instrument')!;
-  if (p.get('material')) preset.materialCategory = p.get('material')!;
+  if (p.get('material')) {
+    preset.materialCategories = p.get('material')!.split(',').map(s => s.trim()).filter(Boolean);
+  }
   if (p.get('search')) preset.search = p.get('search')!;
 
   const rows = Number.parseInt(p.get('rows') ?? '', 10);

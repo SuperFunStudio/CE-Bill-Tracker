@@ -1,11 +1,13 @@
 'use client';
+import { useEffect, useRef, useState } from 'react';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
+import { CheckIcon } from '@/components/ui/icons';
 
 export interface BillFilterState {
   state: string;
   status: string;
   instrumentType: string;
-  materialCategory: string;
+  materialCategories: string[];
   urgency: string;
   search: string;
   eprOnly: boolean;
@@ -17,7 +19,7 @@ export const DEFAULT_FILTERS: BillFilterState = {
   state: '',
   status: '',
   instrumentType: '',
-  materialCategory: '',
+  materialCategories: [],
   urgency: '',
   search: '',
   eprOnly: true,
@@ -84,6 +86,82 @@ function Select({
   );
 }
 
+/** Checkbox popover styled to match the underline Selects — for filters that take several values. */
+function MultiSelect({
+  label, values, onChange, options, placeholder,
+}: {
+  label: string;
+  values: string[];
+  onChange: (v: string[]) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click so the popover behaves like a native dropdown.
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const toggle = (v: string) =>
+    onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v]);
+
+  const summary =
+    values.length === 0
+      ? placeholder
+      : values.length === 1
+        ? options.find(o => o.value === values[0])?.label ?? '1 selected'
+        : `${values.length} selected`;
+
+  return (
+    <div className="flex flex-col gap-1" ref={ref}>
+      <label className="font-serif text-text-muted text-[11px] uppercase tracking-wider">{label}</label>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-left focus:outline-none focus:border-green-accent"
+        >
+          <span className={`truncate ${values.length ? 'text-text-primary' : 'text-text-muted'}`}>{summary}</span>
+        </button>
+        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-[10px]">▾</span>
+        {open && (
+          <div className="absolute left-0 z-30 mt-1 w-max min-w-full max-h-60 overflow-y-auto rounded-md border border-border-default bg-bg-secondary shadow-lg p-1">
+            {options.map(o => {
+              const on = values.includes(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => toggle(o.value)}
+                  className={`w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-left whitespace-nowrap hover:bg-bg-primary ${
+                    on ? 'text-green-accent' : 'text-text-secondary'
+                  }`}
+                >
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      on ? 'border-green-accent bg-green-dark' : 'border-border-default'
+                    }`}
+                  >
+                    {on && <CheckIcon className="text-[10px]" />}
+                  </span>
+                  {o.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BillFilters({ filters, onChange }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
 
@@ -143,15 +221,15 @@ export function BillFilters({ filters, onChange }: BillFiltersProps) {
           }))}
           placeholder="All Types"
         />
-        <Select
-          label="Material"
-          value={filters.materialCategory}
-          onChange={v => set({ materialCategory: v })}
+        <MultiSelect
+          label="Materials & Products"
+          values={filters.materialCategories}
+          onChange={v => set({ materialCategories: v })}
           options={MATERIAL_CATEGORIES.map(m => ({
             value: m,
             label: m.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
           }))}
-          placeholder="All Materials"
+          placeholder="All"
         />
       </div>
 
@@ -180,7 +258,8 @@ export function applyBillFilters(bills: BillSummary[], f: BillFilterState): Bill
     if (f.status && b.status?.toLowerCase() !== f.status.toLowerCase()) return false;
     if (f.instrumentType && b.instrument_type !== f.instrumentType) return false;
     if (f.urgency && b.urgency?.toLowerCase() !== f.urgency.toLowerCase()) return false;
-    if (f.materialCategory && !(b.material_categories ?? []).includes(f.materialCategory)) return false;
+    if (f.materialCategories.length &&
+        !f.materialCategories.some(m => (b.material_categories ?? []).includes(m))) return false;
     if (f.hasLitigation && !(b.litigation_case_count > 0)) return false;
     if (f.search) {
       const q = f.search.toLowerCase();

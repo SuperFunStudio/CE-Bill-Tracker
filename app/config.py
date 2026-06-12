@@ -117,6 +117,15 @@ class Settings(BaseSettings):
     enable_new_bill_alerts: bool = False
     new_bill_alert_window_days: int = 7
 
+    # One-time welcome email on signup. When on, create_subscription fires a best-effort background
+    # send confirming the subscriber's scope + a cumulative "state of play" snapshot (enacted vs.
+    # active bills across their topics + jurisdictions). Dormant by default; preview via
+    # scripts/send_welcome.py before enabling. enable_welcome_recap separately gates the optional
+    # one-paragraph LLM "championship recap" flourish (needs anthropic_api_key) — the email renders
+    # fine without it, so the recap can stay off until its voice has been reviewed.
+    enable_welcome_email: bool = False
+    enable_welcome_recap: bool = False
+
     # Where "request access / pricing" lead notifications go. Each capture also auto-replies to the
     # requester. Both sends are best-effort and require sendgrid_api_key + a verified from-address.
     access_request_notify_email: str = "kenny@superfun.studio"

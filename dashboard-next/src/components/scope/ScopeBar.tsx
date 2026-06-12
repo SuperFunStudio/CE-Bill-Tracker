@@ -16,10 +16,11 @@ function summarize(values: string[], label: (v: string) => string, all: string):
  * deliberate opt-out — relevance is the default, the firehose is the choice.
  */
 export function ScopeBar() {
-  const { ready, isConfigured, scope, scoped, setScoped, openEditor } = useScope();
-  if (!ready || !isConfigured) return null;
+  const { ready, scope, scoped, setScoped, openEditor } = useScope();
+  if (!ready) return null;
 
-  // Configured but no scope (the reader skipped): a quiet invitation to personalize.
+  // No active scope (never personalized, or skipped): a quiet, persistent invitation. This is the
+  // only entry point now that the modal no longer auto-opens, so it must render even pre-onboarding.
   if (isEmptyScope(scope)) {
     return (
       <div className="border-b border-border-default bg-bg-secondary/60">

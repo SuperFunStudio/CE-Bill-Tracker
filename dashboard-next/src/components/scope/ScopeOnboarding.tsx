@@ -16,12 +16,13 @@ const STATE_ENTRIES = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeComp
  * First-visit modal that asks the one question the whole front door pivots on: which states and
  * materials matter to you? Saving defaults every surface to that scope (loss aversion bites hardest
  * when the loss is *mine*). It also opens on demand from the ScopeBar's "Edit". Skipping is allowed
- * but framed as opting *into* the firehose, not as the default.
+ * but framed as opting *into* the firehose, not as the default. It never auto-opens — readers reach
+ * it on demand via the ScopeBar's "Personalize your feed" / "Edit" affordances.
  */
 export function ScopeOnboarding() {
   const { ready, isConfigured, editorOpen, scope, saveAndClose, skip, closeEditor } = useScope();
-  const open = ready && (!isConfigured || editorOpen);
-  const editing = isConfigured; // opened via "Edit" rather than first run
+  const open = ready && editorOpen;
+  const editing = isConfigured; // opened via "Edit" rather than the first-run invitation
 
   const [states, setStates] = useState<string[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
@@ -43,14 +44,20 @@ export function ScopeOnboarding() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="scope-onboarding-title"
+      onClick={editing ? closeEditor : skip}
     >
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-bg-secondary border border-border-default shadow-2xl p-6 space-y-5">
+      <div
+        className="w-full max-w-lg max-h-[90dvh] flex flex-col rounded-t-2xl sm:rounded-xl bg-bg-secondary border border-border-default shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Scrollable body — keeps the footer CTA pinned and visible on short screens. */}
+        <div className="overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
         <div className="space-y-1">
-          <h2 id="scope-onboarding-title" className="font-serif text-2xl text-text-primary">
+          <h2 id="scope-onboarding-title" className="font-serif text-xl sm:text-2xl text-text-primary">
             See what&apos;s coming for you.
           </h2>
           <p className="text-text-secondary text-sm leading-relaxed">
@@ -112,8 +119,9 @@ export function ScopeOnboarding() {
             {states.length > 0 ? `${states.length} selected` : 'Leave empty to follow every state.'}
           </p>
         </fieldset>
+        </div>
 
-        <div className="flex items-center justify-between gap-3 pt-1">
+        <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border-default p-4 sm:px-6">
           <button
             type="button"
             onClick={editing ? closeEditor : skip}

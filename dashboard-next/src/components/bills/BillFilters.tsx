@@ -68,7 +68,7 @@ function Select({
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-text-primary focus:outline-none focus:border-green-accent"
+          className="w-full appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-text-primary focus:outline-none focus:border-green-accent [&>option]:bg-bg-secondary [&>option]:text-text-primary"
         >
           <option value="">{placeholder}</option>
           {options.map(o => (

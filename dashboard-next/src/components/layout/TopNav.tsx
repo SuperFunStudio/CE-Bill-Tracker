@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeContext';
 import { useScrolled } from '@/hooks/useScrolled';
 import {
-  HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, SunIcon, MoonIcon,
+  HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, SunIcon, MoonIcon,
 } from '@/components/ui/icons';
 
 const NAV_ITEMS = [
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon },
   { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon },
   { href: '/company', label: 'Portfolio Exposure', Icon: FactoryIcon },
+  { href: '/design-guide', label: 'Design Guide', Icon: CompassIcon },
   { href: '/pricing', label: 'Pricing', Icon: TagIcon },
   { href: '/about', label: 'About', Icon: InfoIcon },
 ];

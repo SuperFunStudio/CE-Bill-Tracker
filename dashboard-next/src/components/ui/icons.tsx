@@ -149,6 +149,16 @@ export function TagIcon(props: IconProps) {
   );
 }
 
+/** Compass — stands in for the design guide / direction. */
+export function CompassIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M15.5 8.5 13 13l-4.5 2.5L11 11l4.5-2.5Z" />
+    </Icon>
+  );
+}
+
 export function SunIcon(props: IconProps) {
   return (
     <Icon {...props}>

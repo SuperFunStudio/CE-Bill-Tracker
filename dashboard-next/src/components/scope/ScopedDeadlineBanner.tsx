@@ -54,7 +54,7 @@ export function ScopedDeadlineBanner({ bills }: { bills: BillSummary[] }) {
     const nearest = list.reduce((a, b) => (a.deadline_date <= b.deadline_date ? a : b));
     const matPhrase =
       scope.materials.length > 0
-        ? ` affecting your materials (${scope.materials.map(formatMaterial).join(', ')})`
+        ? ` affecting your products & materials (${scope.materials.map(formatMaterial).join(', ')})`
         : '';
     const statePhrase = states.length > 0 ? ` in ${states.join(', ')}` : '';
     const urgent = w30.length > 0;
@@ -109,7 +109,7 @@ export function ScopedDeadlineBanner({ bills }: { bills: BillSummary[] }) {
           <span className="font-serif font-semibold text-text-primary">{upcoming.length}</span>{' '}
           deadlines nationwide over the next 3 years.{' '}
           <span className="text-green-accent">
-            Tell us your states and materials to see which ones are yours →
+            Tell us your states, products &amp; materials to see which ones are yours →
           </span>
         </p>
       </div>

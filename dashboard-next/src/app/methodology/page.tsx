@@ -23,7 +23,7 @@ export default function MethodologyPage() {
 
       <p className="text-text-secondary leading-relaxed">
         Every bill is screened against a fixed set of circularity criteria — EPR, deposit-return,
-        right-to-repair, recycled-content, and labeling instruments across 15 material streams.
+        right-to-repair, recycled-content, and labeling instruments across 15 material &amp; product streams.
         Flagged bills are auto-classified and spot-reviewed. The goal is a judgment you can audit,
         not a black box.
       </p>
@@ -38,7 +38,7 @@ export default function MethodologyPage() {
             </ul>
           </div>
           <div>
-            <div className="text-text-muted text-xs uppercase tracking-wide mb-1">Material streams (15)</div>
+            <div className="text-text-muted text-xs uppercase tracking-wide mb-1">Material &amp; product streams (15)</div>
             <p className="text-sm text-text-secondary leading-relaxed">
               {MATERIALS.join(', ')}.
             </p>

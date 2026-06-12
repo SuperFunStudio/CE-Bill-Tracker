@@ -25,7 +25,7 @@ export function ScopeBar() {
     return (
       <div className="border-b border-border-default bg-bg-secondary/60">
         <div className="max-w-6xl mx-auto px-4 py-1.5 text-center text-xs text-text-muted">
-          Showing every state &amp; material.{' '}
+          Showing every state, material &amp; product.{' '}
           <button onClick={openEditor} className="text-green-accent hover:underline">
             Personalize your feed →
           </button>
@@ -35,7 +35,7 @@ export function ScopeBar() {
   }
 
   const states = summarize(scope.states, a => STATE_NAMES[a] ?? a, 'all states');
-  const materials = summarize(scope.materials, formatMaterial, 'all materials');
+  const materials = summarize(scope.materials, formatMaterial, 'all materials & products');
 
   return (
     <div className="border-b border-border-default bg-bg-secondary/60">

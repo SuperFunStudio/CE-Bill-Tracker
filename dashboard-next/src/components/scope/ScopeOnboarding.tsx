@@ -61,15 +61,15 @@ export function ScopeOnboarding() {
             See what&apos;s coming for you.
           </h2>
           <p className="text-text-secondary text-sm leading-relaxed">
-            Pick your materials and states once. We&apos;ll surface the bills and deadlines that hit
-            your portfolio — and skip the ones that don&apos;t.
+            Pick your products, materials &amp; states once. We&apos;ll surface the bills and
+            deadlines that hit your portfolio — and skip the ones that don&apos;t.
           </p>
         </div>
 
         {/* Materials */}
         <fieldset>
           <legend className="font-serif text-text-muted text-[11px] uppercase tracking-wider mb-2">
-            Materials
+            Materials &amp; Products
           </legend>
           <div className="flex flex-wrap gap-2">
             {MATERIAL_CATEGORIES.map(m => {

@@ -1,4 +1,5 @@
 'use client';
+import { usePathname } from 'next/navigation';
 import { STATE_NAMES } from '@/lib/utils';
 import { isEmptyScope } from '@/lib/scope';
 import { useScope } from './ScopeContext';
@@ -17,11 +18,15 @@ function summarize(values: string[], label: (v: string) => string, all: string):
  */
 export function ScopeBar() {
   const { ready, scope, scoped, setScoped, openEditor } = useScope();
+  const pathname = usePathname();
   if (!ready) return null;
 
-  // No active scope (never personalized, or skipped): a quiet, persistent invitation. This is the
-  // only entry point now that the modal no longer auto-opens, so it must render even pre-onboarding.
+  // No active scope (never personalized, or skipped): a quiet, persistent invitation, and the entry
+  // point on every page where the modal no longer auto-opens. The home page is the exception — its
+  // ScopedDeadlineBanner carries the single "personalize" CTA (with deadline urgency baked in), so we
+  // suppress this redundant strip there rather than show two buttons opening the same modal.
   if (isEmptyScope(scope)) {
+    if (pathname === '/') return null;
     return (
       <div className="border-b border-border-default bg-bg-secondary/60">
         <div className="max-w-6xl mx-auto px-4 py-1.5 text-center text-xs text-text-muted">

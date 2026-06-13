@@ -160,7 +160,7 @@ export default function PricingPage() {
           rel="noopener noreferrer"
           className="shrink-0 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity"
         >
-          Have a worthy challenge? →
+          Get in touch →
         </a>
       </section>
 

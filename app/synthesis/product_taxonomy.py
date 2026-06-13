@@ -47,6 +47,10 @@ class Product:
     tags: tuple[str, ...] = field(default_factory=tuple)
     # Relationships that realistically apply (an EV battery is stewarded, never "repairable" here).
     relationships: tuple[str, ...] = RELATIONSHIPS
+    # Whether a blanket "covers the whole class" law sweeps this product in automatically. False for
+    # specialty/appliance items that are almost always scoped separately (a consumer-electronics
+    # repair law's blanket clause shouldn't silently cover tractors or medical devices).
+    blanket_expand: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -75,16 +79,18 @@ _ELECTRONICS: tuple[Product, ...] = (
     # Entertainment / connected
     Product("game_consoles", "Game consoles", "electronics", "Entertainment", "gamepad-2"),
     Product("streaming_devices", "Set-top / streaming", "electronics", "Entertainment", "router"),
-    # Appliances (white goods + small)
-    Product("large_appliances", "Large appliances", "electronics", "Appliances", "refrigerator"),
-    Product("small_appliances", "Small appliances", "electronics", "Appliances", "microwave"),
-    # Specialty scopes seen in right-to-repair bills
+    # Appliances (white goods + small) — usually a separate stream, so not swept in by a blanket clause.
+    Product("large_appliances", "Large appliances", "electronics", "Appliances", "refrigerator",
+            blanket_expand=False),
+    Product("small_appliances", "Small appliances", "electronics", "Appliances", "microwave",
+            blanket_expand=False),
+    # Specialty scopes seen in right-to-repair bills — always scoped explicitly, never via blanket.
     Product("medical_devices", "Medical devices", "electronics", "Specialty", "stethoscope",
-            relationships=("repairable", "stewarded")),
+            relationships=("repairable", "stewarded"), blanket_expand=False),
     Product("mobility_devices", "Mobility devices", "electronics", "Specialty", "accessibility",
-            relationships=("repairable",)),
+            relationships=("repairable",), blanket_expand=False),
     Product("ag_industrial_equipment", "Ag / industrial equipment", "electronics", "Specialty", "tractor",
-            relationships=("repairable",)),
+            relationships=("repairable",), blanket_expand=False),
     # Catch-alls
     Product("other_electronics", "Other electronics", "electronics", "Other", "cpu"),
 )

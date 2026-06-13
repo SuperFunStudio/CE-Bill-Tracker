@@ -66,16 +66,25 @@ Bill text (your ONLY source — quote from it verbatim):
 {text}
 \"\"\"
 
-Call report_coverage with one entry per catalog product the bill actually reaches. Rules:
+Call report_coverage. Rules:
 - source_excerpt MUST be copied exactly from the bill text above; it is verified as a substring and
-  fabricated or paraphrased quotes are discarded. When the bill defines a broad scope rather than
-  naming the product (e.g. right-to-repair "digital electronic equipment"), quote that scope clause.
-- status: "covered"=in scope; "exempt"=explicitly carved out; "conditional"=covered only past a
-  stated threshold (fill threshold_value/unit from the same clause).
-- defined_by_reference=true when the bill covers the product only by pointing at an existing statute
+  fabricated or paraphrased quotes are discarded.
+- "products": one entry per catalog product the bill names or thresholds INDIVIDUALLY. status:
+  "covered"=named in scope; "exempt"=explicitly carved out (quote the carve-out clause);
+  "conditional"=covered only past a stated threshold (fill threshold_value/unit from the clause).
+- "blanket": MANY laws (esp. right-to-repair) define their reach as an ENTIRE class — e.g. "any
+  digital electronic equipment", "all covered electronic devices" — without listing device types.
+  When the bill does this, set blanket.is_blanket=true and put the verbatim class-definition clause
+  in blanket.scope_excerpt; the system expands it to cover every applicable product. Then list each
+  explicitly carved-out product as an "exempt" entry in "products" (quoting its carve-out clause).
+  Do NOT hand-enumerate the covered devices for a blanket law — that's what blanket does.
+  CRITICAL: if this bill's obligation is "repairable" and it defines a broad equipment class (e.g.
+  "digital electronic equipment means any product..."), it IS blanket — set is_blanket=true and
+  quote that definition. Returning is_blanket=false with no covered products for such a bill is wrong.
+- defined_by_reference=true when a product is covered only by pointing at an existing statute
   ("as defined under ORS Chapter 459A") rather than naming it here.
-- Emit at most one entry per product. Omit any product the bill does not actually reach. Precision
-  beats recall — if the bill covers no catalog product, return an empty list.
+- Precision beats recall. If the bill is neither blanket nor names any catalog product, return
+  empty products and blanket.is_blanket=false.
 """
 
 # Forced-tool schema: guarantees structured output (Sonnet 4.6 rejects assistant prefill, and on raw
@@ -104,6 +113,18 @@ COVERAGE_TOOL = {
                     },
                     "required": ["slug", "status", "source_excerpt", "confidence"],
                 },
+            },
+            "blanket": {
+                "type": "object",
+                "description": "Set when the bill covers an entire product class without enumerating.",
+                "properties": {
+                    "is_blanket": {"type": "boolean"},
+                    "scope_excerpt": {
+                        "type": "string",
+                        "description": "verbatim class-definition clause from the bill text",
+                    },
+                },
+                "required": ["is_blanket"],
             },
         },
         "required": ["products"],
@@ -162,6 +183,18 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text.translate(_PUNCT_FOLD)).strip().lower()
 
 
+def _grounded(excerpt: str, corpus_norm: str) -> bool:
+    """Provenance check: the excerpt must be verbatim in the bill text. Long quotes (e.g. a 350-char
+    statutory definition) are reproduced imperfectly mid-string by the model — one cleaned character
+    anywhere breaks an exact full match — so we require a verbatim PREFIX. 40 chars of exact match is
+    strong evidence the quote is real (a fabricated quote can't reproduce the bill's opening words),
+    while staying robust to mid-quote drift. Short excerpts (<40) are matched in full."""
+    e = _norm(excerpt)
+    if len(e) < 12:
+        return False
+    return e[:40] in corpus_norm
+
+
 def build_corpus(full_text: str, details: dict | None) -> str:
     """Bill text plus any compliance prose, as one quotable block the excerpt must come from."""
     parts: list[str] = []
@@ -197,8 +230,8 @@ def validate_coverages(
         if not is_valid(slug, relationship) or status not in STATUSES or slug in seen:
             dropped += 1
             continue
-        # Excerpt must be a real, non-trivial substring of the bill text.
-        if len(_norm(excerpt)) < 10 or _norm(excerpt) not in corpus_norm:
+        # Excerpt must be verbatim-grounded in the bill text (prefix-match for long quotes).
+        if not _grounded(excerpt, corpus_norm):
             dropped += 1
             continue
         tv = r.get("threshold_value")
@@ -231,7 +264,7 @@ class ProductCoverageExtractor:
         )
 
     @retry_with_backoff(max_attempts=3, base_delay=1.0)
-    async def _call(self, prompt: str) -> list[dict]:
+    async def _call(self, prompt: str) -> dict:
         resp = await self._client.messages.create(
             model=SONNET_MODEL,
             max_tokens=2500,
@@ -243,8 +276,8 @@ class ProductCoverageExtractor:
         )
         for block in resp.content:
             if block.type == "tool_use":
-                return block.input.get("products", []) or []
-        return []
+                return block.input or {}
+        return {}
 
     async def extract(self, bill: dict, max_chars: int = 14000) -> tuple[list[ProductCoverage], int]:
         """bill: {id, state, bill_number, title, instrument_type, categories[list], full_text,
@@ -276,5 +309,29 @@ class ProductCoverageExtractor:
             catalog=catalog,
             text=corpus[:max_chars],
         )
-        raw = await self._call(prompt)
-        return validate_coverages(raw, corpus, bill, relationship)
+        data = await self._call(prompt)
+        coverages, dropped = validate_coverages(data.get("products", []), corpus, bill, relationship)
+
+        # Blanket laws ("any digital electronic equipment") cover the whole class: the model flags
+        # is_blanket + the verbatim scope clause, and we expand it deterministically rather than
+        # trusting the model to hand-enumerate (which it does unreliably). Explicit per-product
+        # entries above win — blanket only fills the products the model didn't already address.
+        blanket = data.get("blanket") or {}
+        if blanket.get("is_blanket"):
+            excerpt = str(blanket.get("scope_excerpt", "")).strip()
+            if _grounded(excerpt, _norm(corpus)):
+                seen = {c.product_slug for c in coverages}
+                for cat in cats:
+                    for p in products_for(cat):
+                        if (p.blanket_expand and p.slug not in seen
+                                and relationship in p.relationships):
+                            seen.add(p.slug)
+                            coverages.append(ProductCoverage(
+                                bill_id=bill["id"], state=bill["state"],
+                                bill_number=bill.get("bill_number"), category=p.category,
+                                product_slug=p.slug, relationship_type=relationship,
+                                status="covered", defined_by_reference=True,
+                                source_excerpt=excerpt[:400], threshold_value=None,
+                                threshold_unit=None, confidence=0.7,
+                            ))
+        return coverages, dropped

@@ -644,7 +644,11 @@ export default function CompanyImpactPage() {
       <div className="flex gap-1 bg-bg-secondary border border-border-default rounded-lg p-1 w-fit">
         {[
           { id: 'obligations' as const, label: 'Obligations & Deadlines' },
-          { id: 'bill' as const, label: 'Cost Estimate (beta)' },
+          // Cost Estimate (beta) — DISABLED until PROs publish real per-tonne fee schedules.
+          // The estimate depends on fee data that isn't reliably available yet (most enacted bills
+          // set fees via post-enactment rulemaking, not the statute), so it rendered "$0 / N/A".
+          // BillView + the backend cost endpoints are left intact; re-add this entry to restore.
+          // { id: 'bill' as const, label: 'Cost Estimate (beta)' },
           { id: 'company' as const, label: 'Company Profile' },
         ].map(({ id, label }) => (
           <button

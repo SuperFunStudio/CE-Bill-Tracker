@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Designing for Circularity — A Practitioner's Guide</title>
+<style>
+:root{
+  --paper:#f8f9fa; --card:#ffffff; --rule:#dee2e6;
+  --ink:#1a1a2e; --ink2:#495057; --muted:#6b7280; --accent:#1e6ae9; --accent-bg:#eff6ff;
+}
+*{box-sizing:border-box}
+html{ -webkit-text-size-adjust:100% }
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.55;
+}
+.wrap{ max-width:780px; margin:0 auto; padding:32px 22px 80px }
+.serif{ font-family:Georgia,Cambria,"Times New Roman",serif }
+.masthead{ text-align:center; margin:6px 0 18px }
+.masthead .rule-top{ border-top:2px solid var(--ink); }
+.masthead .rule-bot{ border-top:1px solid rgba(26,26,46,.3); }
+.masthead h1{
+  font-family:Georgia,Cambria,serif; text-transform:uppercase; letter-spacing:.05em;
+  font-weight:700; font-size:30px; line-height:1.15; margin:14px 8px; color:var(--ink);
+}
+.tagline{ font-family:Georgia,serif; font-style:italic; color:var(--ink2); text-align:center;
+  font-size:15px; margin:-6px 0 4px }
+.dateline{ text-align:center; text-transform:uppercase; letter-spacing:.18em; font-size:11px;
+  color:var(--muted); margin:0 0 22px }
+.part{
+  font-family:Georgia,serif; text-transform:uppercase; letter-spacing:.08em; font-weight:700;
+  font-size:15px; color:var(--ink); text-align:center; margin:38px 0 18px; padding:8px 0;
+  border-top:2px solid var(--ink); border-bottom:1px solid var(--rule);
+}
+section.lever{
+  background:var(--card); border:1px solid var(--rule); border-radius:10px;
+  padding:20px 22px; margin:0 0 18px; break-inside:avoid;
+}
+section.lever h2{
+  font-family:Georgia,serif; font-size:20px; font-weight:700; line-height:1.25;
+  margin:0 0 8px; color:var(--ink);
+}
+.kicker{
+  text-transform:uppercase; letter-spacing:.1em; font-size:11px; font-weight:700;
+  color:var(--accent); margin:16px 0 6px;
+}
+p{ margin:8px 0; color:var(--ink2); font-size:14.5px }
+section.lever > p:first-of-type{ color:var(--ink) }
+em{ color:var(--muted) }
+ul{ margin:6px 0 4px; padding-left:18px }
+li{ margin:6px 0; font-size:14px; color:var(--ink2) }
+li strong{ color:var(--ink) }
+blockquote{
+  margin:8px 0; padding:8px 14px; border-left:3px solid var(--accent);
+  background:var(--accent-bg); font-family:Georgia,serif; font-style:italic;
+  font-size:13.5px; color:var(--ink2); border-radius:0 6px 6px 0;
+}
+details{ margin:12px 0 2px }
+summary{ cursor:pointer; font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--accent); font-weight:700 }
+code{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12.5px;
+  background:var(--paper); padding:1px 4px; border-radius:3px }
+a{ color:var(--accent) }
+.printbtn{
+  position:fixed; top:14px; right:14px; background:var(--accent); color:#fff; border:0;
+  padding:9px 14px; border-radius:7px; font-size:13px; font-weight:600; cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.15);
+}
+@media print{
+  body{ background:#fff }
+  .wrap{ max-width:none; padding:0 }
+  .printbtn{ display:none }
+  section.lever{ border-color:#ccc; box-shadow:none }
+  /* Force evidence blocks open when printing so quotes are not lost. */
+  details > *{ display:block !important }
+  summary{ display:none }
+  a{ color:var(--ink); text-decoration:none }
+}
+</style>
+</head>
+<body>
+<button class="printbtn" onclick="window.print()">Print / Save as PDF</button>
+<div class="wrap">
+<header class="masthead"><div class="rule-top"></div><h1>Designing for Circularity: A Practitioner's Guide</h1><div class="rule-bot"></div></header>
+<p class="dateline">SignalScout · Circularity Intelligence · Compiled 11 June 2026</p>
+<p class="tagline"><em>How to design packaging and products that stay compliant — and pay lower fees — under US Extended Producer Responsibility (EPR) and adjacent circular-economy law.</em></p>
+<blockquote>Derived from <strong>74 bills across 12 states</strong> (53 already enacted) that our system has classified and analyzed. Every principle below traces to specific bills, with the exact statutory language quoted. Proposed bills show the direction of travel; <strong>enacted</strong> laws are obligations today.</blockquote>
+<p><strong>How to use this guide.</strong> Each lever is a design decision you control. For every lever: the *imperatives* are what to do, *targets* are the hard numbers to hit, and *evidence* shows the laws driving it. Audit your SKUs lever by lever; prioritize the states you sell into. Fee figures are intentionally omitted until the Circular Action Alliance publishes eco-modulation rates — at which point design choices map directly to dollar exposure.</p>
+<div class="part">Part 1 — Packaging design</div>
+<section class="lever">
+<h2>Design packaging to be recyclable in available systems</h2>
+<p>Design packaging and products to be recyclable within the collection and processing systems that actually serve consumers, as multiple enacted state laws now require recyclability as a condition of sale or labeling. Acting early reduces compliance risk, avoids eco-modulated fee penalties, and positions products for markets where recyclability thresholds are already law.</p>
+<p><em>Backed by 34 bills (19 enacted) — <strong>Required</strong> in 8 state(s) · <strong>Fee-advantaged</strong> in 6 state(s) · <strong>Exemption available</strong> in 2 state(s) · <strong>Referenced</strong> in 1 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Ensure packaging is recyclable in systems serving the majority of consumers</strong> <em>(required)</em>. Packaging must be collected for recycling by programs covering at least 60% of California's population and must routinely become feedstock in new products or packaging before displaying a chasing-arrows symbol; by 2032 all covered material sold in California must be recyclable or compostable. — CA SB-343, CA SB-54</li><li><strong>Design batteries to be easily removable with common household tools</strong> <em>(required)</em>. Batteries must be removable by the end user using no more than common household tools, enabling separate collection and recycling and, in Vermont, avoiding stewardship program coverage obligations. — CA AB-2440, CO SB-25-163, VT S-254</li><li><strong>Improve packaging recyclability to reduce eco-modulated fee exposure</strong> <em>(fee-advantaged)</em>. Maine's enacted EPR fee structure references recyclability as an eco-modulation factor, meaning less-recyclable packaging formats will attract higher fees; improving recyclability is the primary lever to minimize those costs. — ME LD-1541, VT H-142</li><li><strong>Design electronics, apparel, and specialty products with clear end-of-life recycling pathways</strong> <em>(required)</em>. Enacted laws in California, Oregon, and Maine require producers of electronics, apparel/textiles, and electronic smoking devices to finance and support collection, sorting, and recycling; products must be designed so these pathways are technically feasible. — OR HB-3220, CA SB-707, ME LD-1519</li><li><strong>Ensure beverage containers use material types accepted in certified recycling systems</strong> <em>(required)</em>. Enacted deposit-return laws in California and Rhode Island require certified recycling centers to accept aluminum, bimetal, glass, and plastic beverage containers; container material and format must be compatible with these certified systems. — CA AB-1311, RI HB-6207, RI SB-996</li><li><strong>Evaluate packaging for the high-recycling-rate exemption pathway where applicable</strong> <em>(exemption)</em>. Maine's enacted law exempts packaging not collected through residential programs if it demonstrates a recycling rate of at least 65% for three consecutive years prior to January 1, 2027, and at least 70% annually thereafter; design teams should assess whether specialty packaging streams can qualify. — ME LD-1423</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>60% population coverage for recyclability claims on packaging (CA SB-343)</li><li>100% of covered material recyclable or compostable by January 1, 2032 (CA SB-54)</li><li>65% recycling rate for 3 consecutive years prior to January 1, 2027 to qualify for Maine exemption (ME LD-1423)</li><li>70% recycling rate annually on and after January 1, 2027 to maintain Maine exemption (ME LD-1423)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"Ensure that any product or packaging displaying a chasing arrows symbol meets statewide recyclability criteria (collected for recycling by programs covering at least 60% of California's population) and is of a material type and form that routinely becomes feedstock used in production of new products or packaging"<br>— <strong>CA SB-343</strong> (enacted, Required)</blockquote>
+<blockquote>"Ensure covered material offered for sale, distributed, or imported in or into the state on or after January 1, 2032, is recyclable or compostable"<br>— <strong>CA SB-54</strong> (enacted, Required)</blockquote>
+<blockquote>"Batteries designed to be easily removed from a product by the user with no more than common household tools"<br>— <strong>CA AB-2440</strong> (enacted, Required)</blockquote>
+</details>
+</section>
+<section class="lever">
+<h2>Incorporate post-consumer recycled content</h2>
+<p>Incorporating post-consumer recycled (PCR) content is now a hard legal requirement in multiple enacted US state laws, with specific minimums for plastic, glass, and paper packaging. Design teams must embed PCR targets into material specifications early to meet compliance deadlines and reduce eco-modulated fees in emerging EPR frameworks.</p>
+<p><em>Backed by 12 bills (7 enacted) — <strong>Fee-advantaged</strong> in 5 state(s) · <strong>Required</strong> in 2 state(s) · <strong>Exemption available</strong> in 2 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Specify minimum 25–30% PCR plastic in plastic beverage containers sold in Maine</strong> <em>(required)</em>. Maine LD-1467 requires an average aggregate minimum of 25% PCR plastic from 2026–2030, rising to 30% from 2031 onward; build the 30% target into long-range material sourcing plans now. — ME LD-1467</li><li><strong>Incorporate minimum 35% post-consumer recycled glass in beverage containers</strong> <em>(required)</em>. California SB-38 mandates that glass container manufacturers use at least 35% post-filled (recycled) glass in food, drink, or beverage containers; specify this threshold in glass supplier contracts for California-distributed products. — CA SB-38</li><li><strong>Design plastic covered material to achieve at least 65% recycled content by 2032</strong> <em>(required)</em>. California SB-54 requires plastic covered material to meet a recycled content rate of not less than 65% on and after January 1, 2032; begin transitioning resin sourcing and supplier qualification well ahead of this deadline. — CA SB-54</li><li><strong>Meet California postconsumer recycled plastic content requirements for filled plastic beverage containers</strong> <em>(required)</em>. CA SB-1013 imposes PCR plastic content requirements on filled plastic beverage containers sold in California; note that box, bladder, and pouch containers for wine or distilled spirits receive a 2-year additional compliance period. — CA SB-1013</li><li><strong>Use 100% recycled material in paper carryout bags to qualify for Colorado compliance exemption</strong> <em>(exemption)</em>. Colorado HB-21-1162 exempts recycled paper carryout bags made from 100% recycled or post-consumer content (with basis weight greater than 30 pounds) from bag restrictions; specify this standard to maintain retail compliance. — CO HB-21-1162</li><li><strong>Increase PCR content across all packaging formats to lower eco-modulated EPR fees</strong> <em>(fee-advantaged)</em>. Multiple enacted and proposed EPR laws (including ME LD-1541 and proposed bills in VT and NY) tie producer fee levels to recycled content performance; maximizing PCR content is a durable strategy to reduce fee exposure as these programs expand. — ME LD-1541, VT H-142, NY A-6193, VT H-915</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>25% PCR plastic in plastic beverage containers by 2026 (ME LD-1467)</li><li>30% PCR plastic in plastic beverage containers by 2031 (ME LD-1467)</li><li>35% post-consumer recycled glass in beverage/food containers (CA SB-38)</li><li>65% recycled content in plastic covered material by January 1, 2032 (CA SB-54)</li><li>100% recycled content in paper carryout bags for Colorado exemption (CO HB-21-1162)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"Beginning January 1, 2026 through December 31, 2030: ensure that the total number of plastic beverage containers sold, offered for sale, or distributed for sale in Maine contain, on average and in the aggregate, at least 25% post-consumer recycled plastic"<br>— <strong>ME LD-1467</strong> (enacted, Required)</blockquote>
+<blockquote>"Beginning January 1, 2031: ensure that the total number of plastic beverage containers sold, offered for sale, or distributed for sale in Maine contain, on average and in the aggregate, at least 30% post-consumer recycled plastic"<br>— <strong>ME LD-1467</strong> (enacted, Required)</blockquote>
+<blockquote>"Recycled paper carryout bags (bags made from 100% recycled material or post-consumer content, with basis weight greater than 30 pounds)"<br>— <strong>CO HB-21-1162</strong> (enacted, Exemption available)</blockquote>
+</details>
+</section>
+<section class="lever">
+<h2>Reduce packaging material per unit (lightweight, right-size)</h2>
+<p>Source reduction means designing packaging to use less material per unit through lightweighting, right-sizing, and eliminating unnecessary layers. Enacted laws in California, Maine, and Colorado directly require or financially reward source reduction, making it both a compliance obligation and a cost-management lever.</p>
+<p><em>Backed by 9 bills (6 enacted) — <strong>Exemption available</strong> in 4 state(s) · <strong>Fee-advantaged</strong> in 2 state(s) · <strong>Required</strong> in 2 state(s) · <strong>Referenced</strong> in 2 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Minimize total packaging material weight per SKU across all markets</strong> <em>(required)</em>. CO HB-22-1355 requires that covered materials be designed to prevent or minimize negative environmental impacts, making material minimization a baseline design obligation, not an optional optimization. — CO HB-22-1355, CA SB-54</li><li><strong>Reduce plastic packaging weight to meet CA SB-54 source reduction targets</strong> <em>(required)</em>. CA SB-54 mandates that producer responsibility plans include source reduction of plastic covered material, so plastic packaging lines must have documented reduction roadmaps tied to PRO compliance submissions. — CA SB-54</li><li><strong>Track and reduce packaging weight sold into Maine to lower per-ton fees</strong> <em>(fee-advantaged)</em>. ME LD-1541 assesses producer fees based on the weight in tons of packaging sold into Maine, so every gram removed from a pack format directly reduces the fee liability. — ME LD-1541</li><li><strong>Design paper bags with basis weight at or below 30 lbs to secure CO exemption</strong> <em>(exemption)</em>. CO HB-21-1162 excludes paper bags with a basis weight of 30 pounds or less from the definition of 'carryout bag,' allowing lightweight paper formats to avoid associated regulatory obligations in Colorado. — CO HB-21-1162</li><li><strong>Audit Maine-bound SKUs; keep total annual packaging under 1 ton to qualify for exemption</strong> <em>(exemption)</em>. ME LD-1541 exempts producers that sold or distributed less than one ton of packaging material in total into Maine during the prior calendar year, making right-sizing and SKU rationalization a direct path to de minimis exemption for smaller product lines. — ME LD-1541</li><li><strong>Incorporate source reduction metrics into eco-modulation fee modeling for future compliance</strong> <em>(fee-advantaged)</em>. Proposed and in-committee bills in Vermont and California (VT H-142, CA SB-303) signal that eco-modulated fee structures will reward source reduction alongside recyclability and recycled content, so building weight-reduction KPIs into packaging briefs now positions teams ahead of likely fee schedules. — VT H-142, CA SB-303</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>Paper bag basis weight ≤30 lbs to qualify for carryout bag exemption (CO HB-21-1162)</li><li>Total packaging sold into Maine &lt;1 ton/year to qualify for producer exemption (ME LD-1541)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"Bags with paper basis weight of 30 pounds or less are excluded from the definition of 'carryout bag'"<br>— <strong>CO HB-21-1162</strong> (enacted, Exemption available)</blockquote>
+<blockquote>"Payments assessed and collected from producers based on the weight (tons) of packaging material sold, offered for sale or distributed for sale in or into Maine by each producer."<br>— <strong>ME LD-1541</strong> (enacted, Fee-advantaged)</blockquote>
+<blockquote>"Area rugs 11 feet by 15 feet in size or smaller are not covered products"<br>— <strong>CA AB-863</strong> (enacted, Exemption available)</blockquote>
+</details>
+</section>
+<section class="lever">
+<h2>Shift to reusable / refillable formats</h2>
+<p>The 'reuse_refill' lever directs design teams to engineer containers, cylinders, and bags for multiple use cycles rather than single-use disposal. Enacted laws in CA, CO, CT, ME, and OR already mandate or incentivize refillable/reusable formats across beverages, gas cylinders, and carryout bags, making proactive design alignment a compliance necessity.</p>
+<p><em>Backed by 8 bills (6 enacted) — <strong>Required</strong> in 3 state(s) · <strong>Fee-advantaged</strong> in 1 state(s) · <strong>Referenced</strong> in 1 state(s) · <strong>Exemption available</strong> in 1 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Design glass beverage containers for certified washing and refill cycles</strong> <em>(required)</em>. Beverage containers must be engineered to withstand repeated commercial washing and refilling, and must be processed through a certified refill processor before resale — a hard legal requirement in California. — CA AB-962, ME LD-1909</li><li><strong>Engineer gas cylinders to support refill, refurbishment, and stewardship programs</strong> <em>(required)</em>. Cylinders must be structurally designed for refilling and residual-gas capture, and must be compatible with manufacturer or industry stewardship collection and refurbishment systems to satisfy enacted obligations in CT and OR. — CT HB-5142, OR SB-582, NY A-8195</li><li><strong>Permanently mark refillable glass carbonated beverage containers with brand name</strong> <em>(exemption)</em>. Containers carrying a refund value of not less than 5¢ and a permanently marked brand name qualify for label-marking exemptions under Maine law, reducing compliance burden while signaling reusability. — ME LD-1909</li><li><strong>Design reusable carryout bags to meet durability and capacity specifications</strong> <em>(fee-advantaged)</em>. Bags must be manufactured for at least 125 uses, carry at least 22 lbs over 175 feet, have stitched handles, and be made of cloth, fiber, fabric, or recycled material such as PET to be excluded from single-use plastic bag fee obligations in Colorado. — CO HB-21-1162</li><li><strong>Integrate reuse and recovery pathways into paint product stewardship programs</strong> <em>(required)</em>. Paint product design and packaging should facilitate collection and reuse of postconsumer paint, as California law requires stewardship plans to actively promote reuse and reduce end-of-life generation. — CA SB-1143</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>≥125 use cycles for reusable carryout bags (CO HB-21-1162)</li><li>≥22 lbs carry capacity over 175 feet for reusable carryout bags (CO HB-21-1162)</li><li>≥5¢ refund value on refillable glass carbonated beverage containers for label-marking exemption (ME LD-1909)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"Reusable carryout bags (designed/manufactured for at least 125 uses, carry at least 22 lbs over 175 feet, stitched handles, made of cloth/fiber/fabric or recycled material such as PET) are excluded from 'single-use plastic carryout bag' definition"<br>— <strong>CO HB-21-1162</strong> (enacted, Fee-advantaged)</blockquote>
+<blockquote>"Beverage manufacturers must have their reusable glass beverage containers processed by a certified processor for subsequent washing for refill and sale"<br>— <strong>CA AB-962</strong> (enacted, Required)</blockquote>
+<blockquote>"Stewardship plan must provide for refilling or recycling cylinders and capturing residual gases for reuse"<br>— <strong>CT HB-5142</strong> (enacted, Required)</blockquote>
+</details>
+</section>
+<section class="lever">
+<h2>Eliminate restricted substances (PFAS, heavy metals, etc.)</h2>
+<p>Toxics elimination requires design teams to remove restricted substances—mercury, free-liquid electrolytes, and other hazardous materials—from products and packaging before they reach market. Multiple enacted state laws already prohibit or penalize these substances, and eco-modulation fee structures in both enacted and proposed EPR programs create direct financial incentives to go further.</p>
+<p><em>Backed by 16 bills (11 enacted) — <strong>Prohibited</strong> in 4 state(s) · <strong>Fee-advantaged</strong> in 4 state(s) · <strong>Referenced</strong> in 4 state(s) · <strong>Required</strong> in 2 state(s) · <strong>Exemption available</strong> in 2 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Eliminate mercury from all thermostat and switch designs immediately</strong> <em>(required)</em>. Mercury-added thermostats and mercury switches are subject to enacted collection mandates and phase-outs in California, New York, and Vermont; transition all new thermostat designs to mercury-free alternatives to avoid compliance obligations and collection program liability. — CA AB-732, CA AB-707, NY A-10284</li><li><strong>Design batteries with no free-liquid electrolyte in any covered product</strong> <em>(prohibited)</em>. Four enacted state laws (Colorado, Kentucky, Oregon, Vermont) explicitly prohibit or exclude from EPR coverage batteries containing electrolyte as a free liquid; use sealed, gel, or solid-state electrolyte chemistries to ensure compliance across all these jurisdictions. — CO SB-25-163, KY SB-49, OR HB-4144, VT S-254</li><li><strong>Eliminate mercury from battery chemistry above allowable thresholds</strong> <em>(prohibited)</em>. Proposed Minnesota legislation would prohibit manufacture and sale of batteries containing mercury above allowable thresholds; design battery formulations to be mercury-free now to future-proof against this prohibition. — MN SF-4679, MN HF-4565</li><li><strong>Remove hazardous substances from packaging to minimize eco-modulated fee penalties</strong> <em>(fee-advantaged)</em>. Enacted Maine EPR law and proposed Vermont and Maryland legislation reference eco-modulation of producer fees based on hazardous substance content; eliminating toxics from packaging materials reduces fee exposure as these schedules are finalized. — ME LD-1541, VT H-142, MD SB-686</li><li><strong>Reduce hazardous substances in battery chemistry to lower stewardship fees</strong> <em>(fee-advantaged)</em>. Proposed Minnesota legislation explicitly states that stewardship fees may be eco-modulated to incentivize batteries that are less hazardous; reformulating battery chemistry away from toxic materials positions products for lower fee tiers. — MN HF-4565</li><li><strong>Ensure containers are free of non-beverage contaminants before deposit redemption</strong> <em>(required)</em>. Oregon's enacted bottle bill allows dealers to refuse containers visibly contaminated by substances other than water, original-content residue, or ordinary dust; design container closures and labeling to prevent contamination that would disqualify products from deposit redemption. — OR SB-1520</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>Sealed lead-acid rechargeable batteries: no liquid electrolyte and ≤11 pounds to qualify for EPR exemption (VT S-254)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"mercury-added thermostats"<br>— <strong>CA AB-732</strong> (enacted, Required)</blockquote>
+<blockquote>"Batteries that contain an electrolyte as a free liquid"<br>— <strong>CO SB-25-163</strong> (enacted, Prohibited)</blockquote>
+<blockquote>"Batteries containing electrolyte as a free liquid"<br>— <strong>CT HB-5019</strong> (enacted, Exemption available)</blockquote>
+</details>
+</section>
+<section class="lever">
+<h2>Avoid banned / restricted materials and formats</h2>
+<p>Material restriction requires design teams to eliminate banned materials and formats before products reach market, avoiding regulatory non-compliance and fee penalties. Enacted state laws already prohibit specific plastics and formats; proposed legislation signals further restrictions that should inform near-term design decisions.</p>
+<p><em>Backed by 8 bills (4 enacted) — <strong>Prohibited</strong> in 3 state(s) · <strong>Exemption available</strong> in 2 state(s) · <strong>Fee-penalized</strong> in 1 state(s) · <strong>Required</strong> in 1 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Eliminate all expanded polystyrene (EPS) and blown polystyrene from packaging</strong> <em>(prohibited)</em>. Colorado law prohibits manufacture and distribution of EPS products including Styrofoam and expanded/extruded foam made from thermoplastic petrochemical styrene monomer; remove these materials from all packaging specifications for products sold in CO. — CO HB-21-1162</li><li><strong>Remove single-use plastic carryout bags from all retail packaging formats</strong> <em>(prohibited)</em>. Colorado enacted a ban effective January 1, 2024, and Vermont has a parallel bill in committee; design teams should eliminate single-use plastic bags across all markets to future-proof against multi-state adoption. — CO HB-21-1162, VT H-142</li><li><strong>Prioritize high-recyclability materials to minimize eco-modulated fee exposure</strong> <em>(fee-advantaged)</em>. Vermont's proposed PRO fee structure explicitly eco-modulates fees based on material type and recyclability; selecting materials with established end-of-life recycling pathways reduces fee liability as similar frameworks spread. — VT H-915</li><li><strong>Design packaging for ≥5-year durable use to qualify for producer responsibility exemption</strong> <em>(exemption)</em>. Colorado's producer responsibility law exempts packaging materials intended for long-term storage or protection of a durable product for at least five years; document intended service life in product specifications to substantiate the exemption claim. — CO HB-22-1355</li><li><strong>Design beverage caps as separable components to exclude them from PCR obligations</strong> <em>(exemption)</em>. Maine law excludes beverage caps screwed onto or affixed to nonrefillable beverage containers from the plastic beverage container definition, relieving those caps from recycled content requirements; ensure cap attachment method qualifies under this definition. — ME LD-1467</li><li><strong>Enroll architectural paint containers in a qualifying stewardship program to secure exemption</strong> <em>(exemption)</em>. Maine exempts architectural paint containers from packaging obligations provided a qualifying paint stewardship program is active and the stewardship organization recycles at least 90% of collected containers (or 80% with department approval); confirm program enrollment and recycling rate compliance before claiming the exemption. — ME LD-1423</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>≥5 years intended service life for durable packaging exemption (CO HB-22-1355)</li><li>90% recycling rate for architectural paint container stewardship exemption (ME LD-1423)</li><li>80% recycling rate minimum with department approval for architectural paint container exemption (ME LD-1423)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"On and after January 1, 2024: Do NOT provide single-use plastic carryout bags to customers (with limited inventory exception through June 1, 2024)"<br>— <strong>CO HB-21-1162</strong> (enacted, Prohibited)</blockquote>
+<blockquote>"Expanded polystyrene (EPS) products including blown polystyrene (Styrofoam), expanded or extruded foam made from thermoplastic petrochemical materials utilizing styrene monomer"<br>— <strong>CO HB-21-1162</strong> (enacted, Prohibited)</blockquote>
+<blockquote>"Beverage caps screwed onto or otherwise affixed to nonrefillable beverage containers are excluded from the definition of plastic beverage container"<br>— <strong>ME LD-1467</strong> (enacted, Exemption available)</blockquote>
+</details>
+</section>
+<section class="lever">
+<h2>Apply required recyclability / disposal labeling</h2>
+<p>Labeling and marking requirements span battery chemistry, recyclability claims, deposit refund values, and disposal instructions across multiple enacted state laws, making compliant label design a legal prerequisite for market access in key states. Design teams must audit every product and packaging label against these obligations before launch to avoid deceptive-claim liability and retailer refusal.</p>
+<p><em>Backed by 23 bills (13 enacted) — <strong>Required</strong> in 11 state(s) · <strong>Exemption available</strong> in 2 state(s) · <strong>Referenced</strong> in 2 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Mark covered batteries with chemistry type, producer ID, and disposal prohibition</strong> <em>(required)</em>. All covered batteries (including those embedded in products) must carry the manufacturer or producer name, battery chemistry identification, and a clear notice that the battery must not be disposed of as household waste — required by enacted law in California, Kentucky, and Connecticut, with similar requirements advancing in Minnesota and Maryland. — CA SB-1215, KY SB-49, CT HB-5019</li><li><strong>Never place a resin code inside chasing arrows unless recyclability is verified</strong> <em>(prohibited)</em>. Rigid plastic bottles and containers sold in California may only display a resin identification code inside the chasing-arrows symbol if the product demonstrably meets statewide recyclability requirements; otherwise use the resin code alone or replace with accurate disposal or compost directions to avoid deceptive-claim liability. — CA SB-343</li><li><strong>Emboss or permanently mark deposit refund value and state identifier on beverage containers</strong> <em>(required)</em>. Containers sold in Maine must clearly show the refund value (or 'RV') and 'Maine'/'ME' via embossing, stamping, labeling, or secure attachment — not on the container bottom — and Oregon requires a refund value statement on the label; brand identification must remain legible on the exterior throughout the container's life. — ME LD-1909, OR SB-1520, CA AB-1311, CA SB-1013</li><li><strong>Include a UPC on every beverage container label and update registration on any change</strong> <em>(required)</em>. Maine requires a universal product code for each beverage/container combination at registration, and any revision to the UPC or change in container size, composition, or glass color triggers a mandatory label registration renewal. — ME LD-1564</li><li><strong>Add recycling and free drop-off information to mattress and product labels</strong> <em>(required)</em>. California requires mattress labels (or accompanying consumer materials) to educate end users on recycling options and free drop-off or collection programs; apply the same principle to any product category covered by a state stewardship program. — CA AB-1478</li><li><strong>Explore digital labeling as a supplement to physical recyclability claim disclosures</strong> <em>(required)</em>. Oregon's enacted producer responsibility framework directs producers, working through the PRO, to develop recommendations for digital labeling to convey recyclability information — design teams should build QR-code or digital-link infrastructure now to future-proof compliance. — OR SB-123</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>Refund value ≥ 5¢ on refillable glass carbonated containers qualifies for exemption from standard label marking (ME LD-1909)</li><li>Battery-embedded product labels must be in place for products sold on or after January 1, 2026 (CA SB-1215)</li><li>Newly covered beverage containers (added January 1, 2024) exempt from California labeling requirements until July 1, 2025 (CA SB-1013)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"Ensure covered battery-embedded products sold on or after January 1, 2026 are labeled with the manufacturer's name or brand label, readily visible"<br>— <strong>CA SB-1215</strong> (enacted, Required)</blockquote>
+<blockquote>"Ensure covered battery-embedded products are labeled with information identifying the chemistry of the embedded battery"<br>— <strong>CA SB-1215</strong> (enacted, Required)</blockquote>
+<blockquote>"Manufacturers of home furnishings/thermal insulation must include flame retardant chemical statement on product labels"<br>— <strong>CA SB-814</strong> (enacted, Required)</blockquote>
+</details>
+</section>
+<section class="lever">
+<h2>Use certified-compostable materials where specified</h2>
+<p>Compostability is a legally recognized alternative pathway to recyclability for covered packaging materials in California, with a hard compliance deadline of 2032. Design teams should evaluate compostable material options now to meet enacted obligations and unlock available product-category exemptions.</p>
+<p><em>Backed by 3 bills (3 enacted) — <strong>Exemption available</strong> in 1 state(s) · <strong>Required</strong> in 1 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Design covered packaging to be certified compostable as a recyclability alternative</strong> <em>(required)</em>. Under CA SB-54, any covered material offered for sale, distributed, or imported into California on or after January 1, 2032 must be either recyclable or compostable — begin material qualification and certification processes well ahead of that deadline. — CA SB-54</li><li><strong>Pursue compostable labeling for carpet products to secure statutory exemption</strong> <em>(exemption)</em>. Carpet that meets the requirements of CA Public Resources Code Section 42357 and is labeled 'compostable' is excluded from covered-product obligations, making certification and labeling a direct compliance strategy for carpet lines. — CA AB-863</li><li><strong>Route compostable packaging to organics programs, not recycling streams</strong> <em>(required)</em>. Under CA SB-343, directing consumers to compost or use an organics recycling program is explicitly not treated as a recyclability claim, so on-pack end-of-life instructions for compostable products must reference composting or organics programs — not recycling — to remain legally accurate. — CA SB-343</li><li><strong>Obtain third-party compostability certification before making any compostable claim</strong> <em>(required)</em>. Because enacted law ties exemptions and compliance credit to materials that formally 'meet requirements' or are properly 'labeled compostable,' design teams must secure recognized certification (e.g., BPI or equivalent) prior to printing any compostable claim on product or packaging. — CA SB-54, CA AB-863</li><li><strong>Audit the full product portfolio to identify candidates for compostable conversion by 2030</strong> <em>(required)</em>. With the 2032 statutory deadline for covered materials, a 2030 internal audit milestone allows time for material reformulation, supplier qualification, certification, and packaging redesign before legal exposure begins. — CA SB-54</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>100% of covered materials recyclable or compostable by January 1, 2032 (CA SB-54)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"Carpet that meets requirements of Section 42357 to be labeled 'compostable' is not a covered product"<br>— <strong>CA AB-863</strong> (enacted, Exemption available)</blockquote>
+<blockquote>"Ensure covered material offered for sale, distributed, or imported in or into the state on or after January 1, 2032, is recyclable or compostable"<br>— <strong>CA SB-54</strong> (enacted, Required)</blockquote>
+<blockquote>"Directing a consumer to compost or properly dispose of a consumer good through an organics recycling program is not considered directing a consumer to recycle"<br>— <strong>CA SB-343</strong> (enacted, Exemption available)</blockquote>
+</details>
+</section>
+<div class="part">Part 2 — Product design &amp; right to repair</div>
+<p><em>Adjacent legislation: right-to-repair and durability laws don't use EPR fees, but they impose design obligations on the same product teams — and they are the fastest-moving category in this dataset.</em></p>
+<section class="lever">
+<h2>Design for repairability, spare-parts access, and longevity</h2>
+<p>Design for repairability requires that products be engineered so owners and independent repair providers can diagnose, maintain, and fix them using openly available parts, tools, and documentation — without software locks or pairing restrictions blocking the process. Multiple enacted state laws now mandate this across consumer electronics, agricultural equipment, wheelchairs, and motor vehicles, creating legal exposure for products that fail to meet these standards.</p>
+<p><em>Backed by 25 bills (21 enacted) — <strong>Required</strong> in 8 state(s) · <strong>Exemption available</strong> in 6 state(s) · <strong>Prohibited</strong> in 2 state(s) · <strong>Referenced</strong> in 2 state(s) · <strong>Fee-advantaged</strong> in 1 state(s).</em></p>
+<p class="kicker">Design imperatives</p>
+<ul><li><strong>Eliminate parts-pairing software that blocks or degrades functional replacement parts</strong> <em>(prohibited)</em>. Do not use unique-identifier software to prevent installation of replacement parts (including unapproved ones), reduce device functionality after installation, or display non-dismissible misleading alerts about unrecognized components. — OR SB-550, OR SB-1596, MN SF-1598</li><li><strong>Publish repair documentation, firmware, and software tools at no charge</strong> <em>(required)</em>. Make all manuals, schematics, service codes, embedded software, firmware, and diagnostic/calibration software freely available to owners and independent repair providers; only reasonable actual costs for physical printed or shipped copies may be charged. — OR SB-550, NY S-4104, MN SF-1598, CA SB-1384, RI SB-884, RI HB-5017</li><li><strong>Supply replacement parts to independent repairers on parity pricing terms</strong> <em>(required)</em>. Make all parts available to independent repair providers and owners at costs and terms equivalent to the most favorable pricing — including discounts, rebates, and delivery terms — offered to authorized service providers. — OR SB-550, NY S-4104, MN SF-1598, RI HB-5017, RI SB-884, CO HB-24-1121</li><li><strong>Design repair tools to function without OEM authorization or internet connectivity</strong> <em>(required)</em>. Hardware and software diagnostic/repair tools must operate offline and without requiring OEM registration, pairing approval, or internet access, and must not impose impediments to access or efficient use. — NY S-4104, MN SF-1598, OR SB-550</li><li><strong>Commit to a minimum post-manufacture repair-support window by price tier</strong> <em>(required)</em>. Plan parts, documentation, and tool availability from the start of product development: at least 3 years of support for products with wholesale price $50–$99.99, and at least 7 years for products at $100 or more, measured from the last date the model was manufactured. — CA SB-244</li><li><strong>Ensure wheelchair repairs can be completed within 10 business days of request</strong> <em>(required)</em>. Design service logistics and spare-parts stocking for powered wheelchairs so that any repair requested by a Connecticut customer can be completed within 10 business days, excluding time attributable to insurer prior-authorization delays or parts-delivery lead times. — CT SB-308</li></ul>
+<p class="kicker">Targets to hit</p>
+<ul><li>3 years post-manufacture repair support for products with wholesale price $50–$99.99 (CA SB-244)</li><li>7 years post-manufacture repair support for products with wholesale price $100 or more (CA SB-244)</li><li>10 business days maximum repair turnaround for wheelchairs (CT SB-308)</li></ul>
+<details><summary>Evidence (statutory language)</summary>
+<blockquote>"For consumer equipment manufactured for the first time and first sold or used in Oregon after January 1, 2025: not use parts pairing to prevent or inhibit installation or enabling of otherwise functional replacement parts (including unapproved parts)"<br>— <strong>OR SB-550</strong> (enacted, Prohibited)</blockquote>
+<blockquote>"For consumer equipment manufactured for the first time and first sold or used in Oregon after January 1, 2025: not use parts pairing to reduce functionality or performance of consumer equipment"<br>— <strong>OR SB-550</strong> (enacted, Prohibited)</blockquote>
+<blockquote>"For consumer equipment manufactured for the first time and first sold or used in Oregon after January 1, 2025: not use parts pairing to cause consumer equipment to display misleading alerts or warnings about unidentified parts that the owner cannot immediately dismiss"<br>— <strong>OR SB-550</strong> (enacted, Prohibited)</blockquote>
+</details>
+</section>
+<div class="part">Methodology &amp; limits</div>
+<ul><li><strong>Source.</strong> 74 bills across 12 states classified and analyzed by SignalScout; design signals extracted from each bill's compliance text and <strong>verified to be verbatim</strong> before inclusion (no paraphrased citations).</li><li><strong>Authority.</strong> Enacted laws are current obligations; proposed bills indicate direction and may change or fail. Each principle notes how many of its backing bills are enacted.</li><li><strong>Coverage.</strong> Drawn from the bills with full compliance extractions to date — strong on flagship enacted programs (CA, OR, CO, ME, CT, MN, VT), lighter on early-stage bills.</li><li><strong>Costs.</strong> No fee or cost figures are asserted; eco-modulation rates are set by producer responsibility organizations (e.g. Circular Action Alliance) and are pending. Once published, each design lever maps to fee exposure based on the volume of covered product you sell.</li><li><strong>This is design guidance, not legal advice.</strong> Confirm obligations against the statute and your counsel for the states you operate in.</li></ul>
+</div>
+</body></html>

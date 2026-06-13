@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { CompassIcon, LockIcon } from '@/components/ui/icons';
-import { RequestAccessModal } from '@/components/access/RequestAccessModal';
+import { useAuth } from '@/components/auth/AuthContext';
+import { startProCheckout, openFullGuide } from '@/lib/billing';
 import { TEASER_LEVERS, GUIDE_COVERAGE } from '@/data/designGuideTeaser';
 
 // The Free teaser surfaces the headline design imperative per lever — enough to know what the law
@@ -21,7 +21,44 @@ const OBLIGATION_STYLE: Record<string, string> = {
 };
 
 export default function DesignGuidePage() {
-  const [modalOpen, setModalOpen] = useState(false);
+  const { user, isPro, loading, openAuth, getToken, refreshEntitlement } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  // Returning from Stripe Checkout: the webhook may have just upgraded this account, so re-check
+  // entitlement a few times (webhook delivery can lag the redirect by a second or two).
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.location.search.includes('checkout=success')) return;
+    let n = 0;
+    const t = setInterval(() => {
+      refreshEntitlement();
+      if (++n >= 4) clearInterval(t);
+    }, 1500);
+    return () => clearInterval(t);
+  }, [refreshEntitlement]);
+
+  async function handlePrimary() {
+    setError('');
+    if (!user) {
+      openAuth();
+      return;
+    }
+    setBusy(true);
+    try {
+      if (isPro) await openFullGuide(getToken);
+      else await startProCheckout(getToken);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const ctaLabel = !user
+    ? 'Sign in to unlock →'
+    : isPro
+      ? 'Open the full guide →'
+      : 'Upgrade to Pro — $39/mo →';
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
@@ -89,13 +126,18 @@ export default function DesignGuidePage() {
             current as bills move. The teaser is the headline; this is the playbook.
           </p>
         </div>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-green-accent text-bg-primary px-5 py-2.5 font-medium text-sm hover:opacity-90 transition-opacity"
-        >
-          <LockIcon className="text-sm" />
-          Get the full guide →
-        </button>
+        <div className="shrink-0 flex flex-col items-stretch gap-1.5">
+          <button
+            onClick={handlePrimary}
+            disabled={busy || loading}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-accent text-bg-primary px-5 py-2.5 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-60"
+          >
+            {isPro ? <CompassIcon className="text-sm" /> : <LockIcon className="text-sm" />}
+            {busy ? 'Working…' : ctaLabel}
+          </button>
+          {isPro && <span className="text-green-accent text-xs text-center">✓ Pro — full access</span>}
+          {error && <span className="text-urgency-high text-xs text-center max-w-[14rem]">{error}</span>}
+        </div>
       </section>
 
       {/* Enterprise / consulting line */}
@@ -113,15 +155,6 @@ export default function DesignGuidePage() {
           Have a worthy challenge? →
         </a>
       </section>
-
-      {modalOpen && (
-        <RequestAccessModal
-          plan="pro"
-          planLabel="Design Guide (Pro)"
-          source="design_guide"
-          onClose={() => setModalOpen(false)}
-        />
-      )}
     </div>
   );
 }

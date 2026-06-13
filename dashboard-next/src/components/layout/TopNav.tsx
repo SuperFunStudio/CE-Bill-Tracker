@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeContext';
 import { useScrolled } from '@/hooks/useScrolled';
+import { AuthButton } from '@/components/auth/AuthButton';
 import {
   HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, SunIcon, MoonIcon,
 } from '@/components/ui/icons';
@@ -113,8 +114,11 @@ export function TopNav() {
       </div>
 
       {/* Desktop section bar — visible at sm+ */}
-      <nav className="hidden sm:flex items-center justify-center flex-wrap gap-x-5 gap-y-1 border-t border-border-default px-4 py-2">
+      <nav className="relative hidden sm:flex items-center justify-center flex-wrap gap-x-5 gap-y-1 border-t border-border-default px-4 py-2">
         {renderLinks('bar')}
+        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+          <AuthButton />
+        </div>
       </nav>
 
       {/* Mobile dropdown menu (opened by the hamburger) */}
@@ -122,7 +126,10 @@ export function TopNav() {
         <nav className="sm:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
           <div className="max-w-6xl mx-auto p-3 space-y-1">
             {renderLinks('menu')}
-            <div className="text-text-muted text-xs text-center pt-2 border-t border-border-default mt-2">
+            <div className="pt-2 border-t border-border-default mt-2" onClick={() => setMenuOpen(false)}>
+              <AuthButton />
+            </div>
+            <div className="text-text-muted text-xs text-center pt-2">
               Circularity legislation tracker · Beta
             </div>
           </div>

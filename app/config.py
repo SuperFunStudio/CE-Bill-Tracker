@@ -19,6 +19,9 @@ class Settings(BaseSettings):
         "legiscan_api_key",
         "sendgrid_api_key",
         "open_states_api_key",
+        "stripe_secret_key",
+        "stripe_pro_price_id",
+        "stripe_webhook_secret",
         mode="before",
     )
     @classmethod
@@ -123,12 +126,26 @@ class Settings(BaseSettings):
     # scripts/send_welcome.py before enabling. enable_welcome_recap separately gates the optional
     # one-paragraph LLM "championship recap" flourish (needs anthropic_api_key) — the email renders
     # fine without it, so the recap can stay off until its voice has been reviewed.
-    enable_welcome_email: bool = False
-    enable_welcome_recap: bool = False
+    enable_welcome_email: bool = True
+    enable_welcome_recap: bool = True
 
     # Where "request access / pricing" lead notifications go. Each capture also auto-replies to the
     # requester. Both sends are best-effort and require sendgrid_api_key + a verified from-address.
     access_request_notify_email: str = "kenny@superfun.studio"
+
+    # Stripe premium-seat billing + Firebase Auth. Dev reads sandbox keys from .env; prod pulls
+    # STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET from Secret Manager (see cloudbuild --set-secrets).
+    # See gating-and-monetization-plan.
+    stripe_secret_key: str = ""
+    stripe_pro_price_id: str = ""
+    stripe_webhook_secret: str = ""
+    # Non-secret, baked into the frontend build — not used server-side. Declared only so a shared
+    # .env carrying STRIPE_PUBLISHABLE_KEY doesn't trip extra='forbid' and crash the backend.
+    stripe_publishable_key: str = ""
+    # Firebase project whose ID tokens we verify on premium routes (firebase-admin).
+    firebase_project_id: str = "ce-bill-tracker"
+    # Dashboard origin Stripe Checkout returns to (success/cancel) and that we allow for auth.
+    app_base_url: str = "https://ce-bill-tracker.web.app"
 
     model_config = SettingsConfigDict(
         env_file=".env",

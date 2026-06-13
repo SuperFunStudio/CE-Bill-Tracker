@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import access, bills, alerts, pipeline, health, federal, companies, webhooks
+from app.api import access, bills, alerts, pipeline, health, federal, companies, webhooks, billing, design
 from app.api.federal import litigation_router
 
 
@@ -55,3 +55,5 @@ app.include_router(companies.bills_exposure_router)
 app.include_router(companies.queue_router)
 app.include_router(webhooks.router)
 app.include_router(litigation_router)
+app.include_router(billing.router)
+app.include_router(design.router)

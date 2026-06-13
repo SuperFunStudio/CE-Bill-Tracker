@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from './ThemeContext';
 import { ScopeProvider } from '@/components/scope/ScopeContext';
+import { AuthProvider } from '@/components/auth/AuthContext';
+import { AuthModal } from '@/components/auth/AuthModal';
 import { hydrateSnapshots } from '@/lib/snapshot';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -24,9 +26,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <ScopeProvider>
-          {children}
-        </ScopeProvider>
+        <AuthProvider>
+          <ScopeProvider>
+            {children}
+          </ScopeProvider>
+          <AuthModal />
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -549,3 +549,43 @@ class CLAlertSubscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("idx_cl_subs_active", "active"),)
+
+
+class Entitlement(Base):
+    """A paid seat. One row per account, keyed by email — the stable identity that bridges Firebase
+    Auth (who the user is) and Stripe (whether they paid).
+
+    Firebase Auth proves identity (firebase_uid/email); Stripe proves payment. The billing webhook
+    upserts this row on checkout + subscription changes. Premium routes treat the account as Pro when
+    plan == "pro" AND status is active/trialing. Distinct from AccessRequest, which only records
+    willingness-to-pay interest (no entitlement). See gating-and-monetization-plan.
+    """
+
+    __tablename__ = "entitlements"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    firebase_uid: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
+    # "free" until a subscription activates; "pro" while a Pro subscription is live.
+    plan: Mapped[str] = mapped_column(String(30), nullable=False, default="free", server_default="free")
+    # Stripe subscription status: active | trialing | past_due | canceled | incomplete | unpaid.
+    status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    current_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_entitlements_email", "email"),
+        Index("idx_entitlements_firebase_uid", "firebase_uid"),
+        Index("idx_entitlements_stripe_customer", "stripe_customer_id"),
+    )

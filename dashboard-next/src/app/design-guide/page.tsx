@@ -1,29 +1,32 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { CompassIcon, LockIcon } from '@/components/ui/icons';
 import { useAuth } from '@/components/auth/AuthContext';
+import { useBills } from '@/hooks/useBills';
+import { BillModal } from '@/components/ui/BillModal';
+import { PrincipleCard } from '@/components/design-guide/PrincipleCard';
 import { startProCheckout, openFullGuide } from '@/lib/billing';
 import { TEASER_LEVERS, GUIDE_COVERAGE } from '@/data/designGuideTeaser';
 
-// The Free teaser surfaces the headline design imperative per lever — enough to know what the law
-// already requires you to design for. The full guide (every imperative, numeric targets, statutory
+// The Free teaser surfaces the headline design imperative per lever — what to design for, which
+// products/materials it lands on, and the grounded source bills behind it (each opens the same
+// modal as the Bill Explorer). The full guide (every imperative, numeric targets, statutory
 // evidence, printable) is the Pro deliverable; the SKU/portfolio-scoped version is Enterprise.
-// Interim gating = the request-access capture (no billing yet) — see gating-and-monetization-plan.
 
 const BOOKING_URL = 'https://calendar.app.google/QPXh1qXWhNWxXo9n6';
-
-const OBLIGATION_STYLE: Record<string, string> = {
-  Required: 'text-urgency-high border-urgency-high/40',
-  Prohibited: 'text-urgency-high border-urgency-high/40',
-  'Fee-penalized': 'text-amber-500 border-amber-500/40',
-  'Fee-advantaged': 'text-green-accent border-green-accent/40',
-};
 
 export default function DesignGuidePage() {
   const { user, isPro, loading, openAuth, getToken, refreshEntitlement } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  // Bill tags on a flipped principle card open the shared BillModal. We resolve a bill id to a
+  // full BillSummary from the same dataset the Bill Explorer uses.
+  const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
+  const billsById = useMemo(() => new Map(bills.map(b => [b.id, b])), [bills]);
+  const [selectedBillId, setSelectedBillId] = useState<number | null>(null);
+  const selectedBill = selectedBillId != null ? billsById.get(selectedBillId) ?? null : null;
 
   // Returning from Stripe Checkout: the webhook may have just upgraded this account, so re-check
   // entitlement a few times (webhook delivery can lag the redirect by a second or two).
@@ -75,40 +78,17 @@ export default function DesignGuidePage() {
         <span className="text-text-primary font-medium">{GUIDE_COVERAGE.states} states</span>.
       </p>
 
+      <p className="text-text-muted text-xs -mt-4">
+        Flip any card (↻) to see the bills it’s sourced from — each opens the full bill detail.
+      </p>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
         {TEASER_LEVERS.map(l => (
-          <div
-            key={l.lever}
-            className="flex flex-col rounded-xl border border-border-default bg-bg-secondary p-5"
-          >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <h2 className="font-serif text-lg text-text-primary leading-tight">{l.name}</h2>
-              <span
-                className={`shrink-0 text-[10px] uppercase tracking-wider rounded-full border px-2 py-0.5 ${
-                  OBLIGATION_STYLE[l.obligation] ?? 'text-text-muted border-border-default'
-                }`}
-              >
-                {l.obligation}
-              </span>
-            </div>
-            <p className="text-text-primary text-sm font-medium mb-2">{l.headline}</p>
-            {l.direction && (
-              <p className="text-text-secondary text-sm leading-relaxed mb-3">{l.direction}</p>
-            )}
-            {l.evidence && (
-              <blockquote className="mt-auto border-l-2 border-green-accent/40 pl-3 text-text-muted text-xs italic leading-relaxed">
-                “{l.evidence.quote}”
-                <span className="not-italic block mt-1 text-text-secondary">
-                  — {l.evidence.state} {l.evidence.bill}
-                </span>
-              </blockquote>
-            )}
-            <p className="mt-3 pt-3 border-t border-border-default text-text-muted text-xs">
-              {l.billCount} bills · {l.states.length} states
-            </p>
-          </div>
+          <PrincipleCard key={l.lever} lever={l} onOpenBill={setSelectedBillId} />
         ))}
       </div>
+
+      <BillModal bill={selectedBill} onClose={() => setSelectedBillId(null)} />
 
       {/* Pro gate — the full guide */}
       <section className="rounded-xl border border-green-accent bg-green-dark/20 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5">

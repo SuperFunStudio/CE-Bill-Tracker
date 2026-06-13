@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
 
 export const metadata: Metadata = {
@@ -19,12 +20,10 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 export default function AboutPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-10">
-      {/* Intro */}
-      <header className="space-y-3">
-        <h1 className="font-serif uppercase tracking-[0.06em] text-text-primary text-3xl sm:text-4xl">
-          About
-        </h1>
-      </header>
+      <GazetteHeader
+        title="About"
+        subtitle="Who's behind Battle of the Bills, and how it's built."
+      />
 
       {/* Mission — product voice */}
       <section>

@@ -43,10 +43,9 @@ const TIERS: Tier[] = [
     who: 'For sustainability and compliance managers, and solo consultants.',
     features: [
       'Everything in Free, plus:',
-      'Personal watch lists & saved views',
+      'Personal watch lists',
       'Portfolio-scoped deadline dashboard',
-      'Bill change-tracking & diffs',
-      'Priority deadline alerts',
+      'Material and Product Design guide',
     ],
     cta: 'Request access & pricing',
     highlight: true,

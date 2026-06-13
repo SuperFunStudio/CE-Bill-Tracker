@@ -589,3 +589,49 @@ class Entitlement(Base):
         Index("idx_entitlements_firebase_uid", "firebase_uid"),
         Index("idx_entitlements_stripe_customer", "stripe_customer_id"),
     )
+
+
+class UserSettings(Base):
+    """Per-account UI preferences, keyed by the immutable Firebase uid. Today this holds the saved
+    scope (states + materials); prefs is JSONB so new preferences don't need a migration. localStorage
+    stays the anonymous/offline cache and instant-paint source; this is the cross-device source of
+    truth once a user signs in. Free — any authenticated user. See gating-and-monetization-plan.
+    """
+
+    __tablename__ = "user_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    firebase_uid: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    prefs: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WatchlistItem(Base):
+    """A bill an account follows — the Pro 'personal watch list'. Keyed by Firebase uid + bill, with
+    ON DELETE CASCADE so a removed bill drops out of every watch list. Pro-gated at the API layer
+    (require_pro). See gating-and-monetization-plan.
+    """
+
+    __tablename__ = "user_watchlist"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    firebase_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    bill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bills.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("firebase_uid", "bill_id", name="uq_watchlist_uid_bill"),
+        Index("idx_watchlist_uid", "firebase_uid"),
+    )

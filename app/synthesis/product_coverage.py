@@ -246,9 +246,13 @@ class ProductCoverageExtractor:
                 return block.input.get("products", []) or []
         return []
 
-    async def extract(self, bill: dict) -> tuple[list[ProductCoverage], int]:
+    async def extract(self, bill: dict, max_chars: int = 14000) -> tuple[list[ProductCoverage], int]:
         """bill: {id, state, bill_number, title, instrument_type, categories[list], full_text,
-        compliance_details(dict|None)}. Returns (validated coverages, n_dropped_for_provenance)."""
+        compliance_details(dict|None)}. Returns (validated coverages, n_dropped_for_provenance).
+
+        max_chars caps the bill-text window sent to the model (~4 chars/token). The default suits
+        most bills; raise it for long bills whose product definitions sit far in (e.g. OLIS pages
+        carry ~18K of nav chrome before the bill text)."""
         relationship = RELATIONSHIP_BY_INSTRUMENT.get(bill.get("instrument_type") or "")
         if relationship is None:
             return [], 0
@@ -270,7 +274,7 @@ class ProductCoverageExtractor:
             relationship=relationship,
             relationship_desc=_REL_DESC.get(relationship, relationship),
             catalog=catalog,
-            text=corpus[:14000],  # ~3.5K tokens of bill text
+            text=corpus[:max_chars],
         )
         raw = await self._call(prompt)
         return validate_coverages(raw, corpus, bill, relationship)

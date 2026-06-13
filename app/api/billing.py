@@ -10,6 +10,7 @@ See gating-and-monetization-plan.
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import stripe
@@ -144,15 +145,13 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     secret = settings.stripe_webhook_secret
     if secret:
         try:
-            event = stripe.Webhook.construct_event(body, sig, secret)
+            stripe.Webhook.construct_event(body, sig, secret)  # verify signature; raises on mismatch
         except Exception as e:
             log.warning("stripe_webhook_bad_signature", error=str(e))
             raise HTTPException(status_code=400, detail="invalid signature")
-    else:
-        # No signing secret configured yet (pre-setup) — parse unverified. Dev only.
-        import json
-
-        event = json.loads(body)
+    # Always handle the event as a plain dict. Stripe's StripeObject routes .get() through
+    # __getattr__ and raises AttributeError/KeyError, so we never touch the SDK object directly.
+    event = json.loads(body)
 
     etype = event["type"]
     obj = event["data"]["object"]
@@ -171,7 +170,8 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             sub_id = obj.get("subscription")
             if sub_id:
                 try:
-                    sub = await run_in_threadpool(stripe.Subscription.retrieve, sub_id)
+                    sub_obj = await run_in_threadpool(stripe.Subscription.retrieve, sub_id)
+                    sub = sub_obj.to_dict() if hasattr(sub_obj, "to_dict") else dict(sub_obj)
                     ent.status = sub.get("status", "active")
                     ent.current_period_end = _period_end(sub)
                 except Exception as e:

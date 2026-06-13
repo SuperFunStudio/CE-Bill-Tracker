@@ -1,6 +1,8 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Scope, EMPTY_SCOPE, isEmptyScope, loadScope, saveScope, clearScope } from '@/lib/scope';
+import { useAuth } from '@/components/auth/AuthContext';
+import { fetchSettings, saveSettings, type Prefs } from '@/lib/userSettings';
 
 interface ScopeContextValue {
   /** True once we've read localStorage — guards against SSR/first-paint flash. */
@@ -38,12 +40,16 @@ const ScopeContext = createContext<ScopeContextValue>({
 });
 
 export function ScopeProvider({ children }: { children: React.ReactNode }) {
+  const { user, getToken } = useAuth();
   const [ready, setReady] = useState(false);
   const [scope, setScope] = useState<Scope>(EMPTY_SCOPE);
   const [isConfigured, setIsConfigured] = useState(false);
   const [scoped, setScoped] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
+  // Last-known backend prefs, so persisting scope doesn't clobber other keys (e.g. saved views).
+  const prefsRef = useRef<Prefs>({});
 
+  // localStorage is the immediate / anonymous / offline source — read it first for instant paint.
   useEffect(() => {
     const saved = loadScope();
     if (saved) {
@@ -54,13 +60,68 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, []);
 
-  const saveAndClose = useCallback((s: Scope) => {
-    saveScope(s);
-    setScope(s);
-    setIsConfigured(true);
-    setScoped(!isEmptyScope(s));
-    setEditorOpen(false);
-  }, []);
+  // Best-effort push of scope state to the backend (cross-device persistence) when signed in.
+  const persist = useCallback(
+    async (next: { scope: Scope; isConfigured: boolean; scoped: boolean }) => {
+      if (!user) return;
+      try {
+        prefsRef.current = {
+          ...prefsRef.current,
+          scope: next.scope,
+          scopeConfigured: next.isConfigured,
+          scoped: next.scoped,
+        };
+        await saveSettings(await getToken(), prefsRef.current);
+      } catch {
+        /* personalization is best-effort */
+      }
+    },
+    [user, getToken],
+  );
+
+  // On sign-in: adopt the account's saved scope (cross-device truth). If the account has none yet
+  // but this device has a local scope, push the local one up so it follows the user.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const prefs = await fetchSettings(await getToken());
+      if (cancelled) return;
+      prefsRef.current = prefs;
+      const backendScope = prefs.scope as Scope | undefined;
+      if (
+        backendScope &&
+        Array.isArray(backendScope.states) &&
+        Array.isArray(backendScope.materials)
+      ) {
+        setScope(backendScope);
+        setIsConfigured(Boolean(prefs.scopeConfigured));
+        setScoped(
+          prefs.scoped === undefined ? !isEmptyScope(backendScope) : Boolean(prefs.scoped),
+        );
+        saveScope(backendScope);
+      } else if (isConfigured) {
+        persist({ scope, isConfigured, scoped });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only re-run when the signed-in user changes — we intentionally snapshot local state at sign-in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const saveAndClose = useCallback(
+    (s: Scope) => {
+      saveScope(s);
+      setScope(s);
+      setIsConfigured(true);
+      setScoped(!isEmptyScope(s));
+      setEditorOpen(false);
+      persist({ scope: s, isConfigured: true, scoped: !isEmptyScope(s) });
+    },
+    [persist],
+  );
 
   const skip = useCallback(() => {
     saveScope(EMPTY_SCOPE);
@@ -68,7 +129,8 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     setIsConfigured(true);
     setScoped(false);
     setEditorOpen(false);
-  }, []);
+    persist({ scope: EMPTY_SCOPE, isConfigured: true, scoped: false });
+  }, [persist]);
 
   const reset = useCallback(() => {
     clearScope();
@@ -76,7 +138,16 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     setIsConfigured(false);
     setScoped(true);
     setEditorOpen(false);
-  }, []);
+    persist({ scope: EMPTY_SCOPE, isConfigured: false, scoped: true });
+  }, [persist]);
+
+  const setScopedPersist = useCallback(
+    (v: boolean) => {
+      setScoped(v);
+      persist({ scope, isConfigured, scoped: v });
+    },
+    [persist, scope, isConfigured],
+  );
 
   const value = useMemo<ScopeContextValue>(
     () => ({
@@ -87,12 +158,12 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
       editorOpen,
       saveAndClose,
       skip,
-      setScoped,
+      setScoped: setScopedPersist,
       openEditor: () => setEditorOpen(true),
       closeEditor: () => setEditorOpen(false),
       reset,
     }),
-    [ready, scope, isConfigured, scoped, editorOpen, saveAndClose, skip, reset],
+    [ready, scope, isConfigured, scoped, editorOpen, saveAndClose, skip, setScopedPersist, reset],
   );
 
   return <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>;

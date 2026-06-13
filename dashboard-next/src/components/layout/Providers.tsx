@@ -5,6 +5,7 @@ import { ThemeProvider } from './ThemeContext';
 import { ScopeProvider } from '@/components/scope/ScopeContext';
 import { AuthProvider } from '@/components/auth/AuthContext';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { WatchlistProvider } from '@/components/watchlist/WatchlistContext';
 import { hydrateSnapshots } from '@/lib/snapshot';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -27,9 +28,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <ScopeProvider>
-            {children}
-          </ScopeProvider>
+          <WatchlistProvider>
+            <ScopeProvider>
+              {children}
+            </ScopeProvider>
+          </WatchlistProvider>
           <AuthModal />
         </AuthProvider>
       </ThemeProvider>

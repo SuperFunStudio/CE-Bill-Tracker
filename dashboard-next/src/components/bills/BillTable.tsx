@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, statusBadge } from '@/lib/utils';
 import { BillModal } from '@/components/ui/BillModal';
+import { WatchStar } from '@/components/watchlist/WatchStar';
 
 interface BillTableProps {
   bills: BillSummary[];
@@ -119,7 +120,10 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
                 <td className="px-3 py-2">
                   <LitigationBadge bill={bill} />
                 </td>
-                <td className="px-2 py-2 text-text-muted text-xs text-center">›</td>
+                <td className="px-2 py-2 text-center whitespace-nowrap">
+                  <WatchStar billId={bill.id} />
+                  <span className="text-text-muted text-xs ml-0.5">›</span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -149,6 +153,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
                 </span>
               )}
               <LitigationBadge bill={bill} />
+              <span className="ml-auto"><WatchStar billId={bill.id} /></span>
             </div>
             {/* Row 2: title (2-line clamp) */}
             <div className="text-text-primary text-sm line-clamp-2">

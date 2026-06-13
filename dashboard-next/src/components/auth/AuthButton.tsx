@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { useAuth } from './AuthContext';
 import { openBillingPortal } from '@/lib/billing';
 
@@ -46,6 +47,13 @@ export function AuthButton() {
       </button>
       {open && (
         <div className="absolute right-0 mt-1 w-48 rounded-lg border border-border-default bg-bg-secondary shadow-lg p-1 z-50">
+          <Link
+            href="/watchlist"
+            onClick={() => setOpen(false)}
+            className="block w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-bg-primary rounded"
+          >
+            My watchlist
+          </Link>
           {isPro && (
             <button
               onClick={async () => { setOpen(false); try { await openBillingPortal(getToken); } catch {} }}

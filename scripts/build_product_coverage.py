@@ -80,6 +80,8 @@ async def main() -> None:
     ap.add_argument("--concurrency", type=int, default=5, help="Parallel fetch+extract pipelines.")
     ap.add_argument("--category", choices=CATEGORIES, default=None,
                     help="Restrict to one stream (default: electronics + batteries).")
+    ap.add_argument("--bill-ids", default=None,
+                    help="Comma-separated bill ids to (re)process — e.g. retry the no-text set.")
     ap.add_argument("--persist", action="store_true",
                     help="Write to bill_product_coverage (replaces rows for processed bills).")
     args = ap.parse_args()
@@ -87,20 +89,26 @@ async def main() -> None:
     wanted = [args.category] if args.category else list(CATEGORIES)
     instruments = list(RELATIONSHIP_BY_INSTRUMENT)
 
+    bill_ids = [int(x) for x in args.bill_ids.split(",") if x.strip()] if args.bill_ids else None
+
     conn = await asyncpg.connect(args.dsn)
     try:
         q = (
             "SELECT id, state, bill_number, title, status, instrument_type, source_url, "
-            "       material_categories, compliance_details "
+            "       openstates_id, material_categories, compliance_details "
             "FROM bills "
             "WHERE epr_relevant = true "
             "  AND material_categories ?| $1::text[] "
             "  AND instrument_type = ANY($2::text[]) "
-            "ORDER BY (status = 'enacted') DESC, state, bill_number"
         )
+        params: list = [wanted, instruments]
+        if bill_ids:
+            q += "  AND id = ANY($3::int[]) "
+            params.append(bill_ids)
+        q += "ORDER BY (status = 'enacted') DESC, state, bill_number"
         if args.limit:
             q += f" LIMIT {int(args.limit)}"
-        rows = await conn.fetch(q, wanted, instruments)
+        rows = await conn.fetch(q, *params)
     finally:
         await conn.close()
 
@@ -128,6 +136,7 @@ async def main() -> None:
             "id": r["id"], "state": r["state"], "bill_number": r["bill_number"],
             "title": r["title"], "status": r["status"],
             "instrument_type": r["instrument_type"], "source_url": r["source_url"],
+            "openstates_id": r["openstates_id"],
             "categories": cats, "compliance_details": details,
         })
 
@@ -149,6 +158,13 @@ async def main() -> None:
                     text = ""
                     if bill.get("source_url"):
                         text = await os_client.get_text_from_source(bill["source_url"])
+                    # Our stored source_url is often a bill landing page with no inline text. When it
+                    # yields little, fall back to the OpenStates versions API, which returns the
+                    # curated document links (text/plain -> html -> PDF) instead of the status page.
+                    if len((text or "").strip()) < 200 and bill.get("openstates_id"):
+                        alt = await os_client.get_bill_text(bill["openstates_id"])
+                        if len((alt or "").strip()) > len((text or "").strip()):
+                            text = alt
                     bill["full_text"] = text
                     cov, dropped = await extractor.extract(bill)
                 except Exception as e:

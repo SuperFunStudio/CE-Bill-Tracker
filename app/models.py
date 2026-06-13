@@ -192,6 +192,59 @@ class BillProductCoverage(Base):
     )
 
 
+class BillFeeCitation(Base):
+    """One cited fee or coverage-threshold fact extracted from a bill — the chain of custody
+    behind a cost/severity estimate.
+
+    Where the cost estimator turns a `fee_per_ton` into a dollar figure, this answers "where did
+    that number come from, and can it be traced". Each row pins ONE numeric fact (`fact_type`:
+    fee_per_ton / fee_per_unit_usd / registration_fee_usd / producer_revenue_threshold /
+    producer_tonnage_threshold / eco_modulation) to its `basis`:
+
+      enacted_text       — the value is stated in the bill itself; `source_excerpt` is the VERBATIM
+                           clause (validated as a substring of the bill's compliance_details, same
+                           guarantee BillDesignSignal uses — a fabricated quote is dropped, not stored).
+      published_schedule — the value is NOT in the statute but in an agency / PRO fee schedule
+                           (CalRecycle, PaintCare, MRC, …); `source_url` points at that schedule.
+                           This is the honest home for EPR fees, which are usually set by post-enactment
+                           rulemaking rather than written into the law (see scripts/enrich_bill_fees.py).
+      benchmark          — no published value anywhere; an industry/category estimate. NOT grounded.
+
+    A fee estimate is "grounded" when its driving fact has a citation whose basis is enacted_text or
+    published_schedule; the UI surfaces that distinction so a published fee never looks like a guess.
+    `reviewed` mirrors Bill.reviewed (auto-extracted until a human spot-checks it). ON DELETE CASCADE.
+    """
+    __tablename__ = "bill_fee_citation"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bills.id", ondelete="CASCADE"), nullable=False
+    )
+    fact_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    basis: Mapped[str] = mapped_column(String(20), nullable=False)
+    extracted_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    value_unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Verbatim clause for basis="enacted_text"; null for schedule/benchmark facts.
+    source_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Agency / PRO schedule URL for basis="published_schedule"; null otherwise.
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extractor_model: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    bill: Mapped["Bill"] = relationship("Bill", foreign_keys=[bill_id])
+
+    __table_args__ = (
+        UniqueConstraint("bill_id", "fact_type", "basis", name="uq_fee_citation_bill_fact_basis"),
+        Index("idx_fee_citation_bill_id", "bill_id"),
+        Index("idx_fee_citation_fact_type", "fact_type"),
+    )
+
+
 class AlertSubscription(Base):
     __tablename__ = "alert_subscriptions"
 

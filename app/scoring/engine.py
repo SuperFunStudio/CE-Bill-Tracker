@@ -196,6 +196,9 @@ class ScoringEngine:
             "bill_status": bill.status,
             "bill_state": bill.state,
             "fee_basis": cost_data.get("fee_basis", "unknown"),
+            # True when the fee traces to a published schedule / enacted text (not a benchmark guess).
+            # The UI shows "grounded in enacted law" vs "estimated" off this. See app/synthesis/fee_citations.
+            "fee_grounded": cost_data.get("grounded", False),
         }
 
         log.info(

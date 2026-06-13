@@ -32,6 +32,13 @@ _FEE_CONFIDENCE_CAPS: dict[str, float] = {
     "category_benchmark": 0.35,
 }
 
+# Fee sources that trace to a real published schedule or the enacted text — i.e. "grounded".
+# Benchmarks (industry/category) are estimates and are NOT grounded. The UI surfaces this so a
+# published fee never reads like a guess. Mirrors app/synthesis/fee_citations.GROUNDED_BASES.
+_GROUNDED_FEE_SOURCES: frozenset[str] = frozenset(
+    {"calrecycle_published", "paintcare_published", "mrc_published", "published_range_midpoint"}
+)
+
 # Fallback benchmarks for bill categories that have no bill-level fee data at all.
 # Only applies when fees.fee_structure_source == "no_fee_data" and material_categories
 # matches a key here.
@@ -91,7 +98,7 @@ class CostEstimator:
 
         # Bills with no producer monetary fee (R2R, deposit bills, content mandates)
         if fees_block.get("fee_structure") == "no_monetary_fee":
-            return {"estimated_annual_cost": None, "cost_confidence": 0.0, "fee_basis": "no_monetary_fee"}
+            return {"estimated_annual_cost": None, "cost_confidence": 0.0, "fee_basis": "no_monetary_fee", "grounded": False}
 
         # Per-unit path: fee_per_unit_usd * units_per_tonne → effective $/tonne
         fee_per_unit = fees_block.get("fee_per_unit_usd")
@@ -113,7 +120,7 @@ class CostEstimator:
                     benchmark = CATEGORY_BENCHMARKS[cat]
                     break
             if benchmark is None:
-                return {"estimated_annual_cost": None, "cost_confidence": 0.0, "fee_basis": "no_fee_data"}
+                return {"estimated_annual_cost": None, "cost_confidence": 0.0, "fee_basis": "no_fee_data", "grounded": False}
             effective_per_ton = benchmark["fee_per_ton"]
             registration_fee = benchmark["registration_fee_usd"]
             fee_structure_source = benchmark["fee_structure_source"]
@@ -126,7 +133,12 @@ class CostEstimator:
         ]
 
         if not volumes:
-            return {"estimated_annual_cost": None, "cost_confidence": 0.0, "fee_basis": fee_structure_source}
+            return {
+                "estimated_annual_cost": None,
+                "cost_confidence": 0.0,
+                "fee_basis": fee_structure_source,
+                "grounded": fee_structure_source in _GROUNDED_FEE_SOURCES,
+            }
 
         total_volume = sum(volumes)
         # +5% penalty risk multiplier
@@ -146,4 +158,5 @@ class CostEstimator:
             "estimated_annual_cost": round(annual_cost, 2),
             "cost_confidence": cost_confidence,
             "fee_basis": fee_structure_source,
+            "grounded": fee_structure_source in _GROUNDED_FEE_SOURCES,
         }

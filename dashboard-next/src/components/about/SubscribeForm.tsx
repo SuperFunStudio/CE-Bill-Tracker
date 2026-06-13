@@ -4,10 +4,15 @@ import { subscribe } from '@/lib/api';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
 import { CheckIcon } from '@/components/ui/icons';
 import { useScope } from '@/components/scope/ScopeContext';
+import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
 
 // Policy "topics" a reader can follow — the tracked circular-economy instruments
 // (see app/classification instrument_type enum). Order mirrors the About copy.
 const TOPICS = ['epr', 'right_to_repair', 'deposit_return', 'recycled_content', 'labeling'] as const;
+
+// Same slug→label transform used across the bills filters / scope onboarding.
+const formatMaterial = (slug: string) =>
+  slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 const STATE_ENTRIES = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
 
@@ -15,25 +20,33 @@ export function SubscribeForm() {
   const [email, setEmail] = useState('');
   const [organization, setOrganization] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
+  const [materials, setMaterials] = useState<string[]>([]);
   const [allStates, setAllStates] = useState(true);
   const [states, setStates] = useState<string[]>([]);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [error, setError] = useState('');
 
-  // Prefill jurisdictions from the reader's saved personalization scope, so "make this mine" →
-  // "alert me about exactly this" is one step. Materials ride along in the submit payload.
+  // Prefill jurisdictions + materials from the reader's saved personalization scope, so "make this
+  // mine" → "alert me about exactly this" is one step. Both remain editable in the form below.
   const { ready, scope } = useScope();
   const [prefilled, setPrefilled] = useState(false);
   useEffect(() => {
-    if (ready && !prefilled && scope.states.length > 0) {
-      setAllStates(false);
-      setStates(scope.states);
+    if (ready && !prefilled && (scope.states.length > 0 || scope.materials.length > 0)) {
+      if (scope.states.length > 0) {
+        setAllStates(false);
+        setStates(scope.states);
+      }
+      if (scope.materials.length > 0) setMaterials(scope.materials);
       setPrefilled(true);
     }
   }, [ready, prefilled, scope]);
 
   function toggleTopic(t: string) {
     setTopics(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
+  }
+
+  function toggleMaterial(m: string) {
+    setMaterials(prev => (prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]));
   }
 
   function toggleState(abbr: string) {
@@ -51,7 +64,7 @@ export function SubscribeForm() {
         // Empty selection means "everything" — friendliest default for a free digest.
         states: allStates || states.length === 0 ? ['ALL'] : states,
         instrument_types: topics.length === 0 ? ['ALL'] : topics,
-        material_categories: scope.materials.length > 0 ? scope.materials : ['ALL'],
+        material_categories: materials.length === 0 ? ['ALL'] : materials,
       });
       setStatus('done');
     } catch (err) {
@@ -102,6 +115,35 @@ export function SubscribeForm() {
           })}
         </div>
         <p className="text-text-muted text-xs mt-2">Leave all unselected to follow every topic.</p>
+      </fieldset>
+
+      {/* Materials & Products */}
+      <fieldset>
+        <legend className="font-serif text-text-muted text-[11px] uppercase tracking-wider mb-2">
+          Materials &amp; Products
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {MATERIAL_CATEGORIES.map(m => {
+            const on = materials.includes(m);
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => toggleMaterial(m)}
+                aria-pressed={on}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
+                  on
+                    ? 'border-green-accent bg-green-dark text-green-accent'
+                    : 'border-border-default text-text-secondary hover:border-green-accent/40 hover:text-text-primary'
+                }`}
+              >
+                {on && <CheckIcon className="text-xs" />}
+                {formatMaterial(m)}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-text-muted text-xs mt-2">Leave all unselected to follow every material.</p>
       </fieldset>
 
       {/* Jurisdictions */}

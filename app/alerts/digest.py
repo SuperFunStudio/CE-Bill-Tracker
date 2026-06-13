@@ -6,9 +6,10 @@ to exactly what each subscriber signed up for (topics = instrument_types, jurisd
 summarizing the movement over a window: bill status changes, newly tracked bills, and relevant
 federal actions.
 
-Unlike the dispatcher — which only matches on states + material_categories and so ignores the
-instrument_type topic every real subscriber actually picked — the digest matches on instrument_type,
-which is the field the signup form collects.
+The digest and the dispatcher now share one matching rule (subscription_matches_bill): states +
+instrument_types (topics) + material_categories + confidence floor. (The dispatcher historically
+matched only states + materials, ignoring the topic every real subscriber actually picks; that was
+fixed to call this same function.)
 
 build_digests() returns one (subscription, DigestContent) pair per active subscriber that has
 matching movement. render_digest_html() turns one into an email body. The scheduler job

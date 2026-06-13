@@ -161,15 +161,23 @@ async def build_state_of_play(db: AsyncSession, sub: AlertSubscription) -> State
 RECAP_MODEL = "claude-sonnet-4-6"
 
 _RECAP_SYSTEM = """\
-You are the sports desk of "Battle of the Bills", a newsletter that covers U.S. circular-economy and \
-Extended Producer Responsibility (EPR) legislation as if it were a championship sport — states are \
-the contenders, bills are the bouts, enactment is a win on the cards.
+You are the ringside correspondent for "Battle of the Bills", a newsletter that covers U.S. \
+circular-economy and Extended Producer Responsibility (EPR) legislation as if it were a championship \
+sport — states are the contenders, bills are the bouts, enactment is a win on the cards, a veto or a \
+dead bill is a loss.
 
-Write ONE punchy paragraph (60-110 words) recapping the current state of play for a new subscriber, \
-in the voice of a ringside boxing/championship recap: vivid, momentum-aware, a little theatrical — \
-but every factual claim must come straight from the standings you are given. Do NOT invent bill \
-numbers, vote counts, dates, or outcomes. Refer only to the states, counts, and bills provided. No \
-markdown, no headings, no lists, no preamble — just the paragraph.\
+Write a vivid, momentum-aware recap of the current state of play for a new subscriber, in the voice \
+of a championship fight recap. Aim for TWO or THREE short paragraphs, roughly 150-240 words total:
+
+  1. Open with the headline of the moment — who's landed the biggest laws, where the energy is.
+  2. Work in the contenders to watch: the jurisdictions stacking up active bills, and one or two \
+specific live bouts by name worth following.
+  3. Close on the stakes — what's still undecided and why this reader is ringside for it.
+
+Be theatrical but DISCIPLINED: every factual claim — every state, count, bill name, or status — must \
+come straight from the standings you are given. Do NOT invent bill numbers, vote tallies, dates, \
+sponsors, or outcomes, and do not imply a bill passed or failed unless its status says so. Separate \
+paragraphs with a blank line. No markdown, no headings, no lists, no preamble — just the prose.\
 """
 
 
@@ -215,7 +223,7 @@ async def render_recap_paragraph(sub: AlertSubscription, sop: StateOfPlay) -> st
         client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         resp = await client.messages.create(
             model=RECAP_MODEL,
-            max_tokens=320,
+            max_tokens=700,
             temperature=0.7,
             system=_RECAP_SYSTEM,
             messages=[{"role": "user", "content": _recap_user_prompt(sub, sop)}],
@@ -299,13 +307,25 @@ def render_welcome_html(
   </table>""")
 
     if recap:
+        # The recap can come back as 2-3 paragraphs (blank-line separated); render each so the prose
+        # breathes instead of collapsing into one wall of text.
+        paras = [p.strip() for p in recap.split("\n\n") if p.strip()]
+        para_html = "".join(
+            f'<p style="font:italic 16px {_SERIF};color:{_INK};line-height:1.65;margin:0 0 12px;">'
+            f"{p}</p>"
+            for p in paras
+        )
         sections.append(f"""
-  <p style="font:italic 16px {_SERIF};color:{_INK};line-height:1.6;margin:18px 0 4px;
-      padding:0 0 0 16px;border-left:3px solid {_ACCENT};">{recap}</p>""")
+  <div style="margin:20px 0 4px;padding:2px 0 2px 18px;border-left:3px solid {_ACCENT};">
+    {para_html}</div>""")
 
+    # Standings: show jurisdiction and topic breakdowns independently. A subscriber who follows
+    # multiple states gets the geographic scoreboard; one who follows multiple (or all) topics gets
+    # the topical one — the all/all subscriber sees both, which is how "all topics" gets distilled
+    # into something legible rather than just the words "all policy topics".
     if sop.by_state and len(sop.by_state) > 1:
         sections.append(_section("Standings by Jurisdiction", _standings_table(sop.by_state)))
-    elif sop.by_topic and len(sop.by_topic) > 1:
+    if sop.by_topic and len(sop.by_topic) > 1:
         sections.append(_section("Standings by Topic", _standings_table(sop.by_topic)))
 
     if sop.landmark_bills:
@@ -352,17 +372,19 @@ def render_welcome_html(
   <div style="padding:14px 28px 24px;">
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 4px;font-weight:bold;">{hello} to the ring.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 10px;">
-      You're subscribed to <strong>{_topics_summary(sub)}</strong> across
-      <strong>{_jurisdictions_summary(sub)}</strong>. From here on you'll get a heads-up the moment a
-      bill you follow moves — here's where the fight stands today.</p>
+      You're following <strong>{_topics_summary(sub)}</strong> across
+      <strong>{_jurisdictions_summary(sub)}</strong>. From here on you'll get a heads-up whenever a
+      bill in that scope makes a move — here's where the fight stands today.</p>
     {body}
     <!-- What you'll get -->
     <h2 style="font:bold 15px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;color:{_INK};
         border-bottom:1px solid rgba(26,26,46,0.25);padding-bottom:6px;margin:28px 0 8px;">
       What lands in your inbox next</h2>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 14px;">
-      Real-time alerts when a tracked bill changes status, plus a periodic digest rounding up the
-      movement on your topics. Explore everything any time at
+      Topical updates scoped to <strong>{_topics_summary(sub)}</strong> in
+      <strong>{_jurisdictions_summary(sub)}</strong> — a note when a matching bill is introduced or
+      changes status on its way to becoming law, plus a periodic digest rounding up the month's
+      movement. Explore the full picture any time at
       <a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">the dashboard</a>.</p>
   </div>
   <!-- Colophon -->

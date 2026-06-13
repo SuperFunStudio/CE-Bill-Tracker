@@ -125,13 +125,15 @@ steps:
         # Its source URLs were wrong; bill data now comes from the OpenStates dump import
         # (scripts/import_openstates_pgdump.py) and migration 005 purges the old seed rows.
 
-        # Seed target companies (idempotent)
+        # Seed target companies (idempotent, fast — just upserts the static company list).
         DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
           python3 /workspace/scripts/seed_companies.py
 
-        # Re-compute all company impact scores
-        DATABASE_URL="postgresql://signalscout:Design4thefuture@127.0.0.1:5432/signalscout" \
-          python3 /workspace/scripts/rescore_companies.py
+        # NOTE: company impact scores are NOT re-computed here. run_scoring_cycle (the in-process
+        # APScheduler in the always-on API) re-scores all companies daily at 3am UTC, so doing it at
+        # deploy time too was pure redundancy — and re-scoring every company x bill was slow enough
+        # to blow the 45-min build TIMEOUT before deploy-api ran. Run scripts/rescore_companies.py
+        # manually (or wait for the 3am job) if you need an immediate refresh after a scoring change.
 
         kill $${PROXY_PID} || true
 

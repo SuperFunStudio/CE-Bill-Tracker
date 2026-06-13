@@ -93,6 +93,11 @@ Return ONLY valid JSON:
 Rules:
 - 3 to 6 imperatives, ordered most-actionable first. Merge near-identical actions across bills.
 - cite_bills MUST be bills present in the evidence above; prefer [enacted] ones.
+- The evidence may span distinct product sectors (packaging, textiles/apparel, electronics,
+  furniture, turf, etc.). Do NOT collapse a sector-specific obligation into a generic packaging
+  one and drop its sector — when a bill applies the lever to a non-packaging sector, keep at least
+  one imperative that names that sector and cites its bill (e.g. textiles via CA SB-707). Aim to
+  represent every distinct sector present in the evidence at least once.
 - "targets" only where a real number appears in the evidence; otherwise return [].
 - Do not mention fee dollar amounts unless they appear verbatim in the evidence.
 """

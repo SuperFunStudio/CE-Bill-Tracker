@@ -20,7 +20,7 @@ export interface TeaserLever {
   bills: TeaserBill[];
 }
 
-export const GUIDE_COVERAGE = { bills: 74, states: 12, levers: 9 };
+export const GUIDE_COVERAGE = { bills: 80, states: 13, levers: 9 };
 
 export const TEASER_LEVERS: TeaserLever[] = [
   {
@@ -31,9 +31,10 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "focus": [
       "Packaging",
       "Beverage containers",
-      "Batteries"
+      "Batteries",
+      "Textiles"
     ],
-    "billCount": 36,
+    "billCount": 37,
     "states": [
       "CA",
       "CO",
@@ -56,6 +57,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "CA",
         "billNumber": "AB-1311",
         "billId": 81168
+      },
+      {
+        "state": "CA",
+        "billNumber": "AB-1857",
+        "billId": 82616
       },
       {
         "state": "CA",
@@ -118,6 +124,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 81678
       },
       {
+        "state": "MN",
+        "billNumber": "HF-3320",
+        "billId": 82543
+      },
+      {
         "state": "NY",
         "billNumber": "A-1209",
         "billId": 1444
@@ -126,6 +137,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "NY",
         "billNumber": "A-8195",
         "billId": 60357
+      },
+      {
+        "state": "NY",
+        "billNumber": "S-1460",
+        "billId": 81668
       },
       {
         "state": "NY",
@@ -159,11 +175,6 @@ export const TEASER_LEVERS: TeaserLever[] = [
       },
       {
         "state": "OR",
-        "billNumber": "SB-1576",
-        "billId": 82231
-      },
-      {
-        "state": "OR",
         "billNumber": "SB-582",
         "billId": 72452
       },
@@ -183,11 +194,6 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 1221
       },
       {
-        "state": "MN",
-        "billNumber": "SF-4679",
-        "billId": 1222
-      },
-      {
         "state": "NY",
         "billNumber": "A-6193",
         "billId": 60356
@@ -203,14 +209,9 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 72345
       },
       {
-        "state": "ME",
-        "billNumber": "LD-1423",
-        "billId": 80310
-      },
-      {
-        "state": "VT",
-        "billNumber": "S-254",
-        "billId": 81811
+        "state": "NY",
+        "billNumber": "S-10168",
+        "billId": 79613
       },
       {
         "state": "RI",
@@ -221,6 +222,21 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "RI",
         "billNumber": "SB-996",
         "billId": 79521
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-1423",
+        "billId": 80310
+      },
+      {
+        "state": "VT",
+        "billNumber": "S-254",
+        "billId": 81811
+      },
+      {
+        "state": "MN",
+        "billNumber": "SF-4679",
+        "billId": 1222
       }
     ]
   },
@@ -231,9 +247,10 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "direction": "Incorporate minimum postconsumer recycled content percentages.",
     "focus": [
       "Packaging",
-      "Plastic products"
+      "Plastic products",
+      "Textiles"
     ],
-    "billCount": 15,
+    "billCount": 13,
     "states": [
       "CA",
       "CO",
@@ -255,8 +272,33 @@ export const TEASER_LEVERS: TeaserLever[] = [
       },
       {
         "state": "CA",
+        "billNumber": "SB-1013",
+        "billId": 851
+      },
+      {
+        "state": "CA",
         "billNumber": "SB-303",
         "billId": 733
+      },
+      {
+        "state": "CA",
+        "billNumber": "SB-38",
+        "billId": 82353
+      },
+      {
+        "state": "CA",
+        "billNumber": "SB-54",
+        "billId": 865
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-1467",
+        "billId": 72366
+      },
+      {
+        "state": "NY",
+        "billNumber": "S-10168",
+        "billId": 79613
       },
       {
         "state": "ME",
@@ -284,26 +326,6 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 1213
       },
       {
-        "state": "CA",
-        "billNumber": "SB-1013",
-        "billId": 851
-      },
-      {
-        "state": "CA",
-        "billNumber": "SB-38",
-        "billId": 82353
-      },
-      {
-        "state": "CA",
-        "billNumber": "SB-54",
-        "billId": 865
-      },
-      {
-        "state": "ME",
-        "billNumber": "LD-1467",
-        "billId": 72366
-      },
-      {
         "state": "CO",
         "billNumber": "HB-21-1162",
         "billId": 72433
@@ -318,7 +340,7 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "focus": [
       "Plastic packaging"
     ],
-    "billCount": 11,
+    "billCount": 10,
     "states": [
       "CA",
       "CO",
@@ -334,23 +356,8 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "bills": [
       {
         "state": "CA",
-        "billNumber": "AB-863",
-        "billId": 79950
-      },
-      {
-        "state": "CO",
-        "billNumber": "HB-21-1162",
-        "billId": 72433
-      },
-      {
-        "state": "ME",
-        "billNumber": "LD-1541",
-        "billId": 79534
-      },
-      {
-        "state": "OR",
-        "billNumber": "SB-582",
-        "billId": 72452
+        "billNumber": "AB-1857",
+        "billId": 82616
       },
       {
         "state": "CA",
@@ -366,6 +373,26 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "CO",
         "billNumber": "HB-22-1355",
         "billId": 72416
+      },
+      {
+        "state": "CA",
+        "billNumber": "AB-863",
+        "billId": 79950
+      },
+      {
+        "state": "CO",
+        "billNumber": "HB-21-1162",
+        "billId": 72433
+      },
+      {
+        "state": "OR",
+        "billNumber": "SB-582",
+        "billId": 72452
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-1541",
+        "billId": 79534
       },
       {
         "state": "OR",
@@ -452,9 +479,10 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "direction": "Eliminate mercury from thermostat designs; transition to mercury-free alternatives.",
     "focus": [
       "Packaging",
-      "Electronics"
+      "Electronics",
+      "Textiles"
     ],
-    "billCount": 18,
+    "billCount": 17,
     "states": [
       "CA",
       "CO",
@@ -500,6 +528,26 @@ export const TEASER_LEVERS: TeaserLever[] = [
       },
       {
         "state": "CA",
+        "billNumber": "AB-732",
+        "billId": 80259
+      },
+      {
+        "state": "NY",
+        "billNumber": "S-10168",
+        "billId": 79613
+      },
+      {
+        "state": "OR",
+        "billNumber": "HB-3780",
+        "billId": 72412
+      },
+      {
+        "state": "OR",
+        "billNumber": "SB-1520",
+        "billId": 83268
+      },
+      {
+        "state": "CA",
         "billNumber": "AB-707",
         "billId": 80248
       },
@@ -524,24 +572,9 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 79534
       },
       {
-        "state": "OR",
-        "billNumber": "HB-3780",
-        "billId": 72412
-      },
-      {
         "state": "VT",
         "billNumber": "H-142",
         "billId": 72481
-      },
-      {
-        "state": "CA",
-        "billNumber": "AB-732",
-        "billId": 80259
-      },
-      {
-        "state": "OR",
-        "billNumber": "SB-1520",
-        "billId": 83268
       },
       {
         "state": "CT",
@@ -561,13 +594,16 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Avoid banned / restricted materials and formats",
     "direction": "Eliminate or reduce problematic or unnecessary plastic packaging.",
     "focus": [
-      "Plastic packaging"
+      "Plastic packaging",
+      "Textiles"
     ],
-    "billCount": 8,
+    "billCount": 13,
     "states": [
       "CA",
       "CO",
       "ME",
+      "NY",
+      "RI",
       "VT"
     ],
     "evidence": {
@@ -577,19 +613,9 @@ export const TEASER_LEVERS: TeaserLever[] = [
     },
     "bills": [
       {
-        "state": "CO",
-        "billNumber": "HB-22-1355",
-        "billId": 72416
-      },
-      {
-        "state": "ME",
-        "billNumber": "LD-1423",
-        "billId": 80310
-      },
-      {
-        "state": "ME",
-        "billNumber": "LD-1467",
-        "billId": 72366
+        "state": "CA",
+        "billNumber": "SB-279",
+        "billId": 103008
       },
       {
         "state": "CO",
@@ -602,14 +628,49 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 72241
       },
       {
+        "state": "NY",
+        "billNumber": "A-7912",
+        "billId": 83358
+      },
+      {
         "state": "VT",
         "billNumber": "H-142",
         "billId": 72481
       },
       {
+        "state": "CO",
+        "billNumber": "HB-22-1355",
+        "billId": 72416
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-1467",
+        "billId": 72366
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-1541",
+        "billId": 79534
+      },
+      {
         "state": "CA",
         "billNumber": "SB-303",
         "billId": 733
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-1909",
+        "billId": 83470
+      },
+      {
+        "state": "RI",
+        "billNumber": "SB-996",
+        "billId": 79521
+      },
+      {
+        "state": "CA",
+        "billNumber": "AB-962",
+        "billId": 79926
       },
       {
         "state": "VT",
@@ -625,20 +686,20 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "direction": "Mark containers with refund value indicator per Section 14560 requirements.",
     "focus": [
       "Packaging",
-      "Beverage containers"
+      "Beverage containers",
+      "Textiles"
     ],
-    "billCount": 25,
+    "billCount": 24,
     "states": [
       "CA",
       "CT",
+      "IL",
       "KY",
-      "MD",
       "ME",
       "MI",
       "MN",
       "NY",
       "OR",
-      "RI",
       "VT"
     ],
     "evidence": {
@@ -683,14 +744,14 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 81565
       },
       {
+        "state": "IL",
+        "billNumber": "SB-294",
+        "billId": 81244
+      },
+      {
         "state": "KY",
         "billNumber": "SB-49",
         "billId": 80507
-      },
-      {
-        "state": "MD",
-        "billNumber": "SB-686",
-        "billId": 72278
       },
       {
         "state": "ME",
@@ -719,8 +780,18 @@ export const TEASER_LEVERS: TeaserLever[] = [
       },
       {
         "state": "NY",
+        "billNumber": "A-7912",
+        "billId": 83358
+      },
+      {
+        "state": "NY",
         "billNumber": "A-8195",
         "billId": 60357
+      },
+      {
+        "state": "NY",
+        "billNumber": "S-10168",
+        "billId": 79613
       },
       {
         "state": "NY",
@@ -736,11 +807,6 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "OR",
         "billNumber": "SB-1520",
         "billId": 83268
-      },
-      {
-        "state": "RI",
-        "billNumber": "HB-5017",
-        "billId": 80689
       },
       {
         "state": "VT",
@@ -773,7 +839,7 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Foodware",
       "Packaging"
     ],
-    "billCount": 3,
+    "billCount": 4,
     "states": [
       "CA"
     ],
@@ -785,18 +851,23 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "bills": [
       {
         "state": "CA",
-        "billNumber": "AB-863",
-        "billId": 79950
-      },
-      {
-        "state": "CA",
-        "billNumber": "SB-343",
-        "billId": 81917
+        "billNumber": "AB-1857",
+        "billId": 82616
       },
       {
         "state": "CA",
         "billNumber": "SB-54",
         "billId": 865
+      },
+      {
+        "state": "CA",
+        "billNumber": "AB-863",
+        "billId": 79950
+      },
+      {
+        "state": "CA",
+        "billNumber": "SB-279",
+        "billId": 103008
       }
     ]
   },
@@ -807,9 +878,10 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "direction": "Make replacement parts available to independent repair providers and owners.",
     "focus": [
       "Electronics",
-      "Appliances"
+      "Appliances",
+      "Textiles"
     ],
-    "billCount": 28,
+    "billCount": 25,
     "states": [
       "CA",
       "CO",
@@ -914,11 +986,6 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 72416
       },
       {
-        "state": "CO",
-        "billNumber": "SB-25-163",
-        "billId": 82272
-      },
-      {
         "state": "CT",
         "billNumber": "HB-5019",
         "billId": 81565
@@ -927,6 +994,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "KY",
         "billNumber": "SB-49",
         "billId": 80507
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-1423",
+        "billId": 80310
       },
       {
         "state": "OR",

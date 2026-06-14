@@ -50,6 +50,10 @@ function DeadlineRow({ deadline, onSelect }: { deadline: DeadlineSummary; onSele
   );
 }
 
+// Past "include past deadlines" view is capped to the last 5 years (the historical EPR
+// backfill carries laws back to the 1990s; their compliance dates are not actionable).
+const PAST_DEADLINE_CUTOFF_DAYS = 5 * 365;
+
 export default function CompliancePage() {
   const [daysAhead, setDaysAhead] = useState(1095);
   const [stateFilter, setStateFilter] = useState('');
@@ -115,6 +119,10 @@ export default function CompliancePage() {
       .filter(d => {
         const days = daysUntil(d.deadline_date);
         if (!includePast && days !== null && days < 0) return false;
+        // Even with "include past" on, don't surface ancient deadlines: the historical
+        // backfill carries laws back to the 1990s/2000s whose compliance dates are long gone.
+        // Cap the past view at 5 years so it stays a recent-history aid, not an archive dump.
+        if (includePast && days !== null && days < -PAST_DEADLINE_CUTOFF_DAYS) return false;
         if (days !== null && days > daysAhead) return false;
         return true;
       })

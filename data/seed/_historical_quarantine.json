@@ -1,0 +1,385 @@
+[
+  {
+    "state": "CA",
+    "bill_number": "AB-2398",
+    "title": "California Carpet Stewardship Program",
+    "status": "enacted",
+    "enacted_date": "2010",
+    "effective_date": null,
+    "material_categories": [
+      "carpet"
+    ],
+    "instrument_type": "epr",
+    "product_category": "carpet",
+    "urgency": "low",
+    "ai_summary": "First U.S. carpet EPR law; administered by CARE under PRC 42968-42983.5.",
+    "source_url": "https://calrecycle.ca.gov/carpet/",
+    "compliance_details": null
+  },
+  {
+    "state": "NY",
+    "bill_number": "S-5027C",
+    "title": "New York Carpet Collection and Recycling (Carpet EPR)",
+    "status": "enacted",
+    "enacted_date": "2022",
+    "effective_date": null,
+    "material_categories": [
+      "carpet"
+    ],
+    "instrument_type": "epr",
+    "product_category": "carpet",
+    "urgency": "low",
+    "ai_summary": "Second U.S. carpet EPR law (S5027C/A9279A); program start postponed to July 1, 2026.",
+    "source_url": "https://www.nysenate.gov/legislation/bills/2021/S5027",
+    "compliance_details": null
+  },
+  {
+    "state": "IL",
+    "bill_number": "SB-3686",
+    "title": "Portable and Medium-Format Battery Stewardship Act",
+    "status": "enacted",
+    "enacted_date": "2024-08-09",
+    "effective_date": null,
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "product_category": "batteries",
+    "urgency": "low",
+    "ai_summary": "EPR for portable and medium-format batteries (Public Act 103-1033); signed Aug 9, 2024.",
+    "source_url": "https://www.ilga.gov/legislation/billstatus.asp?DocNum=3686&GAID=17&DocTypeID=SB&LegId=153259&SessionID=112",
+    "compliance_details": null
+  },
+  {
+    "state": "ME",
+    "bill_number": null,
+    "title": "Stewardship Program for Primary and Rechargeable Batteries",
+    "status": "enacted",
+    "enacted_date": "2025",
+    "effective_date": null,
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "product_category": "batteries",
+    "urgency": "low",
+    "ai_summary": "Listed on Battery Network (Call2Recycle) as an enacted battery stewardship law; specific bill page not separately verified.",
+    "source_url": "https://batterynetwork.org/recycling-laws-by-state/",
+    "compliance_details": null
+  },
+  {
+    "state": "NJ",
+    "bill_number": null,
+    "title": "Rechargeable Battery Management Law",
+    "status": "enacted",
+    "enacted_date": "1991",
+    "effective_date": null,
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "product_category": "batteries",
+    "urgency": "low",
+    "ai_summary": "Long-standing rechargeable (Ni-Cd / SSLA) battery take-back law listed by Call2Recycle/Battery Network.",
+    "source_url": "https://batterynetwork.org/recycling-laws-by-state/",
+    "compliance_details": null
+  },
+  {
+    "state": "MN",
+    "bill_number": null,
+    "title": "Rechargeable Battery Law",
+    "status": "enacted",
+    "enacted_date": "1990",
+    "effective_date": null,
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "product_category": "batteries",
+    "urgency": "low",
+    "ai_summary": "Early rechargeable-battery management/labeling law listed by Battery Network.",
+    "source_url": "https://batterynetwork.org/recycling-laws-by-state/",
+    "compliance_details": null
+  },
+  {
+    "state": "NY",
+    "bill_number": null,
+    "title": "Rechargeable Battery Recycling Law",
+    "status": "enacted",
+    "enacted_date": "2010",
+    "effective_date": null,
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "product_category": "batteries",
+    "urgency": "low",
+    "ai_summary": "Statewide rechargeable battery take-back law listed by Battery Network.",
+    "source_url": "https://batterynetwork.org/recycling-laws-by-state/",
+    "compliance_details": null
+  },
+  {
+    "state": "FL",
+    "bill_number": null,
+    "title": "Rechargeable Battery Management Law",
+    "status": "enacted",
+    "enacted_date": "1996",
+    "effective_date": null,
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "product_category": "batteries",
+    "urgency": "low",
+    "ai_summary": "Ni-Cd / sealed lead-acid rechargeable battery management law listed by Battery Network.",
+    "source_url": "https://batterynetwork.org/recycling-laws-by-state/",
+    "compliance_details": null
+  },
+  {
+    "state": "IA",
+    "bill_number": null,
+    "title": "Rechargeable Battery Management Law",
+    "status": "enacted",
+    "enacted_date": "1996",
+    "effective_date": null,
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "product_category": "batteries",
+    "urgency": "low",
+    "ai_summary": "Ni-Cd / sealed lead-acid rechargeable battery management law listed by Battery Network.",
+    "source_url": "https://batterynetwork.org/recycling-laws-by-state/",
+    "compliance_details": null
+  },
+  {
+    "state": "MD",
+    "bill_number": null,
+    "title": "Rechargeable Battery Management Law",
+    "status": "enacted",
+    "enacted_date": "1995",
+    "effective_date": null,
+    "material_categories": [
+      "batteries"
+    ],
+    "instrument_type": "epr",
+    "product_category": "batteries",
+    "urgency": "low",
+    "ai_summary": "Ni-Cd / sealed lead-acid rechargeable battery management law listed by Battery Network.",
+    "source_url": "https://batterynetwork.org/recycling-laws-by-state/",
+    "compliance_details": null
+  },
+  {
+    "state": "CA",
+    "bill_number": null,
+    "title": "Mercury Thermostat Collection Act of 2008",
+    "status": "enacted",
+    "enacted_date": "2008",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Requires manufacturers that sold mercury thermostats to establish collection/recycling programs; administered by DTSC.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/california/",
+    "compliance_details": null
+  },
+  {
+    "state": "PA",
+    "bill_number": null,
+    "title": "Mercury-Free Thermostat Act",
+    "status": "enacted",
+    "enacted_date": "2008-10-09",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Bans sale/installation/disposal of mercury thermostats and requires manufacturer collection.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/pennsylvania/",
+    "compliance_details": null
+  },
+  {
+    "state": "IL",
+    "bill_number": null,
+    "title": "Mercury Thermostat Collection Act",
+    "status": "enacted",
+    "enacted_date": "2010",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Requires thermostat manufacturers to establish collection programs for out-of-service mercury thermostats.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/illinois/",
+    "compliance_details": null
+  },
+  {
+    "state": "CT",
+    "bill_number": null,
+    "title": "Mercury Thermostat Collection requirement",
+    "status": "enacted",
+    "enacted_date": "2013",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Requires manufacturers to establish collection programs for mercury thermostats.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/connecticut/",
+    "compliance_details": null
+  },
+  {
+    "state": "NH",
+    "bill_number": null,
+    "title": "Mercury Thermostat Collection requirement",
+    "status": "enacted",
+    "enacted_date": "2007",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Requires manufacturers that sold mercury thermostats to participate in a collection program.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/new-hampshire/",
+    "compliance_details": null
+  },
+  {
+    "state": "NY",
+    "bill_number": null,
+    "title": "Mercury Thermostat Collection Act / disposal ban",
+    "status": "enacted",
+    "enacted_date": "2005",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Disposal ban since 2005 plus manufacturer collection requirements.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/new-york/",
+    "compliance_details": null
+  },
+  {
+    "state": "MT",
+    "bill_number": null,
+    "title": "Mercury Thermostat Collection requirement",
+    "status": "enacted",
+    "enacted_date": "2009",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Requires thermostat manufacturers to establish collection programs for out-of-service mercury thermostats.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/montana/",
+    "compliance_details": null
+  },
+  {
+    "state": "VT",
+    "bill_number": null,
+    "title": "Mercury Thermostat Collection / EPR law",
+    "status": "enacted",
+    "enacted_date": "2008",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Among the states with manufacturer thermostat-collection EPR legislation.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/vermont/",
+    "compliance_details": null
+  },
+  {
+    "state": "RI",
+    "bill_number": null,
+    "title": "Mercury Thermostat Collection / EPR law",
+    "status": "enacted",
+    "enacted_date": "2008",
+    "effective_date": null,
+    "material_categories": [
+      "mercury",
+      "thermostats"
+    ],
+    "instrument_type": "epr",
+    "product_category": "mercury_thermostats",
+    "urgency": "low",
+    "ai_summary": "Listed among PSI's mercury-thermostat EPR states; TRC maintains a Rhode Island state-law page.",
+    "source_url": "https://thermostat-recycle.org/program-info/recycling-by-state/rhode-island/",
+    "compliance_details": null
+  },
+  {
+    "state": "CT",
+    "bill_number": "HB-6486",
+    "title": "An Act Concerning Extended Producer Responsibility for Tires",
+    "status": "enacted",
+    "enacted_date": "2023-06-27",
+    "effective_date": null,
+    "material_categories": [
+      "tires"
+    ],
+    "instrument_type": "epr",
+    "product_category": "tires",
+    "urgency": "low",
+    "ai_summary": "Public Act 23-62; first-in-the-nation tire EPR program requiring manufacturers to finance post-consumer tire management.",
+    "source_url": "https://www.cga.ct.gov/asp/cgabillstatus/cgabillstatus.asp?selBillType=Bill&which_year=2023&bill_num=6486",
+    "compliance_details": null
+  },
+  {
+    "state": "IL",
+    "bill_number": "HB-1780",
+    "title": "Drug Take-Back Act (410 ILCS 720)",
+    "status": "enacted",
+    "enacted_date": "2022-06-10",
+    "effective_date": null,
+    "material_categories": [
+      "pharmaceuticals"
+    ],
+    "instrument_type": "epr",
+    "product_category": "pharmaceuticals",
+    "urgency": "low",
+    "ai_summary": "Public Act 102-1055; pharmaceutical manufacturers must establish and finance a drug take-back program.",
+    "source_url": "https://www.ilga.gov/legislation/ilcs/ilcs3.asp?ActID=4321&ChapterID=35",
+    "compliance_details": null
+  },
+  {
+    "state": "CT",
+    "bill_number": "HB-5142",
+    "title": "An Act Concerning Extended Producer Responsibility for Gas Cylinders",
+    "status": "enacted",
+    "enacted_date": "2022",
+    "effective_date": null,
+    "material_categories": [
+      "gas_cylinders"
+    ],
+    "instrument_type": "epr",
+    "product_category": "gas_cylinders",
+    "urgency": "low",
+    "ai_summary": "Public Act 22-27; first-in-nation EPR law for consumer gas cylinders (CGS 22a-905h).",
+    "source_url": "https://cga.ct.gov/2022/ACT/PA/PDF/2022PA-00027-R00HB-05142-PA.PDF",
+    "compliance_details": null
+  }
+]

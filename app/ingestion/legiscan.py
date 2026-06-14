@@ -112,10 +112,15 @@ class LegiScanClient:
             log.warning("bill_text_decode_failed", doc_id=doc_id, error=str(e))
             return ""
 
-    async def search(self, query: str, state: str | None = None, page: int = 1) -> list[dict]:
+    async def search(
+        self, query: str, state: str | None = None, page: int = 1, year: int | None = None
+    ) -> list[dict]:
         params: dict[str, Any] = {"query": query, "page": page}
         if state:
             params["state"] = state
+        if year:
+            # LegiScan getSearch 'year': 1=all, 2=current, or a specific 4-digit year.
+            params["year"] = year
         data = await self._get("getSearch", **params)
         results = data.get("searchresult", {})
         # Remove summary key

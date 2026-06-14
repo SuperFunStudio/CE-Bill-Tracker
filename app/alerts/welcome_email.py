@@ -36,6 +36,7 @@ from app.alerts.digest import (
     _SERIF,
     _bill_sort_key,
     _jurisdictions_summary,
+    _materials_summary,
     _status_label,
     _topics_summary,
     subscription_matches_bill,
@@ -188,7 +189,12 @@ just the prose.\
 
 
 def _recap_user_prompt(sub: AlertSubscription, sop: StateOfPlay) -> str:
-    scope = f"Topics followed: {_topics_summary(sub)}. Jurisdictions: {_jurisdictions_summary(sub)}."
+    mats = _materials_summary(sub)
+    mats_part = f" Materials/products: {mats}." if mats else ""
+    scope = (
+        f"Topics followed: {_topics_summary(sub)}.{mats_part} "
+        f"Jurisdictions: {_jurisdictions_summary(sub)}."
+    )
     standings = "; ".join(
         f"{r.label}: {r.enacted} enacted / {r.active} active" for r in sop.by_state
     ) or "no jurisdiction breakdown"
@@ -355,7 +361,15 @@ def render_welcome_html(
     topics moves in your jurisdictions, you'll be the first to know.</p>""")
 
     body = "\n".join(sections)
-    scope_line = f"{_topics_summary(sub)} · {_jurisdictions_summary(sub)}"
+    materials = _materials_summary(sub)
+    # Slotted into the prose only when a material/product filter is set; with leading
+    # space so it reads "all policy topics on Electronics across all jurisdictions".
+    mat_html = f" on <strong>{materials}</strong>" if materials else ""
+    scope_bits = [_topics_summary(sub)]
+    if materials:
+        scope_bits.append(materials)
+    scope_bits.append(_jurisdictions_summary(sub))
+    scope_line = " · ".join(scope_bits)
 
     return f"""
 <html><body style="margin:0;padding:0;background:{_PAPER};">
@@ -378,7 +392,7 @@ def render_welcome_html(
   <div style="padding:14px 28px 24px;">
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 4px;font-weight:bold;">{hello} to the ring.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 10px;">
-      You're following <strong>{_topics_summary(sub)}</strong> across
+      You're following <strong>{_topics_summary(sub)}</strong>{mat_html} across
       <strong>{_jurisdictions_summary(sub)}</strong>. From here on you'll get a heads-up whenever a
       bill in that scope makes a move — here's where the fight stands today.</p>
     {body}
@@ -387,7 +401,7 @@ def render_welcome_html(
         border-bottom:1px solid rgba(26,26,46,0.25);padding-bottom:6px;margin:28px 0 8px;">
       What lands in your inbox next</h2>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 14px;">
-      Topical updates scoped to <strong>{_topics_summary(sub)}</strong> in
+      Topical updates scoped to <strong>{_topics_summary(sub)}</strong>{mat_html} in
       <strong>{_jurisdictions_summary(sub)}</strong> — a note when a matching bill is introduced or
       changes status on its way to becoming law, plus a periodic digest rounding up the month's
       movement. Explore the full picture any time at

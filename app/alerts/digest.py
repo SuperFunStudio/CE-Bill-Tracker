@@ -46,6 +46,13 @@ def topic_label(slug: str | None) -> str:
     return TOPIC_LABELS.get(slug, slug.replace("_", " ").title())
 
 
+def material_label(slug: str | None) -> str:
+    # Mirrors the dashboard's material chip labels (BillFilters.tsx): title-cased slug.
+    if not slug:
+        return "Other"
+    return slug.replace("_", " ").title()
+
+
 def _matches_list(values: list | None, candidate: str | None) -> bool:
     """A subscriber filter list matches a candidate value when the list is empty/None, contains
     the sentinel "ALL", or explicitly contains the candidate."""
@@ -396,6 +403,19 @@ def _jurisdictions_summary(sub: AlertSubscription) -> str:
     return ", ".join(states)
 
 
+def _materials_summary(sub: AlertSubscription) -> str:
+    """Human label for the material/product filter, or "" when unfiltered (ALL/empty).
+
+    Returns empty so callers can omit the materials clause entirely rather than
+    printing a clunky "all materials" — the topic + jurisdiction summaries already
+    carry the "you're following everything" reading.
+    """
+    mats = sub.material_categories or []
+    if not mats or "ALL" in mats:
+        return ""
+    return ", ".join(material_label(m) for m in mats)
+
+
 # Gazette palette — mirrors dashboard-next/src/app/globals.css light mode (the "Battle of the Bills"
 # masthead). Email clients can't load web fonts reliably, so we use a Georgia serif stack to carry
 # the New Yorker / newspaper feel the dashboard gets from `.font-serif`.
@@ -479,10 +499,10 @@ def render_digest_html(
         sections.append(_section("Federal Actions", rows, content.federal_overflow))
 
     body = "\n".join(sections)
-    dateline = (
-        f"{period_label.capitalize()} edition · {content.total} updates · "
-        f"{_topics_summary(sub)} · {_jurisdictions_summary(sub)}"
+    scope = " · ".join(
+        filter(None, [_topics_summary(sub), _materials_summary(sub), _jurisdictions_summary(sub)])
     )
+    dateline = f"{period_label.capitalize()} edition · {content.total} updates · {scope}"
     return f"""
 <html><body style="margin:0;padding:0;background:{_PAPER};">
  <div style="max-width:640px;margin:0 auto;background:#fff;">

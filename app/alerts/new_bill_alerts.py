@@ -27,6 +27,7 @@ from app.alerts.digest import (
     _RULE,
     _SERIF,
     _jurisdictions_summary,
+    _materials_summary,
     _merge_subs_by_email,
     _status_label,
     _topics_summary,
@@ -139,7 +140,10 @@ def _new_bill_block(b: Bill) -> str:
 def render_new_bill_alert_html(sub: AlertSubscription, content: NewBillAlertContent) -> str:
     """Render one subscriber's new-bill alert as a Gazette-styled HTML email."""
     blocks = "".join(_new_bill_block(b) for b in content.bills)
-    following = f"Following: {_topics_summary(sub)} · {_jurisdictions_summary(sub)}"
+    scope = " · ".join(
+        filter(None, [_topics_summary(sub), _materials_summary(sub), _jurisdictions_summary(sub)])
+    )
+    following = f"Following: {scope}"
     return f"""
 <html><body style="margin:0;padding:0;background:{_PAPER};">
  <div style="max-width:640px;margin:0 auto;background:#fff;">

@@ -31,6 +31,7 @@ from app.alerts.digest import (
     _SERIF,
     _jurisdictions_summary,
     _matches_list,
+    _materials_summary,
     _merge_subs_by_email,
     _section,
     _status_label,
@@ -207,9 +208,11 @@ def _deadline_headline_html(item: DeadlineItem) -> str:
 
 
 def _deadline_footer(sub: AlertSubscription) -> str:
-    """'You're tracking EPR in CA. Adjust what you follow →'"""
+    """'You're tracking EPR on Electronics in CA. Adjust what you follow →'"""
+    mats = _materials_summary(sub)
+    on_mats = f" on {mats}" if mats else ""
     return (
-        f"You're tracking {_topics_summary(sub)} in {_jurisdictions_summary(sub)}. "
+        f"You're tracking {_topics_summary(sub)}{on_mats} in {_jurisdictions_summary(sub)}. "
         f'<a href="{_DASHBOARD_URL}/compliance" style="color:{_ACCENT};">Adjust what you follow →</a>'
     )
 

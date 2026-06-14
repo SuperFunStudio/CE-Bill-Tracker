@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { requestAccess, type PlanInterest } from '@/lib/api';
+import { track } from '@/lib/analytics';
 import { CheckIcon } from '@/components/ui/icons';
 
 /**
@@ -37,6 +38,14 @@ export function RequestAccessModal({
         plan_interest: plan,
         message: message.trim() || undefined,
         source,
+      });
+      // Willingness-to-pay conversion. No PII — plan/source enums only (see lib/analytics PII rule).
+      // Mark as a Key Event in GA Admin to track it as a conversion.
+      track('request_access', {
+        plan,
+        source,
+        has_organization: organization.trim().length > 0,
+        has_message: message.trim().length > 0,
       });
       setStatus('done');
     } catch (err) {

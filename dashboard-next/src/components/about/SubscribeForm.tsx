@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { subscribe } from '@/lib/api';
+import { track } from '@/lib/analytics';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
 import { CheckIcon } from '@/components/ui/icons';
 import { useScope } from '@/components/scope/ScopeContext';
@@ -65,6 +66,14 @@ export function SubscribeForm() {
         states: allStates || states.length === 0 ? ['ALL'] : states,
         instrument_types: topics.length === 0 ? ['ALL'] : topics,
         material_categories: materials.length === 0 ? ['ALL'] : materials,
+      });
+      // Conversion event. No PII — counts/flags only (see lib/analytics PII rule). Mark as a Key Event
+      // in GA Admin to track it as a conversion.
+      track('subscribe', {
+        topics_count: topics.length,
+        materials_count: materials.length,
+        all_states: allStates || states.length === 0,
+        has_organization: organization.trim().length > 0,
       });
       setStatus('done');
     } catch (err) {

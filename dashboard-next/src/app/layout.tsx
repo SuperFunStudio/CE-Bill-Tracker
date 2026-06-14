@@ -4,6 +4,7 @@ import Script from 'next/script';
 import './globals.css';
 import { Providers } from '@/components/layout/Providers';
 import { AppShell } from '@/components/layout/AppShell';
+import { RouteAnalytics } from '@/components/layout/RouteAnalytics';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 const spectral = Spectral({
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-bg-primary text-text-primary antialiased">
         <Providers>
           <AppShell>{children}</AppShell>
+          <RouteAnalytics />
         </Providers>
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-S858LD2MMN"
@@ -62,7 +64,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', 'G-S858LD2MMN');
+            // send_page_view:false — RouteAnalytics owns page_view so SPA route changes are tracked
+            // and the initial load isn't double-counted.
+            gtag('config', 'G-S858LD2MMN', { send_page_view: false });
           `}
         </Script>
       </body>

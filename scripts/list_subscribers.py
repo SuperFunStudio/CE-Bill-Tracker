@@ -8,7 +8,7 @@ Local:
 
 Production (via Cloud SQL Auth Proxy):
     %USERPROFILE%\\cloud-sql-proxy.exe --gcloud-auth --port 5434 ce-bill-tracker:us-central1:signalscout-pg
-    set DATABASE_URL=postgresql://signalscout:Design4thefuture@127.0.0.1:5434/signalscout
+    set DATABASE_URL=postgresql://signalscout:$DB_PASSWORD@127.0.0.1:5434/signalscout
     venv/Scripts/python scripts/list_subscribers.py --all   # include deactivated rows
 """
 import argparse

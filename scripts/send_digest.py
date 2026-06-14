@@ -11,7 +11,7 @@ Local (against whatever DATABASE_URL points at):
     venv/Scripts/python scripts/send_digest.py
 
 Production preview (via Cloud SQL Auth Proxy on 5434):
-    set DATABASE_URL=postgresql://signalscout:Design4thefuture@127.0.0.1:5434/signalscout
+    set DATABASE_URL=postgresql://signalscout:$DB_PASSWORD@127.0.0.1:5434/signalscout
     venv/Scripts/python scripts/send_digest.py --window-days 30
 
 Send only to yourself first:

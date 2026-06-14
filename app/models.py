@@ -246,9 +246,28 @@ class BillFeeCitation(Base):
 
 
 class AlertSubscription(Base):
+    """A subscription to bill movement, in one of two scopes (the `scope` column):
+
+      - "filter":    matches bills by states + instrument_types (topics) + materials + a confidence
+                     floor. The anonymous public subscribe flow (POST /subscriptions) creates these;
+                     firebase_uid is NULL.
+      - "watchlist": account-owned (firebase_uid set), matches the explicit set of bills the owner
+                     follows in user_watchlist, ignoring the filter columns and confidence floor. The
+                     Pro star toggle ensures one of these per user (app/api/user.py). `alert_on` is
+                     the user's "global per-user" notification prefs (which events to email about).
+
+    All channels (real-time dispatcher, digest, deadline + new-bill alerts) match through
+    subscription_matches_bill in app/alerts/digest.py, so the scope branch lives there once.
+    """
     __tablename__ = "alert_subscriptions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Owner of an account subscription; NULL for anonymous public (filter) subscriptions.
+    firebase_uid: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # "filter" | "watchlist" — see class docstring.
+    scope: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="filter", server_default="filter"
+    )
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     organization: Mapped[str | None] = mapped_column(String(255), nullable=True)
     slack_webhook: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -263,6 +282,8 @@ class AlertSubscription(Base):
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("idx_alert_sub_uid_scope", "firebase_uid", "scope"),)
 
 
 class AccessRequest(Base):

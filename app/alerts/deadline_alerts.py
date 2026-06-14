@@ -35,6 +35,7 @@ from app.alerts.digest import (
     _section,
     _status_label,
     _topics_summary,
+    load_watchlists,
     subscription_matches_bill,
     subscription_matches_federal,
     topic_label,
@@ -83,12 +84,20 @@ def _deadline_matches(
     sub: AlertSubscription,
     item: DeadlineItem,
     federal_by_id: dict[int, FederalAction],
+    watchlist_ids: set[int] | None = None,
 ) -> bool:
-    """A deadline matches a subscriber via its linked bill (topics + states + materials + confidence),
-    its linked federal action, or — for a bare deadline — its jurisdiction alone."""
+    """A deadline matches a subscriber via its linked bill (topics + states + materials + confidence,
+    or — for a watchlist sub — the explicit bill set), its linked federal action, or, for a bare
+    deadline, its jurisdiction alone.
+
+    A watchlist subscription only matches a deadline through its linked bill: a bare or federal-only
+    deadline isn't a bill anyone can star, so those are filter-sub territory."""
     d = item.deadline
+    if getattr(sub, "scope", "filter") == "watchlist":
+        return d.bill is not None and subscription_matches_bill(sub, d.bill, watchlist_ids)
     if d.bill is not None:
-        return subscription_matches_bill(sub, d.bill)
+        # Pass watchlist_ids so a combined subscriber's starred bills are OR'd in alongside filters.
+        return subscription_matches_bill(sub, d.bill, watchlist_ids)
     if d.federal_action_id is not None:
         action = federal_by_id.get(d.federal_action_id)
         if action is not None:
@@ -122,9 +131,20 @@ async def build_deadline_alerts(
         ).scalars().all()
     )
 
+    merged_subs = _merge_subs_by_email(subs)
+    watchlists = await load_watchlists(
+        db, {s.firebase_uid for s in merged_subs if s.firebase_uid}
+    )
+
     results: list[tuple[AlertSubscription, DeadlineAlertContent]] = []
-    for sub in _merge_subs_by_email(subs):
-        matched = [it for it in items if _deadline_matches(sub, it, federal_by_id)]
+    for sub in merged_subs:
+        # Resolve the owner's watch list only when their "deadline" pref is on, so turning it off
+        # suppresses watched-bill deadlines while a combined subscriber still gets filter-matched
+        # deadlines (the matcher falls back to filters when wl is None).
+        wl = None
+        if sub.firebase_uid and "deadline" in (sub.alert_on or []):
+            wl = watchlists.get(sub.firebase_uid)
+        matched = [it for it in items if _deadline_matches(sub, it, federal_by_id, wl)]
         if matched:
             results.append((sub, DeadlineAlertContent(items=matched)))
     return results

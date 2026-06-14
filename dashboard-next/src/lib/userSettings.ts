@@ -49,3 +49,37 @@ export async function addWatch(token: string | null, billId: number): Promise<vo
 export async function removeWatch(token: string | null, billId: number): Promise<void> {
   await authedFetch(`/me/watchlist/${billId}`, token, { method: 'DELETE' });
 }
+
+// Notification prefs for watched bills (which events to email about). Pro-gated server-side.
+export type WatchlistAlertEvent = 'status_change' | 'text_update' | 'deadline';
+
+export interface WatchlistPrefs {
+  alert_on: WatchlistAlertEvent[];
+  active: boolean;
+}
+
+const DEFAULT_WATCHLIST_PREFS: WatchlistPrefs = {
+  alert_on: ['status_change', 'deadline'],
+  active: true,
+};
+
+export async function getWatchlistPrefs(token: string | null): Promise<WatchlistPrefs> {
+  try {
+    const res = await authedFetch('/me/watchlist/prefs', token);
+    if (!res.ok) return { ...DEFAULT_WATCHLIST_PREFS };
+    return (await res.json()) as WatchlistPrefs;
+  } catch {
+    return { ...DEFAULT_WATCHLIST_PREFS };
+  }
+}
+
+export async function saveWatchlistPrefs(
+  token: string | null,
+  prefs: WatchlistPrefs,
+): Promise<void> {
+  await authedFetch('/me/watchlist/prefs', token, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(prefs),
+  });
+}

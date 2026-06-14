@@ -14,9 +14,55 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import AuthedUser, get_current_user, require_pro
 from app.database import get_db
-from app.models import UserSettings, WatchlistItem
+from app.models import AlertSubscription, UserSettings, WatchlistItem
 
 router = APIRouter(prefix="/me", tags=["me"])
+
+# Events a watch-list follower can be notified about (the "global per-user" notification prefs).
+# A subset of AlertSubscription.alert_on: a watch list tracks specific bills, so "new_bill" (which is
+# about bills you haven't seen yet) doesn't apply.
+WATCHLIST_ALERT_EVENTS = {"status_change", "text_update", "deadline"}
+DEFAULT_WATCHLIST_ALERT_ON = ["status_change", "deadline"]
+
+
+async def _get_watchlist_subscription(
+    db: AsyncSession, uid: str
+) -> AlertSubscription | None:
+    res = await db.execute(
+        select(AlertSubscription).where(
+            AlertSubscription.firebase_uid == uid,
+            AlertSubscription.scope == "watchlist",
+        )
+    )
+    return res.scalar_one_or_none()
+
+
+async def _ensure_watchlist_subscription(
+    db: AsyncSession, user: AuthedUser
+) -> AlertSubscription:
+    """Return the user's watch-list alert subscription, creating it with default prefs if absent.
+
+    This is the delivery side of the watch list: membership lives in user_watchlist, while this one
+    row per user carries the notification prefs (which events to email about). min_confidence is 0 —
+    a bill you explicitly starred should alert regardless of how the classifier scored it. Does not
+    commit; the caller owns the transaction."""
+    sub = await _get_watchlist_subscription(db, user.uid)
+    if sub is None:
+        sub = AlertSubscription(
+            firebase_uid=user.uid,
+            scope="watchlist",
+            email=user.email,
+            states=[],
+            material_categories=[],
+            instrument_types=[],
+            min_confidence=0.0,
+            alert_on=list(DEFAULT_WATCHLIST_ALERT_ON),
+            active=True,
+        )
+        db.add(sub)
+    elif not sub.email and user.email:
+        sub.email = user.email
+    return sub
 
 
 class SettingsUpdate(BaseModel):
@@ -81,6 +127,9 @@ async def add_watch(
     )
     if exists.scalar_one_or_none() is None:
         db.add(WatchlistItem(firebase_uid=user.uid, bill_id=payload.bill_id))
+        # Following a bill opts the user into the alert pipeline: ensure their watch-list alert
+        # subscription exists (with default prefs) so status changes on this bill reach them.
+        await _ensure_watchlist_subscription(db, user)
         try:
             await db.commit()
         except IntegrityError:
@@ -103,3 +152,43 @@ async def remove_watch(
     )
     await db.commit()
     return {"bill_id": bill_id, "watched": False}
+
+
+class WatchlistPrefs(BaseModel):
+    # Which events to email about for watched bills. Subset of WATCHLIST_ALERT_EVENTS.
+    alert_on: list[str]
+    # Master on/off for watch-list emails (the subscription's active flag).
+    active: bool = True
+
+
+def _prefs_payload(sub: AlertSubscription | None) -> dict:
+    if sub is None:
+        return {"alert_on": list(DEFAULT_WATCHLIST_ALERT_ON), "active": True}
+    return {"alert_on": list(sub.alert_on or []), "active": bool(sub.active)}
+
+
+@router.get("/watchlist/prefs")
+async def get_watchlist_prefs(
+    user: AuthedUser = Depends(require_pro),
+    db: AsyncSession = Depends(get_db),
+):
+    """The user's watch-list notification prefs. Returns defaults if they haven't starred a bill yet
+    (no subscription row created)."""
+    return _prefs_payload(await _get_watchlist_subscription(db, user.uid))
+
+
+@router.put("/watchlist/prefs")
+async def put_watchlist_prefs(
+    payload: WatchlistPrefs,
+    user: AuthedUser = Depends(require_pro),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update which events the user is emailed about for their watched bills. Creates the
+    subscription if it doesn't exist yet, so prefs can be set before the first star."""
+    # Drop anything outside the allowed set (e.g. "new_bill" doesn't apply to a watch list).
+    cleaned = [e for e in payload.alert_on if e in WATCHLIST_ALERT_EVENTS]
+    sub = await _ensure_watchlist_subscription(db, user)
+    sub.alert_on = cleaned
+    sub.active = payload.active
+    await db.commit()
+    return _prefs_payload(sub)

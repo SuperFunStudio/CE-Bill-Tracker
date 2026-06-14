@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTable } from '@/components/bills/BillTable';
@@ -8,6 +8,12 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { useWatchlist } from '@/components/watchlist/WatchlistContext';
 import { startProCheckout } from '@/lib/billing';
 import { useBills } from '@/hooks/useBills';
+import {
+  getWatchlistPrefs,
+  saveWatchlistPrefs,
+  type WatchlistAlertEvent,
+  type WatchlistPrefs,
+} from '@/lib/userSettings';
 
 export default function WatchlistPage() {
   const { user, isPro, loading, openAuth, getToken } = useAuth();
@@ -53,8 +59,78 @@ export default function WatchlistPage() {
           </p>
         </div>
       ) : (
-        <BillTable bills={watchedBills} />
+        <>
+          <NotifyPrefs />
+          <BillTable bills={watchedBills} />
+        </>
       )}
+    </div>
+  );
+}
+
+const ALERT_OPTIONS: { event: WatchlistAlertEvent; label: string; hint: string }[] = [
+  { event: 'status_change', label: 'Status changes', hint: 'introduced, passed, signed, vetoed…' },
+  { event: 'deadline', label: 'Compliance deadlines', hint: 'when a deadline is approaching' },
+];
+
+/** Pro per-account control for which events email the user about their watched bills. */
+function NotifyPrefs() {
+  const { getToken } = useAuth();
+  const [prefs, setPrefs] = useState<WatchlistPrefs | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const p = await getWatchlistPrefs(await getToken());
+      if (active) setPrefs(p);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [getToken]);
+
+  const persist = useCallback(
+    async (next: WatchlistPrefs) => {
+      const prev = prefs;
+      setPrefs(next); // optimistic
+      try {
+        await saveWatchlistPrefs(await getToken(), next);
+      } catch {
+        setPrefs(prev); // reconcile on failure
+      }
+    },
+    [prefs, getToken],
+  );
+
+  if (!prefs) return null;
+
+  const toggle = (event: WatchlistAlertEvent) => {
+    const on = prefs.alert_on.includes(event);
+    const alert_on = on
+      ? prefs.alert_on.filter(e => e !== event)
+      : [...prefs.alert_on, event];
+    persist({ ...prefs, alert_on });
+  };
+
+  return (
+    <div className="rounded-xl border border-border-default bg-bg-secondary p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-text-primary text-sm font-medium">Email me about these bills</p>
+        <p className="text-text-muted text-xs">We&apos;ll send a note when a bill you follow moves.</p>
+      </div>
+      <div className="flex flex-wrap gap-4">
+        {ALERT_OPTIONS.map(({ event, label, hint }) => (
+          <label key={event} className="flex items-center gap-2 cursor-pointer" title={hint}>
+            <input
+              type="checkbox"
+              checked={prefs.alert_on.includes(event)}
+              onChange={() => toggle(event)}
+              className="accent-green-accent h-4 w-4"
+            />
+            <span className="text-text-secondary text-sm">{label}</span>
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

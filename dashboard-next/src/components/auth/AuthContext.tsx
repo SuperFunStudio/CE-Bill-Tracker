@@ -9,6 +9,7 @@ import {
   type User,
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
+import { track } from '@/lib/analytics';
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -76,14 +77,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInEmail = useCallback(async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
+    track('login', { method: 'email' });
   }, []);
 
   const signUpEmail = useCallback(async (email: string, password: string) => {
     await createUserWithEmailAndPassword(auth, email, password);
+    track('sign_up', { method: 'email' });
   }, []);
 
   const signInGoogle = useCallback(async () => {
     await signInWithPopup(auth, googleProvider);
+    track('login', { method: 'google' });
   }, []);
 
   const signOut = useCallback(async () => {

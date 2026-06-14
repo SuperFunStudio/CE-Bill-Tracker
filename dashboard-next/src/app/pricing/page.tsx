@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { CheckIcon } from '@/components/ui/icons';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
+import { track } from '@/lib/analytics';
 import type { PlanInterest } from '@/lib/api';
 
 interface Tier {
@@ -71,6 +72,13 @@ const TIERS: Tier[] = [
 export default function PricingPage() {
   const [modal, setModal] = useState<{ plan: PlanInterest; label: string } | null>(null);
 
+  // The CTA click that opens the request-access modal — the step *before* request_access submit. The
+  // gap between this and request_access is your modal drop-off.
+  function openPlan(plan: PlanInterest, label: string) {
+    track('pricing_cta', { plan, plan_label: label });
+    setModal({ plan, label });
+  }
+
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
       <GazetteHeader
@@ -110,13 +118,14 @@ export default function PricingPage() {
             {tier.id === 'free' ? (
               <Link
                 href="/#get-updates"
+                onClick={() => track('pricing_cta', { plan: 'free', plan_label: 'Free' })}
                 className="block text-center rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity"
               >
                 {tier.cta}
               </Link>
             ) : (
               <button
-                onClick={() => setModal({ plan: tier.id as PlanInterest, label: tier.name })}
+                onClick={() => openPlan(tier.id as PlanInterest, tier.name)}
                 className={`rounded-lg px-4 py-2 font-medium text-sm transition-opacity hover:opacity-90 ${
                   tier.highlight
                     ? 'bg-green-accent text-bg-primary'
@@ -141,7 +150,7 @@ export default function PricingPage() {
           </p>
         </div>
         <button
-          onClick={() => setModal({ plan: 'api', label: 'API' })}
+          onClick={() => openPlan('api', 'API')}
           className="shrink-0 rounded-lg border border-green-accent bg-green-dark px-5 py-2.5 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity"
         >
           Request API access & pricing →

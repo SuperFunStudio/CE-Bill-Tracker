@@ -4,6 +4,7 @@ import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, statusBadge } from '@/lib/utils';
 import { BillModal } from '@/components/ui/BillModal';
 import { WatchStar } from '@/components/watchlist/WatchStar';
+import { track } from '@/lib/analytics';
 
 interface BillTableProps {
   bills: BillSummary[];
@@ -40,6 +41,16 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
     ? bills.slice(safePage * autoPageSize, safePage * autoPageSize + autoPageSize)
     : maxRows ? bills.slice(0, maxRows) : bills;
   const selectedBill = bills.find(b => b.id === selectedId) ?? null;
+
+  // Mid-funnel engagement: which bills people actually open. State/type tell us what content pulls.
+  function openBill(bill: BillSummary) {
+    track('bill_open', {
+      bill_id: bill.id,
+      state: bill.state,
+      instrument_type: bill.instrument_type,
+    });
+    setSelectedId(bill.id);
+  }
 
   function LitigationBadge({ bill }: { bill: BillSummary }) {
     if (bill.litigation_case_count === 0) return null;
@@ -84,7 +95,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
             {displayBills.map(bill => (
               <tr
                 key={bill.id}
-                onClick={() => setSelectedId(bill.id)}
+                onClick={() => openBill(bill)}
                 className="border-b border-border-default cursor-pointer transition-colors hover:bg-bg-secondary"
               >
                 <td className="px-3 py-2">
@@ -140,7 +151,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
         {displayBills.map(bill => (
           <div
             key={bill.id}
-            onClick={() => setSelectedId(bill.id)}
+            onClick={() => openBill(bill)}
             className="rounded-lg border border-border-default bg-bg-secondary cursor-pointer transition-colors p-3 space-y-1.5 active:bg-green-dark/20"
           >
             {/* Row 1: state / bill# / litigation */}

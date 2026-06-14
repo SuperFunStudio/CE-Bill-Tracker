@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useWatchlist } from './WatchlistContext';
 import { useAuth } from '@/components/auth/AuthContext';
 import { StarIcon } from '@/components/ui/icons';
+import { track } from '@/lib/analytics';
 
 /** A follow/unfollow star for a bill. Stops row-click propagation; routes anon→sign-in, non-Pro→upgrade. */
 export function WatchStar({ billId, className }: { billId: number; className?: string }) {
@@ -24,6 +25,14 @@ export function WatchStar({ billId, className }: { billId: number; className?: s
       type="button"
       onClick={async e => {
         e.stopPropagation();
+        // Mid-funnel intent. signed_in/is_pro reveal how often the star is hit by users who hit the
+        // sign-in / Pro-upgrade wall vs. those who actually follow a bill.
+        track('watchlist_toggle', {
+          bill_id: billId,
+          action: watched ? 'remove' : 'add',
+          signed_in: !!user,
+          is_pro: isPro,
+        });
         setBusy(true);
         try {
           await toggle(billId);

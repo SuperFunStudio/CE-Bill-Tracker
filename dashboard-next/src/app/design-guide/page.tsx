@@ -7,7 +7,7 @@ import { useBills } from '@/hooks/useBills';
 import { BillModal } from '@/components/ui/BillModal';
 import { PrincipleCard } from '@/components/design-guide/PrincipleCard';
 import { startProCheckout, openFullGuide } from '@/lib/billing';
-import { TEASER_LEVERS, GUIDE_COVERAGE } from '@/data/designGuideTeaser';
+import { TEASER_LEVERS, GUIDE_COVERAGE, type TeaserLever } from '@/data/designGuideTeaser';
 
 // The Free teaser surfaces the headline design imperative per lever — what to design for, which
 // products/materials it lands on, and the grounded source bills behind it (each opens the same
@@ -15,6 +15,33 @@ import { TEASER_LEVERS, GUIDE_COVERAGE } from '@/data/designGuideTeaser';
 // evidence, printable) is the Pro deliverable; the SKU/portfolio-scoped version is Enterprise.
 
 const BOOKING_URL = 'https://calendar.app.google/QPXh1qXWhNWxXo9n6';
+
+// Two reading groups, ordered deliberately (not the raw dataset order). First: the R-ladder —
+// strategies that keep material in use, highest-value at the top (reuse/repair) descending to the
+// recovery pathways (recycle/compost). Then the material & disclosure rules: what a product is made
+// of and what must be declared on it.
+const GROUPS: { label: string; blurb: string; levers: string[] }[] = [
+  {
+    label: 'Keep it in the loop',
+    blurb:
+      'The R-ladder — choices that keep material circulating, highest-value first: reuse and repair down through recycling and composting.',
+    levers: [
+      'reuse_refill',
+      'repairability_durability',
+      'source_reduction',
+      'recycled_content',
+      'design_for_recycling',
+      'compostability',
+    ],
+  },
+  {
+    label: 'Material & disclosure',
+    blurb: 'What a product is made of — and what you have to declare on it.',
+    levers: ['material_restriction', 'toxics_elimination', 'labeling_marking'],
+  },
+];
+
+const LEVER_BY_KEY = new Map<string, TeaserLever>(TEASER_LEVERS.map(l => [l.lever, l]));
 
 export default function DesignGuidePage() {
   const { user, isPro, loading, openAuth, getToken, refreshEntitlement } = useAuth();
@@ -82,11 +109,25 @@ export default function DesignGuidePage() {
         Flip any card (↻) to see the bills it’s sourced from — each opens the full bill detail.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-stretch">
-        {TEASER_LEVERS.map(l => (
-          <PrincipleCard key={l.lever} lever={l} onOpenBill={setSelectedBillId} />
-        ))}
-      </div>
+      {GROUPS.map(group => {
+        const levers = group.levers
+          .map(k => LEVER_BY_KEY.get(k))
+          .filter((l): l is TeaserLever => Boolean(l));
+        if (!levers.length) return null;
+        return (
+          <section key={group.label} className="space-y-3">
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <h2 className="font-serif text-lg text-text-primary">{group.label}</h2>
+              <p className="text-text-muted text-xs leading-relaxed">{group.blurb}</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+              {levers.map(l => (
+                <PrincipleCard key={l.lever} lever={l} onOpenBill={setSelectedBillId} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
 
       <BillModal bill={selectedBill} onClose={() => setSelectedBillId(null)} />
 

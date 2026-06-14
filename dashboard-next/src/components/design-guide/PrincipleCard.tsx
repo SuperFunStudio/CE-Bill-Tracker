@@ -25,7 +25,7 @@ export function PrincipleCard({ lever, onOpenBill }: PrincipleCardProps) {
           className="absolute inset-0 flex flex-col overflow-hidden rounded-xl border border-border-default bg-bg-secondary p-5 [backface-visibility:hidden]"
           aria-hidden={flipped}
         >
-          <h2 className="font-serif text-lg text-text-primary leading-tight mb-2">{lever.name}</h2>
+          <h3 className="font-serif text-lg text-text-primary leading-tight mb-2">{lever.name}</h3>
           <p className="text-text-primary text-sm font-medium mb-1.5">{lever.headline}</p>
           {lever.direction && (
             <p className="text-text-secondary text-sm leading-relaxed mb-4">{lever.direction}</p>

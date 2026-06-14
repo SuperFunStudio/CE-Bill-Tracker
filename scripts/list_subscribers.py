@@ -35,7 +35,8 @@ def main() -> int:
 
     where = "" if args.all else "WHERE active = true"
     query = f"""
-        SELECT created_at, email, organization, active, states, instrument_types
+        SELECT created_at, email, organization, active, states, instrument_types,
+               material_categories
         FROM alert_subscriptions
         {where}
         ORDER BY created_at DESC
@@ -49,15 +50,20 @@ def main() -> int:
         print("No subscribers found.")
         return 0
 
+    # Empty list (no filter) matches everything, same as ["ALL"] — render both as "all X".
+    def summarize(values, all_label):
+        return all_label if not values or values == ["ALL"] else ", ".join(values)
+
     print(f"{len(rows)} subscriber(s):\n")
-    for created_at, email, org, active, states, instruments in rows:
+    for created_at, email, org, active, states, instruments, materials in rows:
         when = created_at.strftime("%Y-%m-%d") if created_at else "?"
         flag = "" if active else "  [unsubscribed]"
         org_str = f" · {org}" if org else ""
-        topics = "all topics" if instruments in (["ALL"], None) else ", ".join(instruments)
-        places = "all jurisdictions" if states in (["ALL"], None) else ", ".join(states)
+        topics = summarize(instruments, "all topics")
+        mats = summarize(materials, "all materials")
+        places = summarize(states, "all jurisdictions")
         print(f"  {when}  {email or '(no email)'}{org_str}{flag}")
-        print(f"            {topics}  |  {places}")
+        print(f"            {topics}  |  {mats}  |  {places}")
     return 0
 
 

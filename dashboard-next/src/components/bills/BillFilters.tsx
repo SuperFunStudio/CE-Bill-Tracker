@@ -40,8 +40,10 @@ const STATUSES = [
 // Values must match the classifier instrument_type enum (see app/classification/haiku_classifier.py).
 // chemical_restriction and budget are omitted: neither is a tracked circular-economy instrument
 // (see TRACKED_INSTRUMENTS); budget is generic appropriations and pulls in tangential bills.
+// `incentives` IS surfaced: it's the financial lever (tax credits, grants, funding) for in-scope
+// circular-economy outcomes, and supersedes the in-scope use of budget.
 const INSTRUMENT_TYPES = ['epr', 'deposit_return', 'right_to_repair', 'recycled_content',
-  'labeling', 'preemption', 'other'];
+  'incentives', 'labeling', 'preemption', 'other'];
 // Values must match the material categories in data/seed/epr_keywords.json.
 // biobased / agriculture are the biological cycle of the circular economy (bio-based materials,
 // regenerative ag & soil health); composting/organics-recycling bills tag "organics". These live

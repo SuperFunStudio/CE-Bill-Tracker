@@ -109,6 +109,7 @@ const INSTRUMENT_DISPLAY: Record<string, string> = {
   deposit_return: 'Deposit Return',
   recycled_content: 'Recycled Content',
   right_to_repair: 'Right to Repair',
+  incentives: 'Incentives',
   labeling: 'Labeling',
   preemption: 'Preemption',
   other: 'Other',

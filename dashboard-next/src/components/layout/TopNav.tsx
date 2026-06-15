@@ -5,8 +5,9 @@ import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeContext';
 import { useScrolled } from '@/hooks/useScrolled';
 import { AuthButton } from '@/components/auth/AuthButton';
+import { useAuth } from '@/components/auth/AuthContext';
 import {
-  HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, SunIcon, MoonIcon,
+  HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
 } from '@/components/ui/icons';
 
 const NAV_ITEMS = [
@@ -19,6 +20,10 @@ const NAV_ITEMS = [
   { href: '/about', label: 'About', Icon: InfoIcon },
 ];
 
+// Pro subscribers have already bought — surface "Account" where the "Pricing" link sits rather than
+// keep selling them the plan they own. The /pricing route stays reachable directly.
+const ACCOUNT_ITEM = { href: '/account', label: 'Account', Icon: UserIcon };
+
 /**
  * Top nav with the "BATTLE OF THE BILLS" masthead centered, theme toggle pinned right.
  * At sm+ an inline section bar (newspaper-style) shows every destination; on mobile that
@@ -29,13 +34,19 @@ export function TopNav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const scrolled = useScrolled(80);
   const { theme, toggle } = useTheme();
+  const { isPro } = useAuth();
+
+  // Pro users get "Account" in place of "Pricing"; everyone else keeps the Pricing link.
+  const navItems = isPro
+    ? NAV_ITEMS.map(item => (item.href === '/pricing' ? ACCOUNT_ITEM : item))
+    : NAV_ITEMS;
 
   const isActive = (href: string) =>
     pathname === href || (href !== '/' && pathname.startsWith(href));
 
   // 'bar' = horizontal desktop section strip; 'menu' = stacked mobile dropdown rows.
   const renderLinks = (variant: 'bar' | 'menu') =>
-    NAV_ITEMS.map(({ href, label, Icon }) => {
+    navItems.map(({ href, label, Icon }) => {
       const active = isActive(href);
       const cls = variant === 'bar'
         ? `inline-flex items-center gap-1.5 px-2 py-1 font-serif text-sm tracking-wide border-b-2 transition-colors ${

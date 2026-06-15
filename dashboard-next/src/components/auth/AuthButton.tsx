@@ -48,6 +48,13 @@ export function AuthButton() {
       {open && (
         <div className="absolute right-0 mt-1 w-48 rounded-lg border border-border-default bg-bg-secondary shadow-lg p-1 z-50">
           <Link
+            href="/account"
+            onClick={() => setOpen(false)}
+            className="block w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-bg-primary rounded"
+          >
+            Account settings
+          </Link>
+          <Link
             href="/watchlist"
             onClick={() => setOpen(false)}
             className="block w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-bg-primary rounded"

@@ -626,8 +626,9 @@ class IngestionCoordinator:
         return {"new_federal_actions": new_count, "classified_federal_actions": classified}
 
     async def _classify_federal_actions(self, actions: list[FederalAction]) -> int:
-        """Populate epr_relevant / preemption_risk / ai_summary / material_categories
-        on newly-ingested federal actions. Returns the number classified."""
+        """Populate epr_relevant / preemption_risk / friction_type / instrument_type /
+        ai_summary / material_categories on newly-ingested federal actions. Returns the
+        number classified."""
         from app.classification.federal_classifier import FederalClassifier
 
         classifier = FederalClassifier()
@@ -645,8 +646,12 @@ class IngestionCoordinator:
                 log.error("federal_classify_failed", doc=action.federal_register_document_number,
                           error=str(e), error_type=type(e).__name__)
                 continue
-            action.epr_relevant = fr.is_relevant
+            # in_scope applies the confidence floor (mirrors the state-bill relevance gate);
+            # a low-confidence is_relevant guess no longer counts as relevant.
+            action.epr_relevant = fr.in_scope
             action.preemption_risk = fr.preemption_risk
+            action.friction_type = fr.friction_type
+            action.instrument_type = fr.instrument_type
             action.ai_summary = fr.summary
             action.material_categories = fr.material_categories
             classified += 1

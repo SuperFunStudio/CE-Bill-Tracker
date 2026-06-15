@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import access, bills, alerts, pipeline, health, federal, companies, webhooks, billing, design, user
+from app.api import access, admin, bills, alerts, pipeline, health, federal, companies, webhooks, billing, design, user
 from app.api.federal import litigation_router
 
 
@@ -33,7 +33,7 @@ app.add_middleware(
         "http://localhost:3000",
     ],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -58,3 +58,4 @@ app.include_router(litigation_router)
 app.include_router(billing.router)
 app.include_router(design.router)
 app.include_router(user.router)
+app.include_router(admin.router)

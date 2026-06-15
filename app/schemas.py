@@ -67,6 +67,9 @@ class FederalActionSummary(BaseModel):
     effective_date: date | None
     document_url: str | None
     preemption_risk: str | None
+    friction_type: str | None
+    instrument_type: str | None
+    material_categories: list[str] | None
     ai_summary: str | None
     epr_relevant: bool
 

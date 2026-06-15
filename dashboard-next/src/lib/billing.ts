@@ -29,6 +29,24 @@ export async function openBillingPortal(getToken: () => Promise<string | null>):
   window.location.href = url;
 }
 
+/** Permanently delete the signed-in account (cancels Stripe, purges data, removes the auth user).
+ * Returns the server's report — `firebase_deleted` flags whether the auth identity was removed. */
+export async function deleteAccount(
+  getToken: () => Promise<string | null>,
+): Promise<{ deleted: boolean; firebase_deleted: boolean }> {
+  const token = await getToken();
+  if (!token) throw new Error('Please sign in first.');
+  const res = await fetch(`${API}/me/account`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Could not delete account (${res.status})${detail ? `: ${detail}` : ''}`);
+  }
+  return res.json();
+}
+
 /** Fetch the Pro-gated full Design Guide HTML and open it in a new tab. */
 export async function openFullGuide(getToken: () => Promise<string | null>): Promise<void> {
   const token = await getToken();

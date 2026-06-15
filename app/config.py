@@ -144,6 +144,19 @@ class Settings(BaseSettings):
     stripe_publishable_key: str = ""
     # Firebase project whose ID tokens we verify on premium routes (firebase-admin).
     firebase_project_id: str = "ce-bill-tracker"
+    # Emails allowed into the hidden /admin console (manage sign-ups, grant complimentary Pro, …).
+    # Compared case-insensitively against the verified Firebase email. Override in prod via the
+    # ADMIN_EMAILS env var — accepts a comma-separated list ("a@x.com,b@y.com") or a JSON array.
+    admin_emails: list[str] = ["kenny@superfun.studio"]
+
+    @field_validator("admin_emails", mode="before")
+    @classmethod
+    def split_admin_emails(cls, v):
+        # Accept a comma-separated string in addition to pydantic's default JSON-list parsing, so the
+        # env var can be set the obvious way ("a@x.com, b@y.com") without JSON quoting.
+        if isinstance(v, str) and not v.strip().startswith("["):
+            return [e.strip() for e in v.split(",") if e.strip()]
+        return v
     # Dashboard origin Stripe Checkout returns to (success/cancel) and that we allow for auth.
     app_base_url: str = "https://ce-bill-tracker.web.app"
 

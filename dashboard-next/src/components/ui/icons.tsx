@@ -159,6 +159,16 @@ export function CompassIcon(props: IconProps) {
   );
 }
 
+/** User silhouette — account / profile. */
+export function UserIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6" />
+    </Icon>
+  );
+}
+
 export function SunIcon(props: IconProps) {
   return (
     <Icon {...props}>

@@ -16,7 +16,19 @@ router = APIRouter(prefix="/federal-actions", tags=["federal"])
 async def list_federal_actions(
     action_type: str | None = None,
     preemption_risk: str | None = None,
-    days_back: int = Query(default=365, description="How many days back to fetch"),
+    instrument_type: str | None = None,
+    material_category: str | None = None,
+    friction_type: str | None = None,
+    epr_relevant: bool | None = Query(
+        default=True,
+        description="Filter by EPR relevance. Defaults to true so the page only shows "
+        "classified-relevant actions; pass false to inspect the rejected/noise rows.",
+    ),
+    days_back: int = Query(
+        default=1825,
+        description="How many days back to fetch. Defaults to ~5y: the federal feed is sparse "
+        "and these actions (strategies, comment dockets, procurement rules) stay relevant for years.",
+    ),
     limit: int = Query(default=50, le=200),
     db: AsyncSession = Depends(get_db),
 ):
@@ -28,10 +40,18 @@ async def list_federal_actions(
         .order_by(FederalAction.published_date.desc())
         .limit(limit)
     )
+    if epr_relevant is not None:
+        q = q.where(FederalAction.epr_relevant == epr_relevant)
     if action_type:
         q = q.where(FederalAction.action_type == action_type)
     if preemption_risk:
         q = q.where(FederalAction.preemption_risk == preemption_risk)
+    if instrument_type:
+        q = q.where(FederalAction.instrument_type == instrument_type)
+    if friction_type:
+        q = q.where(FederalAction.friction_type == friction_type)
+    if material_category:
+        q = q.where(FederalAction.material_categories.contains([material_category]))
     result = await db.execute(q)
     return result.scalars().all()
 

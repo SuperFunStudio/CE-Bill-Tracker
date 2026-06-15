@@ -29,6 +29,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/federal': 'Federal',
   '/company': 'Company Impact',
   '/pricing': 'Pricing',
+  '/account': 'Account',
   '/about': 'About',
   '/methodology': 'Methodology',
 };

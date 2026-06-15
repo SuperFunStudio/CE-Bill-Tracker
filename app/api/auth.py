@@ -7,6 +7,8 @@ verified email, the same key the billing webhook writes. See gating-and-monetiza
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import structlog
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
@@ -72,8 +74,17 @@ async def get_entitlement(db: AsyncSession, user: AuthedUser) -> Entitlement | N
 
 
 def is_pro(ent: Entitlement | None) -> bool:
-    """A live Pro seat: plan is pro and the subscription is in good standing."""
-    return bool(ent and ent.plan == "pro" and ent.status in ("active", "trialing"))
+    """A live Pro seat: plan is pro and the subscription is in good standing.
+
+    A complimentary grant (ent.comp) has no Stripe webhook to flip it off, so we enforce its expiry
+    here: a comp seat whose current_period_end has passed is no longer Pro. A NULL period_end on a
+    comp seat means an indefinite grant.
+    """
+    if not (ent and ent.plan == "pro" and ent.status in ("active", "trialing")):
+        return False
+    if ent.comp and ent.current_period_end and ent.current_period_end < datetime.now(timezone.utc):
+        return False
+    return True
 
 
 async def require_pro(
@@ -84,4 +95,19 @@ async def require_pro(
     ent = await get_entitlement(db, user)
     if not is_pro(ent):
         raise HTTPException(status_code=403, detail="pro subscription required")
+    return user
+
+
+def is_admin(user: AuthedUser) -> bool:
+    """Is this verified email on the admin allowlist (settings.admin_emails)?"""
+    allow = {e.lower().strip() for e in settings.admin_emails}
+    return bool(user.email) and user.email.lower().strip() in allow
+
+
+async def require_admin(
+    user: AuthedUser = Depends(get_current_user),
+) -> AuthedUser:
+    """Guard for the hidden /admin console — 401 if unauthenticated, 403 if not an admin."""
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="admin access required")
     return user

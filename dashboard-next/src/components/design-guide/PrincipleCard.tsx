@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { TeaserLever } from '@/data/designGuideTeaser';
+import { track } from '@/lib/analytics';
 
 interface PrincipleCardProps {
   lever: TeaserLever;
@@ -48,7 +49,10 @@ export function PrincipleCard({ lever, onOpenBill }: PrincipleCardProps) {
 
           <button
             type="button"
-            onClick={() => setFlipped(true)}
+            onClick={() => {
+              track('design_card_flip', { lever: lever.lever, name: lever.name, bill_count: billCount });
+              setFlipped(true);
+            }}
             className="mt-4 pt-3 border-t border-border-default flex items-center justify-between gap-2 text-left text-green-accent text-xs font-medium hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/50 rounded-sm transition-opacity"
             aria-label={`Show the ${billCount} bills behind ${lever.name}`}
           >
@@ -88,7 +92,10 @@ export function PrincipleCard({ lever, onOpenBill }: PrincipleCardProps) {
               <button
                 key={b.billId}
                 type="button"
-                onClick={() => onOpenBill(b.billId)}
+                onClick={() => {
+                  track('design_source_bill_open', { lever: lever.lever, bill_id: b.billId, state: b.state });
+                  onOpenBill(b.billId);
+                }}
                 className="text-xs rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-text-secondary hover:border-green-accent hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/50 transition-colors"
               >
                 <span className="font-mono text-[10px] text-text-muted">{b.state}</span> {b.billNumber}

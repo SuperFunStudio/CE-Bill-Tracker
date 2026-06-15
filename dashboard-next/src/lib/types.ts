@@ -88,6 +88,9 @@ export interface FederalActionSummary {
   effective_date: string | null;
   document_url: string | null;
   preemption_risk: string | null;
+  friction_type: string | null;
+  instrument_type: string | null;
+  material_categories: string[] | null;
   ai_summary: string | null;
   epr_relevant: boolean;
 }
@@ -248,4 +251,9 @@ export interface FederalActionParams {
   days_back?: number;
   limit?: number;
   action_type?: string;
+  preemption_risk?: string;
+  instrument_type?: string;
+  material_category?: string;
+  friction_type?: string;
+  epr_relevant?: boolean;
 }

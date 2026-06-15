@@ -7,14 +7,27 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { AlertIcon } from '@/components/ui/icons';
-import { formatDate, daysUntil, fixEncoding } from '@/lib/utils';
+import { formatDate, daysUntil, fixEncoding, formatInstrumentType } from '@/lib/utils';
+import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
 import type { FederalActionSummary, LitigationCaseSummary } from '@/lib/types';
+
+const titleCase = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 function ActionTypeBadge({ type }: { type: string | null | undefined }) {
   if (!type) return null;
   return (
     <span className="bg-bg-primary border border-border-default rounded px-2 py-0.5 text-xs text-text-secondary">
-      {type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+      {titleCase(type)}
+    </span>
+  );
+}
+
+// friction_type is the federal-specific axis: how this action pressures state EPR programs.
+function FrictionBadge({ friction }: { friction: string | null | undefined }) {
+  if (!friction || friction === 'none') return null;
+  return (
+    <span className="bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded px-2 py-0.5 text-xs text-amber-800 dark:text-amber-300">
+      {titleCase(friction)}
     </span>
   );
 }
@@ -28,7 +41,13 @@ function FederalActionCard({ action }: { action: FederalActionSummary }) {
           <div className="flex items-center gap-2 flex-wrap mb-1">
             {action.agency && <span className="text-green-accent text-xs font-mono">{action.agency}</span>}
             <ActionTypeBadge type={action.action_type} />
-            {action.preemption_risk && <RiskBadge risk={action.preemption_risk} />}
+            {action.instrument_type && action.instrument_type !== 'other' && (
+              <span className="bg-bg-primary border border-green-accent/40 rounded px-2 py-0.5 text-xs text-green-accent">
+                {formatInstrumentType(action.instrument_type)}
+              </span>
+            )}
+            <FrictionBadge friction={action.friction_type} />
+            {action.preemption_risk && action.preemption_risk !== 'none' && <RiskBadge risk={action.preemption_risk} />}
           </div>
           <h3 className="text-text-primary font-medium text-sm leading-snug">
             {fixEncoding(action.title) || 'Untitled Action'}
@@ -39,6 +58,16 @@ function FederalActionCard({ action }: { action: FederalActionSummary }) {
 
       {action.ai_summary && (
         <p className="text-text-secondary text-sm">{fixEncoding(action.ai_summary)}</p>
+      )}
+
+      {action.material_categories && action.material_categories.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {action.material_categories.filter(m => m !== 'other').map(m => (
+            <span key={m} className="bg-bg-primary border border-border-default rounded px-1.5 py-0.5 text-[11px] text-text-muted">
+              {titleCase(m)}
+            </span>
+          ))}
+        </div>
       )}
 
       <div className="flex flex-wrap gap-4 text-xs text-text-muted">
@@ -137,22 +166,28 @@ function LitigationCaseDetail({ caseId }: { caseId: number }) {
 }
 
 export default function FederalPage() {
-  const [actionTypeFilter, setActionTypeFilter] = useState('');
+  const [instrumentFilter, setInstrumentFilter] = useState('');
+  const [materialFilter, setMaterialFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
   const [expandedCaseId, setExpandedCaseId] = useState<number | null>(null);
 
-  const { data: actions = [], isLoading: actionsLoading } = useFederalActions({ limit: 100 });
+  // epr_relevant defaults true server-side; pass it explicitly so the page only ever shows
+  // classified-relevant federal actions (the API still supports epr_relevant=false to inspect noise).
+  const { data: actions = [], isLoading: actionsLoading } = useFederalActions({ limit: 100, epr_relevant: true, days_back: 3650 });
   const { data: cases = [], isLoading: casesLoading } = useLitigationCases();
 
   const filteredActions = useMemo(() => {
     let filtered = actions;
-    if (actionTypeFilter) filtered = filtered.filter(a => a.action_type === actionTypeFilter);
-    if (riskFilter) filtered = filtered.filter(a => a.preemption_risk === riskFilter);
+    if (instrumentFilter) filtered = filtered.filter(a => a.instrument_type === instrumentFilter);
+    if (materialFilter) filtered = filtered.filter(a => a.material_categories?.includes(materialFilter));
+    if (riskFilter) filtered = filtered.filter(a => (a.preemption_risk ?? '').toLowerCase() === riskFilter);
     return filtered;
-  }, [actions, actionTypeFilter, riskFilter]);
+  }, [actions, instrumentFilter, materialFilter, riskFilter]);
 
-  const highRisk = filteredActions.filter(a => a.preemption_risk === 'High').length;
-  const actionTypes = Array.from(new Set(actions.map(a => a.action_type).filter(Boolean)));
+  const highRisk = filteredActions.filter(a => (a.preemption_risk ?? '').toLowerCase() === 'high').length;
+  // Only surface facet options actually present in the data, so empty dropdowns don't appear.
+  const instrumentOptions = Array.from(new Set(actions.map(a => a.instrument_type).filter((t): t is string => !!t && t !== 'other'))).sort();
+  const materialOptions = MATERIAL_CATEGORIES.filter(m => m !== 'other' && actions.some(a => a.material_categories?.includes(m)));
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
@@ -183,15 +218,28 @@ export default function FederalPage() {
       {/* Filters */}
       <div className="bg-bg-secondary border border-border-default rounded-lg p-4 flex flex-wrap gap-4">
         <div className="flex flex-col gap-1">
-          <label className="text-text-muted text-xs uppercase">Action Type</label>
+          <label className="text-text-muted text-xs uppercase">Instrument</label>
           <select
-            value={actionTypeFilter}
-            onChange={e => setActionTypeFilter(e.target.value)}
+            value={instrumentFilter}
+            onChange={e => setInstrumentFilter(e.target.value)}
             className="bg-bg-primary border border-border-default rounded px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-green-accent"
           >
-            <option value="">All Types</option>
-            {(actionTypes as string[]).map(t => (
-              <option key={t} value={t}>{t!.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+            <option value="">All Instruments</option>
+            {instrumentOptions.map(t => (
+              <option key={t} value={t}>{formatInstrumentType(t)}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-text-muted text-xs uppercase">Material / Product</label>
+          <select
+            value={materialFilter}
+            onChange={e => setMaterialFilter(e.target.value)}
+            className="bg-bg-primary border border-border-default rounded px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-green-accent"
+          >
+            <option value="">All Materials</option>
+            {materialOptions.map(m => (
+              <option key={m} value={m}>{titleCase(m)}</option>
             ))}
           </select>
         </div>
@@ -203,7 +251,7 @@ export default function FederalPage() {
             className="bg-bg-primary border border-border-default rounded px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-green-accent"
           >
             <option value="">All Risk Levels</option>
-            {['High', 'Medium', 'Low'].map(r => <option key={r} value={r}>{r}</option>)}
+            {['high', 'medium', 'low'].map(r => <option key={r} value={r}>{titleCase(r)}</option>)}
           </select>
         </div>
       </div>

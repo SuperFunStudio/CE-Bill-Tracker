@@ -6,16 +6,27 @@ follows. See app/api/auth.py + gating-and-monetization-plan.
 """
 from __future__ import annotations
 
+import stripe
+import structlog
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
-from app.api.auth import AuthedUser, get_current_user, require_pro
+from app.api.auth import (
+    AuthedUser,
+    _ensure_firebase,
+    get_current_user,
+    get_entitlement,
+    require_pro,
+)
+from app.config import settings
 from app.database import get_db
-from app.models import AlertSubscription, UserSettings, WatchlistItem
+from app.models import AlertSubscription, Entitlement, UserSettings, WatchlistItem
 
+log = structlog.get_logger()
 router = APIRouter(prefix="/me", tags=["me"])
 
 # Events a watch-list follower can be notified about (the "global per-user" notification prefs).
@@ -192,3 +203,55 @@ async def put_watchlist_prefs(
     sub.active = payload.active
     await db.commit()
     return _prefs_payload(sub)
+
+
+@router.delete("/account")
+async def delete_account(
+    user: AuthedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete the signed-in account: cancel any live Stripe subscription, purge the
+    user's rows, then remove the Firebase user.
+
+    Order matters: cancel billing first (so a failed purge never leaves an uncancelled sub), then
+    erase data, then delete the auth identity last (its token is still needed to reach this route).
+    Stripe and Firebase calls are best-effort — a failure there must not block the local erase, so
+    the caller gets a clean account-gone response even if an external system lagged. The response
+    flags whether the Firebase delete actually landed (it needs the Firebase Auth Admin role, which
+    may be absent in some environments — see app/api/auth.py)."""
+    ent = await get_entitlement(db, user)
+
+    # 1. Cancel the Stripe subscription if it's live. Best-effort: log and continue on failure.
+    if ent and ent.stripe_subscription_id and ent.status in ("active", "trialing"):
+        stripe.api_key = settings.stripe_secret_key
+        try:
+            await run_in_threadpool(stripe.Subscription.delete, ent.stripe_subscription_id)
+        except Exception as e:  # noqa: BLE001 — never let billing block the erase
+            log.warning("delete_account_stripe_cancel_failed", error=str(e), email=user.email)
+
+    # 2. Purge all of this user's rows. WatchlistItem / UserSettings / the watch-list AlertSubscription
+    #    key on firebase_uid; topic-alert subscriptions and the Entitlement key on email.
+    await db.execute(delete(WatchlistItem).where(WatchlistItem.firebase_uid == user.uid))
+    await db.execute(delete(UserSettings).where(UserSettings.firebase_uid == user.uid))
+    await db.execute(
+        delete(AlertSubscription).where(
+            (AlertSubscription.firebase_uid == user.uid)
+            | (AlertSubscription.email == user.email)
+        )
+    )
+    await db.execute(delete(Entitlement).where(Entitlement.email == user.email))
+    await db.commit()
+
+    # 3. Delete the Firebase auth user last. Privileged call — needs the Firebase Auth Admin role.
+    firebase_deleted = False
+    try:
+        _ensure_firebase()
+        from firebase_admin import auth as fb_auth
+
+        await run_in_threadpool(fb_auth.delete_user, user.uid)
+        firebase_deleted = True
+    except Exception as e:  # noqa: BLE001 — data is already gone; report the lag, don't 500
+        log.warning("delete_account_firebase_delete_failed", error=str(e), uid=user.uid)
+
+    log.info("account_deleted", email=user.email, firebase_deleted=firebase_deleted)
+    return {"deleted": True, "firebase_deleted": firebase_deleted}

@@ -7,6 +7,7 @@ import { useBills } from '@/hooks/useBills';
 import { BillModal } from '@/components/ui/BillModal';
 import { PrincipleCard } from '@/components/design-guide/PrincipleCard';
 import { startProCheckout, openFullGuide } from '@/lib/billing';
+import { track } from '@/lib/analytics';
 import { TEASER_LEVERS, GUIDE_COVERAGE, type TeaserLever } from '@/data/designGuideTeaser';
 
 // The Free teaser surfaces the headline design imperative per lever — what to design for, which
@@ -69,6 +70,9 @@ export default function DesignGuidePage() {
 
   async function handlePrimary() {
     setError('');
+    // The Pro-gate CTA: which action it resolves to is the conversion intent on this page —
+    // sign_in (anon), upgrade (free user), or open_guide (already Pro).
+    track('design_guide_cta', { action: !user ? 'sign_in' : isPro ? 'open_guide' : 'upgrade' });
     if (!user) {
       openAuth();
       return;

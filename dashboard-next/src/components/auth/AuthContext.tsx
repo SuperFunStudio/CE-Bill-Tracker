@@ -25,6 +25,7 @@ interface AuthState {
   loading: boolean;
   entitlement: Entitlement | null;
   isPro: boolean;
+  isAdmin: boolean;
   authModalOpen: boolean;
   openAuth: () => void;
   closeAuth: () => void;
@@ -42,22 +43,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const fetchEntitlement = useCallback(async (u: User | null) => {
     if (!u) {
       setEntitlement(null);
+      setIsAdmin(false);
       return;
     }
     try {
       const token = await u.getIdToken();
-      const res = await fetch(`${API}/billing/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setEntitlement(await res.json());
-      else setEntitlement(null);
+      const [entRes, adminRes] = await Promise.all([
+        fetch(`${API}/billing/me`, { headers: { Authorization: `Bearer ${token}` } }),
+        // 200 only for an allowlisted admin; 403 for everyone else. Used to reveal the hidden console.
+        fetch(`${API}/admin/me`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      setEntitlement(entRes.ok ? await entRes.json() : null);
+      setIsAdmin(adminRes.ok);
     } catch {
       setEntitlement(null);
+      setIsAdmin(false);
     }
   }, []);
 
@@ -99,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     entitlement,
     isPro: !!entitlement?.is_pro,
+    isAdmin,
     authModalOpen,
     openAuth: () => setAuthModalOpen(true),
     closeAuth: () => setAuthModalOpen(false),

@@ -326,6 +326,11 @@ class FederalAction(Base):
     document_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     epr_relevant: Mapped[bool] = mapped_column(Boolean, default=False)
     preemption_risk: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # friction_type / instrument_type: the other two classifier axes. friction_type is
+    # federal-specific (how the action pressures state programs); instrument_type reuses the
+    # state-bill vocabulary so the federal page can share the bill explorer's instrument facet.
+    friction_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    instrument_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     raw_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -651,6 +656,14 @@ class Entitlement(Base):
     current_period_end: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Complimentary ("comp") Pro granted by an admin — no Stripe subscription behind it. When True,
+    # current_period_end (if set) is the grant's expiry; NULL period_end means indefinite. There is no
+    # Stripe webhook to flip a comp grant off, so is_pro() enforces the expiry itself. comp_note /
+    # comp_granted_by / comp_granted_at are the audit trail (why, which admin, when). See app/api/admin.py.
+    comp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    comp_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comp_granted_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    comp_granted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

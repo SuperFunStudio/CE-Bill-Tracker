@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { CheckIcon } from '@/components/ui/icons';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
+import { useAuth } from '@/components/auth/AuthContext';
+import { startProCheckout } from '@/lib/billing';
 import { track } from '@/lib/analytics';
 import type { PlanInterest } from '@/lib/api';
 
@@ -18,9 +20,9 @@ interface Tier {
   highlight?: boolean;
 }
 
-// Pro shows one confident price ($39); Free is $0 and Enterprise is Custom. The "Request access &
-// pricing" clicks (who, org, tier) still set the real numbers before any billing is built — Pro's
-// CTA stays request-access until self-serve checkout exists. See app/api/access.py.
+// Pro shows one confident price ($39) and is self-serve: its CTA goes straight to Stripe Checkout.
+// Free is $0; Enterprise (and API, below the grid) have no self-serve price, so they keep the
+// "Request access & pricing" lead-capture modal. See app/api/billing.py + app/api/access.py.
 const TIERS: Tier[] = [
   {
     id: 'free',
@@ -48,7 +50,7 @@ const TIERS: Tier[] = [
       'Portfolio-scoped deadline dashboard',
       'Material and Product Design guide',
     ],
-    cta: 'Request access & pricing',
+    cta: 'Subscribe — $39/mo',
     highlight: true,
   },
   {
@@ -70,13 +72,34 @@ const TIERS: Tier[] = [
 ];
 
 export default function PricingPage() {
+  const { isPro, user, openAuth, getToken } = useAuth();
   const [modal, setModal] = useState<{ plan: PlanInterest; label: string } | null>(null);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   // The CTA click that opens the request-access modal — the step *before* request_access submit. The
   // gap between this and request_access is your modal drop-off.
   function openPlan(plan: PlanInterest, label: string) {
     track('pricing_cta', { plan, plan_label: label });
     setModal({ plan, label });
+  }
+
+  // Pro is self-serve: send the visitor to Stripe Checkout. Checkout needs an authenticated user
+  // (the backend keys the Stripe customer off the verified email), so prompt sign-in first if needed.
+  async function startPro() {
+    track('pricing_cta', { plan: 'pro', plan_label: 'Pro' });
+    setCheckoutError(null);
+    if (!user) {
+      openAuth();
+      return;
+    }
+    setCheckoutBusy(true);
+    try {
+      await startProCheckout(getToken);
+    } catch (e) {
+      setCheckoutError(e instanceof Error ? e.message : 'Could not start checkout.');
+      setCheckoutBusy(false);
+    }
   }
 
   return (
@@ -115,7 +138,17 @@ export default function PricingPage() {
                 </li>
               ))}
             </ul>
-            {tier.id === 'free' ? (
+            {tier.id === 'pro' && isPro ? (
+              // Already subscribed — show a purchased badge that routes to account management
+              // instead of the request-access CTA.
+              <Link
+                href="/account"
+                className="flex items-center justify-center gap-2 rounded-lg bg-green-accent text-bg-primary px-4 py-2 font-medium text-sm hover:opacity-90 transition-opacity"
+              >
+                <CheckIcon className="text-xs" />
+                Purchased
+              </Link>
+            ) : tier.id === 'free' ? (
               <Link
                 href="/#get-updates"
                 onClick={() => track('pricing_cta', { plan: 'free', plan_label: 'Free' })}
@@ -123,6 +156,17 @@ export default function PricingPage() {
               >
                 {tier.cta}
               </Link>
+            ) : tier.id === 'pro' ? (
+              <div className="space-y-2">
+                <button
+                  onClick={startPro}
+                  disabled={checkoutBusy}
+                  className="w-full rounded-lg bg-green-accent text-bg-primary px-4 py-2 font-medium text-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {checkoutBusy ? 'Starting…' : `${tier.cta} →`}
+                </button>
+                {checkoutError && <p className="text-red-400 text-xs">{checkoutError}</p>}
+              </div>
             ) : (
               <button
                 onClick={() => openPlan(tier.id as PlanInterest, tier.name)}

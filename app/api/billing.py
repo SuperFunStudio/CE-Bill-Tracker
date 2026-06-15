@@ -131,6 +131,8 @@ async def _apply_subscription(db: AsyncSession, customer_id: str | None, sub: di
     ent.stripe_subscription_id = sub.get("id") or ent.stripe_subscription_id
     ent.current_period_end = _period_end(sub)
     ent.plan = "pro" if status in ("active", "trialing") else "free"
+    # This seat is now Stripe-backed; clear any comp marker so its period_end isn't read as a comp expiry.
+    ent.comp = False
     await db.commit()
 
 
@@ -167,6 +169,9 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             ent.stripe_subscription_id = obj.get("subscription") or ent.stripe_subscription_id
             ent.plan = "pro"
             ent.status = "active"
+            # A real paid conversion supersedes any complimentary grant — drop the comp marker so
+            # is_pro() stops applying a comp expiry to what is now a Stripe-backed seat.
+            ent.comp = False
             sub_id = obj.get("subscription")
             if sub_id:
                 try:

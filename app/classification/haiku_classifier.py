@@ -40,6 +40,12 @@ TRACKED_INSTRUMENTS = frozenset({
 # same reason: not circular-economy instruments. chemical_restriction surfaced chemical-safety
 # bills like CA SB-236 (hair relaxer ingredients). The classifier may still tag a bill with any
 # of these; it just won't count as in-scope on that basis alone.
+# "incentives" — the FINANCIAL lever (tax credits/deductions/rebates, appropriations/grants/
+# funding programs, procurement/tenders) — is also NOT tracked: it rides into scope via
+# is_epr_relevant, like the biological cycle, because money only counts when it funds a
+# circular-economy outcome (a recycling grant or compost tax credit — yes; a generic
+# appropriation — no). It supersedes the in-scope use of "budget", which now means only
+# circularity-unrelated appropriations. See scripts/reclassify_incentives.py.
 
 SYSTEM_PROMPT = """\
 You are an expert in US environmental policy and Extended Producer Responsibility (EPR) legislation. \
@@ -66,7 +72,7 @@ Return this exact JSON structure:
   "is_epr_relevant": <true or false>,
   "confidence": <float 0.0-1.0>,
   "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","other"]>,
-  "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","labeling","chemical_restriction","preemption","budget","other">,
+  "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","incentives","labeling","chemical_restriction","preemption","budget","other">,
   "stance": <one of: "advances","weakens","neutral">,
   "urgency": <one of: "high","medium","low">,
   "reasoning": "<1 sentence max>"
@@ -87,7 +93,14 @@ compostable materials), regenerative agriculture & soil health (healthy soils, c
 carbon farming, biochar), or organics recycling / composting (source-separated organics,
 anaerobic digestion, compost market development) ARE circular-economy relevant — set
 is_epr_relevant=true. Tag their material as "biobased", "agriculture", or "organics"; set
-instrument_type to the actual policy lever (grant/incentive/standard → "other" if none fits).
+instrument_type to the actual policy lever (a standard/ban → its type; a financial lever →
+"incentives"; else "other").
+
+Incentives: when the bill's PRIMARY lever is financial — a tax credit / deduction / rebate, an
+appropriation / grant / funding program, or a public procurement / tender — and it funds a
+circular-economy or biological-cycle outcome (recycling, reuse, repair, composting, soil
+health, bio-based materials, an EPR/stewardship program), set instrument_type="incentives" and
+is_epr_relevant=true. A generic appropriation NOT tied to a circular-economy outcome is "budget".
 """
 
 

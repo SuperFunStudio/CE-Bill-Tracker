@@ -110,13 +110,14 @@ export default function StatesPage() {
             <span className="w-12 text-right">Bills</span>
           </li>
           {active.map((r, i) => (
-            <li
-              key={r.abbr}
-              className="flex items-center gap-3 px-4 py-2 border-t border-border-default hover:bg-bg-secondary/60"
-            >
-              <span className="font-serif text-text-muted w-6 text-right tabular-nums">{i + 1}</span>
-              <span className="font-mono font-bold text-green-accent w-8" title={r.name}>{r.abbr}</span>
-              <span className="flex-1 min-w-0">
+            <li key={r.abbr} className="border-t border-border-default">
+              <Link
+                href={`/states/${r.abbr.toLowerCase()}/`}
+                className="flex items-center gap-3 px-4 py-2 hover:bg-bg-secondary/60"
+              >
+                <span className="font-serif text-text-muted w-6 text-right tabular-nums">{i + 1}</span>
+                <span className="font-mono font-bold text-green-accent w-8" title={r.name}>{r.abbr}</span>
+                <span className="flex-1 min-w-0">
                 <span className="flex h-2.5 w-full rounded-sm overflow-hidden bg-bg-tertiary" title={momentumTitle(r)}>
                   {STAGES.map(s =>
                     r[s.key] > 0 ? (
@@ -131,8 +132,9 @@ export default function StatesPage() {
                   )}
                 </span>
               </span>
-              <span className="text-text-muted text-sm tabular-nums w-16 text-right">{r.enacted || '—'}</span>
-              <span className="font-serif text-text-primary tabular-nums w-12 text-right">{r.count}</span>
+                <span className="text-text-muted text-sm tabular-nums w-16 text-right">{r.enacted || '—'}</span>
+                <span className="font-serif text-text-primary tabular-nums w-12 text-right">{r.count}</span>
+              </Link>
             </li>
           ))}
         </ol>
@@ -146,13 +148,14 @@ export default function StatesPage() {
           </p>
           <div className="flex flex-wrap gap-2">
             {dormant.map(r => (
-              <span
+              <Link
                 key={r.abbr}
+                href={`/states/${r.abbr.toLowerCase()}/`}
                 title={r.name}
-                className="font-mono text-xs border border-border-default rounded px-2 py-1 text-text-muted"
+                className="font-mono text-xs border border-border-default rounded px-2 py-1 text-text-muted hover:text-text-primary hover:border-text-muted"
               >
                 {r.abbr}
-              </span>
+              </Link>
             ))}
           </div>
         </section>

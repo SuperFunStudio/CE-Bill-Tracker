@@ -102,6 +102,8 @@ export default function HomePage() {
           <div className="mt-2 text-sm text-text-muted">
             Showing <span className="text-green-accent font-medium">{STATE_NAMES[billFilters.state] ?? billFilters.state}</span>
             {' — '}
+            <Link href={`/states/${billFilters.state.toLowerCase()}/`} className="underline hover:text-text-secondary">view {STATE_NAMES[billFilters.state] ?? billFilters.state} profile</Link>
+            {' · '}
             <button onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className="underline hover:text-text-secondary">clear</button>
           </div>
         )}

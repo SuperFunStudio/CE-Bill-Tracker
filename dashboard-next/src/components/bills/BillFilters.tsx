@@ -57,6 +57,8 @@ const URGENCY_LEVELS = ['high', 'medium', 'low'];
 interface BillFiltersProps {
   filters: BillFilterState;
   onChange: (f: BillFilterState) => void;
+  /** Omit the State select — for contexts where the state is already fixed (e.g. a state profile). */
+  hideState?: boolean;
 }
 
 function Select({
@@ -164,8 +166,10 @@ function MultiSelect({
   );
 }
 
-export function BillFilters({ filters, onChange }: BillFiltersProps) {
+export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
+  // On a fixed-state context, reset preserves the locked state instead of clearing it.
+  const reset = () => onChange(hideState ? { ...DEFAULT_FILTERS, state: filters.state } : DEFAULT_FILTERS);
 
   const stateOptions = Object.entries(STATE_NAMES).map(([abbr, name]) => ({
     value: abbr,
@@ -198,14 +202,16 @@ export function BillFilters({ filters, onChange }: BillFiltersProps) {
       </div>
 
       {/* Filter row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Select
-          label="State"
-          value={filters.state}
-          onChange={v => set({ state: v })}
-          options={stateOptions}
-          placeholder="All States"
-        />
+      <div className={`grid grid-cols-2 gap-3 ${hideState ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
+        {!hideState && (
+          <Select
+            label="State"
+            value={filters.state}
+            onChange={v => set({ state: v })}
+            options={stateOptions}
+            placeholder="All States"
+          />
+        )}
         <Select
           label="Status"
           value={filters.status}
@@ -238,7 +244,7 @@ export function BillFilters({ filters, onChange }: BillFiltersProps) {
       {/* Reset */}
       <div className="flex justify-end">
         <button
-          onClick={() => onChange(DEFAULT_FILTERS)}
+          onClick={reset}
           className="text-green-accent text-xs hover:underline"
         >
           Reset filters

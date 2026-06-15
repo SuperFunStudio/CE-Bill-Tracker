@@ -1,8 +1,10 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useBills } from '@/hooks/useBills';
 import { useDeadlines } from '@/hooks/useDeadlines';
+import { useCompliancePathways } from '@/hooks/useCompliancePathways';
+import type { CompliancePathway } from '@/lib/types';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillFilters, DEFAULT_FILTERS, applyBillFilters, type BillFilterState } from '@/components/bills/BillFilters';
@@ -26,13 +28,46 @@ const STAGE_OF: Record<string, StageKey> = Object.fromEntries(
 
 const DEAD_STATUSES = new Set(['failed', 'vetoed', 'tabled', 'dead']);
 
+/** Action types that impose a concrete producer obligation (vs. monitor/none). */
+const ACTIONABLE = new Set([
+  'join_pro', 'file_individual_plan', 'register_with_state', 'pay_into_program', 'arrange_collection',
+]);
+const ACTION_LABEL: Record<string, string> = {
+  join_pro: 'Join a PRO',
+  file_individual_plan: 'File a plan',
+  register_with_state: 'Register with state',
+  pay_into_program: 'Pay into program',
+  arrange_collection: 'Arrange collection',
+};
+
 export function StateProfile({ abbr }: { abbr: string }) {
   const name = STATE_NAMES[abbr];
   const { data: bills = [], isLoading } = useBills({ epr_relevant: true, limit: 5000 });
   const { data: deadlines = [] } = useDeadlines();
+  const { data: pathways = [], isLoading: pathwaysLoading, isError: pathwaysError } = useCompliancePathways(abbr);
   const programs = programsForState(abbr);
+
+  // Compliance pathways exist only for enacted laws. Split into actionable obligations
+  // (join a PRO / file a plan / register) vs. tracked-but-no-obligation (labeling, study, …).
+  const actionable = useMemo(
+    () => pathways.filter(p => ACTIONABLE.has(p.action_type ?? '')),
+    [pathways],
+  );
+  const hasPRO = useMemo(
+    () => actionable.some(p => p.action_type === 'join_pro' || p.entity?.entity_type === 'pro'),
+    [actionable],
+  );
   // Bill-explorer filters, scoped to this state (the State select is hidden).
   const [filters, setFilters] = useState<BillFilterState>({ ...DEFAULT_FILTERS, state: abbr });
+  const [showAllPathways, setShowAllPathways] = useState(false);
+  const billsRef = useRef<HTMLDivElement>(null);
+
+  // A headline counter sets the matching bill filter and jumps to the table.
+  const PATHWAY_PAGE = 5;
+  function focusBills(partial: Partial<BillFilterState>) {
+    setFilters({ ...DEFAULT_FILTERS, state: abbr, ...partial });
+    billsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   const stateBills = useMemo(() => bills.filter(b => b.state === abbr), [bills, abbr]);
 
@@ -40,17 +75,13 @@ export function StateProfile({ abbr }: { abbr: string }) {
     const blank = () => ({ introduced: 0, committee: 0, advancing: 0, enacted: 0 } as Record<StageKey, number>);
     const stages = blank();
     let dead = 0;
-    let advances = 0;
-    let weakens = 0;
     stateBills.forEach(b => {
       const stage = STAGE_OF[(b.status ?? '').toLowerCase()];
       if (stage) stages[stage] += 1;
       if (DEAD_STATUSES.has((b.status ?? '').toLowerCase())) dead += 1;
-      if (b.policy_stance === 'advances') advances += 1;
-      else if (b.policy_stance === 'weakens') weakens += 1;
     });
     const inMotion = stages.introduced + stages.committee + stages.advancing + stages.enacted;
-    return { stages, inMotion, dead, advances, weakens, total: stateBills.length };
+    return { stages, inMotion, dead, total: stateBills.length };
   }, [stateBills]);
 
   const instrumentMix = useMemo(() => {
@@ -103,12 +134,74 @@ export function StateProfile({ abbr }: { abbr: string }) {
         <Link href="/" className="text-sm text-green-accent hover:underline">Front page &rarr;</Link>
       </div>
 
-      {/* At-a-glance counters */}
+      {/* At-a-glance counters. Tracked + Enacted filter the table below and scroll to it;
+          Advancing + In motion are momentum read-outs that match the Momentum bar. */}
       <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Tracked bills" value={stats.total} />
-        <Stat label="Enacted" value={stats.stages.enacted} />
-        <Stat label="Advancing" value={stats.advances} hint="bills that strengthen circularity" />
-        <Stat label="Weakening" value={stats.weakens} hint="bills that exempt / narrow / repeal" danger={stats.weakens > 0} />
+        <Stat label="Tracked bills" value={stats.total} onClick={() => focusBills({})} />
+        <Stat label="Enacted" value={stats.stages.enacted} onClick={() => focusBills({ status: 'enacted' })} />
+        <Stat label="Advancing" value={stats.stages.advancing} hint="cleared at least one chamber" />
+        <Stat label="In motion" value={stats.inMotion} hint="active bills, introduced through enacted" />
+      </section>
+
+      {/* How to comply — the action layer: each enacted law → its next step */}
+      <section className="space-y-3">
+        <div>
+          <h2 className="font-serif text-lg text-text-primary">How to comply</h2>
+          <p className="text-text-muted text-xs">
+            For each enacted law, who a producer registers with and what to do next.
+          </p>
+        </div>
+
+        {stats.stages.enacted === 0 ? (
+          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+            No enacted EPR law in {name} yet — there&rsquo;s nothing to comply with here.
+          </p>
+        ) : pathwaysLoading && pathways.length === 0 ? (
+          <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="h-20 bg-bg-secondary rounded animate-pulse" />)}</div>
+        ) : pathwaysError ? (
+          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-text-muted">
+            Couldn&rsquo;t load compliance details right now — please try again shortly.
+          </p>
+        ) : pathways.length === 0 ? (
+          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-text-muted">
+            Compliance pathways for {name} aren&rsquo;t available yet.
+          </p>
+        ) : actionable.length === 0 ? (
+          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+            {name} has enacted circularity legislation, but none yet imposes a producer-compliance
+            obligation (e.g. labeling, disposal-ban, or study laws).
+          </p>
+        ) : (
+          <>
+            {!hasPRO && (
+              <p className="rounded-lg border border-border-default bg-bg-tertiary/40 px-4 py-2.5 text-xs text-text-muted">
+                No producer responsibility organization (PRO) operates in {name} yet — obligations are
+                met through individual producer filings or state-run programs.
+              </p>
+            )}
+            <ul className="space-y-3">
+              {(showAllPathways ? actionable : actionable.slice(0, PATHWAY_PAGE)).map(p => (
+                <PathwayCard key={p.bill_id} p={p} />
+              ))}
+            </ul>
+            {actionable.length > PATHWAY_PAGE && (
+              <button
+                onClick={() => setShowAllPathways(s => !s)}
+                className="text-green-accent text-xs hover:underline"
+              >
+                {showAllPathways
+                  ? 'Show fewer'
+                  : `Show all ${actionable.length} compliance actions`}
+              </button>
+            )}
+            {pathways.length - actionable.length > 0 && (
+              <p className="text-text-muted text-xs">
+                + {pathways.length - actionable.length} other enacted law
+                {pathways.length - actionable.length === 1 ? '' : 's'} with no producer-compliance obligation.
+              </p>
+            )}
+          </>
+        )}
       </section>
 
       {/* Momentum bar — same visual language as the leaderboard */}
@@ -210,7 +303,7 @@ export function StateProfile({ abbr }: { abbr: string }) {
       )}
 
       {/* Tracked bills */}
-      <section className="space-y-2">
+      <section ref={billsRef} className="space-y-2 scroll-mt-6">
         <div className="flex items-baseline gap-3">
           <h2 className="font-serif text-lg text-text-primary">Tracked bills</h2>
           {!isLoading && recentBills.length > 0 && (
@@ -238,11 +331,56 @@ export function StateProfile({ abbr }: { abbr: string }) {
   );
 }
 
-function Stat({ label, value, hint, danger }: { label: string; value: number; hint?: string; danger?: boolean }) {
+function PathwayCard({ p }: { p: CompliancePathway }) {
+  const actionLabel = ACTION_LABEL[p.action_type ?? ''] ?? 'Action';
   return (
-    <div className="rounded-lg border border-border-default bg-bg-secondary px-3 py-2.5" title={hint}>
+    <li className="rounded-lg border border-border-default bg-bg-secondary p-4">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-green-accent border border-green-accent/40 rounded px-1.5 py-0.5">
+          {actionLabel}
+        </span>
+        <h3 className="font-serif text-text-primary">
+          {p.bill_number}
+          {p.bill_title && <span className="text-text-secondary font-sans text-sm"> · {p.bill_title}</span>}
+        </h3>
+      </div>
+      <p className="text-text-secondary text-sm mt-1.5 leading-relaxed">{p.action_summary}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-text-muted">
+        {p.entity && (
+          p.registration_url ? (
+            <a href={p.registration_url} target="_blank" rel="noopener noreferrer" className="text-green-accent hover:underline">
+              {p.entity.name} &rarr;
+            </a>
+          ) : (
+            <span className="text-text-primary">{p.entity.name}</span>
+          )
+        )}
+        {p.next_deadline_date && <span className="tabular-nums">Next deadline {formatDate(p.next_deadline_date)}</span>}
+        {p.has_fee && <span>Fee applies</span>}
+      </div>
+    </li>
+  );
+}
+
+function Stat({ label, value, hint, danger, onClick }: { label: string; value: number; hint?: string; danger?: boolean; onClick?: () => void }) {
+  const inner = (
+    <>
       <div className={`font-serif text-2xl tabular-nums ${danger ? 'text-urgency-high' : 'text-text-primary'}`}>{value}</div>
       <div className="text-xs text-text-muted">{label}</div>
-    </div>
+    </>
+  );
+  const base = 'rounded-lg border border-border-default bg-bg-secondary px-3 py-2.5';
+  if (!onClick) {
+    return <div className={base} title={hint}>{inner}</div>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={hint ? `${hint} — click to filter` : 'Click to filter the bills below'}
+      className={`${base} text-left w-full transition-colors hover:border-green-accent/60 hover:bg-bg-tertiary/40 focus:outline-none focus:border-green-accent`}
+    >
+      {inner}
+    </button>
   );
 }

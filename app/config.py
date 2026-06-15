@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     fred_api_key: str = ""
     comtrade_api_key: str = ""
     newsapi_key: str = ""
+    # NREL incentives panel (state-profile Phase 2). Declared so a shared .env carrying
+    # NREL_API_KEY doesn't trip extra='forbid' and crash the backend.
+    nrel_api_key: str = ""
 
     # SEC EDGAR — user-agent required by SEC fair-use policy
     sec_user_agent: str = "SignalScout/1.0 contact@signalscout.io"

@@ -13,15 +13,11 @@ interface BillTableProps {
   autoPageSize?: number;
 }
 
-function StatusBadge({ status, stance }: { status: string | null; stance: string | null }) {
+function StatusBadge({ status }: { status: string | null }) {
   if (!status) return <span className="text-text-muted text-xs">—</span>;
-  const { cls, marker, markerCls, label } = statusBadge(status, stance);
+  const { cls } = statusBadge(status);
   return (
-    <span
-      title={label || undefined}
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${cls}`}
-    >
-      {marker && <span className={`leading-none ${markerCls}`}>{marker}</span>}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
       {status.replace(/\b\w/g, c => c.toUpperCase())}
     </span>
   );
@@ -123,7 +119,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
                   {formatInstrumentType(bill.instrument_type)}
                 </td>
                 <td className="px-3 py-2">
-                  <StatusBadge status={bill.status} stance={bill.policy_stance} />
+                  <StatusBadge status={bill.status} />
                 </td>
                 <td className="px-3 py-2 text-text-muted text-xs">
                   {formatDate(bill.last_action_date)}
@@ -178,7 +174,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
             )}
             {/* Row 4: status + last action + expand indicator */}
             <div className="flex items-center justify-between text-xs">
-              <StatusBadge status={bill.status} stance={bill.policy_stance} />
+              <StatusBadge status={bill.status} />
               <div className="flex items-center gap-3 text-text-muted">
                 <span>{formatDate(bill.last_action_date)}</span>
                 <span>›</span>

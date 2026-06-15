@@ -10,27 +10,14 @@ interface BillDetailPanelProps {
   onClose?: () => void;
 }
 
-function StatusBadge({ status, stance }: { status: string | null; stance: string | null }) {
+function StatusBadge({ status }: { status: string | null }) {
   if (!status) return null;
-  const { cls, marker, markerCls, label } = statusBadge(status, stance);
+  const { cls } = statusBadge(status);
   return (
-    <span
-      title={label || undefined}
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${cls}`}
-    >
-      {marker && <span className={`leading-none ${markerCls}`}>{marker}</span>}
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
       {status.replace(/\b\w/g, c => c.toUpperCase())}
     </span>
   );
-}
-
-/** Short human label for a policy stance, shown in the detail metadata row. */
-function stanceLabel(stance: string | null): string | null {
-  switch (stance) {
-    case 'advances': return 'Advances the policy';
-    case 'weakens': return 'Weakens / exempts the policy';
-    default: return null;
-  }
 }
 
 export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
@@ -56,7 +43,7 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
             {bill.bill_number && (
               <span className="text-text-muted font-mono text-sm">{bill.bill_number}</span>
             )}
-            <StatusBadge status={bill.status} stance={bill.policy_stance} />
+            <StatusBadge status={bill.status} />
           </div>
           <h3 className="text-text-primary text-lg font-bold leading-snug">
             {fixEncoding(bill.title) || 'Untitled'}
@@ -73,11 +60,6 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
         <span>Type: <span className="text-text-secondary">{formatInstrumentType(bill.instrument_type)}</span></span>
         <span>Last Action: <span className="text-text-secondary">{formatDate(bill.last_action_date)}</span></span>
-        {stanceLabel(bill.policy_stance) && (
-          <span>Direction: <span className={bill.policy_stance === 'weakens' ? 'text-red-400' : 'text-green-accent'}>
-            {stanceLabel(bill.policy_stance)}
-          </span></span>
-        )}
       </div>
 
       {/* Classification transparency — auto-classified vs reviewed, linked to methodology */}

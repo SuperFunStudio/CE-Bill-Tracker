@@ -722,3 +722,89 @@ class WatchlistItem(Base):
         UniqueConstraint("firebase_uid", "bill_id", name="uq_watchlist_uid_bill"),
         Index("idx_watchlist_uid", "firebase_uid"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Compliance Action layer — "now what do I do" bridge from a tracked law to the
+# concrete next step (join this PRO / file this plan, by this deadline).
+# ---------------------------------------------------------------------------
+
+
+class ComplianceEntity(Base):
+    """A real-world body a producer interacts with to comply: a stewardship organization
+    (PRO) or a government agency. The normalized directory behind the "connect with a PRO"
+    step — e.g. Circular Action Alliance (packaging), Call2Recycle (batteries), PaintCare,
+    Mattress Recycling Council, CalRecycle. Curated, not auto-extracted (these are stable
+    real-world facts); a law links to one via CompliancePathway. See compliance-action-vision.
+    """
+    __tablename__ = "compliance_entity"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Stable kebab key for idempotent seeding / linking (e.g. "circular-action-alliance").
+    slug: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(300), nullable=False)
+    # "pro" (producer responsibility / stewardship org) | "agency" (government administrator).
+    entity_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Where a producer actually registers / joins / files — the actionable link.
+    registration_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "national" | "multistate" | "single_state".
+    jurisdiction_scope: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # For single-state entities (agencies, state PRO chapters).
+    home_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    materials: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_compliance_entity_type", "entity_type"),
+        Index("idx_compliance_entity_materials", "materials", postgresql_using="gin"),
+    )
+
+
+class CompliancePathway(Base):
+    """The "how do I comply with THIS law" record — one primary next-action per enacted law.
+
+    Bridges the management_model classification (compliance_details.management) to a concrete
+    step: join_pro (→ a ComplianceEntity), file_individual_plan / register_with_state (→ a state
+    agency, or null when only the statute itself is the start), pay_into_program, monitor, or none.
+    `action_summary` is the human one-liner; `registration_url` is the click target; next_deadline /
+    has_fee are convenience snapshots so a state page renders without re-joining. `basis` records how
+    the link was derived (management_model | pro_domain | curated | manual). One row per bill (v1).
+    """
+    __tablename__ = "compliance_pathway"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bills.id", ondelete="CASCADE"), nullable=False
+    )
+    entity_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("compliance_entity.id", ondelete="SET NULL"), nullable=True
+    )
+    management_model: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # join_pro | file_individual_plan | register_with_state | pay_into_program | monitor | none
+    action_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    action_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    registration_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_deadline_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    has_fee: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    basis: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    bill: Mapped["Bill"] = relationship("Bill", foreign_keys=[bill_id])
+    entity: Mapped["ComplianceEntity | None"] = relationship(
+        "ComplianceEntity", foreign_keys=[entity_id]
+    )
+
+    __table_args__ = (
+        UniqueConstraint("bill_id", name="uq_pathway_bill"),
+        Index("idx_pathway_bill_id", "bill_id"),
+        Index("idx_pathway_entity_id", "entity_id"),
+        Index("idx_pathway_management_model", "management_model"),
+    )

@@ -290,3 +290,35 @@ class LitigationCaseSummary(BaseModel):
 
 class LitigationCaseDetail(LitigationCaseSummary):
     events: list[LitigationEventSummary] = []
+
+
+# --- Compliance action layer (compliance_entity + compliance_pathway) ---
+
+
+class ComplianceEntityRef(BaseModel):
+    id: int
+    slug: str
+    name: str
+    entity_type: str  # "pro" | "agency"
+    url: str | None = None
+    registration_url: str | None = None
+    jurisdiction_scope: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class CompliancePathwaySummary(BaseModel):
+    """One enacted law's "how do I comply" record, with its administering entity inlined."""
+    bill_id: int
+    bill_number: str | None = None
+    bill_title: str | None = None
+    material_categories: list | None = None
+    management_model: str | None = None
+    action_type: str | None = None
+    action_summary: str | None = None
+    registration_url: str | None = None
+    next_deadline_date: date | None = None
+    has_fee: bool = False
+    entity: ComplianceEntityRef | None = None
+
+    model_config = {"from_attributes": True}

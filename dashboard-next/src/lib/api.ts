@@ -14,6 +14,7 @@ import type {
   CompanyObligationsResponse,
   ExposureRanking,
   ExposureBriefResponse,
+  CompliancePathway,
 } from './types';
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -143,4 +144,9 @@ export async function fetchExposureBrief(companyId: string, billId: number): Pro
 
 export async function fetchCompanyObligations(companyId: string): Promise<CompanyObligationsResponse> {
   return apiFetch<CompanyObligationsResponse>(buildUrl(`/companies/${companyId}/obligations`));
+}
+
+/** Per-state compliance pathways — one "how do I comply" record per enacted EPR law. */
+export async function fetchCompliancePathways(state: string): Promise<CompliancePathway[]> {
+  return apiFetch<CompliancePathway[]>(buildUrl('/compliance/pathways', { state }));
 }

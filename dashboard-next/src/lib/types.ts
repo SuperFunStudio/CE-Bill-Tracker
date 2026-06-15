@@ -78,6 +78,30 @@ export interface DeadlineSummary {
   bill_title: string | null;
 }
 
+export interface ComplianceEntityRef {
+  id: number;
+  slug: string;
+  name: string;
+  entity_type: 'pro' | 'agency' | string;
+  url: string | null;
+  registration_url: string | null;
+  jurisdiction_scope: string | null;
+}
+
+export interface CompliancePathway {
+  bill_id: number;
+  bill_number: string | null;
+  bill_title: string | null;
+  material_categories: string[] | null;
+  management_model: string | null;
+  action_type: string | null;
+  action_summary: string | null;
+  registration_url: string | null;
+  next_deadline_date: string | null;
+  has_fee: boolean;
+  entity: ComplianceEntityRef | null;
+}
+
 export interface FederalActionSummary {
   id: number;
   agency: string | null;

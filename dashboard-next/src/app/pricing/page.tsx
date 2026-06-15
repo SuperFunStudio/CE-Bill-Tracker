@@ -33,8 +33,9 @@ const TIERS: Tier[] = [
     features: [
       'Full Bill Explorer, map & timeline',
       'National deadline dashboard',
-      'Topic & jurisdiction email alerts',
-      'CSV export',
+      'Federal Actions tracker',
+      'Design Guide — headline imperatives',
+      'Personalize your feed (free account)',
     ],
     cta: 'Get free updates',
   },
@@ -47,8 +48,9 @@ const TIERS: Tier[] = [
     features: [
       'Everything in Free, plus:',
       'Personal watch lists',
-      'Portfolio-scoped deadline dashboard',
-      'Material and Product Design guide',
+      'Portfolio exposure',
+      'Complete Design Guide',
+      'CSV export (bills & deadlines)',
     ],
     cta: 'Subscribe — $39/mo',
     highlight: true,

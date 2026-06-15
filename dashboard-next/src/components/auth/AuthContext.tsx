@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { track } from '@/lib/analytics';
+import { startProCheckout } from '@/lib/billing';
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -124,4 +125,28 @@ export function useAuth(): AuthState {
   const ctx = useContext(AuthCtx);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
+}
+
+/**
+ * Routes a Pro-only action through the right conversion step: an anonymous visitor is sent to
+ * sign-in (a free account is the first gate), a signed-in Free user to Stripe Checkout, and a Pro
+ * subscriber runs the action. Returns true only when the action actually ran.
+ */
+export function useProGate(): (action: () => void) => boolean {
+  const { user, isPro, openAuth, getToken } = useAuth();
+  return useCallback(
+    (action: () => void) => {
+      if (!user) {
+        openAuth();
+        return false;
+      }
+      if (!isPro) {
+        startProCheckout(getToken);
+        return false;
+      }
+      action();
+      return true;
+    },
+    [user, isPro, openAuth, getToken],
+  );
 }

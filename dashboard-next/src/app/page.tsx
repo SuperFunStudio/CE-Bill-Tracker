@@ -13,6 +13,8 @@ import { BillFilters, DEFAULT_FILTERS, applyBillFilters, type BillFilterState } 
 import { ScopedDeadlineBanner } from '@/components/scope/ScopedDeadlineBanner';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { inScope } from '@/lib/scope';
+import { useAuth, useProGate } from '@/components/auth/AuthContext';
+import { LockIcon } from '@/components/ui/icons';
 import { STATE_NAMES, formatDate, downloadCsv } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -29,6 +31,9 @@ export default function HomePage() {
 
   const { scope } = useScope();
   const scopeActive = useScopeActive();
+
+  const { isPro } = useAuth();
+  const gatePro = useProGate();
 
   const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
 
@@ -54,8 +59,9 @@ export default function HomePage() {
 
   const tableBills = useMemo(() => applyBillFilters(tableSource, billFilters), [tableSource, billFilters]);
 
+  // CSV export is a Pro feature: gatePro routes anon → sign-in, Free → checkout, Pro → the download.
   function handleExport() {
-    downloadCsv('signalscout_bills.csv', tableBills.map(b => ({
+    gatePro(() => downloadCsv('signalscout_bills.csv', tableBills.map(b => ({
       State: b.state,
       Bill: b.bill_number ?? '',
       Title: b.title ?? '',
@@ -65,7 +71,7 @@ export default function HomePage() {
       Materials: (b.material_categories ?? []).join('; '),
       'Last Action': formatDate(b.last_action_date),
       'Source URL': b.source_url ?? '',
-    })));
+    }))));
   }
 
   return (
@@ -90,9 +96,16 @@ export default function HomePage() {
           <button
             onClick={handleExport}
             disabled={tableBills.length === 0}
-            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0"
+            title={isPro ? undefined : 'CSV export is a Pro feature'}
+            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0 inline-flex items-center gap-1.5"
           >
+            {!isPro && <LockIcon className="text-xs" />}
             ↓ Export CSV
+            {!isPro && (
+              <span className="text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
+                Pro
+              </span>
+            )}
           </button>
         </div>
 

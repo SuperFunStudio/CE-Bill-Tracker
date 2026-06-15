@@ -43,7 +43,7 @@ export default function WatchlistPage() {
         <Gate
           icon={<LockIcon className="text-2xl text-green-accent" />}
           title="Watch lists are a Pro feature"
-          body="Upgrade to Pro ($39/mo) to follow bills, get a portfolio-scoped deadline view, and unlock the full Design Guide."
+          body="Upgrade to Pro ($39/mo) to follow bills, see your portfolio exposure, export to CSV, and unlock the full Design Guide."
           cta="Upgrade to Pro — $39/mo →"
           onClick={() => startProCheckout(getToken)}
         />

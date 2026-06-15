@@ -10,6 +10,8 @@ import { ScoreBadge } from '@/components/ui/ScoreBadge';
 import { DemoBanner } from '@/components/ui/DemoBanner';
 import { LockIcon, StarIcon } from '@/components/ui/icons';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
+import { useAuth } from '@/components/auth/AuthContext';
+import { startProCheckout } from '@/lib/billing';
 import { formatCost, fixEncoding, formatDate, daysUntil, STATE_NAMES } from '@/lib/utils';
 import type { CompanyObligation } from '@/lib/types';
 
@@ -532,21 +534,9 @@ function CompanyView() {
 
 // ─── Access Gate ─────────────────────────────────────────────────────────────
 
-function AccessGate({ onUnlock }: { onUnlock: () => void }) {
+function AccessGate() {
+  const { user, openAuth, getToken } = useAuth();
   const [showModal, setShowModal] = useState(false);
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [password, setPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-
-  function handleAdminUnlock(e: React.FormEvent) {
-    e.preventDefault();
-    // Forgiving match: trim stray whitespace (copy-paste) and ignore case.
-    if (password.trim().toLowerCase() === 'scout2026') {
-      onUnlock();
-    } else {
-      setPasswordError('Incorrect password');
-    }
-  }
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
@@ -555,7 +545,7 @@ function AccessGate({ onUnlock }: { onUnlock: () => void }) {
           <LockIcon className="text-4xl mx-auto text-text-muted" />
           <div>
             <span className="inline-block mb-2 text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
-              Pro &amp; Enterprise
+              Pro
             </span>
             <h1 className="text-2xl font-bold text-text-primary mb-2">Portfolio Exposure</h1>
             <p className="text-text-muted text-sm leading-relaxed">
@@ -564,25 +554,30 @@ function AccessGate({ onUnlock }: { onUnlock: () => void }) {
             </p>
           </div>
 
-          {!showAdminLogin && (
-            <div className="space-y-3">
+          <div className="space-y-3">
+            {!user ? (
               <button
-                onClick={() => setShowModal(true)}
+                onClick={openAuth}
                 className="w-full bg-green-accent text-bg-primary font-semibold py-3 rounded-lg text-sm hover:opacity-90 transition-opacity"
               >
-                Request access &amp; pricing →
+                Sign in to unlock →
               </button>
-              <p className="text-text-muted text-xs">
-                Or <Link href="/pricing" className="text-green-accent hover:underline">compare plans</Link>.
-              </p>
+            ) : (
               <button
-                onClick={() => setShowAdminLogin(true)}
-                className="text-text-muted text-xs underline hover:text-text-secondary"
+                onClick={() => startProCheckout(getToken)}
+                className="w-full bg-green-accent text-bg-primary font-semibold py-3 rounded-lg text-sm hover:opacity-90 transition-opacity"
               >
-                Admin? Sign in
+                Upgrade to Pro — $39/mo →
               </button>
-            </div>
-          )}
+            )}
+            <p className="text-text-muted text-xs">
+              Need team or enterprise access?{' '}
+              <button onClick={() => setShowModal(true)} className="text-green-accent hover:underline">
+                Request pricing
+              </button>{' '}
+              · <Link href="/pricing" className="text-green-accent hover:underline">compare plans</Link>
+            </p>
+          </div>
 
           {showModal && (
             <RequestAccessModal
@@ -591,32 +586,6 @@ function AccessGate({ onUnlock }: { onUnlock: () => void }) {
               source="company_gate"
               onClose={() => setShowModal(false)}
             />
-          )}
-
-          {showAdminLogin && (
-            <form onSubmit={handleAdminUnlock} className="text-left space-y-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-text-muted text-xs uppercase">Admin Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => { setPassword(e.target.value); setPasswordError(''); }}
-                  placeholder="Enter password"
-                  autoFocus
-                  className="bg-bg-primary border border-border-default rounded px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent"
-                />
-                {passwordError && <div className="text-urgency-high text-xs">{passwordError}</div>}
-              </div>
-              <button
-                type="submit"
-                className="w-full bg-green-dark text-green-accent border border-green-accent/30 font-medium py-2 rounded-lg text-sm hover:opacity-90 transition-opacity"
-              >
-                Unlock
-              </button>
-              <button type="button" onClick={() => setShowAdminLogin(false)} className="text-text-muted text-xs underline hover:text-text-secondary">
-                Cancel
-              </button>
-            </form>
           )}
         </div>
       </div>
@@ -627,11 +596,16 @@ function AccessGate({ onUnlock }: { onUnlock: () => void }) {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function CompanyImpactPage() {
+  const { isPro, isAdmin, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<'obligations' | 'bill' | 'company'>('obligations');
-  const [isAuthed, setIsAuthed] = useState(false);
 
-  if (!isAuthed) {
-    return <AccessGate onUnlock={() => setIsAuthed(true)} />;
+  if (loading) {
+    return <div className="p-6 max-w-5xl mx-auto"><div className="h-64 bg-bg-secondary rounded-xl animate-pulse" /></div>;
+  }
+
+  // Portfolio Exposure is a Pro feature; allowlisted admins get in for demos.
+  if (!isPro && !isAdmin) {
+    return <AccessGate />;
   }
 
   return (

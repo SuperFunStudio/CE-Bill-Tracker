@@ -40,12 +40,14 @@ const ScopeContext = createContext<ScopeContextValue>({
 });
 
 export function ScopeProvider({ children }: { children: React.ReactNode }) {
-  const { user, getToken } = useAuth();
+  const { user, getToken, openAuth } = useAuth();
   const [ready, setReady] = useState(false);
   const [scope, setScope] = useState<Scope>(EMPTY_SCOPE);
   const [isConfigured, setIsConfigured] = useState(false);
   const [scoped, setScoped] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
+  // Set when a signed-out reader taps "Personalize"; we prompt sign-in and open the editor once they're in.
+  const [pendingEditor, setPendingEditor] = useState(false);
   // Last-known backend prefs, so persisting scope doesn't clobber other keys (e.g. saved views).
   const prefsRef = useRef<Prefs>({});
 
@@ -149,6 +151,25 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     [persist, scope, isConfigured],
   );
 
+  // Personalization requires a (free) account — the scope follows the reader across devices, so it
+  // can't live for anonymous visitors. A signed-out tap prompts sign-in and defers opening the editor.
+  const openEditor = useCallback(() => {
+    if (!user) {
+      setPendingEditor(true);
+      openAuth();
+      return;
+    }
+    setEditorOpen(true);
+  }, [user, openAuth]);
+
+  // Once the deferred sign-in lands, open the editor we held back.
+  useEffect(() => {
+    if (user && pendingEditor) {
+      setPendingEditor(false);
+      setEditorOpen(true);
+    }
+  }, [user, pendingEditor]);
+
   const value = useMemo<ScopeContextValue>(
     () => ({
       ready,
@@ -159,11 +180,11 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
       saveAndClose,
       skip,
       setScoped: setScopedPersist,
-      openEditor: () => setEditorOpen(true),
+      openEditor,
       closeEditor: () => setEditorOpen(false),
       reset,
     }),
-    [ready, scope, isConfigured, scoped, editorOpen, saveAndClose, skip, setScopedPersist, reset],
+    [ready, scope, isConfigured, scoped, editorOpen, saveAndClose, skip, setScopedPersist, openEditor, reset],
   );
 
   return <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>;

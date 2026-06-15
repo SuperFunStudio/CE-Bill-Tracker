@@ -102,9 +102,10 @@ export default function DesignGuidePage() {
       />
 
       <p className="text-text-secondary text-sm leading-relaxed max-w-3xl">
-        Every imperative below is pulled verbatim from enacted and proposed US bills — no
-        opinion, no invented thresholds. Miss one and it shows up as a non-compliant SKU, a
-        fee penalty, or a market you can no longer sell into. Derived from{' '}
+        This guide is built dynamically from the bills in the tracker — every imperative below is
+        pulled verbatim from enacted and proposed US bills, with no opinion and no invented
+        thresholds, and it stays current as legislation moves. Miss one and it shows up as a
+        non-compliant SKU, a fee penalty, or a market you can no longer sell into. Assembled from{' '}
         <span className="text-text-primary font-medium">{GUIDE_COVERAGE.bills} bills</span> across{' '}
         <span className="text-text-primary font-medium">{GUIDE_COVERAGE.states} states</span>.
       </p>

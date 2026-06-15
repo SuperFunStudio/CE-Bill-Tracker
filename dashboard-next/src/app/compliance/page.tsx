@@ -10,6 +10,8 @@ import { DeadlineTimeline } from '@/components/compliance/DeadlineTimeline';
 import { DeadlineModal } from '@/components/compliance/DeadlineModal';
 import { deadlineAccentText } from '@/lib/deadlineStyle';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
+import { useAuth, useProGate } from '@/components/auth/AuthContext';
+import { LockIcon } from '@/components/ui/icons';
 import { deadlineInScope } from '@/lib/scope';
 import { formatMaterial } from '@/components/scope/ScopeOnboarding';
 import { formatDate, daysUntil, downloadCsv, STATE_NAMES } from '@/lib/utils';
@@ -65,6 +67,9 @@ export default function CompliancePage() {
 
   const { scope } = useScope();
   const scopeActive = useScopeActive();
+
+  const { isPro } = useAuth();
+  const gatePro = useProGate();
 
   // Merge API deadlines with compliance_details.deadlines from bills
   const mergedDeadlines = useMemo(() => {
@@ -163,15 +168,16 @@ export default function CompliancePage() {
     [selected, bills],
   );
 
+  // CSV export is a Pro feature: gatePro routes anon → sign-in, Free → checkout, Pro → the download.
   function handleExport() {
-    downloadCsv('signalscout_deadlines.csv', allDeadlines.map(d => ({
+    gatePro(() => downloadCsv('signalscout_deadlines.csv', allDeadlines.map(d => ({
       State: d.state,
       Type: d.deadline_type,
       Date: d.deadline_date,
       Description: d.description ?? '',
       Bill: d.bill_number ?? '',
       'Who Affected': d.who_affected ?? '',
-    })));
+    }))));
   }
 
   return (
@@ -244,8 +250,18 @@ export default function CompliancePage() {
         </div>
 
         <div className="flex items-end ml-auto pb-1">
-          <button onClick={handleExport} className="text-sm text-green-accent hover:underline">
+          <button
+            onClick={handleExport}
+            title={isPro ? undefined : 'CSV export is a Pro feature'}
+            className="text-sm text-green-accent hover:underline inline-flex items-center gap-1.5"
+          >
+            {!isPro && <LockIcon className="text-xs" />}
             ↓ Export CSV
+            {!isPro && (
+              <span className="text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
+                Pro
+              </span>
+            )}
           </button>
         </div>
       </div>

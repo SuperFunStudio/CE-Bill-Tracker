@@ -37,15 +37,23 @@ def _ensure_firebase() -> None:
         try:
             cred = credentials.ApplicationDefault()
             firebase_admin.initialize_app(cred, {"projectId": settings.firebase_project_id})
-        except Exception:
+        except Exception as e:
+            # ADC unavailable (e.g. local dev) — fall back to a project-id-only app. Token verification
+            # still validates Google's signature, so this is safe, but log it loudly (L-2): if it fires
+            # in prod it signals a credentials misconfiguration worth investigating.
+            log.warning("firebase_adc_unavailable_fallback", error=str(e))
             firebase_admin.initialize_app(options={"projectId": settings.firebase_project_id})
     _initialized = True
 
 
 class AuthedUser:
-    def __init__(self, uid: str, email: str):
+    def __init__(self, uid: str, email: str, email_verified: bool = False):
         self.uid = uid
         self.email = email
+        # Whether Firebase considers the email verified. Google sign-ins are always True; email/password
+        # signups are False until the user clicks the verification link. Gates complimentary Pro grants
+        # (H-2) so a script can't farm free seats from throwaway, unverified accounts.
+        self.email_verified = email_verified
 
 
 async def get_current_user(authorization: str | None = Header(default=None)) -> AuthedUser:
@@ -65,7 +73,7 @@ async def get_current_user(authorization: str | None = Header(default=None)) -> 
     uid = decoded.get("uid") or decoded.get("user_id") or ""
     if not email or not uid:
         raise HTTPException(status_code=401, detail="token missing email/uid")
-    return AuthedUser(uid=uid, email=email)
+    return AuthedUser(uid=uid, email=email, email_verified=bool(decoded.get("email_verified")))
 
 
 async def get_entitlement(db: AsyncSession, user: AuthedUser) -> Entitlement | None:
@@ -87,10 +95,17 @@ def is_pro(ent: Entitlement | None) -> bool:
     return True
 
 
+# Hard ceiling on how far out a stacked complimentary grant can reach. Bounds the payoff of referral
+# farming (each referral is +30d, stackable) regardless of how many fake-but-verified accounts a
+# sharer musters — a comp seat can never extend more than this far from "now". See H-2.
+MAX_COMP_DAYS = 180
+
+
 def grant_comp_days(ent: Entitlement, days: int) -> None:
     """Give an entitlement `days` of complimentary (no-card) Pro, stacking on an existing comp grant.
     A real paid subscription is left untouched — it doesn't need it. Used by the signup trial (7d) and
     the referral reward (30d); is_pro() enforces the expiry since there's no Stripe webhook behind it.
+    Stacking is capped at MAX_COMP_DAYS from now so the comp window can't be farmed indefinitely.
     """
     now = datetime.now(timezone.utc)
     if ent.plan == "pro" and not ent.comp and ent.status in ("active", "trialing"):
@@ -103,7 +118,7 @@ def grant_comp_days(ent: Entitlement, days: int) -> None:
     ent.plan = "pro"
     ent.status = "active"
     ent.comp = True
-    ent.current_period_end = base + timedelta(days=days)
+    ent.current_period_end = min(base + timedelta(days=days), now + timedelta(days=MAX_COMP_DAYS))
 
 
 async def require_pro(
@@ -117,8 +132,33 @@ async def require_pro(
     return user
 
 
+async def get_optional_pro(
+    authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> bool:
+    """Best-effort Pro check for teaser/full endpoints. NEVER raises — returns False for an
+    anonymous, malformed-token, expired-token, or non-Pro caller, and True only for a verified
+    live Pro seat (or an admin). Lets one endpoint serve full data to Pro and a teaser to everyone
+    else without 401-ing public traffic."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return False
+    try:
+        user = await get_current_user(authorization)
+    except HTTPException:
+        return False
+    if is_admin(user):
+        return True
+    ent = await get_entitlement(db, user)
+    return is_pro(ent)
+
+
 def is_admin(user: AuthedUser) -> bool:
-    """Is this verified email on the admin allowlist (settings.admin_emails)?"""
+    """Is this caller an allowlisted admin? Requires a VERIFIED email (M-2/M-1): admin is resolved by
+    email, so without the verified check anyone who got a Firebase account asserting an admin address
+    (where the project allows it) would inherit the console. Admins sign in with Google (verified) or
+    must verify their address."""
+    if not user.email_verified:
+        return False
     allow = {e.lower().strip() for e in settings.admin_emails}
     return bool(user.email) and user.email.lower().strip() in allow
 

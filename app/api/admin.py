@@ -582,9 +582,9 @@ async def admin_set_account_disabled(
         u = await run_in_threadpool(fb_auth.get_user_by_email, email)
         await run_in_threadpool(fb_auth.update_user, u.uid, disabled=payload.disabled)
     except Exception as e:  # noqa: BLE001 — user-not-found, missing role, or no network
-        raise HTTPException(
-            status_code=502,
-            detail=f"could not update the Firebase user ({e})",
-        )
+        # Log the detail server-side; return a generic message rather than echoing the backend
+        # exception string to the client (L-1).
+        log.warning("admin_set_disabled_failed", target=email, error=str(e))
+        raise HTTPException(status_code=502, detail="could not update the Firebase user")
     log.info("admin_set_disabled", target=email, by=admin.email, disabled=payload.disabled)
     return {"email": email, "disabled": payload.disabled}

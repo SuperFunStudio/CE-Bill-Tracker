@@ -4,11 +4,15 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import require_admin
 from app.config import settings
 from app.database import get_db
 from app.models import Bill
 
-router = APIRouter(prefix="/pipeline", tags=["pipeline"])
+# Operator-only surface: every route triggers ingestion/classification jobs (LLM + external-API cost)
+# or destructive DB ops (purge/reset). The service is public (--allow-unauthenticated), so the router
+# itself must require an admin token — there's no frontend caller. See docs/SECURITY_ASSESSMENT.md C-2.
+router = APIRouter(prefix="/pipeline", tags=["pipeline"], dependencies=[Depends(require_admin)])
 log = structlog.get_logger()
 
 _METADATA_TOKEN_URL = (

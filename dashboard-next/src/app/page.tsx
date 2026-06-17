@@ -77,7 +77,7 @@ export default function HomePage() {
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
       {/* Scoped deadline banner — "3 deadlines hitting your plastic packaging" (only when a scope is set) */}
-      <ScopedDeadlineBanner bills={bills} />
+      <ScopedDeadlineBanner />
 
       {/* Top-states leaderboard line, right under the nav */}
       <StatesTicker

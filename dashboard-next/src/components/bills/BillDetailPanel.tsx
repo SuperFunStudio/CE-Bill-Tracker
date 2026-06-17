@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, statusBadge } from '@/lib/utils';
-import { useBillLitigationCases } from '@/hooks/useBills';
+import { useBill, useBillLitigationCases } from '@/hooks/useBills';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
 
 interface BillDetailPanelProps {
@@ -21,7 +21,11 @@ function StatusBadge({ status }: { status: string | null }) {
 }
 
 export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
-  const cd = bill.compliance_details;
+  // compliance_details no longer rides along on the bulk list (it's the paid extraction) — fetch the
+  // per-bill detail to populate the compliance layers. Free per-bill detail is intended; the gate is
+  // on the *bulk* harvest, not single-bill views.
+  const { data: detail } = useBill(bill.id);
+  const cd = detail?.compliance_details;
   const { data: litigationCases = [] } = useBillLitigationCases(
     bill.litigation_case_count > 0 ? bill.id : null
   );

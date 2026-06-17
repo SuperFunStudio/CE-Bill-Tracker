@@ -9,11 +9,12 @@ import { track } from '@/lib/analytics';
 import { LockIcon } from '@/components/ui/icons';
 
 /**
- * The lock that fades in over the Upcoming Deadlines preview after the free timer runs out. Two ways
- * out: start the 90-day Pro trial, or share a referral link — when a colleague creates a free account
- * through it, the sharer earns a month of Pro (granted server-side; we poll to flip the gate open).
+ * The unlock card shown below the free teaser rows (the soonest few deadlines a non-Pro visitor is
+ * allowed to see — the full calendar is served only to Pro, server-side). Two ways out: start the
+ * 90-day Pro trial, or share a referral link — when a colleague creates a free account through it, the
+ * sharer earns a month of Pro (granted server-side; we poll to flip the gate open).
  */
-export function UpcomingDeadlinesLock() {
+export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number }) {
   const { user, isPro, openAuth, getToken, refreshEntitlement } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [link, setLink] = useState<string | null>(null);
@@ -94,14 +95,17 @@ export function UpcomingDeadlinesLock() {
 
   return (
     <div
-      className={`fixed inset-0 z-30 flex items-center justify-center p-6 bg-bg-primary/70 backdrop-blur-sm transition-opacity duration-700 ${
+      className={`mx-auto w-full max-w-md rounded-2xl border border-green-accent bg-bg-secondary p-7 text-center space-y-5 shadow-xl transition-opacity duration-700 ${
         mounted ? 'opacity-100' : 'opacity-0'
       }`}
     >
-      <div className="w-full max-w-md rounded-2xl border border-green-accent bg-bg-secondary p-7 text-center space-y-5 shadow-xl">
         <LockIcon className="text-3xl text-green-accent mx-auto" />
         <div>
-          <h2 className="font-serif text-xl text-text-primary mb-1">That was a peek at Upcoming Deadlines</h2>
+          <h2 className="font-serif text-xl text-text-primary mb-1">
+            {lockedCount && lockedCount > 0
+              ? `${lockedCount} more deadline${lockedCount === 1 ? '' : 's'} behind Pro`
+              : 'Unlock every Upcoming Deadline'}
+          </h2>
           <p className="text-text-secondary text-sm leading-relaxed">
             See every EPR compliance deadline across all 50 states on one timeline, filtered to your
             scope — and never miss a date.
@@ -181,7 +185,6 @@ export function UpcomingDeadlinesLock() {
         >
           ← Back to the Bill Explorer
         </Link>
-      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchCompanies, fetchCompany, fetchExposureRanking, fetchExposureBrief, fetchCompanyObligations } from '@/lib/api';
 import { resilient, getSnapshot } from '@/lib/snapshot';
+import { useAuth } from '@/components/auth/AuthContext';
 import type { CompanySummary } from '@/lib/types';
 
 const STALE = 5 * 60 * 1000;
@@ -47,9 +48,10 @@ export function useCompanyObligations(companyId: string | null) {
 }
 
 export function useExposureBrief(companyId: string | null, billId: number | null) {
+  const { getToken } = useAuth();
   return useQuery({
     queryKey: ['exposureBrief', companyId, billId],
-    queryFn: () => fetchExposureBrief(companyId!, billId!),
+    queryFn: async () => fetchExposureBrief(companyId!, billId!, await getToken()),
     enabled: companyId !== null && billId !== null,
     staleTime: 10 * 60 * 1000, // 10 min — briefs are expensive to generate
   });

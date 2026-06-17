@@ -21,7 +21,6 @@ class BillSummary(BaseModel):
     stance_source: str | None = None
     reviewed: bool = False
     source_url: str | None
-    compliance_details: dict | None
     litigation_case_count: int = 0
     max_preemption_risk: int | None = None
 
@@ -30,6 +29,9 @@ class BillSummary(BaseModel):
 
 class BillDetail(BillSummary):
     description: str | None
+    # compliance_details (the paid Sonnet extraction) is intentionally absent from BillSummary so the
+    # bulk list endpoint can't be harvested for the whole compliance dataset in one call — it lives
+    # here, on the per-bill detail, only.
     compliance_details: dict | None
     created_at: datetime
     updated_at: datetime
@@ -55,6 +57,29 @@ class BillTimelinePoint(BaseModel):
     count: int
 
 
+class BillStancePoint(BaseModel):
+    """One (year, stance) bucket: how many EPR-relevant bills last moved in `year` carry `stance`.
+
+    `stance` is policy_stance — "advances" (establishes/strengthens), "weakens"
+    (exempts/narrows/repeals/preempts), or "neutral" (admin/study/ambiguous). Powers the Insights
+    "policy momentum" diverging chart; neutral is returned but the chart leaves it off the axis.
+    """
+
+    year: int
+    stance: str
+    count: int
+
+
+class InstrumentMaterialCell(BaseModel):
+    """One (instrument, material) cell of the Insights coverage heatmap: how many EPR-relevant bills
+    apply `instrument_type` to `material_category`. Materials are unnested from the JSONB array, so a
+    bill tagging three materials contributes to three cells. Absent cells are the white space."""
+
+    instrument_type: str
+    material_category: str
+    count: int
+
+
 class DeadlineSummary(BaseModel):
     id: int
     state: str
@@ -65,8 +90,24 @@ class DeadlineSummary(BaseModel):
     bill_id: int | None
     bill_number: str | None
     bill_title: str | None
+    # The linked bill's material categories, denormalized so the client can scope-filter deadlines
+    # without bulk-loading every bill (the bulk bill list no longer carries compliance_details).
+    material_categories: list | None = None
 
     model_config = {"from_attributes": True}
+
+
+class DeadlineStats(BaseModel):
+    """Public aggregate counts for the Upcoming Deadlines surfaces (metric cards + scoped banner).
+
+    Counts are not the paid product — the individual deadline rows are — so these stay ungated to
+    power the conversion hook ("147 deadlines, 12 within 30 days") even for anonymous visitors.
+    """
+    total_upcoming: int
+    within_30: int
+    within_90: int
+    next_date: date | None = None
+    states: list[str] = []
 
 
 class FederalActionSummary(BaseModel):
@@ -372,5 +413,39 @@ class CompliancePathwaySummary(BaseModel):
     next_deadline_date: date | None = None
     has_fee: bool = False
     entity: ComplianceEntityRef | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# --- Real-world outcomes (bill_outcome) ---
+
+
+class BillOutcomeSummary(BaseModel):
+    """One documented real-world effect of an enacted law, anchored to a citation.
+
+    `direction` is positive | negative | mixed; `attribution` (direct | program | associated)
+    says how tightly the figure ties to the statute. `bill_id` is set only when the law is a
+    tracked row (→ clickable); the denormalized state/bill_number/law_title always describe it.
+    """
+    id: int
+    slug: str
+    bill_id: int | None = None
+    state: str | None = None
+    bill_number: str | None = None
+    law_title: str | None = None
+    instrument_type: str | None = None
+    material_categories: list | None = None
+    direction: str
+    metric_label: str | None = None
+    metric_value: float | None = None
+    metric_unit: str | None = None
+    metric_display: str | None = None
+    summary: str
+    attribution: str | None = None
+    as_of_date: date | None = None
+    source_name: str | None = None
+    source_url: str | None = None
+    confidence: float | None = None
+    reviewed: bool = False
 
     model_config = {"from_attributes": True}

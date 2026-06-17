@@ -1,11 +1,12 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   onIdTokenChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
   getAdditionalUserInfo,
+  sendEmailVerification,
   signOut as fbSignOut,
   type User,
 } from 'firebase/auth';
@@ -40,6 +41,11 @@ interface AuthState {
   signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
   refreshEntitlement: () => Promise<void>;
+  /** True once Firebase considers the email verified (Google sign-ins are always verified). The
+   *  no-card trial + referral credit only land after this flips true — see H-2. */
+  emailVerified: boolean;
+  /** Re-send the verification email to a signed-in but unverified account. */
+  resendVerification: () => Promise<void>;
 }
 
 const AuthCtx = createContext<AuthState | null>(null);
@@ -72,15 +78,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // onIdTokenChanged covers sign-in, sign-out, and silent token refreshes.
+  const getToken = useCallback(async () => {
+    return auth.currentUser ? auth.currentUser.getIdToken() : null;
+  }, []);
+
+  // Credit any pending share-to-unlock referral. The backend now requires the *referred* account to be
+  // email-verified (H-2), so on an unverified account the grant is deferred — we keep the pending code
+  // and let the post-verification provision retry it. Cleared only on a terminal outcome.
+  const attributePendingReferral = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    let code: string | null = null;
+    try {
+      code = localStorage.getItem(PENDING_REF_KEY);
+    } catch {
+      return;
+    }
+    if (!code) return;
+    const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+    const res = await attributeReferral(token, code);
+    const terminal =
+      res.granted || ['invalid_code', 'self', 'already_referred', 'no_code'].includes(res.reason ?? '');
+    if (terminal) {
+      try { localStorage.removeItem(PENDING_REF_KEY); } catch { /* ignore */ }
+    }
+  }, []);
+
+  // Everything a verified free account gets: credit any pending referral (rewards the referrer), claim
+  // its own one-time 7-day signup trial, then refresh entitlement so Pro reflects immediately. Gated on
+  // a verified email server-side, so this no-ops cleanly for an unverified account.
+  const provisionNewAccount = useCallback(async () => {
+    await attributePendingReferral();
+    await startSignupTrial(getToken);
+    await fetchEntitlement(auth.currentUser);
+  }, [attributePendingReferral, getToken, fetchEntitlement]);
+
+  // Provision a given uid at most once per session (the verified-poll below can fire repeatedly).
+  const provisionedUids = useRef<Set<string>>(new Set());
+  const provisionOnce = useCallback(async (uid: string) => {
+    if (provisionedUids.current.has(uid)) return;
+    provisionedUids.current.add(uid);
+    await provisionNewAccount();
+  }, [provisionNewAccount]);
+
+  // onIdTokenChanged covers sign-in, sign-out, and silent token refreshes (incl. the forced refresh the
+  // verified-poll triggers). Comp grants only land once the email is verified — see H-2.
   useEffect(() => {
     const unsub = onIdTokenChanged(auth, async u => {
       setUser(u);
       setLoading(false);
       await fetchEntitlement(u);
+      if (u && u.emailVerified) await provisionOnce(u.uid);
     });
     return unsub;
-  }, [fetchEntitlement]);
+  }, [fetchEntitlement, provisionOnce]);
 
   // Capture a ?ref= code on first landing and stash it until signup, when it's attributed.
   useEffect(() => {
@@ -95,54 +145,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const getToken = useCallback(async () => {
-    return auth.currentUser ? auth.currentUser.getIdToken() : null;
-  }, []);
+  // While signed in but unverified, watch for the user clicking the verification link (often in another
+  // tab): reload on focus + a bounded interval, and force a token refresh the moment it flips so
+  // onIdTokenChanged provisions the trial/referral. Stops after 10 min to avoid an endless poll.
+  useEffect(() => {
+    if (!user || user.emailVerified) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        await user.reload();
+        if (!cancelled && auth.currentUser?.emailVerified) {
+          await auth.currentUser.getIdToken(true); // fire onIdTokenChanged → provision
+        }
+      } catch {
+        /* transient — try again on the next tick/focus */
+      }
+    };
+    const onFocus = () => { void check(); };
+    window.addEventListener('focus', onFocus);
+    const interval = setInterval(() => { void check(); }, 15000);
+    const stop = setTimeout(() => clearInterval(interval), 10 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
+      clearTimeout(stop);
+    };
+  }, [user]);
 
-  // After a NEW account is created, credit any pending share-to-unlock referral (one-shot, best-effort
-  // — the backend enforces the not-self / one-per-account guards and grants the referrer).
-  const attributePendingReferral = useCallback(async () => {
-    if (typeof window === 'undefined') return;
-    let code: string | null = null;
-    try {
-      code = localStorage.getItem(PENDING_REF_KEY);
-      if (code) localStorage.removeItem(PENDING_REF_KEY);
-    } catch {
-      return;
+  const resendVerification = useCallback(async () => {
+    if (auth.currentUser && !auth.currentUser.emailVerified) {
+      await sendEmailVerification(auth.currentUser);
     }
-    if (!code) return;
-    const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-    await attributeReferral(token, code);
   }, []);
-
-  // Everything a brand-new free account gets: credit any pending referral (rewards the referrer), claim
-  // its own one-time 7-day signup trial, then refresh entitlement so Pro reflects immediately.
-  const provisionNewAccount = useCallback(async () => {
-    await attributePendingReferral();
-    await startSignupTrial(getToken);
-    await fetchEntitlement(auth.currentUser);
-  }, [attributePendingReferral, getToken, fetchEntitlement]);
 
   const signInEmail = useCallback(async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
     track('login', { method: 'email' });
   }, []);
 
-  const signUpEmail = useCallback(
-    async (email: string, password: string) => {
-      await createUserWithEmailAndPassword(auth, email, password);
-      track('sign_up', { method: 'email' });
-      await provisionNewAccount();
-    },
-    [provisionNewAccount],
-  );
+  const signUpEmail = useCallback(async (email: string, password: string) => {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    track('sign_up', { method: 'email' });
+    // Start email verification; the trial + referral provision once they verify (H-2). Google sign-ins
+    // skip this — their email is already verified, so onIdTokenChanged provisions them immediately.
+    try { await sendEmailVerification(cred.user); } catch { /* best-effort */ }
+  }, []);
 
   const signInGoogle = useCallback(async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const isNew = getAdditionalUserInfo(result)?.isNewUser;
     track(isNew ? 'sign_up' : 'login', { method: 'google' });
-    if (isNew) await provisionNewAccount();
-  }, [provisionNewAccount]);
+    // Provisioning runs via onIdTokenChanged (Google emails are verified).
+  }, []);
 
   const signOut = useCallback(async () => {
     await fbSignOut(auth);
@@ -163,6 +218,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     getToken,
     refreshEntitlement: () => fetchEntitlement(auth.currentUser),
+    emailVerified: !!user?.emailVerified,
+    resendVerification,
   };
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

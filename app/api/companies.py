@@ -14,6 +14,7 @@ from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import AuthedUser, require_admin
 from app.config import settings
 from app.database import get_db
 from app.models import (
@@ -86,8 +87,14 @@ async def get_or_generate_exposure_brief(
     company_id: uuid.UUID,
     bill_id: int,
     db: AsyncSession = Depends(get_db),
+    _user: AuthedUser = Depends(require_admin),
 ) -> ExposureBriefResponse:
     """Return a cached Exposure Brief for a (company, bill) pair, generating one if needed.
+
+    Admin-gated: a cache miss triggers a Claude Sonnet generation, so on a public service an
+    unauthenticated caller could iterate (company, bill) pairs to run up unbounded LLM cost. The
+    Portfolio Exposure tool this backs is itself admin-only (a Bespoke engagement), so require_admin
+    matches the product and closes the abuse vector. See docs/SECURITY_ASSESSMENT.md C-3.
 
     Returns 503 if interpretation is disabled via ENABLE_INTERPRETATION=false.
     Returns 404 if no impact score exists for the pair (can't generate a meaningful brief).
@@ -534,7 +541,12 @@ async def get_bill_company_exposure(
 # /entity-match-queue router
 # ---------------------------------------------------------------------------
 
-queue_router = APIRouter(prefix="/entity-match-queue", tags=["companies"])
+# Admin-only: these read/mutate the entity-resolution review queue. The PATCH lets a caller resolve
+# items and bind them to arbitrary companies, corrupting resolution and hiding items from human
+# review, so the whole router requires an admin token. See docs/SECURITY_ASSESSMENT.md H-3.
+queue_router = APIRouter(
+    prefix="/entity-match-queue", tags=["companies"], dependencies=[Depends(require_admin)]
+)
 
 
 @queue_router.get("", response_model=list[EntityMatchQueueItem])

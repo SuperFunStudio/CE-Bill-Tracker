@@ -4,6 +4,8 @@ import type {
   BillParams,
   StateMapSummary,
   BillTimelinePoint,
+  BillStancePoint,
+  InstrumentMaterialCell,
   DeadlineSummary,
   DeadlineParams,
   FederalActionSummary,
@@ -16,6 +18,8 @@ import type {
   ExposureRanking,
   ExposureBriefResponse,
   CompliancePathway,
+  BillOutcome,
+  DeadlineStats,
 } from './types';
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -32,8 +36,8 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
   return url.toString();
 }
 
-async function apiFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+async function apiFetch<T>(url: string, token?: string | null): Promise<T> {
+  const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
   if (!res.ok) throw new Error(`API error ${res.status}: ${url}`);
   return res.json();
 }
@@ -110,8 +114,51 @@ export async function fetchBillTimeline(params?: {
   );
 }
 
-export async function fetchDeadlines(params?: DeadlineParams): Promise<DeadlineSummary[]> {
-  return apiFetch<DeadlineSummary[]>(buildUrl('/bills/deadlines/upcoming', params as Record<string, string | number | boolean | undefined>));
+/** Per-year bill counts by policy stance (advances/weakens/neutral) — the Insights "policy momentum" view. */
+export async function fetchStanceMomentum(params?: {
+  instrument_type?: string;
+  material_category?: string;
+  min_confidence?: number;
+}): Promise<BillStancePoint[]> {
+  return apiFetch<BillStancePoint[]>(
+    buildUrl('/bills/stance-momentum', params as Record<string, string | number | boolean | undefined>),
+  );
+}
+
+/** Bill counts per (instrument × material) — the Insights coverage heatmap. */
+export async function fetchInstrumentMaterialMatrix(params?: {
+  min_confidence?: number;
+}): Promise<InstrumentMaterialCell[]> {
+  return apiFetch<InstrumentMaterialCell[]>(
+    buildUrl('/bills/instrument-material-matrix', params as Record<string, string | number | boolean | undefined>),
+  );
+}
+
+/** Documented real-world outcomes of enacted laws — powers the Insights "Real-World Impact" spotlight. */
+export async function fetchBillOutcomes(params?: {
+  direction?: string;
+  state?: string;
+  reviewed_only?: boolean;
+}): Promise<BillOutcome[]> {
+  return apiFetch<BillOutcome[]>(
+    buildUrl('/bills/outcomes', params as Record<string, string | number | boolean | undefined>),
+  );
+}
+
+/** The Upcoming Deadlines list. Pro seats (pass a Firebase token) get the full merged calendar; an
+ *  anonymous/free call gets only the soonest few rows as a teaser — the gate is enforced server-side. */
+export async function fetchDeadlines(params?: DeadlineParams, token?: string | null): Promise<DeadlineSummary[]> {
+  return apiFetch<DeadlineSummary[]>(
+    buildUrl('/bills/deadlines/upcoming', params as Record<string, string | number | boolean | undefined>),
+    token,
+  );
+}
+
+/** Ungated aggregate deadline counts — powers the metric cards + scoped banner even for free visitors. */
+export async function fetchDeadlineStats(params?: DeadlineParams): Promise<DeadlineStats> {
+  return apiFetch<DeadlineStats>(
+    buildUrl('/bills/deadlines/summary', params as Record<string, string | number | boolean | undefined>),
+  );
 }
 
 export async function fetchFederalActions(params?: FederalActionParams): Promise<FederalActionSummary[]> {
@@ -148,8 +195,9 @@ export async function fetchExposureRanking(billId?: number, limit = 50): Promise
   return apiFetch<ExposureRanking[]>(buildUrl('/companies/exposure-ranking', params));
 }
 
-export async function fetchExposureBrief(companyId: string, billId: number): Promise<ExposureBriefResponse> {
-  return apiFetch<ExposureBriefResponse>(buildUrl(`/companies/${companyId}/exposure-brief`, { bill_id: billId }));
+/** Admin-gated (the brief generation calls Claude Sonnet) — pass the caller's Firebase token. */
+export async function fetchExposureBrief(companyId: string, billId: number, token?: string | null): Promise<ExposureBriefResponse> {
+  return apiFetch<ExposureBriefResponse>(buildUrl(`/companies/${companyId}/exposure-brief`, { bill_id: billId }), token);
 }
 
 export async function fetchCompanyObligations(companyId: string): Promise<CompanyObligationsResponse> {

@@ -1,11 +1,9 @@
 'use client';
-import { useMemo } from 'react';
 import Link from 'next/link';
-import { useDeadlines } from '@/hooks/useDeadlines';
-import { deadlineInScope, isEmptyScope } from '@/lib/scope';
-import { formatDate, daysUntil } from '@/lib/utils';
+import { useDeadlineStats } from '@/hooks/useDeadlines';
+import { isEmptyScope } from '@/lib/scope';
+import { formatDate } from '@/lib/utils';
 import { CalendarIcon, AlertIcon } from '@/components/ui/icons';
-import type { BillSummary, DeadlineSummary } from '@/lib/types';
 import { useScope, useScopeActive } from './ScopeContext';
 import { formatMaterial } from './ScopeOnboarding';
 
@@ -17,48 +15,31 @@ const THREE_YEARS = 1095;
  *    CA, IL within 30 days. Nearest: Jul 1, 2026."
  *  • Unscoped → a de-escalated hook: "33 deadlines nationwide over the next 3 years. Tell us your
  *    states and materials to see which ones are yours →" (opens onboarding).
- * Materials live on the linked bill, not the deadline, so we resolve them through the loaded bills.
+ * It runs entirely off the ungated /deadlines/summary counts — no deadline rows are fetched here, so
+ * this works for anonymous visitors without exposing the Pro-gated calendar.
  */
-export function ScopedDeadlineBanner({ bills }: { bills: BillSummary[] }) {
+export function ScopedDeadlineBanner() {
   const active = useScopeActive();
   const { scope, openEditor } = useScope();
-  const { data: deadlines = [] } = useDeadlines({ days_ahead: THREE_YEARS });
+  const { data: stats } = useDeadlineStats({
+    days_ahead: THREE_YEARS,
+    materials: active && scope.materials.length ? scope.materials.join(',') : undefined,
+    states: active && scope.states.length ? scope.states.join(',') : undefined,
+  });
 
-  const billMaterials = useMemo(() => {
-    const map = new Map<number, string[]>();
-    for (const b of bills) map.set(b.id, b.material_categories ?? []);
-    return map;
-  }, [bills]);
-
-  const resolve = (d: DeadlineSummary) => (d.bill_id != null ? billMaterials.get(d.bill_id) : null);
-
-  const upcoming = useMemo(
-    () => deadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0; }),
-    [deadlines],
-  );
-
-  const scoped = useMemo(
-    () => (active ? upcoming.filter(d => deadlineInScope(d, scope, resolve)) : []),
-    [active, upcoming, scope, billMaterials],
-  );
+  if (!stats) return null;
 
   // ── Scoped: lead with the 30-day window, fall back to 90 ──
   if (active) {
-    const within = (days: number) =>
-      scoped.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n <= days; });
-    const w30 = within(30);
-    const list = w30.length > 0 ? w30 : within(90);
-    if (list.length === 0) return null;
-
-    const states = Array.from(new Set(list.map(d => d.state)));
-    const nearest = list.reduce((a, b) => (a.deadline_date <= b.deadline_date ? a : b));
+    const count = stats.within_30 > 0 ? stats.within_30 : stats.within_90;
+    if (count === 0) return null;
+    const urgent = stats.within_30 > 0;
+    const horizon = urgent ? 'within 30 days' : 'in the next 90 days';
     const matPhrase =
       scope.materials.length > 0
         ? ` affecting your products & materials (${scope.materials.map(formatMaterial).join(', ')})`
         : '';
-    const statePhrase = states.length > 0 ? ` in ${states.join(', ')}` : '';
-    const urgent = w30.length > 0;
-    const horizon = urgent ? 'within 30 days' : 'in the next 90 days';
+    const statePhrase = stats.states.length > 0 ? ` in ${stats.states.join(', ')}` : '';
 
     return (
       <Link
@@ -77,12 +58,14 @@ export function ScopedDeadlineBanner({ bills }: { bills: BillSummary[] }) {
           )}
           <p className="text-sm sm:text-base text-text-primary">
             <span className={`font-serif font-semibold ${urgent ? 'text-urgency-high' : 'text-green-accent'}`}>
-              {list.length}
+              {count}
             </span>{' '}
-            {list.length === 1 ? 'deadline' : 'deadlines'}
+            {count === 1 ? 'deadline' : 'deadlines'}
             {matPhrase}
             {statePhrase} {horizon}.{' '}
-            <span className="text-text-secondary">Nearest: {formatDate(nearest.deadline_date)}.</span>{' '}
+            {stats.next_date && (
+              <span className="text-text-secondary">Nearest: {formatDate(stats.next_date)}.</span>
+            )}{' '}
             <span className={urgent ? 'text-urgency-high' : 'text-green-accent'}>
               See what&apos;s required →
             </span>
@@ -96,7 +79,7 @@ export function ScopedDeadlineBanner({ bills }: { bills: BillSummary[] }) {
   // A reader with a scope who toggled "show everything" gets nothing here (the ScopeBar owns that
   // state); only a genuinely unscoped reader (never set one, or skipped) sees the hook.
   if (!isEmptyScope(scope)) return null;
-  if (upcoming.length === 0) return null;
+  if (stats.total_upcoming === 0) return null;
 
   return (
     <button
@@ -106,7 +89,7 @@ export function ScopedDeadlineBanner({ bills }: { bills: BillSummary[] }) {
       <div className="flex items-center gap-3">
         <CalendarIcon className="text-text-muted text-xl shrink-0" />
         <p className="text-sm sm:text-base text-text-secondary">
-          <span className="font-serif font-semibold text-text-primary">{upcoming.length}</span>{' '}
+          <span className="font-serif font-semibold text-text-primary">{stats.total_upcoming}</span>{' '}
           deadlines nationwide over the next 3 years.{' '}
           <span className="text-green-accent">
             Tell us your states, products &amp; materials to see which ones are yours →

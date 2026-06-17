@@ -1,18 +1,21 @@
-"""Fetch real legislative session windows from OpenStates jurisdiction metadata.
+"""Generate real legislative session windows for the /beta Legislative Timeline.
 
-Replaces the hand-entered guesses in the /beta Legislative Timeline prototype with
-authoritative convene/adjourn dates. OpenStates carries `legislative_sessions` (with
-start_date/end_date) per jurisdiction on the /jurisdictions endpoint — free, same API
-key we already use for bill ingestion.
+Source: the OpenStates monthly Postgres dump (opencivicdata_legislativesession), restored
+into the local scratch DB on port 5433 — the SAME bulk dump we used for the historical bill
+backfill (see app/ingestion/openstates_pgdump.py). This avoids the rate-limited v3 API
+(250/day) entirely and is repeatable: when a newer monthly dump is restored, rerun this.
 
 Writes a static JSON consumed by dashboard-next:
     dashboard-next/src/components/beta/legislative-sessions.json
 
-This is a one-time/occasional generator (sessions change rarely), not a live endpoint.
-Run from repo root:  ./venv/Scripts/python.exe scripts/fetch_legislative_sessions.py
+Run from repo root:
+    PYTHONPATH=. ./venv/Scripts/python.exe scripts/fetch_legislative_sessions.py
 
-Note: OpenStates does NOT carry procedural cutoffs (crossover / committee deadlines).
-Those remain a separate curated layer in the component (clearly labeled).
+Caveats baked into the data:
+  * For biennium states (CA, NY, NJ, IL, MI, OH, ...) the regular-session row spans the
+    FULL two years, so end_date is the end of the biennium, not the annual adjournment.
+  * OpenStates does NOT carry procedural cutoffs (crossover / committee deadlines). Those
+    remain a separate curated layer in the component (clearly labeled).
 """
 
 import asyncio
@@ -20,11 +23,12 @@ import json
 import re
 from pathlib import Path
 
-import httpx
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.config import settings
+# The restored OpenStates monthly dump (scratch DB on the second local Postgres instance).
+DUMP_DSN = "postgresql+asyncpg://postgres:dev@localhost:5433/openstates_dump"
 
-BASE_URL = "https://v3.openstates.org"
 OUT_PATH = (
     Path(__file__).resolve().parent.parent
     / "dashboard-next"
@@ -34,112 +38,77 @@ OUT_PATH = (
     / "legislative-sessions.json"
 )
 
-# Only keep sessions that overlap this window — matches the timeline axis.
+# Keep sessions overlapping this window — matches the timeline axis.
 WINDOW_START = "2024-12-01"
 WINDOW_END = "2026-12-31"
 
-_STATE_FROM_OCD = re.compile(r"state:([a-z]{2})")
+_STATE_RE = re.compile(r"/state:([a-z]{2})/")
+_SPECIAL_RE = re.compile(r"special|extraordinary|extra session", re.IGNORECASE)
+
+QUERY = text(
+    """
+    SELECT jurisdiction_id, identifier, name, classification, start_date, end_date, active
+    FROM opencivicdata_legislativesession
+    WHERE jurisdiction_id ~ '/state:[a-z]{2}/'
+      AND end_date >= :win_start
+      AND start_date <= :win_end
+      AND start_date <> ''
+      AND end_date <> ''
+    ORDER BY start_date
+    """
+)
 
 
-def _overlaps(start: str, end: str) -> bool:
-    """True if [start, end] intersects the timeline window. Missing dates fail open
-    only when the session has at least one date inside the window."""
-    if not start and not end:
-        return False
-    s = start or end
-    e = end or start
-    return s <= WINDOW_END and e >= WINDOW_START
-
-
-async def fetch_jurisdictions() -> list[dict]:
-    """List all state jurisdictions with their legislative_sessions included."""
-    results: list[dict] = []
-    async with httpx.AsyncClient(
-        base_url=BASE_URL,
-        headers={"X-API-KEY": settings.open_states_api_key},
-        timeout=30.0,
-    ) as client:
-        page = 1
-        while True:
-            body = None
-            for attempt in range(6):
-                resp = await client.get(
-                    "/jurisdictions",
-                    params={
-                        "classification": "state",
-                        "include": ["legislative_sessions"],
-                        "page": page,
-                        "per_page": 52,
-                    },
-                )
-                if resp.status_code == 429:
-                    wait = float(resp.headers.get("Retry-After", 0)) or 6.0 * (attempt + 1)
-                    print(f"  429 on page {page}, backing off {wait:.0f}s (attempt {attempt + 1})")
-                    await asyncio.sleep(wait)
-                    continue
-                resp.raise_for_status()
-                body = resp.json()
-                break
-            if body is None:
-                raise RuntimeError(f"Gave up on page {page} after repeated 429s")
-            results.extend(body.get("results", []))
-            pagination = body.get("pagination", {})
-            if page >= pagination.get("max_page", page):
-                break
-            page += 1
-    return results
-
-
-def build_calendar(jurisdictions: list[dict]) -> dict[str, list[dict]]:
-    """Map 2-letter state code -> list of in-window sessions (sorted by start)."""
-    out: dict[str, list[dict]] = {}
-    for j in jurisdictions:
-        m = _STATE_FROM_OCD.search(j.get("id", ""))
-        if not m:
-            continue
-        state = m.group(1).upper()
-        sessions = []
-        for s in j.get("legislative_sessions", []):
-            start = s.get("start_date") or ""
-            end = s.get("end_date") or ""
-            if not _overlaps(start, end):
-                continue
-            sessions.append(
-                {
-                    "start": start,
-                    "end": end,
-                    "label": s.get("name") or s.get("identifier") or "session",
-                    "classification": s.get("classification") or "",
-                }
-            )
-        if sessions:
-            sessions.sort(key=lambda x: x["start"] or x["end"])
-            out[state] = sessions
-    return out
+def _is_special(classification: str, name: str) -> bool:
+    return (classification or "").lower() == "special" or bool(_SPECIAL_RE.search(name or ""))
 
 
 async def main() -> None:
-    jurisdictions = await fetch_jurisdictions()
-    calendar = build_calendar(jurisdictions)
+    engine = create_async_engine(DUMP_DSN, echo=False)
+    by_state: dict[str, list[dict]] = {}
+    try:
+        async with engine.connect() as conn:
+            rows = (await conn.execute(QUERY, {"win_start": WINDOW_START, "win_end": WINDOW_END})).all()
+    finally:
+        await engine.dispose()
+
+    for r in rows:
+        m = _STATE_RE.search(r.jurisdiction_id or "")
+        if not m:
+            continue
+        st = m.group(1).upper()
+        by_state.setdefault(st, []).append(
+            {
+                "start": r.start_date,
+                "end": r.end_date,
+                "label": r.name or r.identifier or "session",
+                "special": _is_special(r.classification, r.name),
+                "active": bool(r.active),
+            }
+        )
+
+    for sessions in by_state.values():
+        sessions.sort(key=lambda s: s["start"])
+
     payload = {
-        "_source": "OpenStates v3 /jurisdictions legislative_sessions",
+        "_source": "OpenStates monthly Postgres dump (opencivicdata_legislativesession)",
         "_window": {"start": WINDOW_START, "end": WINDOW_END},
-        "_note": "Convene/adjourn from OpenStates. Procedural cutoffs are NOT included here.",
-        "states": calendar,
+        "_note": (
+            "Convene/adjourn from OpenStates. Biennium states span the full 2 years "
+            "(end_date = end of biennium, not annual adjournment). Procedural cutoffs NOT included."
+        ),
+        "states": by_state,
     }
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    total = sum(len(v) for v in calendar.values())
-    missing_end = sum(
-        1 for v in calendar.values() for s in v if not s["end"]
-    )
+
+    total = sum(len(v) for v in by_state.values())
     print(f"Wrote {OUT_PATH}")
-    print(f"  {len(calendar)} states, {total} sessions in window")
-    print(f"  sessions missing an end_date: {missing_end}")
-    # Spot-check the states the prototype currently shows.
+    print(f"  {len(by_state)} states, {total} sessions in window")
     for st in ["CA", "WA", "OR", "NY", "NJ", "MN", "ME", "CO", "MD", "IL"]:
-        for s in calendar.get(st, []):
-            print(f"    {st}  {s['start'] or '????-??-??'} -> {s['end'] or '????-??-??'}  {s['label']}")
+        for s in by_state.get(st, []):
+            tag = " [special]" if s["special"] else ""
+            print(f"    {st}  {s['start']} -> {s['end']}  {s['label']}{tag}")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTimelineChart } from '@/components/insights/BillTimelineChart';
+import { StanceMomentumChart } from '@/components/insights/StanceMomentumChart';
+import { InstrumentMaterialMatrix } from '@/components/insights/InstrumentMaterialMatrix';
+import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { fetchBillTimeline } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
@@ -161,7 +164,44 @@ export default function InsightsPage() {
         )}
       </Section>
 
-      {/* Future sections (flagship-bill spotlights, field notes, best practices) slot in here as
+      <Section
+        kicker="Momentum"
+        title="Policy momentum: advancing vs. being rolled back"
+      >
+        <p className="text-text-secondary text-sm leading-relaxed">
+          Counting bills misses the most important question: which direction are they pushing? Above
+          the line are bills that <em>establish or strengthen</em> a circular-economy obligation; below
+          it, bills that <em>exempt, narrow, repeal, or preempt</em> one. Slice by instrument to see
+          where the field is gaining ground and where the backlash is concentrated.
+        </p>
+        <StanceMomentumChart />
+      </Section>
+
+      <Section
+        kicker="Coverage"
+        title="Where instruments meet materials"
+      >
+        <p className="text-text-secondary text-sm leading-relaxed">
+          Which policy tools have been aimed at which materials. The dense cells are well-trodden
+          ground; the empty ones are the white space — a material with deposit-return or labeling
+          precedent but no EPR yet is often where the next wave of bills lands.
+        </p>
+        <InstrumentMaterialMatrix />
+      </Section>
+
+      <Section
+        kicker="Field notes"
+        title="Real-world impact: what enacted laws actually did"
+      >
+        <p className="text-text-secondary text-sm leading-relaxed">
+          Everywhere else we track what a law <em>requires</em>. This is what enacted laws have been
+          documented to <em>produce</em> — measured outcomes, positive and negative, each anchored to
+          a citation. Measured impacts are rare and uneven, so the list grows as evidence surfaces.
+        </p>
+        <RealWorldImpact />
+      </Section>
+
+      {/* Future sections (more flagship-bill spotlights, best practices) slot in here as
           additional <Section> blocks — the page is built to grow. */}
     </div>
   );

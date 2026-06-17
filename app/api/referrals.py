@@ -8,13 +8,13 @@ a code can't credit its own owner, and a given new account can only be the refer
 accounts to self-refer) is inherent to the "friend signs up" model and accepted for launch — at least
 each one is a real account. See state-profile-pages / compliance-action-vision.
 """
-from __future__ import annotations
-
+# NOTE: no `from __future__ import annotations` — see the note in app/api/billing.py (slowapi's
+# @limiter.limit wrapper + stringized annotations don't mix). PEP 604 unions are fine at runtime here.
 import secrets
 import string
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import AuthedUser, get_current_user, grant_comp_days
 from app.database import get_db
 from app.models import Entitlement, Referral
+from app.ratelimit import limiter
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/referrals", tags=["referrals"])
@@ -76,7 +77,9 @@ class AttributeRequest(BaseModel):
 
 
 @router.post("/attribute")
+@limiter.limit("30/hour")
 async def attribute(
+    request: Request,
     payload: AttributeRequest,
     user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -86,6 +89,13 @@ async def attribute(
     code = (payload.code or "").strip().upper()
     if not code:
         return {"granted": False, "reason": "no_code"}
+
+    # The referred account must have a verified email before it can credit anyone — this is the lever
+    # that stops a sharer from farming referral rewards with scripted throwaway signups (each one would
+    # have to pass real email verification). The frontend keeps the pending code and retries once the
+    # new account verifies. See docs/SECURITY_ASSESSMENT.md H-2.
+    if not user.email_verified:
+        return {"granted": False, "reason": "email_unverified"}
 
     referrer = (
         await db.execute(select(Entitlement).where(Entitlement.referral_code == code))

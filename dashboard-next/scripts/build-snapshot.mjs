@@ -20,12 +20,14 @@ const OUT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public',
 // name → API path. `name` is also the localStorage key and the snapshot file the
 // frontend reads (lib/snapshot.ts SNAPSHOTS must list the same names).
 const ENDPOINTS = [
+  // The bills list no longer carries compliance_details (the paid extraction) — this is just the
+  // public Bill Explorer metadata, safe to bake to the CDN.
   { name: 'bills', path: '/bills?epr_relevant=true&limit=5000' },
   { name: 'map-summary', path: '/bills/map-summary' },
-  // days_ahead=1095 matches the 3-year window the Upcoming Deadlines page requests.
-  // The endpoint defaults to days_ahead=90, so baking with no params under-reports
-  // the fallback (7 vs 51) whenever the live API is unreachable.
-  { name: 'deadlines', path: '/bills/deadlines/upcoming?days_ahead=1095' },
+  // Only the ungated deadline COUNTS are baked. The deadline rows are Pro-gated server-side, so we
+  // deliberately do NOT snapshot /bills/deadlines/upcoming (an unauthenticated build would only get
+  // the public 5-row teaser anyway, and the CDN must not serve the paid calendar). See C-1.
+  { name: 'deadlines-summary', path: '/bills/deadlines/summary?days_ahead=1095' },
   { name: 'federal-actions', path: '/federal-actions?limit=100' },
   { name: 'litigation-cases', path: '/litigation-cases' },
   { name: 'companies', path: '/companies?limit=200' },

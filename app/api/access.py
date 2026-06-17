@@ -1,9 +1,10 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.access_emails import send_access_request_emails
 from app.database import get_db
 from app.models import AccessRequest
+from app.ratelimit import limiter
 from app.schemas import AccessRequestCreate, AccessRequestResponse
 
 router = APIRouter(prefix="/access-requests", tags=["access"])
@@ -14,7 +15,9 @@ _VALID_PLANS = {"pro", "team", "enterprise", "api", "company_impact"}
 
 
 @router.post("", response_model=AccessRequestResponse, status_code=201)
+@limiter.limit("6/minute")
 async def create_access_request(
+    request: Request,
     payload: AccessRequestCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),

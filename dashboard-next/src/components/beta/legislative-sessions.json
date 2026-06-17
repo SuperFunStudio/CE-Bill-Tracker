@@ -1,0 +1,866 @@
+{
+  "_source": "OpenStates monthly Postgres dump (opencivicdata_legislativesession)",
+  "_window": {
+    "start": "2024-12-01",
+    "end": "2026-12-31"
+  },
+  "_note": "Convene/adjourn from OpenStates. Biennium states span the full 2 years (end_date = end of biennium, not annual adjournment). Procedural cutoffs NOT included.",
+  "states": {
+    "OH": [
+      {
+        "start": "2023-01-02",
+        "end": "2024-12-31",
+        "label": "135th Legislature (2023-2024)",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-01-06",
+        "end": "2026-12-31",
+        "label": "136th Legislature (2025-2026)",
+        "special": false,
+        "active": true
+      }
+    ],
+    "VT": [
+      {
+        "start": "2023-01-04",
+        "end": "2025-05-09",
+        "label": "2023-2024 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-01-08",
+        "end": "2025-05-08",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "MI": [
+      {
+        "start": "2023-01-11",
+        "end": "2024-12-22",
+        "label": "2023-2024 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-01-08",
+        "end": "2025-12-31",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "NJ": [
+      {
+        "start": "2024-01-09",
+        "end": "2025-12-31",
+        "label": "2024-2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-13",
+        "end": "2027-12-31",
+        "label": "2026-2027 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "CA": [
+      {
+        "start": "2024-09-01",
+        "end": "2024-12-05",
+        "label": "2023-2024, Special Session 2",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2024-12-02",
+        "end": "2024-12-02",
+        "label": "2025-2026, Special Session 1",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2024-12-02",
+        "end": "2026-11-30",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "ME": [
+      {
+        "start": "2024-12-04",
+        "end": "2025-06-18",
+        "label": "132nd Legislature (2025-2026)",
+        "special": false,
+        "active": true
+      }
+    ],
+    "OR": [
+      {
+        "start": "2024-12-12",
+        "end": "2024-12-20",
+        "label": "2024 Special Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2025-01-21",
+        "end": "2025-06-30",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-08-29",
+        "end": "2025-09-05",
+        "label": "2025 Special Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-02-02",
+        "end": "2026-03-09",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "MA": [
+      {
+        "start": "2025-01-01",
+        "end": "2026-07-31",
+        "label": "194th Legislature (2025-2026)",
+        "special": false,
+        "active": true
+      }
+    ],
+    "RI": [
+      {
+        "start": "2025-01-02",
+        "end": "2025-06-30",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-02",
+        "end": "2026-06-30",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "ID": [
+      {
+        "start": "2025-01-06",
+        "end": "2025-04-10",
+        "label": "68th Legislature, 1st Regular Session (2025)",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-05",
+        "end": "2026-04-10",
+        "label": "68th Legislature, 2nd Regular Session (2026)",
+        "special": false,
+        "active": true
+      }
+    ],
+    "WI": [
+      {
+        "start": "2025-01-06",
+        "end": "2026-05-25",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-05-13",
+        "end": "2026-05-25",
+        "label": "May 2026 Special Session",
+        "special": true,
+        "active": true
+      }
+    ],
+    "MT": [
+      {
+        "start": "2025-01-06",
+        "end": "2025-05-03",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "MS": [
+      {
+        "start": "2025-01-06",
+        "end": "2025-04-05",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-01-07",
+        "end": "2025-04-06",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-05-28",
+        "end": "2025-06-06",
+        "label": "2025 First Extraordinary Session",
+        "special": true,
+        "active": true
+      }
+    ],
+    "PA": [
+      {
+        "start": "2025-01-07",
+        "end": "2025-11-30",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "KY": [
+      {
+        "start": "2025-01-07",
+        "end": "2025-04-15",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-06",
+        "end": "2026-04-15",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "ND": [
+      {
+        "start": "2025-01-07",
+        "end": "2025-05-02",
+        "label": "69th Legislative Assembly (2025-26)",
+        "special": false,
+        "active": true
+      }
+    ],
+    "NH": [
+      {
+        "start": "2025-01-08",
+        "end": "2025-06-30",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-08",
+        "end": "2026-06-30",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "MD": [
+      {
+        "start": "2025-01-08",
+        "end": "2025-04-07",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-14",
+        "end": "2026-04-13",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "IL": [
+      {
+        "start": "2025-01-08",
+        "end": "2025-05-31",
+        "label": "104th Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "NY": [
+      {
+        "start": "2025-01-08",
+        "end": "2026-12-31",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "NE": [
+      {
+        "start": "2025-01-08",
+        "end": "2026-04-19",
+        "label": "109th Legislature (2025-2026)",
+        "special": false,
+        "active": true
+      }
+    ],
+    "MO": [
+      {
+        "start": "2025-01-08",
+        "end": "2025-05-16",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-06-02",
+        "end": "2025-06-13",
+        "label": "2025 1st Extraordinary Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2025-09-03",
+        "end": "2025-09-13",
+        "label": "2025 2nd Extraordinary Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-01-07",
+        "end": "2026-05-15",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "CT": [
+      {
+        "start": "2025-01-08",
+        "end": "2025-06-04",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-02-04",
+        "end": "2026-05-06",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "CO": [
+      {
+        "start": "2025-01-08",
+        "end": "2025-05-07",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-08-26",
+        "end": "2025-08-30",
+        "label": "2025 First Extraordinary Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-01-14",
+        "end": "2026-05-13",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "VA": [
+      {
+        "start": "2025-01-08",
+        "end": "2025-02-22",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-14",
+        "end": "2026-03-14",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-04-23",
+        "end": "2026-05-01",
+        "label": "2026, 1st Special Session",
+        "special": true,
+        "active": true
+      }
+    ],
+    "IN": [
+      {
+        "start": "2025-01-09",
+        "end": "2025-04-29",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-09",
+        "end": "2026-04-29",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "TX": [
+      {
+        "start": "2025-01-10",
+        "end": "2025-06-02",
+        "label": "89th Legislature (2025)",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-07-21",
+        "end": "2025-08-15",
+        "label": "89th Legislature, 1st Called Session (2025)",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2025-08-18",
+        "end": "2025-09-18",
+        "label": "89th Legislature, 2nd Called Session (2025)",
+        "special": true,
+        "active": true
+      }
+    ],
+    "NC": [
+      {
+        "start": "2025-01-11",
+        "end": "2025-07-01",
+        "label": "2025-2026 Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-11-17",
+        "end": "2025-12-01",
+        "label": "2025 Extra Session",
+        "special": true,
+        "active": true
+      }
+    ],
+    "GA": [
+      {
+        "start": "2025-01-13",
+        "end": "2026-04-02",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "AZ": [
+      {
+        "start": "2025-01-13",
+        "end": "2025-04-26",
+        "label": "57th Legislature - First Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-12",
+        "end": "2026-04-25",
+        "label": "57th Legislature - Second Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "KS": [
+      {
+        "start": "2025-01-13",
+        "end": "2025-05-06",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "AR": [
+      {
+        "start": "2025-01-13",
+        "end": "2025-04-11",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-04-08",
+        "end": "2026-05-01",
+        "label": "2026 Fiscal Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-05-04",
+        "end": "2026-08-15",
+        "label": "2026 First Extraordinary Session",
+        "special": true,
+        "active": true
+      }
+    ],
+    "WA": [
+      {
+        "start": "2025-01-13",
+        "end": "2026-03-06",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "IA": [
+      {
+        "start": "2025-01-13",
+        "end": "2025-04-22",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "SC": [
+      {
+        "start": "2025-01-14",
+        "end": "2025-05-08",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "TN": [
+      {
+        "start": "2025-01-14",
+        "end": "2026-04-25",
+        "label": "114th Regular Session (2025-2026)",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-01-27",
+        "end": "2025-01-31",
+        "label": "114th First Extraordinary Session (January 2025)",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-05-05",
+        "end": "2026-05-08",
+        "label": "114th Second Extraordinary Session (May 2026)",
+        "special": true,
+        "active": true
+      }
+    ],
+    "MN": [
+      {
+        "start": "2025-01-14",
+        "end": "2026-05-20",
+        "label": "2025-2026 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-06-08",
+        "end": "2025-12-31",
+        "label": "2025, First Special Session",
+        "special": true,
+        "active": true
+      }
+    ],
+    "DE": [
+      {
+        "start": "2025-01-14",
+        "end": "2026-06-30",
+        "label": "153rd General Assembly (2025-2026)",
+        "special": false,
+        "active": true
+      }
+    ],
+    "SD": [
+      {
+        "start": "2025-01-14",
+        "end": "2025-03-31",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-09-03",
+        "end": "2025-09-10",
+        "label": "2025 First Special Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-01-14",
+        "end": "2026-03-31",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "WY": [
+      {
+        "start": "2025-01-14",
+        "end": "2025-03-15",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-02-09",
+        "end": "2026-03-06",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "HI": [
+      {
+        "start": "2025-01-17",
+        "end": "2025-05-02",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-21",
+        "end": "2026-05-08",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "NM": [
+      {
+        "start": "2025-01-21",
+        "end": "2025-03-22",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-10-01",
+        "end": "2025-10-10",
+        "label": "2025 First Special Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2025-11-10",
+        "end": "2025-11-17",
+        "label": "2025 Second Special Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-01-20",
+        "end": "2026-02-19",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "AK": [
+      {
+        "start": "2025-01-21",
+        "end": "2025-05-21",
+        "label": "34th Legislature (2025-2026)",
+        "special": false,
+        "active": true
+      }
+    ],
+    "UT": [
+      {
+        "start": "2025-01-21",
+        "end": "2025-03-17",
+        "label": "2025 General Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-10-06",
+        "end": "2025-10-10",
+        "label": "2025 First Special Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2025-12-09",
+        "end": "2025-12-12",
+        "label": "2025 Second Special Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-01-20",
+        "end": "2026-03-06",
+        "label": "2026 General Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "FL": [
+      {
+        "start": "2025-01-27",
+        "end": "2025-12-31",
+        "label": "2025 Special Session A",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2025-01-27",
+        "end": "2025-12-31",
+        "label": "2025 Special Session B",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2025-02-11",
+        "end": "2025-12-31",
+        "label": "2025 Special Session C",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2025-03-04",
+        "end": "2025-05-02",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-13",
+        "end": "2026-03-13",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-04-28",
+        "end": "2026-05-01",
+        "label": "2026 Special Session D",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-05-12",
+        "end": "2026-05-29",
+        "label": "2026 Special Session E",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-06-01",
+        "end": "2026-06-05",
+        "label": "2026 Special Session F",
+        "special": true,
+        "active": true
+      }
+    ],
+    "NV": [
+      {
+        "start": "2025-02-01",
+        "end": "2025-06-01",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-11-13",
+        "end": "2025-11-21",
+        "label": "36th (2026) Special Session",
+        "special": true,
+        "active": true
+      }
+    ],
+    "OK": [
+      {
+        "start": "2025-02-03",
+        "end": "2025-05-30",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-02-02",
+        "end": "2026-05-29",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "AL": [
+      {
+        "start": "2025-02-04",
+        "end": "2025-05-15",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-13",
+        "end": "2026-04-02",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "WV": [
+      {
+        "start": "2025-02-12",
+        "end": "2025-04-12",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2026-01-14",
+        "end": "2026-03-14",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ],
+    "LA": [
+      {
+        "start": "2025-04-14",
+        "end": "2025-06-12",
+        "label": "2025 Regular Session",
+        "special": false,
+        "active": true
+      },
+      {
+        "start": "2025-10-23",
+        "end": "2025-10-24",
+        "label": "2025 First Extraordinary Session",
+        "special": true,
+        "active": true
+      },
+      {
+        "start": "2026-03-09",
+        "end": "2026-06-01",
+        "label": "2026 Regular Session",
+        "special": false,
+        "active": true
+      }
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
-import { useDeadlines } from '@/hooks/useDeadlines';
-import { useBills } from '@/hooks/useBills';
+import { useState, useMemo } from 'react';
+import { useDeadlines, useDeadlineStats } from '@/hooks/useDeadlines';
+import { useBill } from '@/hooks/useBills';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { SectionHeader } from '@/components/ui/SectionHeader';
@@ -57,135 +57,76 @@ function DeadlineRow({ deadline, onSelect }: { deadline: DeadlineSummary; onSele
 // backfill carries laws back to the 1990s; their compliance dates are not actionable).
 const PAST_DEADLINE_CUTOFF_DAYS = 5 * 365;
 
-// How long a free visitor previews the live timeline before the lock fades in.
-const PREVIEW_MS = 15_000;
-
 export default function CompliancePage() {
   const [daysAhead, setDaysAhead] = useState(1095);
   const [stateFilter, setStateFilter] = useState('');
   const [includePast, setIncludePast] = useState(false);
   const [selected, setSelected] = useState<DeadlineSummary | null>(null);
 
-  const { data: apiDeadlines = [], isLoading } = useDeadlines({ days_ahead: daysAhead, state: stateFilter || undefined });
-  const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
-
   const { scope } = useScope();
   const scopeActive = useScopeActive();
-
   const { isPro, isAdmin, loading } = useAuth();
   const gatePro = useProGate();
 
-  // Free visitors get a live ~40s preview of the real timeline, then the lock fades in over it (so they
-  // see exactly what they're missing). Pro + admins skip it. isPro flipping (e.g. a referral grant
-  // lands) tears the lock down.
-  const needsPreview = !loading && !isPro && !isAdmin;
-  const [previewExpired, setPreviewExpired] = useState(false);
-  useEffect(() => {
-    if (!needsPreview) {
-      setPreviewExpired(false);
-      return;
-    }
-    const t = setTimeout(() => setPreviewExpired(true), PREVIEW_MS);
-    return () => clearTimeout(t);
-  }, [needsPreview]);
-  const locked = needsPreview && previewExpired;
+  // A live Pro seat (or admin) sees the full calendar; everyone else gets the server-capped teaser.
+  const proView = isPro || isAdmin;
 
-  // Merge API deadlines with compliance_details.deadlines from bills
-  const mergedDeadlines = useMemo(() => {
-    const seen = new Set<string>();
-    const merged: DeadlineSummary[] = [];
+  // The list itself is gated server-side: Pro → full merged calendar, free → soonest few rows. We pass
+  // the reader's scope only for the free path (so the teaser is relevant); Pro gets everything and
+  // filters client-side, which keeps the "show everything" toggle instant (no refetch).
+  const scopeMaterials = scopeActive && scope.materials.length ? scope.materials.join(',') : undefined;
+  const scopeStates = scopeActive && scope.states.length ? scope.states.join(',') : undefined;
+  const { data: deadlines = [], isLoading } = useDeadlines({
+    days_ahead: daysAhead,
+    state: stateFilter || undefined,
+    materials: proView ? undefined : scopeMaterials,
+    states: proView ? undefined : scopeStates,
+  });
 
-    for (const d of apiDeadlines) {
-      const key = `${d.state}|${d.deadline_date}|${d.deadline_type}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        merged.push(d);
-      }
-    }
+  // Ungated counts drive the metric cards (and the locked-remaining math) for free + Pro alike.
+  const { data: stats } = useDeadlineStats({
+    days_ahead: daysAhead,
+    state: stateFilter || undefined,
+    materials: scopeMaterials,
+    states: scopeStates,
+  });
 
-    // Extract from compliance_details: explicit deadlines plus the key implementation/
-    // enforcement dates (effective_date, compliance_date) that the bulk classifier pulled
-    // out of each bill but that don't live in the `deadlines` array.
-    const pushDeadline = (
-      bill: (typeof bills)[number],
-      type: string,
-      date: string | null | undefined,
-      description: string | null | undefined,
-    ) => {
-      if (!date) return;
-      const key = `${bill.state}|${date}|${type}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      merged.push({
-        id: -1,
-        state: bill.state,
-        deadline_type: type,
-        deadline_date: date,
-        description: description ?? null,
-        who_affected: null,
-        bill_id: bill.id,
-        bill_number: bill.bill_number,
-        bill_title: bill.title,
-      });
-    };
+  // The bill behind the selected deadline powers the modal's full detail (fetched on demand; the bulk
+  // list no longer carries compliance_details).
+  const { data: selectedBill } = useBill(selected?.bill_id ?? null);
 
-    for (const bill of bills) {
-      if (stateFilter && bill.state !== stateFilter) continue;
-      const details = bill.compliance_details;
-      for (const cd of details?.deadlines ?? []) {
-        pushDeadline(bill, cd.type ?? 'compliance', cd.date, cd.description);
-      }
-      pushDeadline(bill, 'effective', details?.effective_date, `${bill.bill_number ?? 'Bill'} takes effect`);
-      pushDeadline(bill, 'compliance', details?.compliance_date, `${bill.bill_number ?? 'Bill'} compliance date`);
-    }
-
-    return merged
-      .filter(d => {
+  // Client-side window filter (Pro list spans up to 5y of past dates so this toggle works without a
+  // refetch; the free teaser is already upcoming-only so this is a no-op there).
+  const windowed = useMemo(
+    () =>
+      deadlines.filter(d => {
         const days = daysUntil(d.deadline_date);
         if (!includePast && days !== null && days < 0) return false;
-        // Even with "include past" on, don't surface ancient deadlines: the historical
-        // backfill carries laws back to the 1990s/2000s whose compliance dates are long gone.
-        // Cap the past view at 5 years so it stays a recent-history aid, not an archive dump.
         if (includePast && days !== null && days < -PAST_DEADLINE_CUTOFF_DAYS) return false;
         if (days !== null && days > daysAhead) return false;
         return true;
-      })
-      .sort((a, b) => a.deadline_date.localeCompare(b.deadline_date));
-  }, [apiDeadlines, bills, stateFilter, includePast, daysAhead]);
+      }),
+    [deadlines, includePast, daysAhead],
+  );
 
-  // Default the whole page to the reader's personalization scope (materials live on the linked bill).
-  // The global "Show everything" toggle in the ScopeBar turns this off.
-  const billMaterials = useMemo(() => {
-    const map = new Map<number, string[]>();
-    for (const b of bills) map.set(b.id, b.material_categories ?? []);
-    return map;
-  }, [bills]);
-
+  // Default to the reader's scope (materials live on the deadline's linked bill, denormalized onto the
+  // row). The global "Show everything" toggle in the ScopeBar turns this off.
   const allDeadlines = useMemo(
     () =>
       scopeActive
-        ? mergedDeadlines.filter(d =>
-            deadlineInScope(d, scope, dl => (dl.bill_id != null ? billMaterials.get(dl.bill_id) : null)),
-          )
-        : mergedDeadlines,
-    [mergedDeadlines, scopeActive, scope, billMaterials],
+        ? windowed.filter(d => deadlineInScope(d, scope, dl => dl.material_categories))
+        : windowed,
+    [windowed, scopeActive, scope],
   );
 
-  // Timeline shows only upcoming deadlines (today onward), regardless of the include-past toggle.
+  // Timeline shows only upcoming deadlines (today onward). Pro-only — it's the full-calendar view.
   const timelineDeadlines = useMemo(
     () => allDeadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0; }),
     [allDeadlines],
   );
 
-  const within30 = allDeadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0 && n <= 30; }).length;
-  const within90 = allDeadlines.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0 && n <= 90; }).length;
-  const nextDeadline = allDeadlines.find(d => { const n = daysUntil(d.deadline_date); return n !== null && n >= 0; });
-
-  // The bill behind the selected deadline (if it's in the loaded set) powers the modal.
-  const selectedBill = useMemo(
-    () => (selected?.bill_id != null ? bills.find(b => b.id === selected.bill_id) ?? null : null),
-    [selected, bills],
-  );
+  const totalUpcoming = stats?.total_upcoming ?? 0;
+  const lockedRemaining = Math.max(0, totalUpcoming - allDeadlines.length);
 
   // CSV export is a Pro feature: gatePro routes anon → sign-in, Free → checkout, Pro → the download.
   function handleExport() {
@@ -201,10 +142,7 @@ export default function CompliancePage() {
 
   return (
     <>
-      <div
-        className={`p-6 space-y-6 max-w-5xl mx-auto ${locked ? 'pointer-events-none select-none blur-[6px]' : ''}`}
-        aria-hidden={locked || undefined}
-      >
+      <div className="p-6 space-y-6 max-w-5xl mx-auto">
       <GazetteHeader title="Upcoming Deadlines" subtitle="EPR compliance deadlines across all states" />
 
       {scopeActive && (
@@ -220,16 +158,16 @@ export default function CompliancePage() {
         </p>
       )}
 
-      {/* Metrics */}
+      {/* Metrics — true aggregate counts (ungated), so free visitors see exactly what they're missing */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard label="Total Deadlines" value={allDeadlines.length} accent />
-        <MetricCard label="Within 30 Days" value={within30} sublabel={within30 > 0 ? 'Action required' : 'None urgent'} />
-        <MetricCard label="Within 90 Days" value={within90} />
-        <MetricCard label="Next Deadline" value={nextDeadline ? formatDate(nextDeadline.deadline_date) : 'None'} />
+        <MetricCard label="Total Deadlines" value={totalUpcoming} accent />
+        <MetricCard label="Within 30 Days" value={stats?.within_30 ?? 0} sublabel={(stats?.within_30 ?? 0) > 0 ? 'Action required' : 'None urgent'} />
+        <MetricCard label="Within 90 Days" value={stats?.within_90 ?? 0} />
+        <MetricCard label="Next Deadline" value={stats?.next_date ? formatDate(stats.next_date) : 'None'} />
       </div>
 
-      {within30 > 0 && (
-        <AlertBanner variant="red" message={`${within30} deadline(s) within the next 30 days require immediate attention.`} />
+      {(stats?.within_30 ?? 0) > 0 && (
+        <AlertBanner variant="red" message={`${stats?.within_30} deadline(s) within the next 30 days require immediate attention.`} />
       )}
 
       {/* Filters */}
@@ -265,12 +203,14 @@ export default function CompliancePage() {
           </select>
         </div>
 
-        <div className="flex items-end pb-1">
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-text-secondary">
-            <input type="checkbox" checked={includePast} onChange={e => setIncludePast(e.target.checked)} className="accent-green-accent" />
-            Include past deadlines
-          </label>
-        </div>
+        {proView && (
+          <div className="flex items-end pb-1">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-text-secondary">
+              <input type="checkbox" checked={includePast} onChange={e => setIncludePast(e.target.checked)} className="accent-green-accent" />
+              Include past deadlines
+            </label>
+          </div>
+        )}
 
         <div className="flex items-end ml-auto pb-1">
           <button
@@ -289,8 +229,8 @@ export default function CompliancePage() {
         </div>
       </div>
 
-      {/* Timeline */}
-      {timelineDeadlines.length > 0 && (
+      {/* Timeline — Pro only (the full-calendar view) */}
+      {proView && timelineDeadlines.length > 0 && (
         <div>
           <SectionHeader title={`Timeline — next 3 years (${timelineDeadlines.length})`} />
           <DeadlineTimeline deadlines={timelineDeadlines} onSelect={setSelected} />
@@ -299,8 +239,14 @@ export default function CompliancePage() {
 
       {/* Deadline list — brief headlines; tap any to open its detail */}
       <div>
-        <SectionHeader title={`Deadlines (${allDeadlines.length})`} />
-        {isLoading ? (
+        <SectionHeader
+          title={
+            proView || totalUpcoming <= allDeadlines.length
+              ? `Deadlines (${allDeadlines.length})`
+              : `Deadlines (showing ${allDeadlines.length} of ${totalUpcoming})`
+          }
+        />
+        {(isLoading || loading) ? (
           <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
         ) : allDeadlines.length === 0 ? (
           <div className="text-center text-text-muted py-12">No deadlines found for the selected filters.</div>
@@ -311,9 +257,12 @@ export default function CompliancePage() {
         )}
       </div>
 
-      <DeadlineModal deadline={selected} bill={selectedBill} onClose={() => setSelected(null)} />
+      {/* Free visitors: the unlock card sits right below the teaser rows (no full-page blur — the data
+          they don't have was simply never sent). */}
+      {!loading && !proView && <UpcomingDeadlinesLock lockedCount={lockedRemaining} />}
+
+      <DeadlineModal deadline={selected} bill={selectedBill ?? null} onClose={() => setSelected(null)} />
       </div>
-      {locked && <UpcomingDeadlinesLock />}
     </>
   );
 }

@@ -848,3 +848,70 @@ class CompliancePathway(Base):
         Index("idx_pathway_entity_id", "entity_id"),
         Index("idx_pathway_management_model", "management_model"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Real-world outcomes — the "what did this law actually do in the world" layer.
+# Everything else in the schema describes what a law REQUIRES; this captures what
+# an enacted law has been documented to PRODUCE (positive, negative, or mixed),
+# always anchored to a citation. The atom of the Insights "Real-World Impact"
+# spotlight. Curated, not auto-extracted — measured outcomes are rare and uneven,
+# so each row is hand-seeded and source-backed (see scripts/seed_bill_outcomes.py).
+# ---------------------------------------------------------------------------
+
+
+class BillOutcome(Base):
+    """One documented real-world outcome attributable to (or enabled by) an enacted law.
+
+    A law can have several outcomes (e.g. a recycling gain AND a cost complaint), so this is
+    one-to-many on bills, not one-per-bill. bill_id is a soft link: set when the law is in our
+    bills table (→ clickable), but the denormalized state/bill_number/law_title keep the row
+    self-describing for famous laws we don't track as rows yet. `attribution` records how tightly
+    the number ties to the statute — "direct" (the law itself produced it), "program" (the law
+    funds/incentivizes a program that produced it, e.g. TX HB3487 → Sink Your Shucks reef acreage),
+    or "associated" (correlated, looser). `source_url` is the chain of custody — no outcome without it.
+    """
+    __tablename__ = "bill_outcome"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Stable kebab key for idempotent seeding (e.g. "tx-hb3487-oyster-reef").
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    bill_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("bills.id", ondelete="SET NULL"), nullable=True
+    )
+    # Denormalized law identity — present even when bill_id is null.
+    state: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    bill_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    law_title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    instrument_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    material_categories: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
+    # "positive" | "negative" | "mixed" — direction of the documented effect.
+    direction: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The headline metric, split for clean rendering: "Oyster reef restored" / 25 / "acres".
+    # metric_display is an optional override for figures that don't compose as value+unit
+    # (e.g. "recycling rate 18% → 64%"); the UI prefers it when present.
+    metric_label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metric_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    metric_unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    metric_display: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    # "direct" | "program" | "associated" — how tightly the outcome ties to the statute.
+    attribution: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    as_of_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Mirrors Bill.reviewed: auto/curated-but-unvetted until a human spot-checks the figure.
+    reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    bill: Mapped["Bill | None"] = relationship("Bill", foreign_keys=[bill_id])
+
+    __table_args__ = (
+        Index("idx_bill_outcome_bill_id", "bill_id"),
+        Index("idx_bill_outcome_direction", "direction"),
+    )

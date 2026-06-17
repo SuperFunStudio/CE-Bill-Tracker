@@ -1,0 +1,52 @@
+# Docker build-context excludes (M-3). The Dockerfiles use selective COPY (app/, data/, alembic/), so
+# this is defense-in-depth: it keeps secrets and bloat out of the build context entirely, so a future
+# `COPY . .` can't silently bake .env/credentials into an image, and builds stay fast. Mirrors
+# .gcloudignore where it matters.
+
+# Secrets / credentials
+.env
+.env.*
+*-service-account*.json
+*serviceAccount*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Node / Next.js
+node_modules/
+dashboard-next/node_modules/
+.next/
+dashboard-next/.next/
+dashboard-next/out/
+
+# Git & tooling
+.git/
+.gitignore
+.gcloudignore
+.dockerignore
+.claude/
+
+# Firebase artifacts
+.firebase/
+firebase-public/
+.firebaserc
+
+# Local scratch / build artifacts
+tmp/
+data/exports/
+dist/
+build/
+*.egg-info/
+*.log
+
+# OS
+.DS_Store

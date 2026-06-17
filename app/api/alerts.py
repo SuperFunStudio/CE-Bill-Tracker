@@ -1,17 +1,20 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.welcome_email import send_welcome_for_subscription
 from app.database import get_db
 from app.models import AlertSubscription
+from app.ratelimit import limiter
 from app.schemas import SubscriptionCreate, SubscriptionResponse
 
 router = APIRouter(prefix="/subscriptions", tags=["alerts"])
 
 
 @router.post("", response_model=SubscriptionResponse, status_code=201)
+@limiter.limit("12/minute")
 async def create_subscription(
+    request: Request,
     payload: SubscriptionCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),

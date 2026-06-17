@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
+from app.ratelimit import limiter
 from app.ingestion.courtlistener import (
     CourtListenerClient,
     classify_litigation_event,
@@ -35,10 +36,16 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
 def _verify_signature(body: bytes, signature_header: str | None) -> bool:
-    """Verify HMAC-SHA256 webhook signature. Returns True if valid or no secret configured."""
+    """Verify HMAC-SHA256 webhook signature. Fails CLOSED: an unset secret rejects all events.
+
+    This endpoint injects litigation cases/events and triggers alert emails + per-event LLM
+    classification, so accepting unsigned bodies is an unauthenticated cost/spam vector. With no
+    secret configured we cannot verify anything, so we reject. See docs/SECURITY_ASSESSMENT.md C-4.
+    """
     secret = settings.courtlistener_webhook_secret
     if not secret:
-        return True  # No secret configured — accept all
+        log.error("cl_webhook_secret_unset")
+        return False  # Fail closed — no secret means we can't verify, so don't trust it
     if not signature_header:
         return False
     expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
@@ -48,6 +55,7 @@ def _verify_signature(body: bytes, signature_header: str | None) -> bool:
 
 
 @router.post("/courtlistener")
+@limiter.exempt  # signature-verified; CourtListener delivers from its own infra, not per-user IPs
 async def courtlistener_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),

@@ -9,7 +9,9 @@
 const SNAPSHOTS = [
   'bills',
   'map-summary',
-  'deadlines',
+  // Only the ungated deadline COUNTS are snapshotted; the deadline rows are Pro-gated and must not be
+  // baked into the public CDN (that was the C-1 leak).
+  'deadlines-summary',
   'federal-actions',
   'litigation-cases',
   'companies',

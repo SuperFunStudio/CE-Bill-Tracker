@@ -1,21 +1,32 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Integer, func, select
+from sqlalchemy import Integer, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_optional_pro
 from app.database import get_db
-from app.models import Bill, ComplianceDeadline, LitigationCase, LitigationEvent
+from app.models import Bill, BillOutcome, ComplianceDeadline, LitigationCase, LitigationEvent
 from app.schemas import (
     BillDetail,
+    BillOutcomeSummary,
+    BillStancePoint,
     BillSummary,
     BillTimelinePoint,
+    DeadlineStats,
     DeadlineSummary,
+    InstrumentMaterialCell,
     LitigationCaseSummary,
     StateMapSummary,
 )
 
 router = APIRouter(prefix="/bills", tags=["bills"])
+
+# The Upcoming Deadlines list is the Pro product. Anonymous/free callers get true aggregate counts
+# (DeadlineStats, ungated — they drive conversion) plus only the soonest few rows as a taste; the full
+# merged list is served only to a verified Pro seat. See docs/SECURITY_ASSESSMENT.md C-1.
+DEADLINE_TEASER_LIMIT = 5
+DEADLINE_PAST_CAP_DAYS = 5 * 365
 
 
 def _lit_subquery():
@@ -129,6 +140,99 @@ async def get_bill_timeline(
     return [BillTimelinePoint(year=row.year, status=row.status, count=row.count) for row in rows]
 
 
+@router.get("/stance-momentum", response_model=list[BillStancePoint])
+async def get_stance_momentum(
+    instrument_type: str | None = None,
+    material_category: str | None = None,
+    min_confidence: float = 0.7,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-year counts of EPR-relevant bills by policy_stance — the Insights "policy momentum" view.
+
+    Answers "is the field advancing or being rolled back?" by bucketing each bill under the year of
+    its most recent status change and its stance (advances / weakens / neutral). A confidence floor
+    (default 0.7) keeps low-confidence classifications out of the aggregate, since stance is the
+    noisiest classifier axis. neutral is included in the response; the chart leaves it off the axis.
+    """
+    year = func.extract("year", Bill.status_date)
+    q = (
+        select(year.cast(Integer).label("year"), Bill.policy_stance, func.count().label("count"))
+        .where(Bill.epr_relevant == True)
+        .where(Bill.status_date.isnot(None))
+        .where(Bill.policy_stance.isnot(None))
+        .where(Bill.confidence_score >= min_confidence)
+        .group_by("year", Bill.policy_stance)
+        .order_by("year")
+    )
+    if instrument_type:
+        q = q.where(Bill.instrument_type == instrument_type)
+    if material_category:
+        q = q.where(Bill.material_categories.contains([material_category]))
+    rows = (await db.execute(q)).all()
+    return [BillStancePoint(year=row.year, stance=row.policy_stance, count=row.count) for row in rows]
+
+
+@router.get("/instrument-material-matrix", response_model=list[InstrumentMaterialCell])
+async def get_instrument_material_matrix(
+    min_confidence: float = 0.7,
+    db: AsyncSession = Depends(get_db),
+):
+    """Counts of EPR-relevant bills per (instrument_type × material_category) — the Insights coverage
+    heatmap. material_categories is a JSONB array, so it's unnested: a bill tagging three materials
+    lands in three cells. Cells with no bills simply have no row (the white space the chart surfaces).
+    """
+    # Unnest the JSONB material array as a LATERAL set-returning function joined per bill row.
+    material = func.jsonb_array_elements_text(Bill.material_categories).table_valued("value").lateral()
+    q = (
+        select(
+            Bill.instrument_type.label("instrument_type"),
+            material.c.value.label("material_category"),
+            func.count().label("count"),
+        )
+        .select_from(Bill)
+        .join(material, true())
+        .where(Bill.epr_relevant == True)
+        .where(Bill.instrument_type.isnot(None))
+        .where(Bill.material_categories.isnot(None))
+        .where(Bill.confidence_score >= min_confidence)
+        .group_by(Bill.instrument_type, material.c.value)
+    )
+    rows = (await db.execute(q)).all()
+    return [
+        InstrumentMaterialCell(
+            instrument_type=row.instrument_type,
+            material_category=row.material_category,
+            count=row.count,
+        )
+        for row in rows
+    ]
+
+
+@router.get("/outcomes", response_model=list[BillOutcomeSummary])
+async def list_bill_outcomes(
+    direction: str | None = None,
+    state: str | None = None,
+    reviewed_only: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """Documented real-world outcomes of enacted laws — the Insights "Real-World Impact" feed.
+
+    Each row is a curated, source-backed effect (positive | negative | mixed). Ordered most-recent
+    first by as_of_date so the freshest documented impacts lead. `reviewed_only` gates to
+    human-vetted figures; default returns all (the page is internal/URL-only).
+    """
+    q = select(BillOutcome)
+    if direction:
+        q = q.where(BillOutcome.direction == direction)
+    if state:
+        q = q.where(BillOutcome.state == state.upper())
+    if reviewed_only:
+        q = q.where(BillOutcome.reviewed.is_(True))
+    q = q.order_by(BillOutcome.as_of_date.desc().nullslast(), BillOutcome.id.desc())
+    rows = (await db.execute(q)).scalars().all()
+    return [BillOutcomeSummary.model_validate(r) for r in rows]
+
+
 @router.get("/{bill_id}", response_model=BillDetail)
 async def get_bill(bill_id: int, db: AsyncSession = Depends(get_db)):
     lit_sub = _lit_subquery()
@@ -166,34 +270,153 @@ async def get_bill_litigation_cases(bill_id: int, db: AsyncSession = Depends(get
     return results
 
 
+def _parse_iso_date(val) -> date | None:
+    if not isinstance(val, str) or not val:
+        return None
+    try:
+        return date.fromisoformat(val[:10])
+    except ValueError:
+        return None
+
+
+async def _merge_deadlines(
+    db: AsyncSession, *, days_ahead: int, state: str | None, include_past: bool
+) -> list[DeadlineSummary]:
+    """The full deadline set the Upcoming Deadlines page needs, merged server-side: explicit
+    ComplianceDeadline rows plus the implementation/enforcement dates the classifier pulled into each
+    bill's compliance_details (effective_date, compliance_date, and the deadlines[] array). Deduped by
+    (state, date, type) with the explicit rows winning. This used to be done client-side by pulling
+    every bill's compliance_details to the browser — the leak C-1 closed."""
+    today = date.today()
+    horizon = today + timedelta(days=days_ahead)
+    floor = today - timedelta(days=DEADLINE_PAST_CAP_DAYS) if include_past else today
+    state_u = state.upper() if state else None
+
+    seen: set[tuple] = set()
+    out: list[DeadlineSummary] = []
+
+    def push(*, id_, st, dtype, ddate, desc, who, bill_id, bill_number, bill_title, materials):
+        if ddate is None or ddate < floor or ddate > horizon:
+            return
+        if state_u and (st or "").upper() != state_u:
+            return
+        key = (st, ddate.isoformat(), dtype)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(
+            DeadlineSummary(
+                id=id_, state=st, deadline_type=dtype, deadline_date=ddate, description=desc,
+                who_affected=who, bill_id=bill_id, bill_number=bill_number, bill_title=bill_title,
+                material_categories=materials,
+            )
+        )
+
+    # 1. Explicit ComplianceDeadline rows (these win on dedup — they're the curated ones).
+    q = select(ComplianceDeadline, Bill.bill_number, Bill.title, Bill.material_categories).outerjoin(
+        Bill, ComplianceDeadline.bill_id == Bill.id
+    )
+    for row in (await db.execute(q)).all():
+        cd = row.ComplianceDeadline
+        push(
+            id_=cd.id, st=cd.state, dtype=cd.deadline_type, ddate=cd.deadline_date,
+            desc=cd.description, who=cd.who_affected, bill_id=cd.bill_id,
+            bill_number=row.bill_number, bill_title=row.title, materials=row.material_categories,
+        )
+
+    # 2. Dates embedded in each EPR bill's compliance_details.
+    bq = select(Bill).where(Bill.epr_relevant == True).where(Bill.compliance_details.isnot(None))  # noqa: E712
+    for bill in (await db.execute(bq)).scalars().all():
+        details = bill.compliance_details or {}
+        for cd in details.get("deadlines") or []:
+            if not isinstance(cd, dict):
+                continue
+            push(
+                id_=-1, st=bill.state, dtype=cd.get("type") or "compliance",
+                ddate=_parse_iso_date(cd.get("date")), desc=cd.get("description"), who=None,
+                bill_id=bill.id, bill_number=bill.bill_number, bill_title=bill.title,
+                materials=bill.material_categories,
+            )
+        push(
+            id_=-1, st=bill.state, dtype="effective", ddate=_parse_iso_date(details.get("effective_date")),
+            desc=f"{bill.bill_number or 'Bill'} takes effect", who=None, bill_id=bill.id,
+            bill_number=bill.bill_number, bill_title=bill.title, materials=bill.material_categories,
+        )
+        push(
+            id_=-1, st=bill.state, dtype="compliance", ddate=_parse_iso_date(details.get("compliance_date")),
+            desc=f"{bill.bill_number or 'Bill'} compliance date", who=None, bill_id=bill.id,
+            bill_number=bill.bill_number, bill_title=bill.title, materials=bill.material_categories,
+        )
+
+    out.sort(key=lambda d: d.deadline_date)
+    return out
+
+
+def _scope_filter(
+    rows: list[DeadlineSummary], *, materials: list[str], states: list[str]
+) -> list[DeadlineSummary]:
+    """Mirror the frontend deadlineInScope: empty dimensions match all; a deadline with no known
+    materials is never excluded on the material axis (better to surface than silently hide)."""
+    out = rows
+    if states:
+        want = {s.upper() for s in states}
+        out = [d for d in out if (d.state or "").upper() in want]
+    if materials:
+        want_m = set(materials)
+        out = [
+            d for d in out
+            if not (d.material_categories or []) or any(c in want_m for c in d.material_categories)
+        ]
+    return out
+
+
+def _csv(val: str | None) -> list[str]:
+    return [v for v in (val or "").split(",") if v]
+
+
 @router.get("/deadlines/upcoming", response_model=list[DeadlineSummary])
 async def list_upcoming_deadlines(
     days_ahead: int = 90,
     state: str | None = None,
+    materials: str | None = None,  # csv; scopes the FREE teaser so the taste is relevant (Pro ignores)
+    states: str | None = None,  # csv; ditto
+    is_pro: bool = Depends(get_optional_pro),
     db: AsyncSession = Depends(get_db),
 ):
-    cutoff = date.today() + timedelta(days=days_ahead)
-    q = (
-        select(ComplianceDeadline, Bill.bill_number, Bill.title)
-        .outerjoin(Bill, ComplianceDeadline.bill_id == Bill.id)
-        .where(ComplianceDeadline.deadline_date <= cutoff)
-        .where(ComplianceDeadline.deadline_date >= date.today())
-        .order_by(ComplianceDeadline.deadline_date)
+    """Pro seats get the full merged deadline list (incl. up to 5 years of past dates so the page's
+    "include past" toggle works client-side). Everyone else gets the soonest few upcoming rows as a
+    teaser — the full calendar is the paid product. Counts for the metric cards come from
+    /deadlines/summary, which stays public."""
+    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=is_pro)
+    if is_pro:
+        return merged
+    today = date.today()
+    upcoming = [d for d in merged if d.deadline_date >= today]
+    scoped = _scope_filter(upcoming, materials=_csv(materials), states=_csv(states))
+    return scoped[:DEADLINE_TEASER_LIMIT]
+
+
+@router.get("/deadlines/summary", response_model=DeadlineStats)
+async def deadlines_summary(
+    days_ahead: int = 1095,
+    state: str | None = None,
+    materials: str | None = None,
+    states: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Ungated aggregate counts (total/within-30/within-90/nearest + which states), optionally scoped
+    to the reader's materials/states. Powers the metric cards and the scoped deadline banner for free
+    visitors without handing over the deadline rows themselves."""
+    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=False)
+    scoped = _scope_filter(merged, materials=_csv(materials), states=_csv(states))  # already upcoming-only
+    today = date.today()
+    within_30 = sum(1 for d in scoped if (d.deadline_date - today).days <= 30)
+    within_90 = sum(1 for d in scoped if (d.deadline_date - today).days <= 90)
+    near_states = sorted({d.state for d in scoped if d.state and (d.deadline_date - today).days <= 90})
+    return DeadlineStats(
+        total_upcoming=len(scoped),
+        within_30=within_30,
+        within_90=within_90,
+        next_date=scoped[0].deadline_date if scoped else None,  # merged is sorted ascending
+        states=near_states,
     )
-    if state:
-        q = q.where(ComplianceDeadline.state == state.upper())
-    rows = (await db.execute(q)).all()
-    return [
-        DeadlineSummary(
-            id=row.ComplianceDeadline.id,
-            state=row.ComplianceDeadline.state,
-            deadline_type=row.ComplianceDeadline.deadline_type,
-            deadline_date=row.ComplianceDeadline.deadline_date,
-            description=row.ComplianceDeadline.description,
-            who_affected=row.ComplianceDeadline.who_affected,
-            bill_id=row.ComplianceDeadline.bill_id,
-            bill_number=row.bill_number,
-            bill_title=row.title,
-        )
-        for row in rows
-    ]

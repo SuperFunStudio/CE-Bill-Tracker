@@ -9,8 +9,9 @@ Entitlement on checkout.session.completed + customer.subscription.* events.
 Stripe's SDK is synchronous, so network calls run in a threadpool to avoid blocking the event loop.
 See gating-and-monetization-plan.
 """
-from __future__ import annotations
-
+# NOTE: no `from __future__ import annotations` here — slowapi's @limiter.limit wrapper carries its own
+# module globals, so stringized annotations on decorated routes can't be resolved by FastAPI. Keeping
+# annotations eager (real objects) avoids that. PEP 604 unions (X | None) are fine at runtime on 3.10+.
 import json
 from datetime import datetime, timezone
 
@@ -26,6 +27,7 @@ from app.api.auth import AuthedUser, get_current_user, get_entitlement, grant_co
 from app.config import settings
 from app.database import get_db
 from app.models import Entitlement
+from app.ratelimit import limiter
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -71,14 +73,23 @@ _SIGNUP_TRIAL_DAYS = 7
 
 
 @router.post("/signup-trial")
+@limiter.limit("15/hour")
 async def signup_trial(
+    request: Request,
     background_tasks: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Grant this account its one-time 7-day signup trial (full Pro, no card) and send the account
     welcome. Idempotent — a no-op if the trial was already used (so the welcome fires exactly once per
-    new account). Called by the frontend right after a free account is created (incl. referral signups)."""
+    new account). Called by the frontend right after a free account is created (incl. referral signups).
+
+    Requires a verified email (H-2): a comp Pro seat now grants real data access (post C-1), so we
+    don't hand it to unverified throwaway accounts. The frontend sends a verification email on
+    email/password signup and retries this once the address is verified; Google sign-ins are verified
+    out of the gate and get the trial immediately."""
+    if not user.email_verified:
+        return {"granted": False, "reason": "email_unverified"}
     ent = await _get_or_create_entitlement(db, user.email, user.uid)
     if ent.signup_trial_used:
         return {"granted": False, "reason": "already_used"}
@@ -113,7 +124,9 @@ class CheckoutRequest(BaseModel):
 
 
 @router.post("/checkout")
+@limiter.limit("20/hour")
 async def create_checkout(
+    request: Request,
     payload: CheckoutRequest | None = None,
     user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -226,6 +239,7 @@ async def _apply_subscription(db: AsyncSession, customer_id: str | None, sub: di
 
 
 @router.post("/webhook")
+@limiter.exempt  # Stripe sends bursts + retries from many IPs; signature verification is the guard here
 async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """Stripe → us. Verifies the signature (when a signing secret is set) and upserts entitlement.
 
@@ -234,12 +248,17 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     body = await request.body()
     sig = request.headers.get("stripe-signature")
     secret = settings.stripe_webhook_secret
-    if secret:
-        try:
-            stripe.Webhook.construct_event(body, sig, secret)  # verify signature; raises on mismatch
-        except Exception as e:
-            log.warning("stripe_webhook_bad_signature", error=str(e))
-            raise HTTPException(status_code=400, detail="invalid signature")
+    # Fail CLOSED: with no signing secret we cannot verify the event, and this endpoint grants Pro
+    # entitlements — an unverified body could forge a free subscription. Reject rather than trust it.
+    # See docs/SECURITY_ASSESSMENT.md C-4.
+    if not secret:
+        log.error("stripe_webhook_secret_unset")
+        raise HTTPException(status_code=503, detail="webhook signature verification not configured")
+    try:
+        stripe.Webhook.construct_event(body, sig, secret)  # verify signature; raises on mismatch
+    except Exception as e:
+        log.warning("stripe_webhook_bad_signature", error=str(e))
+        raise HTTPException(status_code=400, detail="invalid signature")
     # Always handle the event as a plain dict. Stripe's StripeObject routes .get() through
     # __getattr__ and raises AttributeError/KeyError, so we never touch the SDK object directly.
     event = json.loads(body)

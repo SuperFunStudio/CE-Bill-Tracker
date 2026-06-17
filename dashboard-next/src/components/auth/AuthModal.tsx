@@ -4,23 +4,37 @@ import { useAuth } from './AuthContext';
 
 /** Global sign-in / create-account modal, opened via useAuth().openAuth(). Email + Google. */
 export function AuthModal() {
-  const { authModalOpen, closeAuth, signInEmail, signUpEmail, signInGoogle } = useAuth();
+  const { authModalOpen, closeAuth, signInEmail, signUpEmail, signInGoogle, resendVerification } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [verifySent, setVerifySent] = useState(false);
+  const [resent, setResent] = useState(false);
 
   if (!authModalOpen) return null;
+
+  function dismiss() {
+    setVerifySent(false);
+    setResent(false);
+    closeAuth();
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError('');
     try {
-      if (mode === 'signin') await signInEmail(email.trim(), password);
-      else await signUpEmail(email.trim(), password);
-      closeAuth();
+      if (mode === 'signin') {
+        await signInEmail(email.trim(), password);
+        closeAuth();
+      } else {
+        // Email/password signup sends a verification link; the 7-day trial + any referral land once
+        // it's verified (H-2). Keep the modal open with a "check your email" notice instead of closing.
+        await signUpEmail(email.trim(), password);
+        setVerifySent(true);
+      }
     } catch (err) {
       setError(friendlyError(err));
     } finally {
@@ -46,12 +60,35 @@ export function AuthModal() {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       role="dialog"
       aria-modal="true"
-      onClick={closeAuth}
+      onClick={dismiss}
     >
       <div
         className="w-full max-w-md rounded-xl bg-bg-secondary border border-border-default shadow-2xl p-6 space-y-4"
         onClick={e => e.stopPropagation()}
       >
+        {verifySent ? (
+          <div className="space-y-4 text-center">
+            <h2 className="font-serif text-xl text-text-primary">Check your email</h2>
+            <p className="text-text-secondary text-sm leading-relaxed">
+              We sent a verification link to <span className="text-text-primary font-medium">{email}</span>.
+              Click it to confirm your address — your free 7-day Pro trial unlocks automatically the
+              moment you do.
+            </p>
+            <button
+              onClick={async () => { try { await resendVerification(); setResent(true); } catch { /* ignore */ } }}
+              className="text-green-accent text-sm hover:underline"
+            >
+              {resent ? 'Verification email resent ✓' : 'Resend the email'}
+            </button>
+            <button
+              onClick={dismiss}
+              className="w-full bg-green-accent text-bg-primary font-semibold px-5 py-2 rounded-lg text-sm hover:opacity-90 transition-opacity"
+            >
+              Got it
+            </button>
+          </div>
+        ) : (
+        <>
         <div>
           <h2 className="font-serif text-xl text-text-primary">
             {mode === 'signin' ? 'Sign in' : 'Create your account'}
@@ -117,10 +154,12 @@ export function AuthModal() {
           >
             {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
           </button>
-          <button onClick={closeAuth} className="text-text-muted hover:text-text-secondary">
+          <button onClick={dismiss} className="text-text-muted hover:text-text-secondary">
             Cancel
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

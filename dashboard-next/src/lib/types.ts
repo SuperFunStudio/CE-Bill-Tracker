@@ -47,13 +47,14 @@ export interface BillSummary {
   /** Classification transparency: false = auto-classified only, true = human spot-checked. */
   reviewed?: boolean;
   source_url: string | null;
-  compliance_details: ComplianceDetails | null;
   litigation_case_count: number;
   max_preemption_risk: number | null;
 }
 
 export interface BillDetail extends BillSummary {
   description: string | null;
+  /** The paid Sonnet extraction — present only on the per-bill detail, never on the bulk list. */
+  compliance_details: ComplianceDetails | null;
   created_at: string;
   updated_at: string;
 }
@@ -73,6 +74,20 @@ export interface BillTimelinePoint {
   count: number;
 }
 
+/** One (year, stance) bucket from /bills/stance-momentum — advances | weakens | neutral. */
+export interface BillStancePoint {
+  year: number;
+  stance: string;
+  count: number;
+}
+
+/** One (instrument × material) cell from /bills/instrument-material-matrix. */
+export interface InstrumentMaterialCell {
+  instrument_type: string;
+  material_category: string;
+  count: number;
+}
+
 export interface DeadlineSummary {
   id: number;
   state: string;
@@ -83,6 +98,17 @@ export interface DeadlineSummary {
   bill_id: number | null;
   bill_number: string | null;
   bill_title: string | null;
+  /** Linked bill's material categories — lets the client scope-filter without bulk-loading bills. */
+  material_categories?: string[] | null;
+}
+
+/** Ungated aggregate counts for the Upcoming Deadlines surfaces (metric cards + scoped banner). */
+export interface DeadlineStats {
+  total_upcoming: number;
+  within_30: number;
+  within_90: number;
+  next_date: string | null;
+  states: string[];
 }
 
 export interface ComplianceEntityRef {
@@ -107,6 +133,33 @@ export interface CompliancePathway {
   next_deadline_date: string | null;
   has_fee: boolean;
   entity: ComplianceEntityRef | null;
+}
+
+/** One documented real-world outcome of an enacted law — the Insights "Real-World Impact" feed. */
+export interface BillOutcome {
+  id: number;
+  slug: string;
+  bill_id: number | null;
+  state: string | null;
+  bill_number: string | null;
+  law_title: string | null;
+  instrument_type: string | null;
+  material_categories: string[] | null;
+  /** "positive" | "negative" | "mixed" — direction of the documented effect. */
+  direction: 'positive' | 'negative' | 'mixed' | string;
+  metric_label: string | null;
+  metric_value: number | null;
+  metric_unit: string | null;
+  /** Pre-formatted figure override; prefer over value+unit when present. */
+  metric_display: string | null;
+  summary: string;
+  /** "direct" | "program" | "associated" — how tightly the figure ties to the statute. */
+  attribution: 'direct' | 'program' | 'associated' | string | null;
+  as_of_date: string | null;
+  source_name: string | null;
+  source_url: string | null;
+  confidence: number | null;
+  reviewed: boolean;
 }
 
 export interface FederalActionSummary {
@@ -307,6 +360,10 @@ export interface BillParams {
 export interface DeadlineParams {
   days_ahead?: number;
   state?: string;
+  /** csv of material_category slugs — scopes the free teaser + the stats counts. */
+  materials?: string;
+  /** csv of two-letter state codes — ditto. */
+  states?: string;
 }
 
 export interface FederalActionParams {

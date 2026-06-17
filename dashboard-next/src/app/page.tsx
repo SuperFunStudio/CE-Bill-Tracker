@@ -71,7 +71,7 @@ export default function HomePage() {
       Materials: (b.material_categories ?? []).join('; '),
       'Last Action': formatDate(b.last_action_date),
       'Source URL': b.source_url ?? '',
-    }))));
+    }))), 'csv_export_bills');
   }
 
   return (

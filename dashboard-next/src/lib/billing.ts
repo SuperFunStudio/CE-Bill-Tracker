@@ -3,11 +3,19 @@
 // hosted Stripe URL. See app/api/billing.py + gating-and-monetization-plan.
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
-async function postWithToken(path: string, token: string | null): Promise<string> {
+async function postWithToken(
+  path: string,
+  token: string | null,
+  body?: unknown,
+): Promise<string> {
   if (!token) throw new Error('Please sign in first.');
   const res = await fetch(`${API}${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
@@ -17,10 +25,29 @@ async function postWithToken(path: string, token: string | null): Promise<string
   return url as string;
 }
 
-/** Begin the Pro subscription: create a Checkout Session and send the browser to Stripe. */
-export async function startProCheckout(getToken: () => Promise<string | null>): Promise<void> {
-  const url = await postWithToken('/billing/checkout', await getToken());
+/** Begin the Pro subscription for a billing period (default annual). Opens Checkout — the founding
+ *  offer (90-day trial + first-year coupon) is applied server-side — and sends the browser to Stripe. */
+export async function startProCheckout(
+  getToken: () => Promise<string | null>,
+  period: 'monthly' | 'annual' = 'annual',
+): Promise<void> {
+  const url = await postWithToken('/billing/checkout', await getToken(), { period });
   window.location.href = url;
+}
+
+/** Grant the one-time 7-day signup trial (full Pro, no card). Best-effort; the backend is idempotent
+ *  (no-op if already used). Call right after a free account is created. */
+export async function startSignupTrial(getToken: () => Promise<string | null>): Promise<void> {
+  const token = await getToken();
+  if (!token) return;
+  try {
+    await fetch(`${API}/billing/signup-trial`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    /* best-effort — they just won't get the auto-trial */
+  }
 }
 
 /** Open the Stripe customer portal so a subscriber can manage or cancel. */

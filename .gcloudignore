@@ -37,6 +37,11 @@ firebase-public/
 # Node
 node_modules/
 
+# Next.js build cache — a local artifact (cloudbuild rebuilds the dashboard). Its volatile
+# webpack cache files (*.pack.gz_) can vanish mid-archive and crash `gcloud builds submit`.
+.next/
+dashboard-next/.next/
+
 # Build artifacts
 dist/
 build/

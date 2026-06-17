@@ -20,7 +20,7 @@ export interface TeaserLever {
   bills: TeaserBill[];
 }
 
-export const GUIDE_COVERAGE = { bills: 80, states: 13, levers: 9 };
+export const GUIDE_COVERAGE = { bills: 90, states: 17, levers: 9 };
 
 export const TEASER_LEVERS: TeaserLever[] = [
   {
@@ -34,18 +34,21 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Batteries",
       "Textiles"
     ],
-    "billCount": 37,
+    "billCount": 44,
     "states": [
       "CA",
       "CO",
       "CT",
+      "DC",
       "MD",
       "ME",
       "MN",
+      "NJ",
       "NY",
       "OR",
       "RI",
-      "VT"
+      "VT",
+      "WA"
     ],
     "evidence": {
       "state": "CA",
@@ -95,6 +98,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
       },
       {
         "state": "CO",
+        "billNumber": "HB22-1355",
+        "billId": 104215
+      },
+      {
+        "state": "CO",
         "billNumber": "SB-25-163",
         "billId": 82272
       },
@@ -114,6 +122,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 82796
       },
       {
+        "state": "DC",
+        "billNumber": "D.C. Law 24-320",
+        "billId": 104190
+      },
+      {
         "state": "MD",
         "billNumber": "SB-686",
         "billId": 72278
@@ -129,6 +142,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 82543
       },
       {
+        "state": "NJ",
+        "billNumber": "S-3399",
+        "billId": 104171
+      },
+      {
         "state": "NY",
         "billNumber": "A-1209",
         "billId": 1444
@@ -140,6 +158,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
       },
       {
         "state": "NY",
+        "billNumber": "S-10168",
+        "billId": 79613
+      },
+      {
+        "state": "NY",
         "billNumber": "S-1460",
         "billId": 81668
       },
@@ -147,6 +170,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "NY",
         "billNumber": "S-1463",
         "billId": 1424
+      },
+      {
+        "state": "NY",
+        "billNumber": "S-5027C",
+        "billId": 104184
       },
       {
         "state": "NY",
@@ -184,9 +212,24 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 1213
       },
       {
+        "state": "WA",
+        "billNumber": "SB-5144",
+        "billId": 104189
+      },
+      {
+        "state": "WA",
+        "billNumber": "SB-5284",
+        "billId": 104217
+      },
+      {
         "state": "ME",
         "billNumber": "LD-1541",
         "billId": 79534
+      },
+      {
+        "state": "MN",
+        "billNumber": "HF-3911",
+        "billId": 104216
       },
       {
         "state": "MN",
@@ -209,9 +252,14 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 72345
       },
       {
-        "state": "NY",
-        "billNumber": "S-10168",
-        "billId": 79613
+        "state": "ME",
+        "billNumber": "LD-1423",
+        "billId": 80310
+      },
+      {
+        "state": "VT",
+        "billNumber": "S-254",
+        "billId": 81811
       },
       {
         "state": "RI",
@@ -222,16 +270,6 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "RI",
         "billNumber": "SB-996",
         "billId": 79521
-      },
-      {
-        "state": "ME",
-        "billNumber": "LD-1423",
-        "billId": 80310
-      },
-      {
-        "state": "VT",
-        "billNumber": "S-254",
-        "billId": 81811
       },
       {
         "state": "MN",
@@ -250,11 +288,12 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Plastic products",
       "Textiles"
     ],
-    "billCount": 13,
+    "billCount": 15,
     "states": [
       "CA",
       "CO",
       "ME",
+      "MN",
       "NY",
       "OR",
       "VT"
@@ -301,9 +340,19 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 79613
       },
       {
+        "state": "NY",
+        "billNumber": "S-5027C",
+        "billId": 104184
+      },
+      {
         "state": "ME",
         "billNumber": "LD-1541",
         "billId": 79534
+      },
+      {
+        "state": "MN",
+        "billNumber": "HF-3911",
+        "billId": 104216
       },
       {
         "state": "NY",
@@ -340,13 +389,15 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "focus": [
       "Plastic packaging"
     ],
-    "billCount": 10,
+    "billCount": 12,
     "states": [
       "CA",
       "CO",
       "ME",
+      "MN",
       "OR",
-      "VT"
+      "VT",
+      "WA"
     ],
     "evidence": {
       "state": "CA",
@@ -380,21 +431,6 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 79950
       },
       {
-        "state": "CO",
-        "billNumber": "HB-21-1162",
-        "billId": 72433
-      },
-      {
-        "state": "OR",
-        "billNumber": "SB-582",
-        "billId": 72452
-      },
-      {
-        "state": "ME",
-        "billNumber": "LD-1541",
-        "billId": 79534
-      },
-      {
         "state": "OR",
         "billNumber": "HB-3780",
         "billId": 72412
@@ -403,6 +439,31 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "VT",
         "billNumber": "H-142",
         "billId": 72481
+      },
+      {
+        "state": "WA",
+        "billNumber": "SB-5284",
+        "billId": 104217
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-1541",
+        "billId": 79534
+      },
+      {
+        "state": "MN",
+        "billNumber": "HF-3911",
+        "billId": 104216
+      },
+      {
+        "state": "CO",
+        "billNumber": "HB-21-1162",
+        "billId": 72433
+      },
+      {
+        "state": "OR",
+        "billNumber": "SB-582",
+        "billId": 72452
       }
     ]
   },
@@ -415,14 +476,16 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Beverage containers",
       "Foodware"
     ],
-    "billCount": 8,
+    "billCount": 10,
     "states": [
       "CA",
       "CO",
       "CT",
       "ME",
+      "MN",
       "NY",
-      "OR"
+      "OR",
+      "WA"
     ],
     "evidence": {
       "state": "CA",
@@ -456,9 +519,19 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 60357
       },
       {
+        "state": "WA",
+        "billNumber": "SB-5284",
+        "billId": 104217
+      },
+      {
         "state": "CO",
         "billNumber": "HB-21-1162",
         "billId": 72433
+      },
+      {
+        "state": "OR",
+        "billNumber": "SB-582",
+        "billId": 72452
       },
       {
         "state": "ME",
@@ -466,9 +539,9 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 83470
       },
       {
-        "state": "OR",
-        "billNumber": "SB-582",
-        "billId": 72452
+        "state": "MN",
+        "billNumber": "HF-3911",
+        "billId": 104216
       }
     ]
   },
@@ -482,7 +555,7 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Electronics",
       "Textiles"
     ],
-    "billCount": 17,
+    "billCount": 20,
     "states": [
       "CA",
       "CO",
@@ -493,7 +566,8 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "MN",
       "NY",
       "OR",
-      "VT"
+      "VT",
+      "WA"
     ],
     "evidence": {
       "state": "CA",
@@ -512,6 +586,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 80507
       },
       {
+        "state": "ME",
+        "billNumber": "LD-474",
+        "billId": 104191
+      },
+      {
         "state": "MN",
         "billNumber": "HF-4565",
         "billId": 1221
@@ -522,19 +601,29 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 1222
       },
       {
+        "state": "NY",
+        "billNumber": "S-5027C",
+        "billId": 104184
+      },
+      {
         "state": "OR",
         "billNumber": "HB-4144",
         "billId": 82947
       },
       {
-        "state": "CA",
-        "billNumber": "AB-732",
-        "billId": 80259
+        "state": "WA",
+        "billNumber": "SB-5144",
+        "billId": 104189
       },
       {
-        "state": "NY",
-        "billNumber": "S-10168",
-        "billId": 79613
+        "state": "ME",
+        "billNumber": "LD-1541",
+        "billId": 79534
+      },
+      {
+        "state": "MN",
+        "billNumber": "HF-3911",
+        "billId": 104216
       },
       {
         "state": "OR",
@@ -542,9 +631,9 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 72412
       },
       {
-        "state": "OR",
-        "billNumber": "SB-1520",
-        "billId": 83268
+        "state": "VT",
+        "billNumber": "H-142",
+        "billId": 72481
       },
       {
         "state": "CA",
@@ -567,14 +656,14 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 80376
       },
       {
-        "state": "ME",
-        "billNumber": "LD-1541",
-        "billId": 79534
+        "state": "CA",
+        "billNumber": "AB-732",
+        "billId": 80259
       },
       {
-        "state": "VT",
-        "billNumber": "H-142",
-        "billId": 72481
+        "state": "NY",
+        "billNumber": "S-10168",
+        "billId": 79613
       },
       {
         "state": "CT",
@@ -597,14 +686,17 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Plastic packaging",
       "Textiles"
     ],
-    "billCount": 13,
+    "billCount": 15,
     "states": [
       "CA",
       "CO",
       "ME",
+      "MN",
       "NY",
       "RI",
-      "VT"
+      "SC",
+      "VT",
+      "WA"
     ],
     "evidence": {
       "state": "CA",
@@ -638,6 +730,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 72481
       },
       {
+        "state": "WA",
+        "billNumber": "SB-5284",
+        "billId": 104217
+      },
+      {
         "state": "CO",
         "billNumber": "HB-22-1355",
         "billId": 72416
@@ -648,9 +745,9 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 72366
       },
       {
-        "state": "ME",
-        "billNumber": "LD-1541",
-        "billId": 79534
+        "state": "SC",
+        "billNumber": "S-171",
+        "billId": 104219
       },
       {
         "state": "CA",
@@ -658,9 +755,9 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 733
       },
       {
-        "state": "ME",
-        "billNumber": "LD-1909",
-        "billId": 83470
+        "state": "MN",
+        "billNumber": "HF-3911",
+        "billId": 104216
       },
       {
         "state": "RI",
@@ -671,6 +768,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "CA",
         "billNumber": "AB-962",
         "billId": 79926
+      },
+      {
+        "state": "CO",
+        "billNumber": "HB22-1355",
+        "billId": 104215
       },
       {
         "state": "VT",
@@ -689,17 +791,20 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Beverage containers",
       "Textiles"
     ],
-    "billCount": 24,
+    "billCount": 27,
     "states": [
       "CA",
       "CT",
+      "DC",
       "IL",
       "KY",
+      "MD",
       "ME",
       "MI",
       "MN",
       "NY",
       "OR",
+      "RI",
       "VT"
     ],
     "evidence": {
@@ -744,6 +849,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 81565
       },
       {
+        "state": "DC",
+        "billNumber": "D.C. Law 24-320",
+        "billId": 104190
+      },
+      {
         "state": "IL",
         "billNumber": "SB-294",
         "billId": 81244
@@ -752,6 +862,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "KY",
         "billNumber": "SB-49",
         "billId": 80507
+      },
+      {
+        "state": "MD",
+        "billNumber": "SB-686",
+        "billId": 72278
       },
       {
         "state": "ME",
@@ -809,6 +924,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 83268
       },
       {
+        "state": "RI",
+        "billNumber": "HB-5017",
+        "billId": 80689
+      },
+      {
         "state": "VT",
         "billNumber": "H-175",
         "billId": 72450
@@ -839,9 +959,10 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Foodware",
       "Packaging"
     ],
-    "billCount": 4,
+    "billCount": 5,
     "states": [
-      "CA"
+      "CA",
+      "WA"
     ],
     "evidence": {
       "state": "CA",
@@ -858,6 +979,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "state": "CA",
         "billNumber": "SB-54",
         "billId": 865
+      },
+      {
+        "state": "WA",
+        "billNumber": "SB-5284",
+        "billId": 104217
       },
       {
         "state": "CA",
@@ -881,7 +1007,7 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "Appliances",
       "Textiles"
     ],
-    "billCount": 25,
+    "billCount": 32,
     "states": [
       "CA",
       "CO",
@@ -892,7 +1018,9 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "NY",
       "OR",
       "RI",
-      "VT"
+      "SC",
+      "VT",
+      "WA"
     ],
     "evidence": {
       "state": "CA",
@@ -961,6 +1089,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 81072
       },
       {
+        "state": "NY",
+        "billNumber": "S-5027C",
+        "billId": 104184
+      },
+      {
         "state": "OR",
         "billNumber": "SB-1596",
         "billId": 72344
@@ -986,6 +1119,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 72416
       },
       {
+        "state": "CO",
+        "billNumber": "SB-25-163",
+        "billId": 82272
+      },
+      {
         "state": "CT",
         "billNumber": "HB-5019",
         "billId": 81565
@@ -1001,6 +1139,11 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 80310
       },
       {
+        "state": "ME",
+        "billNumber": "LD-1541",
+        "billId": 79534
+      },
+      {
         "state": "OR",
         "billNumber": "HB-4144",
         "billId": 82947
@@ -1011,14 +1154,34 @@ export const TEASER_LEVERS: TeaserLever[] = [
         "billId": 81811
       },
       {
+        "state": "WA",
+        "billNumber": "SB-5144",
+        "billId": 104189
+      },
+      {
         "state": "ME",
         "billNumber": "LD-1519",
         "billId": 81678
       },
       {
+        "state": "ME",
+        "billNumber": "LD-2289",
+        "billId": 72520
+      },
+      {
+        "state": "ME",
+        "billNumber": "LD-474",
+        "billId": 104191
+      },
+      {
         "state": "NY",
         "billNumber": "A-6193",
         "billId": 60356
+      },
+      {
+        "state": "SC",
+        "billNumber": "S-171",
+        "billId": 104219
       },
       {
         "state": "MN",

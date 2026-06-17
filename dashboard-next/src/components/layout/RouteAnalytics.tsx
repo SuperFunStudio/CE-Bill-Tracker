@@ -24,5 +24,26 @@ export function RouteAnalytics() {
     });
   }, [pathname]);
 
+  // Stripe Checkout returns here on a full page load with ?checkout=success|cancel (success_url is
+  // tier-specific: /design-guide for Pro, /compliance for Basic — see app/api/billing.py). This is the
+  // only place the completed purchase is observable client-side. Fire once on mount, then strip the
+  // param so a refresh can't double-count. (Authoritative revenue should come from the Stripe webhook
+  // via the Measurement Protocol later; this gives the conversion event today.)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const checkout = params.get('checkout');
+    if (!checkout) return;
+    if (checkout === 'success') {
+      const path = window.location.pathname;
+      const tier = path.startsWith('/design-guide') ? 'pro' : path.startsWith('/compliance') ? 'basic' : 'unknown';
+      track('purchase', { tier, method: 'stripe_checkout' });
+    } else if (checkout === 'cancel') {
+      track('checkout_cancel', {});
+    }
+    params.delete('checkout');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+  }, []);
+
   return null;
 }

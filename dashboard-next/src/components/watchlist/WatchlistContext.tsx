@@ -5,11 +5,11 @@ import { startProCheckout } from '@/lib/billing';
 import { getWatchlist, addWatch, removeWatch } from '@/lib/userSettings';
 
 interface WatchlistValue {
-  /** Bill ids the signed-in Pro user follows. Empty for anonymous / non-Pro. */
+  /** Bill ids the signed-in Pro user follows. Empty for anonymous / Free. */
   watched: Set<number>;
   ready: boolean;
   isWatched: (billId: number) => boolean;
-  /** Toggle a bill. Routes anonymous users to sign-in and non-Pro users to upgrade. */
+  /** Toggle a bill. Routes anonymous users to sign-in and Free users to the Pro upgrade. */
   toggle: (billId: number) => Promise<void>;
   refresh: () => Promise<void>;
 }

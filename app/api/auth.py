@@ -7,7 +7,7 @@ verified email, the same key the billing webhook writes. See gating-and-monetiza
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import structlog
 from fastapi import Depends, Header, HTTPException
@@ -74,17 +74,36 @@ async def get_entitlement(db: AsyncSession, user: AuthedUser) -> Entitlement | N
 
 
 def is_pro(ent: Entitlement | None) -> bool:
-    """A live Pro seat: plan is pro and the subscription is in good standing.
+    """A live Pro seat: plan is pro and the subscription is in good standing (active or trialing).
 
-    A complimentary grant (ent.comp) has no Stripe webhook to flip it off, so we enforce its expiry
-    here: a comp seat whose current_period_end has passed is no longer Pro. A NULL period_end on a
-    comp seat means an indefinite grant.
+    "trialing" counts — a founding 90-day Stripe trial is full Pro access. A complimentary grant
+    (ent.comp) has no Stripe webhook to flip it off, so we enforce its expiry here: a comp seat whose
+    current_period_end has passed is no longer Pro. A NULL period_end on a comp seat means indefinite.
     """
     if not (ent and ent.plan == "pro" and ent.status in ("active", "trialing")):
         return False
     if ent.comp and ent.current_period_end and ent.current_period_end < datetime.now(timezone.utc):
         return False
     return True
+
+
+def grant_comp_days(ent: Entitlement, days: int) -> None:
+    """Give an entitlement `days` of complimentary (no-card) Pro, stacking on an existing comp grant.
+    A real paid subscription is left untouched — it doesn't need it. Used by the signup trial (7d) and
+    the referral reward (30d); is_pro() enforces the expiry since there's no Stripe webhook behind it.
+    """
+    now = datetime.now(timezone.utc)
+    if ent.plan == "pro" and not ent.comp and ent.status in ("active", "trialing"):
+        return
+    base = (
+        ent.current_period_end
+        if (ent.comp and ent.current_period_end and ent.current_period_end > now)
+        else now
+    )
+    ent.plan = "pro"
+    ent.status = "active"
+    ent.comp = True
+    ent.current_period_end = base + timedelta(days=days)
 
 
 async def require_pro(

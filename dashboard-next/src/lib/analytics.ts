@@ -35,5 +35,11 @@ const ROUTE_TITLES: Record<string, string> = {
 };
 
 export function pageTitleFromPath(pathname: string): string {
-  return ROUTE_TITLES[pathname] ?? pathname;
+  // next.config has trailingSlash:true, so usePathname yields '/pricing/' — strip it so the map hits.
+  const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+  if (ROUTE_TITLES[path]) return ROUTE_TITLES[path];
+  // Dynamic per-state pages (/states/ca) — group them under a readable, state-stamped title.
+  const stateMatch = path.match(/^\/states\/([a-z]{2})$/i);
+  if (stateMatch) return `State: ${stateMatch[1].toUpperCase()}`;
+  return path;
 }

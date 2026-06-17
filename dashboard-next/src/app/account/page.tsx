@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { LockIcon, StarIcon } from '@/components/ui/icons';
 import { useAuth } from '@/components/auth/AuthContext';
-import { startProCheckout, openBillingPortal, deleteAccount } from '@/lib/billing';
+import { openBillingPortal, deleteAccount } from '@/lib/billing';
+import { PRO } from '@/lib/tiers';
 import { track } from '@/lib/analytics';
 
 /** Friendly label for a Firebase provider id (the first linked sign-in method). */
@@ -24,7 +25,7 @@ function formatDate(iso: string | null | undefined): string {
 }
 
 export default function AccountPage() {
-  const { user, loading, isPro, entitlement, openAuth, signOut, getToken } = useAuth();
+  const { user, loading, entitlement, openAuth, signOut, getToken } = useAuth();
 
   return (
     <div className="p-6 space-y-8 max-w-3xl mx-auto">
@@ -54,9 +55,10 @@ export default function AccountPage() {
             provider={providerLabel(user.providerData?.[0]?.providerId)}
           />
           <PlanCard
-            isPro={isPro}
+            plan={entitlement?.plan ?? 'free'}
             status={entitlement?.status ?? null}
             periodEnd={entitlement?.current_period_end ?? null}
+            founding={!!entitlement?.is_founding}
             getToken={getToken}
           />
           <DataCard />
@@ -100,20 +102,24 @@ function ProfileCard({ email, created, provider }: { email: string; created: str
 }
 
 function PlanCard({
-  isPro,
+  plan,
   status,
   periodEnd,
+  founding,
   getToken,
 }: {
-  isPro: boolean;
+  plan: string;
   status: string | null;
   periodEnd: string | null;
+  founding: boolean;
   getToken: () => Promise<string | null>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // "canceled" subscriptions stay Pro until the period ends — frame the date accordingly.
+  const isPaid = plan === 'pro';
+
+  // "canceled" subscriptions stay active until the period ends — frame the date accordingly.
   const dateLabel = status === 'canceled' ? 'Access ends' : 'Renews';
 
   async function manage() {
@@ -128,40 +134,32 @@ function PlanCard({
     }
   }
 
-  async function upgrade() {
-    setError(null);
-    setBusy(true);
-    track('account_upgrade');
-    try {
-      await startProCheckout(getToken);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not start checkout.');
-      setBusy(false);
-    }
-  }
-
   return (
     <Section title="Plan & billing">
       <Row
         label="Current plan"
         value={
-          isPro ? (
+          isPaid ? (
             <span className="inline-flex items-center gap-1.5">
               <span className="text-[9px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-0.5">
-                Pro
+                {PRO.name}
               </span>
-              <span>$39/mo</span>
+              {founding && (
+                <span className="text-[9px] uppercase tracking-wider text-green-accent bg-green-dark/40 border border-green-accent/40 rounded-full px-1.5 py-0.5">
+                  Founding Member
+                </span>
+              )}
             </span>
           ) : (
             'Free'
           )
         }
       />
-      {isPro && <Row label="Status" value={status ?? 'active'} />}
-      {isPro && periodEnd && <Row label={dateLabel} value={formatDate(periodEnd)} />}
+      {isPaid && <Row label="Status" value={status ?? 'active'} />}
+      {isPaid && periodEnd && <Row label={dateLabel} value={formatDate(periodEnd)} />}
 
       <div className="pt-1">
-        {isPro ? (
+        {isPaid ? (
           <button
             onClick={manage}
             disabled={busy}
@@ -170,15 +168,15 @@ function PlanCard({
             {busy ? 'Opening…' : 'Manage plan'}
           </button>
         ) : (
-          <button
-            onClick={upgrade}
-            disabled={busy}
-            className="inline-flex items-center gap-2 rounded-lg bg-green-accent text-bg-primary px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          <Link
+            href="/pricing"
+            onClick={() => track('account_upgrade')}
+            className="inline-flex items-center gap-2 rounded-lg bg-green-accent text-bg-primary px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity"
           >
-            {busy ? 'Starting…' : 'Upgrade to Pro — $39/mo →'}
-          </button>
+            See plans →
+          </Link>
         )}
-        {isPro && (
+        {isPaid && (
           <p className="text-text-muted text-xs mt-2">
             Opens the Stripe portal to update payment, view invoices, or cancel.
           </p>

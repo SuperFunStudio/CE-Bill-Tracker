@@ -149,6 +149,17 @@ def setup_scheduler() -> AsyncIOScheduler:
             replace_existing=True,
         )
 
+    # Trial-ending reminders — daily 13:30 UTC. Conversion nudge for no-card comp trials about to lapse.
+    if settings.enable_trial_reminders:
+        scheduler.add_job(
+            run_trial_reminder_cycle,
+            "cron",
+            hour=13,
+            minute=30,
+            id="trial_reminders",
+            replace_existing=True,
+        )
+
     return scheduler
 
 
@@ -744,6 +755,40 @@ async def run_deadline_alert_cycle() -> None:
         sent=sent,
         marked=len(sent_deadline_ids),
     )
+
+
+async def run_trial_reminder_cycle() -> None:
+    """Daily: email accounts whose no-card comp trial (signup 7d / referral 30d) expires within the
+    lead window. Gated by settings.enable_trial_reminders. Marks trial_reminder_sent_for on each
+    account emailed, so it sends once per trial expiry."""
+    from datetime import datetime, timezone
+
+    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.trial_reminders import (
+        build_trial_reminders,
+        render_trial_reminder_html,
+        render_trial_reminder_subject,
+    )
+    from app.database import AsyncSessionLocal
+
+    if not settings.sendgrid_api_key:
+        log.warning("trial_reminders_skipped_no_sendgrid_key")
+        return
+
+    sender = SendGridSender()
+    async with AsyncSessionLocal() as db:
+        now = datetime.now(timezone.utc)
+        items = await build_trial_reminders(db, now, settings.trial_reminder_lead_days)
+        sent = 0
+        for item in items:
+            subject = render_trial_reminder_subject(item)
+            html = render_trial_reminder_html(item)
+            if await sender.send_html(item.entitlement.email, subject, html):
+                sent += 1
+                item.entitlement.trial_reminder_sent_for = item.entitlement.current_period_end
+        if sent:
+            await db.commit()
+    log.info("trial_reminder_cycle_complete", candidates=len(items), sent=sent)
 
 
 async def run_new_bill_alert_cycle() -> None:

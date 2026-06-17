@@ -5,15 +5,19 @@ import { track } from '@/lib/analytics';
 
 interface PrincipleCardProps {
   lever: TeaserLever;
+  /** Front-face title override (the "Design for …" framing). Falls back to lever.name. */
+  displayName?: string;
   /** Open the shared bill modal for a given bill id. */
   onOpenBill: (billId: number) => void;
 }
 
 // Front: what to design and which products/materials it applies to.
 // Back: the grounded source bills — each tag opens the same modal used in the Bill Explorer.
-export function PrincipleCard({ lever, onOpenBill }: PrincipleCardProps) {
+export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardProps) {
   const [flipped, setFlipped] = useState(false);
   const billCount = lever.bills.length;
+  // The front face carries the principle framing; the back stays tied to the canonical lever name.
+  const title = displayName ?? lever.name;
 
   return (
     <div className="[perspective:1400px] min-h-[320px]">
@@ -26,7 +30,7 @@ export function PrincipleCard({ lever, onOpenBill }: PrincipleCardProps) {
           className="absolute inset-0 flex flex-col overflow-hidden rounded-xl border border-border-default bg-bg-secondary p-5 [backface-visibility:hidden]"
           aria-hidden={flipped}
         >
-          <h3 className="font-serif text-lg text-text-primary leading-tight mb-2">{lever.name}</h3>
+          <h3 className="font-serif text-lg text-text-primary leading-tight mb-2">{title}</h3>
           <p className="text-text-primary text-sm font-medium mb-1.5">{lever.headline}</p>
           {lever.direction && (
             <p className="text-text-secondary text-sm leading-relaxed mb-4">{lever.direction}</p>
@@ -54,7 +58,7 @@ export function PrincipleCard({ lever, onOpenBill }: PrincipleCardProps) {
               setFlipped(true);
             }}
             className="mt-4 pt-3 border-t border-border-default flex items-center justify-between gap-2 text-left text-green-accent text-xs font-medium hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/50 rounded-sm transition-opacity"
-            aria-label={`Show the ${billCount} bills behind ${lever.name}`}
+            aria-label={`Show the ${billCount} bills behind ${title}`}
           >
             <span>Sourced from {billCount} bill{billCount === 1 ? '' : 's'}</span>
             <span aria-hidden className="text-sm">↻</span>

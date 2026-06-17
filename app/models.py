@@ -664,6 +664,24 @@ class Entitlement(Base):
     comp_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     comp_granted_by: Mapped[str | None] = mapped_column(String(320), nullable=True)
     comp_granted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Stamped True at checkout when the founding launch coupon was applied — i.e. this seat is a
+    # founding member. Drives the "Founding Member" badge; never cleared on renewal (founding status
+    # is granted at signup and kept). See app/api/billing.py.
+    founding: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # This account's share-to-unlock referral code (generated lazily on first GET /referrals/me). When
+    # a NEW account signs up via this code, the referrer gets a 30-day comp Pro grant. See referrals.py.
+    referral_code: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True)
+    # True once this account has consumed its one-time 7-day signup trial (the first rung of the value
+    # ladder). Guards against re-granting on repeat calls. See app/api/billing.py signup_trial.
+    signup_trial_used: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    # The comp-grant expiry we last sent a "trial ending" reminder for. Equals current_period_end once
+    # reminded, so the daily cycle sends once per trial; a re-granted/extended trial (new period_end)
+    # re-qualifies. See app/alerts/trial_reminders.py.
+    trial_reminder_sent_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -676,6 +694,28 @@ class Entitlement(Base):
         Index("idx_entitlements_firebase_uid", "firebase_uid"),
         Index("idx_entitlements_stripe_customer", "stripe_customer_id"),
     )
+
+
+class Referral(Base):
+    """One completed share-to-unlock referral: a NEW account (referred) signed up via a referrer's
+    code, which earns the referrer a 30-day comp Pro grant. One row per referred account (a given new
+    user can only be the referred party once), so the grant can't be replayed. See app/api/referrals.py.
+    """
+
+    __tablename__ = "referrals"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    referrer_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    # The newly-signed-up account this referral credits. Unique → one referral per new user.
+    referred_uid: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    referred_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (Index("idx_referrals_referrer_uid", "referrer_uid"),)
 
 
 class UserSettings(Base):

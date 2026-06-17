@@ -20,7 +20,9 @@ class Settings(BaseSettings):
         "sendgrid_api_key",
         "open_states_api_key",
         "stripe_secret_key",
-        "stripe_pro_price_id",
+        "stripe_pro_monthly_price_id",
+        "stripe_pro_annual_price_id",
+        "stripe_founding_coupon_id",
         "stripe_webhook_secret",
         mode="before",
     )
@@ -123,6 +125,15 @@ class Settings(BaseSettings):
     enable_new_bill_alerts: bool = False
     new_bill_alert_window_days: int = 7
 
+    # Trial-ending reminder — the conversion nudge for no-card comp trials (7-day signup + 30-day
+    # referral) that would otherwise lapse silently. When on, run_trial_reminder_cycle emails each
+    # account whose comp grant expires within trial_reminder_lead_days, once per trial expiry
+    # (trial_reminder_sent_for guards re-send; a re-granted/extended trial re-qualifies). Stripe's own
+    # 90-day trial is card-on-file + auto-converts, so it's excluded. Dormant by default; preview via
+    # scripts/send_trial_reminders.py before enabling.
+    enable_trial_reminders: bool = False
+    trial_reminder_lead_days: int = 2
+
     # One-time welcome email on signup. When on, create_subscription fires a best-effort background
     # send confirming the subscriber's scope + a cumulative "state of play" snapshot (enacted vs.
     # active bills across their topics + jurisdictions). Dormant by default; preview via
@@ -140,7 +151,16 @@ class Settings(BaseSettings):
     # STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET from Secret Manager (see cloudbuild --set-secrets).
     # See gating-and-monetization-plan.
     stripe_secret_key: str = ""
-    stripe_pro_price_id: str = ""
+    # One self-serve Pro tier with two billing periods — monthly ($400/mo) and annual ($4,500/yr, the
+    # cheaper-per-month option we nudge toward). The founding launch offer is applied at Checkout for
+    # either period (see app/api/billing.py): the founding coupon (stripe_founding_coupon_id, "forever"
+    # duration = 50% off for life) plus a 90-day free trial (card required). The founding *window* is
+    # capped by the coupon's Stripe redeem-by date (closes Nov); once it lapses, checkout catches the
+    # rejection and falls back to full price. The Bespoke column is a consulting inquiry, not a price.
+    stripe_pro_monthly_price_id: str = ""
+    stripe_pro_annual_price_id: str = ""
+    stripe_founding_coupon_id: str = ""
+    stripe_founding_trial_days: int = 90
     stripe_webhook_secret: str = ""
     # Non-secret, baked into the frontend build — not used server-side. Declared only so a shared
     # .env carrying STRIPE_PUBLISHABLE_KEY doesn't trip extra='forbid' and crash the backend.

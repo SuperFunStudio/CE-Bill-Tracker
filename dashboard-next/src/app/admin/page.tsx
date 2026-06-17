@@ -11,10 +11,14 @@ import {
   setSubscriberActive,
   grantPro,
   revokePro,
+  fetchAccount,
+  deleteAccountByEmail,
+  setAccountDisabled,
   type AdminStats,
   type Subscriber,
   type AccessRequestRow,
   type EntitlementRow,
+  type AccountDetail,
 } from '@/lib/admin';
 
 type GetToken = () => Promise<string | null>;
@@ -98,6 +102,7 @@ function Console({ getToken, adminEmail }: { getToken: GetToken; adminEmail: str
     <Shell>
       <StatsPanel stats={stats} error={statsErr} />
       <GrantPanel getToken={getToken} onChange={bump} />
+      <AccountPanel getToken={getToken} adminEmail={adminEmail} onChange={bump} />
       <EntitlementsPanel getToken={getToken} reloadKey={reloadKey} onChange={bump} />
       <SubscribersPanel getToken={getToken} reloadKey={reloadKey} />
       <AccessRequestsPanel getToken={getToken} reloadKey={reloadKey} />
@@ -270,6 +275,175 @@ function GrantPanel({ getToken, onChange }: { getToken: GetToken; onChange: () =
       </form>
       {msg && <p className={`text-xs ${msg.ok ? 'text-green-accent' : 'text-red-400'}`}>{msg.text}</p>}
     </Section>
+  );
+}
+
+// ── Account management ─────────────────────────────────────────────────────────
+
+function AccountPanel({ getToken, adminEmail, onChange }: { getToken: GetToken; adminEmail: string; onChange: () => void }) {
+  const [query, setQuery] = useState('');
+  const [acct, setAcct] = useState<AccountDetail | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const isSelf = !!acct?.email && acct.email.toLowerCase() === adminEmail.toLowerCase();
+
+  async function lookup(e: React.FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setError(null); setNotice(null); setConfirm(''); setAcct(null);
+    setBusy(true);
+    try {
+      setAcct(await fetchAccount(getToken, query.trim()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Lookup failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refresh() {
+    if (!acct) return;
+    try { setAcct(await fetchAccount(getToken, acct.email)); } catch { /* keep prior */ }
+  }
+
+  async function toggleDisabled() {
+    if (!acct?.firebase || busy) return;
+    setError(null); setNotice(null); setBusy(true);
+    try {
+      const next = !acct.firebase.disabled;
+      await setAccountDisabled(getToken, acct.email, next);
+      setNotice(next ? 'Sign-in disabled.' : 'Sign-in re-enabled.');
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update sign-in.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!acct || busy) return;
+    setError(null); setNotice(null); setBusy(true);
+    try {
+      const res = await deleteAccountByEmail(getToken, acct.email);
+      setNotice(`Deleted ${res.email} — ${res.uids} Firebase id(s), ${res.firebase_deleted} auth user(s) removed.`);
+      setAcct(null); setQuery(''); setConfirm('');
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete account.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const armed = !!acct && confirm.trim().toLowerCase() === acct.email.toLowerCase();
+
+  return (
+    <Section title="Account management" action={
+      <form onSubmit={lookup} className="flex items-center gap-2">
+        <input
+          type="email"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="email to look up…"
+          className="rounded-lg border border-border-default bg-bg-primary px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:border-green-accent focus:outline-none"
+        />
+        <button type="submit" disabled={busy} className="rounded-lg border border-border-default bg-bg-primary px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50">
+          {busy && !acct ? '…' : 'Look up'}
+        </button>
+      </form>
+    }>
+      <p className="text-text-secondary text-sm leading-relaxed">
+        Look up any account by email to inspect its identity and data, freeze sign-in, or permanently delete it.
+      </p>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      {notice && <p className="text-green-accent text-xs">{notice}</p>}
+
+      {acct && !acct.exists && (
+        <p className="text-text-muted text-sm">No account, entitlement, or data found for <span className="text-text-primary">{acct.email}</span>.</p>
+      )}
+
+      {acct && acct.exists && (
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field label="Email" value={acct.email} />
+            <Field label="Plan" value={
+              acct.entitlement
+                ? <span className="inline-flex items-center gap-1.5">
+                    {acct.entitlement.is_pro ? <Pill tone="green">Pro</Pill> : <Pill>{acct.entitlement.plan}</Pill>}
+                    {acct.entitlement.comp && <Pill tone="amber">Comp</Pill>}
+                  </span>
+                : 'No entitlement'
+            } />
+            <Field label="Sign-in" value={
+              acct.firebase
+                ? (acct.firebase.disabled ? <Pill tone="red">Disabled</Pill> : <Pill tone="green">Active</Pill>)
+                : <span className="text-text-muted">{acct.firebase_error ? 'Firebase unavailable' : 'No Firebase user'}</span>
+            } />
+            <Field label="Providers" value={acct.firebase?.providers?.join(', ') || '—'} />
+            <Field label="Created" value={fmtDateTime(acct.firebase?.created_at)} />
+            <Field label="Last sign-in" value={fmtDateTime(acct.firebase?.last_sign_in_at)} />
+            <Field label="Watchlist" value={`${acct.watchlist_count} bill(s)`} />
+            <Field label="Subscriptions" value={`${acct.subscriptions.length} · settings ${acct.settings_present ? 'saved' : 'none'}`} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            {acct.firebase && (
+              <button
+                onClick={toggleDisabled}
+                disabled={busy || (!acct.firebase.disabled && isSelf)}
+                className="rounded-lg border border-border-default bg-bg-primary px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+                title={!acct.firebase.disabled && isSelf ? 'You cannot disable your own account' : undefined}
+              >
+                {busy ? '…' : acct.firebase.disabled ? 'Re-enable sign-in' : 'Disable sign-in'}
+              </button>
+            )}
+          </div>
+
+          {/* Delete — type-to-confirm */}
+          {!isSelf ? (
+            <div className="rounded-lg border border-red-500/40 bg-red-500/5 p-4 space-y-2">
+              <p className="text-red-400 text-sm font-medium">Delete account</p>
+              <p className="text-text-secondary text-xs leading-relaxed">
+                Cancels Stripe, erases watchlist/settings/subscriptions/entitlement, and removes the Firebase sign-in. Cannot be undone.
+              </p>
+              <label className="block text-text-muted text-xs">
+                Type <span className="text-text-primary">{acct.email}</span> to confirm:
+              </label>
+              <input
+                type="email"
+                autoComplete="off"
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                placeholder={acct.email}
+                className="w-full max-w-sm rounded-lg border border-border-default bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-red-500/60 focus:outline-none"
+              />
+              <button
+                onClick={remove}
+                disabled={!armed || busy}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {busy ? 'Deleting…' : 'Delete account'}
+              </button>
+            </div>
+          ) : (
+            <p className="text-text-muted text-xs">This is your own admin account — manage it from the Account page.</p>
+          )}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border-default bg-bg-primary px-3 py-2">
+      <p className="text-text-muted text-[10px] uppercase tracking-wider">{label}</p>
+      <p className="text-text-primary text-sm">{value}</p>
+    </div>
   );
 }
 

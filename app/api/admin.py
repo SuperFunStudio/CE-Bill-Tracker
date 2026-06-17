@@ -13,15 +13,26 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import stripe
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
-from app.api.auth import AuthedUser, is_pro, require_admin
+from app.api.auth import AuthedUser, _ensure_firebase, is_pro, require_admin
+from app.config import settings
 from app.database import get_db
-from app.models import AccessRequest, AlertSubscription, Bill, Entitlement, FederalAction
+from app.models import (
+    AccessRequest,
+    AlertSubscription,
+    Bill,
+    Entitlement,
+    FederalAction,
+    UserSettings,
+    WatchlistItem,
+)
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -348,3 +359,232 @@ async def revoke_pro(
     await db.commit()
     log.info("admin_revoke_pro", target=email, by=admin.email)
     return _entitlement_payload(ent)
+
+
+# ── Account management ─────────────────────────────────────────────────────────
+# There is no central "users" table — identity lives in Firebase Auth, and a person's data is keyed
+# two ways: by firebase_uid (watchlist, settings, watchlist alert-sub) and by email (entitlement,
+# anonymous filter subs). So an account is resolved from BOTH: we gather every firebase_uid we've
+# seen for an email across our own rows AND from Firebase, then act on the union. Firebase calls are
+# best-effort — the firebase-admin role may be absent (same caveat as the user self-delete in
+# app/api/user.py), so DB purges still work even when Firebase is unreachable.
+
+
+def _ms_to_iso(ms: int | None) -> str | None:
+    if not ms:
+        return None
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).isoformat()
+
+
+async def _firebase_user(email: str) -> tuple[dict | None, str | None]:
+    """Best-effort Firebase lookup by email. Returns (info, error) — info is None if the user doesn't
+    exist or Firebase is unreachable/unauthorized, with the reason in error."""
+    try:
+        _ensure_firebase()
+        from firebase_admin import auth as fb_auth
+
+        u = await run_in_threadpool(fb_auth.get_user_by_email, email)
+        meta = getattr(u, "user_metadata", None)
+        return (
+            {
+                "uid": u.uid,
+                "disabled": bool(u.disabled),
+                "email_verified": bool(u.email_verified),
+                "providers": [p.provider_id for p in (u.provider_data or [])],
+                "created_at": _ms_to_iso(getattr(meta, "creation_timestamp", None)),
+                "last_sign_in_at": _ms_to_iso(getattr(meta, "last_sign_in_timestamp", None)),
+            },
+            None,
+        )
+    except Exception as e:  # noqa: BLE001 — UserNotFound, missing role, or no network all land here
+        return None, str(e)
+
+
+async def _collect_uids(db: AsyncSession, email: str) -> set[str]:
+    """Every firebase_uid we've ever associated with this email, across our own tables."""
+    uids: set[str] = set()
+    for stmt in (
+        select(Entitlement.firebase_uid).where(Entitlement.email == email),
+        select(UserSettings.firebase_uid).where(UserSettings.email == email),
+        select(AlertSubscription.firebase_uid).where(AlertSubscription.email == email),
+    ):
+        for (uid,) in (await db.execute(stmt)).all():
+            if uid:
+                uids.add(uid)
+    return uids
+
+
+@router.get("/account")
+async def admin_account(
+    email: str,
+    _: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Everything we know about one account, resolved by email: entitlement, Firebase identity
+    (best-effort), and how much data is attached (watchlist + subscriptions + saved settings)."""
+    email = (email or "").lower().strip()
+    if "@" not in email:
+        raise HTTPException(status_code=422, detail="a valid email is required")
+
+    ent = (
+        await db.execute(select(Entitlement).where(Entitlement.email == email))
+    ).scalar_one_or_none()
+
+    fb, fb_err = await _firebase_user(email)
+    uids = await _collect_uids(db, email)
+    if fb:
+        uids.add(fb["uid"])
+
+    watch_count = 0
+    if uids:
+        watch_count = (
+            await db.execute(
+                select(func.count()).select_from(WatchlistItem).where(
+                    WatchlistItem.firebase_uid.in_(uids)
+                )
+            )
+        ).scalar() or 0
+
+    sub_filter = or_(AlertSubscription.email == email)
+    if uids:
+        sub_filter = or_(AlertSubscription.email == email, AlertSubscription.firebase_uid.in_(uids))
+    subs = (
+        await db.execute(select(AlertSubscription).where(sub_filter))
+    ).scalars().all()
+
+    settings_present = (
+        await db.execute(
+            select(func.count()).select_from(UserSettings).where(UserSettings.email == email)
+        )
+    ).scalar() or 0
+
+    return {
+        "email": email,
+        "exists": bool(ent or fb or uids or subs or settings_present),
+        "entitlement": _entitlement_payload(ent) if ent else None,
+        "firebase": fb,
+        "firebase_error": fb_err,
+        "uids_known": sorted(uids),
+        "watchlist_count": watch_count,
+        "settings_present": bool(settings_present),
+        "subscriptions": [
+            {
+                "id": s.id,
+                "scope": s.scope,
+                "active": s.active,
+                "states": s.states or [],
+                "instrument_types": s.instrument_types or [],
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in subs
+        ],
+    }
+
+
+class AccountEmail(BaseModel):
+    email: str
+
+
+@router.post("/account/delete")
+async def admin_delete_account(
+    payload: AccountEmail,
+    admin: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete an account by email — the admin-driven twin of the user self-delete:
+    cancel any live Stripe sub, purge every row keyed to the email or its firebase uids, then delete
+    the Firebase auth user(s). Best-effort on Stripe + Firebase so a lagging external system never
+    blocks the local erase. Refuses to delete the acting admin's own account (use the Account page)."""
+    email = (payload.email or "").lower().strip()
+    if "@" not in email:
+        raise HTTPException(status_code=422, detail="a valid email is required")
+    if email == admin.email.lower().strip():
+        raise HTTPException(status_code=409, detail="refusing to delete your own admin account here")
+
+    ent = (
+        await db.execute(select(Entitlement).where(Entitlement.email == email))
+    ).scalar_one_or_none()
+
+    fb, _fb_err = await _firebase_user(email)
+    uids = await _collect_uids(db, email)
+    if fb:
+        uids.add(fb["uid"])
+
+    # 1. Cancel a live Stripe subscription first (best-effort).
+    if ent and ent.stripe_subscription_id and ent.status in ("active", "trialing"):
+        stripe.api_key = settings.stripe_secret_key
+        try:
+            await run_in_threadpool(stripe.Subscription.delete, ent.stripe_subscription_id)
+        except Exception as e:  # noqa: BLE001 — never let billing block the erase
+            log.warning("admin_delete_stripe_cancel_failed", error=str(e), email=email)
+
+    # 2. Purge all rows. uid-keyed (watchlist) + email-or-uid keyed (settings, subscriptions) +
+    #    email-keyed (entitlement).
+    if uids:
+        await db.execute(delete(WatchlistItem).where(WatchlistItem.firebase_uid.in_(uids)))
+    await db.execute(
+        delete(UserSettings).where(
+            or_(UserSettings.email == email, UserSettings.firebase_uid.in_(uids or {""}))
+        )
+    )
+    await db.execute(
+        delete(AlertSubscription).where(
+            or_(AlertSubscription.email == email, AlertSubscription.firebase_uid.in_(uids or {""}))
+        )
+    )
+    await db.execute(delete(Entitlement).where(Entitlement.email == email))
+    await db.commit()
+
+    # 3. Delete the Firebase auth user(s) last (best-effort — needs the Firebase Auth Admin role).
+    firebase_deleted = 0
+    if uids:
+        try:
+            _ensure_firebase()
+            from firebase_admin import auth as fb_auth
+
+            for uid in uids:
+                try:
+                    await run_in_threadpool(fb_auth.delete_user, uid)
+                    firebase_deleted += 1
+                except Exception as e:  # noqa: BLE001 — data already gone; report the lag
+                    log.warning("admin_delete_firebase_failed", error=str(e), uid=uid)
+        except Exception as e:  # noqa: BLE001 — firebase unavailable entirely
+            log.warning("admin_delete_firebase_unavailable", error=str(e), email=email)
+
+    log.info("admin_delete_account", target=email, by=admin.email, uids=len(uids), fb_deleted=firebase_deleted)
+    return {"deleted": True, "email": email, "uids": len(uids), "firebase_deleted": firebase_deleted}
+
+
+class AccountDisable(BaseModel):
+    email: str
+    disabled: bool
+
+
+@router.post("/account/disable")
+async def admin_set_account_disabled(
+    payload: AccountDisable,
+    admin: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Suspend or restore a user's ability to sign in (Firebase `disabled` flag) — a reversible freeze
+    that leaves their data intact. Needs the Firebase Auth Admin role; returns 502 if Firebase can't
+    be reached. Refuses to disable the acting admin's own account."""
+    email = (payload.email or "").lower().strip()
+    if "@" not in email:
+        raise HTTPException(status_code=422, detail="a valid email is required")
+    if payload.disabled and email == admin.email.lower().strip():
+        raise HTTPException(status_code=409, detail="refusing to disable your own admin account")
+
+    try:
+        _ensure_firebase()
+        from firebase_admin import auth as fb_auth
+
+        u = await run_in_threadpool(fb_auth.get_user_by_email, email)
+        await run_in_threadpool(fb_auth.update_user, u.uid, disabled=payload.disabled)
+    except Exception as e:  # noqa: BLE001 — user-not-found, missing role, or no network
+        raise HTTPException(
+            status_code=502,
+            detail=f"could not update the Firebase user ({e})",
+        )
+    log.info("admin_set_disabled", target=email, by=admin.email, disabled=payload.disabled)
+    return {"email": email, "disabled": payload.disabled}

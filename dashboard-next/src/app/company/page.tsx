@@ -11,7 +11,6 @@ import { DemoBanner } from '@/components/ui/DemoBanner';
 import { LockIcon, StarIcon } from '@/components/ui/icons';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { useAuth } from '@/components/auth/AuthContext';
-import { startProCheckout } from '@/lib/billing';
 import { formatCost, fixEncoding, formatDate, daysUntil, STATE_NAMES } from '@/lib/utils';
 import type { CompanyObligation } from '@/lib/types';
 
@@ -535,7 +534,6 @@ function CompanyView() {
 // ─── Access Gate ─────────────────────────────────────────────────────────────
 
 function AccessGate() {
-  const { user, openAuth, getToken } = useAuth();
   const [showModal, setShowModal] = useState(false);
 
   return (
@@ -545,44 +543,33 @@ function AccessGate() {
           <LockIcon className="text-4xl mx-auto text-text-muted" />
           <div>
             <span className="inline-block mb-2 text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
-              Pro
+              Bespoke · Kenny Arnold Design
             </span>
             <h1 className="text-2xl font-bold text-text-primary mb-2">Portfolio Exposure</h1>
             <p className="text-text-muted text-sm leading-relaxed">
-              See exactly which enacted laws hit your portfolio, what each one requires, and when your
-              next deadline falls — the exposure translation compliance teams pay for.
+              A custom exposure map for your portfolio — which enacted laws hit you, what each requires,
+              and the material- and design-level moves that reduce it. Built from your own volume and
+              material data, as a scoped engagement with Kenny Arnold Design.
             </p>
           </div>
 
           <div className="space-y-3">
-            {!user ? (
-              <button
-                onClick={openAuth}
-                className="w-full bg-green-accent text-bg-primary font-semibold py-3 rounded-lg text-sm hover:opacity-90 transition-opacity"
-              >
-                Sign in to unlock →
-              </button>
-            ) : (
-              <button
-                onClick={() => startProCheckout(getToken)}
-                className="w-full bg-green-accent text-bg-primary font-semibold py-3 rounded-lg text-sm hover:opacity-90 transition-opacity"
-              >
-                Upgrade to Pro — $39/mo →
-              </button>
-            )}
+            <button
+              onClick={() => setShowModal(true)}
+              className="w-full bg-green-accent text-bg-primary font-semibold py-3 rounded-lg text-sm hover:opacity-90 transition-opacity"
+            >
+              Start a conversation →
+            </button>
             <p className="text-text-muted text-xs">
-              Need team or enterprise access?{' '}
-              <button onClick={() => setShowModal(true)} className="text-green-accent hover:underline">
-                Request pricing
-              </button>{' '}
-              · <Link href="/pricing" className="text-green-accent hover:underline">compare plans</Link>
+              Tracking deadlines yourself?{' '}
+              <Link href="/pricing" className="text-green-accent hover:underline">See Pro</Link>
             </p>
           </div>
 
           {showModal && (
             <RequestAccessModal
-              plan="company_impact"
-              planLabel="Portfolio Exposure"
+              plan="bespoke"
+              planLabel="Bespoke — Portfolio Exposure"
               source="company_gate"
               onClose={() => setShowModal(false)}
             />
@@ -596,15 +583,16 @@ function AccessGate() {
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function CompanyImpactPage() {
-  const { isPro, isAdmin, loading } = useAuth();
+  const { isAdmin, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<'obligations' | 'bill' | 'company'>('obligations');
 
   if (loading) {
     return <div className="p-6 max-w-5xl mx-auto"><div className="h-64 bg-bg-secondary rounded-xl animate-pulse" /></div>;
   }
 
-  // Portfolio Exposure is a Pro feature; allowlisted admins get in for demos.
-  if (!isPro && !isAdmin) {
+  // Portfolio Exposure is now a Bespoke (Kenny Arnold Design) engagement, not a self-serve tier —
+  // everyone sees the inquiry gate. Allowlisted admins get into the live tool for demos.
+  if (!isAdmin) {
     return <AccessGate />;
   }
 

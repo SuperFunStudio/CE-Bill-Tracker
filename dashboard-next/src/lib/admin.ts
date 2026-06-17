@@ -142,3 +142,49 @@ export const revokePro = (getToken: GetToken, email: string) =>
     method: 'POST',
     body: JSON.stringify({ email }),
   });
+
+// ── Account management ──────────────────────────────────────────────────────
+
+export interface FirebaseInfo {
+  uid: string;
+  disabled: boolean;
+  email_verified: boolean;
+  providers: string[];
+  created_at: string | null;
+  last_sign_in_at: string | null;
+}
+
+export interface AccountDetail {
+  email: string;
+  exists: boolean;
+  entitlement: EntitlementRow | null;
+  firebase: FirebaseInfo | null;
+  firebase_error: string | null;
+  uids_known: string[];
+  watchlist_count: number;
+  settings_present: boolean;
+  subscriptions: {
+    id: number;
+    scope: string;
+    active: boolean;
+    states: string[];
+    instrument_types: string[];
+    created_at: string | null;
+  }[];
+}
+
+export const fetchAccount = (getToken: GetToken, email: string) =>
+  authedFetch<AccountDetail>(`/admin/account?email=${encodeURIComponent(email)}`, getToken);
+
+export const deleteAccountByEmail = (getToken: GetToken, email: string) =>
+  authedFetch<{ deleted: boolean; email: string; uids: number; firebase_deleted: number }>(
+    '/admin/account/delete',
+    getToken,
+    { method: 'POST', body: JSON.stringify({ email }) },
+  );
+
+export const setAccountDisabled = (getToken: GetToken, email: string, disabled: boolean) =>
+  authedFetch<{ email: string; disabled: boolean }>('/admin/account/disable', getToken, {
+    method: 'POST',
+    body: JSON.stringify({ email, disabled }),
+  });

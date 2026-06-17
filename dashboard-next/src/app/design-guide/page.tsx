@@ -7,6 +7,7 @@ import { useBills } from '@/hooks/useBills';
 import { BillModal } from '@/components/ui/BillModal';
 import { PrincipleCard } from '@/components/design-guide/PrincipleCard';
 import { startProCheckout, openFullGuide } from '@/lib/billing';
+import { upgradeLabel } from '@/lib/tiers';
 import { track } from '@/lib/analytics';
 import { TEASER_LEVERS, GUIDE_COVERAGE, type TeaserLever } from '@/data/designGuideTeaser';
 
@@ -17,21 +18,21 @@ import { TEASER_LEVERS, GUIDE_COVERAGE, type TeaserLever } from '@/data/designGu
 
 const BOOKING_URL = 'https://calendar.app.google/QPXh1qXWhNWxXo9n6';
 
-// Two reading groups, ordered deliberately (not the raw dataset order). First: the R-ladder —
-// strategies that keep material in use, highest-value at the top (reuse/repair) descending to the
-// recovery pathways (recycle/compost). Then the material & disclosure rules: what a product is made
-// of and what must be declared on it.
+// Two reading groups, ordered deliberately (not the raw dataset order). First: the Re-X design
+// principles — strategies that keep material in use, highest-value at the top (reuse/repair)
+// descending to the recovery pathways (recycle → recycled content → compost). Then the material &
+// disclosure rules: what a product is made of and what must be declared on it.
 const GROUPS: { label: string; blurb: string; levers: string[] }[] = [
   {
     label: 'Keep it in the loop',
     blurb:
-      'The R-ladder — choices that keep material circulating, highest-value first: reuse and repair down through recycling and composting.',
+      'The Re-X Design Principles extracted from enacted bills. Design for material circulation, highest-value first: reuse and repair down through recycling and composting.',
     levers: [
       'reuse_refill',
       'repairability_durability',
       'source_reduction',
-      'recycled_content',
       'design_for_recycling',
+      'recycled_content',
       'compostability',
     ],
   },
@@ -41,6 +42,17 @@ const GROUPS: { label: string; blurb: string; levers: string[] }[] = [
     levers: ['material_restriction', 'toxics_elimination', 'labeling_marking'],
   },
 ];
+
+// Front-of-card "Design for …" framing for the Re-X principles. The card back keeps the canonical
+// lever name (lever.name, e.g. "Compostability — sources") so the source bills stay tied to the
+// classified data; levers without an override fall back to lever.name on both faces.
+const LEVER_DISPLAY_NAME: Record<string, string> = {
+  reuse_refill: 'Design for Reuse & Refill',
+  repairability_durability: 'Design for Repairability & Durability',
+  source_reduction: 'Design for Reduction',
+  design_for_recycling: 'Design for Recycling',
+  compostability: 'Design for regeneration',
+};
 
 const LEVER_BY_KEY = new Map<string, TeaserLever>(TEASER_LEVERS.map(l => [l.lever, l]));
 
@@ -92,7 +104,7 @@ export default function DesignGuidePage() {
     ? 'Sign in to unlock →'
     : isPro
       ? 'Open the full guide →'
-      : 'Upgrade to Pro — $39/mo →';
+      : upgradeLabel();
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
@@ -102,10 +114,10 @@ export default function DesignGuidePage() {
       />
 
       <p className="text-text-secondary text-sm leading-relaxed max-w-3xl">
-        This guide is built dynamically from the bills in the tracker — every imperative below is
-        pulled verbatim from enacted and proposed US bills, with no opinion and no invented
-        thresholds, and it stays current as legislation moves. Miss one and it shows up as a
-        non-compliant SKU, a fee penalty, or a market you can no longer sell into. Assembled from{' '}
+        The Battle of the Bills online design guide is built dynamically from the bills ingested into
+        the foundational database. Every design principle below is sourced from enacted and proposed
+        US bills and it stays current as legislation moves. Stay ahead of non-compliant SKUs, fee
+        penalties, and ensure you adapt to changing market conditions. Assembled from{' '}
         <span className="text-text-primary font-medium">{GUIDE_COVERAGE.bills} bills</span> across{' '}
         <span className="text-text-primary font-medium">{GUIDE_COVERAGE.states} states</span>.
       </p>
@@ -127,7 +139,12 @@ export default function DesignGuidePage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
               {levers.map(l => (
-                <PrincipleCard key={l.lever} lever={l} onOpenBill={setSelectedBillId} />
+                <PrincipleCard
+                  key={l.lever}
+                  lever={l}
+                  displayName={LEVER_DISPLAY_NAME[l.lever]}
+                  onOpenBill={setSelectedBillId}
+                />
               ))}
             </div>
           </section>

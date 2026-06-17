@@ -63,7 +63,7 @@ export async function subscribe(payload: SubscribePayload): Promise<void> {
 }
 
 /** Which paid tier a visitor expressed interest in — the willingness-to-pay experiment. */
-export type PlanInterest = 'pro' | 'team' | 'enterprise' | 'api' | 'company_impact';
+export type PlanInterest = 'pro' | 'team' | 'enterprise' | 'api' | 'company_impact' | 'bespoke';
 
 export interface AccessRequestPayload {
   email: string;

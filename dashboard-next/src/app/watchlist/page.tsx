@@ -7,6 +7,7 @@ import { StarIcon, LockIcon } from '@/components/ui/icons';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useWatchlist } from '@/components/watchlist/WatchlistContext';
 import { startProCheckout } from '@/lib/billing';
+import { PRO, upgradeLabel } from '@/lib/tiers';
 import { useBills } from '@/hooks/useBills';
 import {
   getWatchlistPrefs,
@@ -43,8 +44,8 @@ export default function WatchlistPage() {
         <Gate
           icon={<LockIcon className="text-2xl text-green-accent" />}
           title="Watch lists are a Pro feature"
-          body="Upgrade to Pro ($39/mo) to follow bills, see your portfolio exposure, export to CSV, and unlock the full Design Guide."
-          cta="Upgrade to Pro — $39/mo →"
+          body={`Follow bills, get alerts when they move, and track the deadlines that matter to you. ${PRO.foundingNote}`}
+          cta={upgradeLabel()}
           onClick={() => startProCheckout(getToken)}
         />
       ) : !ready ? (

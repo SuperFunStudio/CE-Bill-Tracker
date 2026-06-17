@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDeadlines } from '@/hooks/useDeadlines';
 import { useBills } from '@/hooks/useBills';
 import { MetricCard } from '@/components/ui/MetricCard';
@@ -11,6 +11,7 @@ import { DeadlineModal } from '@/components/compliance/DeadlineModal';
 import { deadlineAccentText } from '@/lib/deadlineStyle';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
+import { UpcomingDeadlinesLock } from '@/components/compliance/UpcomingDeadlinesLock';
 import { LockIcon } from '@/components/ui/icons';
 import { deadlineInScope } from '@/lib/scope';
 import { formatMaterial } from '@/components/scope/ScopeOnboarding';
@@ -56,6 +57,9 @@ function DeadlineRow({ deadline, onSelect }: { deadline: DeadlineSummary; onSele
 // backfill carries laws back to the 1990s; their compliance dates are not actionable).
 const PAST_DEADLINE_CUTOFF_DAYS = 5 * 365;
 
+// How long a free visitor previews the live timeline before the lock fades in.
+const PREVIEW_MS = 15_000;
+
 export default function CompliancePage() {
   const [daysAhead, setDaysAhead] = useState(1095);
   const [stateFilter, setStateFilter] = useState('');
@@ -68,8 +72,23 @@ export default function CompliancePage() {
   const { scope } = useScope();
   const scopeActive = useScopeActive();
 
-  const { isPro } = useAuth();
+  const { isPro, isAdmin, loading } = useAuth();
   const gatePro = useProGate();
+
+  // Free visitors get a live ~40s preview of the real timeline, then the lock fades in over it (so they
+  // see exactly what they're missing). Pro + admins skip it. isPro flipping (e.g. a referral grant
+  // lands) tears the lock down.
+  const needsPreview = !loading && !isPro && !isAdmin;
+  const [previewExpired, setPreviewExpired] = useState(false);
+  useEffect(() => {
+    if (!needsPreview) {
+      setPreviewExpired(false);
+      return;
+    }
+    const t = setTimeout(() => setPreviewExpired(true), PREVIEW_MS);
+    return () => clearTimeout(t);
+  }, [needsPreview]);
+  const locked = needsPreview && previewExpired;
 
   // Merge API deadlines with compliance_details.deadlines from bills
   const mergedDeadlines = useMemo(() => {
@@ -177,11 +196,15 @@ export default function CompliancePage() {
       Description: d.description ?? '',
       Bill: d.bill_number ?? '',
       'Who Affected': d.who_affected ?? '',
-    }))));
+    }))), 'csv_export_deadlines');
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
+    <>
+      <div
+        className={`p-6 space-y-6 max-w-5xl mx-auto ${locked ? 'pointer-events-none select-none blur-[6px]' : ''}`}
+        aria-hidden={locked || undefined}
+      >
       <GazetteHeader title="Upcoming Deadlines" subtitle="EPR compliance deadlines across all states" />
 
       {scopeActive && (
@@ -289,6 +312,8 @@ export default function CompliancePage() {
       </div>
 
       <DeadlineModal deadline={selected} bill={selectedBill} onClose={() => setSelected(null)} />
-    </div>
+      </div>
+      {locked && <UpcomingDeadlinesLock />}
+    </>
   );
 }

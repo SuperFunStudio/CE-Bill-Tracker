@@ -1,12 +1,19 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Bill, ComplianceDeadline, LitigationCase, LitigationEvent
-from app.schemas import BillDetail, BillSummary, DeadlineSummary, LitigationCaseSummary, StateMapSummary
+from app.schemas import (
+    BillDetail,
+    BillSummary,
+    BillTimelinePoint,
+    DeadlineSummary,
+    LitigationCaseSummary,
+    StateMapSummary,
+)
 
 router = APIRouter(prefix="/bills", tags=["bills"])
 
@@ -92,6 +99,34 @@ async def get_map_summary(db: AsyncSession = Depends(get_db)):
         )
         for row in rows
     ]
+
+
+@router.get("/timeline", response_model=list[BillTimelinePoint])
+async def get_bill_timeline(
+    instrument_type: str | None = None,
+    material_category: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-year, per-status counts of EPR-relevant bills, bucketed by year of status_date.
+
+    Powers the Insights timeline: cumulate the `enacted` series for "laws on the books over
+    time", and toggle the other statuses to see the "shots on goal" (introductions) behind them.
+    """
+    year = func.extract("year", Bill.status_date)
+    q = (
+        select(year.cast(Integer).label("year"), Bill.status, func.count().label("count"))
+        .where(Bill.epr_relevant == True)
+        .where(Bill.status_date.isnot(None))
+        .where(Bill.status.isnot(None))
+        .group_by("year", Bill.status)
+        .order_by("year")
+    )
+    if instrument_type:
+        q = q.where(Bill.instrument_type == instrument_type)
+    if material_category:
+        q = q.where(Bill.material_categories.contains([material_category]))
+    rows = (await db.execute(q)).all()
+    return [BillTimelinePoint(year=row.year, status=row.status, count=row.count) for row in rows]
 
 
 @router.get("/{bill_id}", response_model=BillDetail)

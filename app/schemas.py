@@ -43,6 +43,18 @@ class StateMapSummary(BaseModel):
     material_categories: list[str]
 
 
+class BillTimelinePoint(BaseModel):
+    """One (year, status) bucket: how many EPR-relevant bills last reached `status` in `year`.
+
+    `year` is derived from status_date (the date of the most recent status transition), so
+    enacted buckets read as "laws enacted that year" — cumulating them gives laws on the books.
+    """
+
+    year: int
+    status: str
+    count: int
+
+
 class DeadlineSummary(BaseModel):
     id: int
     state: str
@@ -192,6 +204,38 @@ class CompanyObligationDeadline(BaseModel):
     source_url: str | None
 
 
+class StakesPenalty(BaseModel):
+    """Civil penalty written into the statute — the grounded 'what's at stake' anchor."""
+    amount_usd: float
+    unit: str  # "day" | "violation"
+    raw: str   # verbatim enforcement text
+
+
+class StakesFee(BaseModel):
+    """Annual program-fee range for a (company, bill) pair.
+
+    `annual_fee_grounded` is True only when backed by a published schedule (CA SB 54
+    2027, Oregon CAA midpoint, PaintCare/MRC). Otherwise it's a benchmark estimate.
+    """
+    annual_fee_low_usd: float
+    annual_fee_high_usd: float
+    annual_fee_grounded: bool
+    fee_basis: str
+    eco_modulation_swing_usd: float | None = None
+    eco_modulation_floor_usd: float | None = None
+    eco_modulation_notes: list[str] = []
+    citation: str | None = None
+    confidence: float
+
+
+class FinancialStakes(BaseModel):
+    """The layered financial exposure for one affected law."""
+    penalty: StakesPenalty | None = None
+    fee: StakesFee | None = None
+    pro_membership_usd: float | None = None
+    has_any: bool = False
+
+
 class CompanyObligation(BaseModel):
     """One enacted law a company is affected by, plus its next deadline.
 
@@ -210,6 +254,7 @@ class CompanyObligation(BaseModel):
     next_deadline: CompanyObligationDeadline | None
     upcoming_deadline_count: int
     total_deadline_count: int
+    stakes: FinancialStakes | None = None
 
 
 class CompanyObligationsResponse(BaseModel):
@@ -221,6 +266,13 @@ class CompanyObligationsResponse(BaseModel):
     upcoming_deadline_count: int
     next_deadline_date: date | None
     obligations: list[CompanyObligation]
+    # Portfolio-level financial rollup (None where no data exists). The max per-day
+    # penalty across affected laws leads the page; fees aggregate into a range.
+    max_penalty_per_day_usd: float | None = None
+    portfolio_annual_fee_low_usd: float | None = None
+    portfolio_annual_fee_high_usd: float | None = None
+    portfolio_eco_modulation_swing_usd: float | None = None
+    any_fee_grounded: bool = False
 
 
 class ExposureBriefResponse(BaseModel):

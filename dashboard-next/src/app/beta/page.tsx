@@ -6,6 +6,7 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { useBills } from '@/hooks/useBills';
 import { STATE_NAMES, formatInstrumentType, formatDate, fixEncoding } from '@/lib/utils';
 import type { BillSummary } from '@/lib/types';
+import { LegislativeTimeline } from '@/components/beta/LegislativeTimeline';
 
 /**
  * Hidden internal preview for features in development — gated exactly like /admin (a signed-in
@@ -38,6 +39,7 @@ export default function BetaPage() {
   }
   return (
     <Shell>
+      <LegislativeTimeline />
       <WeakeningWatch />
     </Shell>
   );

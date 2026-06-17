@@ -476,3 +476,78 @@ async def send_welcome_for_subscription(subscription_id: int) -> None:
             log.warning("welcome_email_subscription_missing", subscription_id=subscription_id)
             return
         await send_welcome_email(db, sub)
+
+
+# --- Account-signup welcome ----------------------------------------------------------------------
+# Distinct from the subscription welcome above: this fires when a brand-new Firebase free account is
+# created (including via a referral link), where there's no AlertSubscription / scope to summarise.
+# It welcomes the account and points at the 7-day Pro trial it just received. Triggered once per
+# account from POST /billing/signup-trial. See conversion-funnel.
+
+
+def render_account_welcome_subject() -> str:
+    return "Welcome to SignalScout — your 7-day Pro trial is live"
+
+
+def render_account_welcome_html() -> str:
+    return f"""
+<html><body style="margin:0;padding:0;background:{_PAPER};">
+ <div style="max-width:640px;margin:0 auto;background:#fff;">
+  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
+    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
+         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
+      SignalScout · EPR Legislative Intelligence
+    </div>
+    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
+      Tracking circularity-aligned legislation across the USA</p>
+  </div>
+  <div style="padding:18px 28px 24px;">
+    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to the ring.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 14px;">
+      You've just created a free SignalScout account — and the next <strong>7 days are on us</strong>.
+      Your Pro trial is live right now, no card required:</p>
+    <ul style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 16px;padding-left:20px;">
+      <li>The full <strong>Upcoming Deadlines</strong> timeline — every EPR compliance date, all 50 states</li>
+      <li>Personal &amp; shared <strong>watch lists</strong> with alerts</li>
+      <li>The complete dynamic <strong>Design Guide</strong></li>
+      <li><strong>CSV export</strong> of bills &amp; deadlines</li>
+    </ul>
+    <a href="{_DASHBOARD_URL}/compliance" style="display:inline-block;background:{_ACCENT};color:#fff;
+       text-decoration:none;font:bold 14px {_SERIF};padding:11px 24px;border-radius:4px;">
+      Open your dashboard →</a>
+    <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
+      When your 7 days are up, keep Pro at <strong>founding 50% off for life</strong> (closes Nov 30),
+      or stay on Free. Want a heads-up when bills move?
+      <a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">Set up alerts →</a></p>
+  </div>
+  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
+       border-top:3px double {_INK};">
+    You're receiving this because you just created a SignalScout account.
+  </div>
+ </div>
+</body></html>
+"""
+
+
+async def send_account_welcome(email: str) -> bool:
+    """Best-effort welcome for a brand-new free account (background-task entrypoint). Self-contained —
+    no DB needed (no scope to summarise). Gated on enable_welcome_email + a SendGrid key + an email.
+    Never raises — a welcome failure must never surface to the signup caller."""
+    if not settings.enable_welcome_email:
+        log.info("account_welcome_skipped_flag_off", email=email)
+        return False
+    if not email or not settings.sendgrid_api_key:
+        return False
+    try:
+        from app.alerts.sendgrid_sender import SendGridSender
+
+        ok = await SendGridSender().send_html(
+            email, render_account_welcome_subject(), render_account_welcome_html()
+        )
+        log.info("account_welcome_sent", email=email, ok=ok)
+        return ok
+    except Exception as e:
+        log.warning("account_welcome_failed", email=email, error=str(e))
+        return False

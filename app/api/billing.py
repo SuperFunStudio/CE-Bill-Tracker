@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 import stripe
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,17 +72,23 @@ _SIGNUP_TRIAL_DAYS = 7
 
 @router.post("/signup-trial")
 async def signup_trial(
+    background_tasks: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Grant this account its one-time 7-day signup trial (full Pro, no card). Idempotent — a no-op
-    if the trial was already used. Called by the frontend right after a free account is created."""
+    """Grant this account its one-time 7-day signup trial (full Pro, no card) and send the account
+    welcome. Idempotent — a no-op if the trial was already used (so the welcome fires exactly once per
+    new account). Called by the frontend right after a free account is created (incl. referral signups)."""
     ent = await _get_or_create_entitlement(db, user.email, user.uid)
     if ent.signup_trial_used:
         return {"granted": False, "reason": "already_used"}
     grant_comp_days(ent, _SIGNUP_TRIAL_DAYS)
     ent.signup_trial_used = True
     await db.commit()
+    # Welcome the brand-new account (best-effort, after the response is sent).
+    from app.alerts.welcome_email import send_account_welcome
+
+    background_tasks.add_task(send_account_welcome, user.email)
     return {"granted": True}
 
 

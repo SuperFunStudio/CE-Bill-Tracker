@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import delete, desc, select
+from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,6 +19,7 @@ from app.database import get_db
 from app.models import (
     Bill,
     Company,
+    CompanyAlias,
     ComplianceDeadline,
     EntityMatchQueue,
     ExposureBrief,
@@ -33,8 +34,11 @@ from app.schemas import (
     EntityMatchQueueItem,
     ExposureBriefResponse,
     ExposureRanking,
+    FinancialStakes,
     ImpactScoreResponse,
 )
+from app.scoring.materials import canonical_material_category, canonical_set
+from app.scoring.stakes import compute_stakes
 
 ENACTED_STATUSES = ("enacted", "signed")
 
@@ -220,15 +224,30 @@ async def get_or_generate_exposure_brief(
 
 @router.get("", response_model=list[CompanySummary])
 async def list_companies(
+    search: str | None = None,
     hq_state: str | None = None,
     naics_code: str | None = None,
     limit: int = Query(default=100, le=500),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
 ) -> list[CompanySummary]:
-    """List companies with optional filters."""
+    """List companies with optional filters.
+
+    `search` matches the company name OR any of its aliases (case-insensitive
+    substring), so a user typing "Pepsi" or "Frito-Lay" both resolve to PepsiCo.
+    """
     stmt = select(Company)
 
+    if search:
+        term = f"%{search.strip()}%"
+        alias_match = (
+            select(CompanyAlias.company_id)
+            .where(CompanyAlias.alias_name.ilike(term))
+            .scalar_subquery()
+        )
+        stmt = stmt.where(
+            or_(Company.name.ilike(term), Company.id.in_(alias_match))
+        )
     if hq_state:
         stmt = stmt.where(Company.hq_state == hq_state.upper())
     if naics_code:
@@ -300,7 +319,20 @@ async def get_company_obligations(
     if company is None:
         raise HTTPException(status_code=404, detail="Company not found")
 
-    material_categories = {m.material_category for m in company.materials}
+    # Normalize company materials to the canonical vocabulary so glass/metal exposure
+    # matches bills that carry "glass"/"metals" (see app/scoring/materials.py).
+    material_categories = {
+        canonical_material_category(m.material_category) for m in company.materials
+    }
+    # canonical category -> tonnage (summed across raw materials that map together;
+    # None only when every contributing material's volume is unknown).
+    tonnes_by_category: dict[str, float | None] = {}
+    for m in company.materials:
+        c = canonical_material_category(m.material_category)
+        if m.annual_volume_tonnes is not None:
+            tonnes_by_category[c] = (tonnes_by_category.get(c) or 0.0) + m.annual_volume_tonnes
+        else:
+            tonnes_by_category.setdefault(c, None)
     # state -> set of presence types (manufacturing, headquarters, …)
     presence_by_state: dict[str, set[str]] = {}
     for p in company.state_presences:
@@ -333,7 +365,7 @@ async def get_company_obligations(
 
     affected: list[tuple[Bill, list[str]]] = []
     for bill in candidate_bills:
-        bill_cats = set(bill.material_categories or [])
+        bill_cats = canonical_set(bill.material_categories)
         matched = material_categories & bill_cats
         if matched:
             affected.append((bill, sorted(matched)))
@@ -379,6 +411,17 @@ async def get_company_obligations(
             if upcoming
             else None
         )
+        # Financial stakes: penalty (grounded in statute) + annual fee range + PRO fee +
+        # eco-modulation lever. Computed from this bill's matched materials and tonnage.
+        stakes_dict = compute_stakes(
+            bill_state=bill.state,
+            compliance_details=bill.compliance_details,
+            matched_materials=[
+                {"category": c, "tonnes": tonnes_by_category.get(c)} for c in matched
+            ],
+            bill_number=bill.bill_number,
+        )
+        stakes = FinancialStakes.model_validate(stakes_dict) if stakes_dict["has_any"] else None
         obligations.append(
             CompanyObligation(
                 bill_id=bill.id,
@@ -392,6 +435,7 @@ async def get_company_obligations(
                 next_deadline=next_dl,
                 upcoming_deadline_count=len(upcoming),
                 total_deadline_count=len(bill_deadlines),
+                stakes=stakes,
             )
         )
 
@@ -410,6 +454,33 @@ async def get_company_obligations(
         (o.next_deadline.deadline_date for o in obligations if o.next_deadline), None
     )
 
+    # Portfolio financial rollup.
+    # Penalty is a MAX (your single largest daily exposure — you wouldn't be in default on
+    # every law at once). Fees are aggregated BY STATE, not summed per law: a producer pays
+    # packaging program fees once per state (to that state's PRO), so summing every matching
+    # law would double-count the same physical packaging. We take the largest fee per state
+    # (its dominant program) and sum across states.
+    penalties = [o.stakes.penalty for o in obligations if o.stakes and o.stakes.penalty]
+    day_penalties = [p.amount_usd for p in penalties if p.unit == "day"]
+
+    fee_low_by_state: dict[str, float] = {}
+    fee_high_by_state: dict[str, float] = {}
+    swing_by_state: dict[str, float] = {}
+    any_grounded = False
+    for o in obligations:
+        f = o.stakes.fee if o.stakes else None
+        if f is None:
+            continue
+        any_grounded = any_grounded or f.annual_fee_grounded
+        if f.annual_fee_low_usd > fee_low_by_state.get(o.state, -1):
+            fee_low_by_state[o.state] = f.annual_fee_low_usd
+            fee_high_by_state[o.state] = f.annual_fee_high_usd
+            swing_by_state[o.state] = f.eco_modulation_swing_usd or 0.0
+    fee_low = round(sum(fee_low_by_state.values())) if fee_low_by_state else None
+    fee_high = round(sum(fee_high_by_state.values())) if fee_high_by_state else None
+    eco_total = sum(swing_by_state.values())
+    eco_swing = round(eco_total) if eco_total else None
+
     return CompanyObligationsResponse(
         company_id=company.id,
         company_name=company.name,
@@ -418,6 +489,11 @@ async def get_company_obligations(
         upcoming_deadline_count=total_upcoming,
         next_deadline_date=next_overall,
         obligations=obligations,
+        max_penalty_per_day_usd=max(day_penalties) if day_penalties else None,
+        portfolio_annual_fee_low_usd=fee_low,
+        portfolio_annual_fee_high_usd=fee_high,
+        portfolio_eco_modulation_swing_usd=eco_swing,
+        any_fee_grounded=any_grounded,
     )
 
 

@@ -32,6 +32,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/account': 'Account',
   '/about': 'About',
   '/methodology': 'Methodology',
+  '/insights': 'Insights',
 };
 
 export function pageTitleFromPath(pathname: string): string {

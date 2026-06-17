@@ -66,6 +66,13 @@ export interface StateMapSummary {
   material_categories: string[];
 }
 
+/** One (year, status) bucket from /bills/timeline — count of EPR bills that last reached `status` in `year`. */
+export interface BillTimelinePoint {
+  year: number;
+  status: string;
+  count: number;
+}
+
 export interface DeadlineSummary {
   id: number;
   state: string;
@@ -230,6 +237,31 @@ export interface CompanyObligationDeadline {
   source_url: string | null;
 }
 
+export interface StakesPenalty {
+  amount_usd: number;
+  unit: string; // "day" | "violation"
+  raw: string;
+}
+
+export interface StakesFee {
+  annual_fee_low_usd: number;
+  annual_fee_high_usd: number;
+  annual_fee_grounded: boolean;
+  fee_basis: string;
+  eco_modulation_swing_usd: number | null;
+  eco_modulation_floor_usd: number | null;
+  eco_modulation_notes: string[];
+  citation: string | null;
+  confidence: number;
+}
+
+export interface FinancialStakes {
+  penalty: StakesPenalty | null;
+  fee: StakesFee | null;
+  pro_membership_usd: number | null;
+  has_any: boolean;
+}
+
 export interface CompanyObligation {
   bill_id: number;
   state: string;
@@ -242,6 +274,7 @@ export interface CompanyObligation {
   next_deadline: CompanyObligationDeadline | null;
   upcoming_deadline_count: number;
   total_deadline_count: number;
+  stakes: FinancialStakes | null;
 }
 
 export interface CompanyObligationsResponse {
@@ -252,6 +285,11 @@ export interface CompanyObligationsResponse {
   upcoming_deadline_count: number;
   next_deadline_date: string | null;
   obligations: CompanyObligation[];
+  max_penalty_per_day_usd: number | null;
+  portfolio_annual_fee_low_usd: number | null;
+  portfolio_annual_fee_high_usd: number | null;
+  portfolio_eco_modulation_swing_usd: number | null;
+  any_fee_grounded: boolean;
 }
 
 // Query param types

@@ -3,6 +3,7 @@ import type {
   BillDetail,
   BillParams,
   StateMapSummary,
+  BillTimelinePoint,
   DeadlineSummary,
   DeadlineParams,
   FederalActionSummary,
@@ -98,6 +99,15 @@ export async function fetchBill(id: number): Promise<BillDetail> {
 
 export async function fetchMapSummary(): Promise<StateMapSummary[]> {
   return apiFetch<StateMapSummary[]>(buildUrl('/bills/map-summary'));
+}
+
+export async function fetchBillTimeline(params?: {
+  instrument_type?: string;
+  material_category?: string;
+}): Promise<BillTimelinePoint[]> {
+  return apiFetch<BillTimelinePoint[]>(
+    buildUrl('/bills/timeline', params as Record<string, string | number | boolean | undefined>),
+  );
 }
 
 export async function fetchDeadlines(params?: DeadlineParams): Promise<DeadlineSummary[]> {

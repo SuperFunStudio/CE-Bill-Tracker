@@ -12,7 +12,7 @@ import { LockIcon, StarIcon } from '@/components/ui/icons';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { useAuth } from '@/components/auth/AuthContext';
 import { formatCost, fixEncoding, formatDate, daysUntil, STATE_NAMES } from '@/lib/utils';
-import type { CompanyObligation } from '@/lib/types';
+import type { CompanyObligation, CompanyObligationsResponse, FinancialStakes } from '@/lib/types';
 
 // ─── Obligations View ("Are you affected + here's your next deadline") ───────
 
@@ -96,11 +96,121 @@ function ObligationCard({ o }: { o: CompanyObligation }) {
       {dl?.description && !dl.who_affected && (
         <div className="mt-3 pt-3 border-t border-border-default text-xs text-text-secondary">{dl.description}</div>
       )}
+      {/* Financial stakes for this law */}
+      {o.stakes?.has_any && <ObligationStakes s={o.stakes} />}
+
       {(dl?.source_url || o.source_url) && (
         <div className="mt-2">
           <a href={dl?.source_url || o.source_url || '#'} target="_blank" rel="noopener noreferrer"
              className="text-green-accent text-xs hover:underline">View bill text →</a>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Compact USD: $50k, $1.2m, $480m. */
+function fmtUsd(n: number | null | undefined): string {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}m`;
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}k`;
+  return `$${Math.round(n).toLocaleString()}`;
+}
+
+/** Portfolio "what's at stake" hero. Leads with the statutory penalty (grounded), then
+ *  the annual program-fee range, then the eco-modulation design lever. */
+function StakesPanel({ ob }: { ob: CompanyObligationsResponse }) {
+  const penalty = ob.max_penalty_per_day_usd;
+  const feeLow = ob.portfolio_annual_fee_low_usd;
+  const feeHigh = ob.portfolio_annual_fee_high_usd;
+  const swing = ob.portfolio_eco_modulation_swing_usd;
+  if (penalty == null && feeLow == null) return null;
+
+  return (
+    <div className="bg-bg-secondary border border-border-default rounded-xl p-6 space-y-5">
+      <div>
+        <div className="text-text-muted text-xs uppercase tracking-wide mb-1">What&apos;s financially at stake</div>
+        <p className="text-text-secondary text-sm leading-relaxed max-w-3xl">
+          Three things drive the cost of these enacted laws: the <span className="text-text-primary font-medium">penalty</span> for
+          non-compliance, the recurring <span className="text-text-primary font-medium">program fees</span> you pay to a producer
+          responsibility organization (PRO) on the packaging you put into each state, and the{' '}
+          <span className="text-text-primary font-medium">eco-modulation</span> built into those fees — where recyclable,
+          mono-material designs are charged far less than hard-to-recycle ones.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Penalty — grounded in statute, leads */}
+        <div className="bg-bg-primary border border-urgency-high/30 rounded-lg p-4">
+          <div className="text-urgency-high text-[10px] uppercase tracking-wide font-semibold mb-1">Non-compliance penalty</div>
+          <div className="text-2xl font-bold text-text-primary">{penalty != null ? `${fmtUsd(penalty)}` : '—'}<span className="text-sm font-normal text-text-muted">{penalty != null ? ' / day' : ''}</span></div>
+          <div className="text-text-muted text-xs mt-1">Largest daily civil penalty across your affected laws — written into statute, per violation.</div>
+        </div>
+
+        {/* Annual program fee */}
+        <div className="bg-bg-primary border border-border-default rounded-lg p-4">
+          <div className="text-text-muted text-[10px] uppercase tracking-wide font-semibold mb-1">Est. annual program fees</div>
+          <div className="text-2xl font-bold text-green-light">
+            {feeLow != null ? `${fmtUsd(feeLow)}–${fmtUsd(feeHigh)}` : '—'}
+          </div>
+          <div className="text-text-muted text-xs mt-1">
+            {ob.any_fee_grounded
+              ? 'From published fee schedules (CA SB 54 2027, OR CAA), apportioned to your state footprint.'
+              : 'Benchmark estimate — no published schedule yet.'}
+          </div>
+        </div>
+
+        {/* Eco-modulation lever */}
+        <div className="bg-bg-primary border border-green-accent/30 rounded-lg p-4">
+          <div className="text-green-accent text-[10px] uppercase tracking-wide font-semibold mb-1">Design lever (eco-modulation)</div>
+          <div className="text-2xl font-bold text-green-accent">{swing != null ? `${fmtUsd(swing)}` : '—'}<span className="text-sm font-normal text-text-muted">{swing != null ? ' / yr' : ''}</span></div>
+          <div className="text-text-muted text-xs mt-1">Annual fee swing between best-case recyclable formats and worst-case hard-to-recycle ones, on your materials.</div>
+        </div>
+      </div>
+
+      <p className="text-text-muted text-[11px] leading-relaxed">
+        Fees scale with the volume you sell in each state; we apportion your reported volume by state population as a proxy.
+        Penalty figures are quoted verbatim from each statute. Fee ranges reflect each program&apos;s own published low–high scenario.
+      </p>
+    </div>
+  );
+}
+
+/** Per-obligation stakes line: penalty + fee range + PRO + the design-lever formats. */
+function ObligationStakes({ s }: { s: FinancialStakes }) {
+  return (
+    <div className="mt-3 pt-3 border-t border-border-default space-y-2">
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
+        {s.penalty && (
+          <span>
+            <span className="text-text-muted">Penalty: </span>
+            <span className="text-urgency-high font-semibold">{fmtUsd(s.penalty.amount_usd)}/{s.penalty.unit}</span>
+          </span>
+        )}
+        {s.fee && (
+          <span>
+            <span className="text-text-muted">Annual fee: </span>
+            <span className="text-green-light font-semibold">{fmtUsd(s.fee.annual_fee_low_usd)}–{fmtUsd(s.fee.annual_fee_high_usd)}</span>
+            <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full border ${s.fee.annual_fee_grounded ? 'border-green-accent/40 text-green-accent' : 'border-border-default text-text-muted'}`}>
+              {s.fee.annual_fee_grounded ? 'published rate' : 'estimate'}
+            </span>
+          </span>
+        )}
+        {s.pro_membership_usd != null && s.pro_membership_usd > 0 && (
+          <span>
+            <span className="text-text-muted">PRO registration: </span>
+            <span className="text-text-secondary font-medium">{fmtUsd(s.pro_membership_usd)}</span>
+          </span>
+        )}
+      </div>
+      {s.fee?.eco_modulation_notes && s.fee.eco_modulation_notes.length > 0 && (
+        <div className="text-[11px] text-text-muted">
+          <span className="text-green-accent">Design lever: </span>
+          {s.fee.eco_modulation_notes.join('  ·  ')}
+        </div>
+      )}
+      {s.fee?.fee_basis && (
+        <div className="text-[10px] text-text-muted italic">{s.fee.fee_basis}</div>
       )}
     </div>
   );
@@ -189,6 +299,9 @@ function ObligationsView() {
               </div>
             </div>
           )}
+
+          {/* What's financially at stake */}
+          {obligations.affected_bill_count > 0 && <StakesPanel ob={obligations} />}
 
           {/* Laws with upcoming deadlines */}
           {withDeadline.length > 0 && (

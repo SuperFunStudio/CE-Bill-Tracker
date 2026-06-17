@@ -30,6 +30,8 @@ app.add_middleware(
     allow_origins=[
         "https://ce-bill-tracker.web.app",
         "https://ce-bill-tracker.firebaseapp.com",
+        "https://battleofbills.com",
+        "https://www.battleofbills.com",
         "http://localhost:3000",
     ],
     allow_credentials=False,

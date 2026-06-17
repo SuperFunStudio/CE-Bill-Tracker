@@ -22,7 +22,10 @@ const OUT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public',
 const ENDPOINTS = [
   { name: 'bills', path: '/bills?epr_relevant=true&limit=5000' },
   { name: 'map-summary', path: '/bills/map-summary' },
-  { name: 'deadlines', path: '/bills/deadlines/upcoming' },
+  // days_ahead=1095 matches the 3-year window the Upcoming Deadlines page requests.
+  // The endpoint defaults to days_ahead=90, so baking with no params under-reports
+  // the fallback (7 vs 51) whenever the live API is unreachable.
+  { name: 'deadlines', path: '/bills/deadlines/upcoming?days_ahead=1095' },
   { name: 'federal-actions', path: '/federal-actions?limit=100' },
   { name: 'litigation-cases', path: '/litigation-cases' },
   { name: 'companies', path: '/companies?limit=200' },

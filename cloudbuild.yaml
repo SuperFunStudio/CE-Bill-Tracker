@@ -245,13 +245,14 @@ steps:
   # path short. NEXT_PUBLIC_API_BASE_URL is baked into the bundle at build time.
   # build-snapshot.mjs pre-renders the list endpoints to public/data/*.json so the
   # CDN serves a data baseline — first paint and bill search never hit the API or
-  # show "0 bills". It calls ${_API_URL}, which routes to the currently-serving
-  # (old, warm) revision while the new one rolls out — fine, since bill data lives
-  # in the DB, not the image. A snapshot failure must NOT fail the deploy (the
+  # show "0 bills". It MUST run after deploy-api so it fetches the NEW revision: the
+  # snapshot captures the API's response *shape*, not just its data, so a schema
+  # change (e.g. dropping a field) would otherwise leave the old shape baked into the
+  # CDN for a whole deploy cycle. A snapshot failure must NOT fail the deploy (the
   # frontend falls back to live + localStorage), so it is tolerated with `|| echo`.
   - name: node:20
     id: build-dashboard-next
-    waitFor: [push-api]
+    waitFor: [deploy-api]
     entrypoint: bash
     args:
       - -c

@@ -42,7 +42,7 @@ const ACTION_LABEL: Record<string, string> = {
 
 export function StateProfile({ abbr }: { abbr: string }) {
   const name = STATE_NAMES[abbr];
-  const { data: bills = [], isLoading } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [], isLoading } = useBills({ ce_relevant: true, limit: 5000 });
   const { data: deadlines = [] } = useDeadlines();
   const { data: pathways = [], isLoading: pathwaysLoading, isError: pathwaysError } = useCompliancePathways(abbr);
   const programs = programsForState(abbr);

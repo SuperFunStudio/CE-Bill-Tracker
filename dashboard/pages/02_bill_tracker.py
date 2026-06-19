@@ -86,7 +86,7 @@ with st.sidebar:
     sort_by = st.selectbox("Sort by", ["Last Action Date", "State", "Bill Number"])
 
 # —— Apply filters (EPR-only always on) ————————————————————
-filtered = [b for b in bills if b.get("epr_relevant")]
+filtered = [b for b in bills if b.get("ce_relevant")]
 
 if filter_state:
     filtered = [b for b in filtered if b.get("state") in filter_state]

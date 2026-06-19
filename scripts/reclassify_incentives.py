@@ -74,7 +74,7 @@ async def main() -> None:
     Session = async_sessionmaker(engine, expire_on_commit=False)
 
     sql = ("SELECT id, state, bill_number, title, description, instrument_type FROM bills "
-           "WHERE epr_relevant = true AND instrument_type IN ('other','budget') "
+           "WHERE ce_relevant = true AND instrument_type IN ('other','budget') "
            "ORDER BY instrument_type, state" + (" LIMIT :lim" if args.limit else ""))
     async with Session() as db:
         rows = list((await db.execute(text(sql), {"lim": args.limit} if args.limit else {})).all())

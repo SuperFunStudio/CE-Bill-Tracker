@@ -22,7 +22,7 @@ const OUT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public',
 const ENDPOINTS = [
   // The bills list no longer carries compliance_details (the paid extraction) — this is just the
   // public Bill Explorer metadata, safe to bake to the CDN.
-  { name: 'bills', path: '/bills?epr_relevant=true&limit=5000' },
+  { name: 'bills', path: '/bills?ce_relevant=true&limit=5000' },
   { name: 'map-summary', path: '/bills/map-summary' },
   // Only the ungated deadline COUNTS are baked. The deadline rows are Pro-gated server-side, so we
   // deliberately do NOT snapshot /bills/deadlines/upcoming (an unauthenticated build would only get

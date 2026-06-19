@@ -104,7 +104,7 @@ async def main() -> None:
         "AND confidence_score <> -1.0"
     )
     if not args.include_relevant:
-        where += " AND epr_relevant = false"
+        where += " AND ce_relevant = false"
 
     conn = await asyncpg.connect(dsn)
     try:
@@ -127,7 +127,7 @@ async def main() -> None:
             print("\n(dry run — no changes written)" if args.dry_run else "\n(nothing to reset)")
             return
 
-        set_clause = "confidence_score = NULL, epr_relevant = false, updated_at = now()"
+        set_clause = "confidence_score = NULL, ce_relevant = false, updated_at = now()"
         if args.suppress_alerts:
             set_clause += ", new_bill_alert_sent = true"
         result = await conn.execute(

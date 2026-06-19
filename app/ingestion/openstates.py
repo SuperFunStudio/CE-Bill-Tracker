@@ -155,11 +155,14 @@ class OpenStatesClient:
         # `sources` + `abstracts` are NOT returned by the search endpoint unless requested.
         # _upsert_openstates_bill reads sources[0].url for source_url and abstracts[0] for
         # description, so without these includes every ingested row gets a NULL source link.
+        # `actions` carries each action's normalized classification (executive-signature / became-law),
+        # which _infer_openstates_status uses to detect enactment reliably — the free-text
+        # latest_action_description misses signatures phrased differently per state (e.g. CO).
         params: dict = {
             "q": query,
             "page": page,
             "per_page": per_page,
-            "include": ["sources", "abstracts"],
+            "include": ["sources", "abstracts", "actions"],
         }
         if jurisdiction:
             params["jurisdiction"] = jurisdiction

@@ -5,7 +5,7 @@ same robust path the deadline backfill uses, which handles PDFs, CA's JS shell, 
 the cited extractor (app/synthesis/product_coverage.py), and writes a reviewable JSON artifact.
 With --persist it idempotently replaces that bill's rows in bill_product_coverage.
 
-In scope = epr_relevant AND tagged electronics/batteries AND instrument_type in
+In scope = ce_relevant AND tagged electronics/batteries AND instrument_type in
 (epr, right_to_repair, deposit_return) — the Phase 0 pre-filter that drops the other/budget/
 preemption mistags before spending extraction calls.
 
@@ -97,7 +97,7 @@ async def main() -> None:
             "SELECT id, state, bill_number, title, status, instrument_type, source_url, "
             "       openstates_id, material_categories, compliance_details "
             "FROM bills "
-            "WHERE epr_relevant = true "
+            "WHERE ce_relevant = true "
             "  AND material_categories ?| $1::text[] "
             "  AND instrument_type = ANY($2::text[]) "
         )

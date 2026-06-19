@@ -5,7 +5,11 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTimelineChart } from '@/components/insights/BillTimelineChart';
 import { StanceMomentumChart } from '@/components/insights/StanceMomentumChart';
 import { InstrumentMaterialMatrix } from '@/components/insights/InstrumentMaterialMatrix';
+import { StateGapTable } from '@/components/insights/StateGapTable';
+import { StateCyclesView } from '@/components/insights/StateCyclesView';
+import { ChampionRoster } from '@/components/insights/ChampionRoster';
 import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
+import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
 import { fetchBillTimeline } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
@@ -109,10 +113,11 @@ export default function InsightsPage() {
         }
       >
         <p className="text-text-secondary text-sm leading-relaxed">
-          The headline line is the running count of extended-producer-responsibility (EPR) and
-          circular-economy laws on the books. Toggle the upstream statuses to see the full pipeline —
-          how many bills get introduced, advance through committee, and pass a chamber for each one
-          that finally becomes law. Pick a policy instrument to slice the same total.
+          The headline line is the running count of circular-economy laws on the books — across every
+          instrument we track (EPR, deposit-return, right-to-repair, recycled-content, and more), not
+          EPR alone. Toggle the upstream statuses to see the full pipeline — how many bills get
+          introduced, advance through committee, and pass a chamber for each one that finally becomes
+          law. Pick a policy instrument to slice the same total.
         </p>
 
         {/* Instrument selector — another view on the same running total. */}
@@ -139,11 +144,20 @@ export default function InsightsPage() {
           })}
         </div>
 
+        <p className="text-text-muted text-xs">
+          <span className="font-semibold text-text-secondary">Other</span> — in-scope circular-economy
+          bills that don&apos;t map to one of the named instruments above (e.g. disposal/landfill
+          bans, product or packaging standards, reuse/refill mandates, and organics-diversion or
+          composting requirements).
+        </p>
+
+        <OutliersPlaylist />
+
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Stat
               value={stats.enacted.toLocaleString()}
-              label={instrument ? `${formatInstrumentType(instrument)} laws enacted to date` : 'EPR laws enacted to date'}
+              label={instrument ? `${formatInstrumentType(instrument)} laws enacted to date` : 'Circular-economy laws enacted to date'}
             />
             {stats.peak.year > 0 && (
               <Stat
@@ -160,7 +174,7 @@ export default function InsightsPage() {
         ) : !points ? (
           <div className="h-[360px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
         ) : (
-          <BillTimelineChart points={points} />
+          <BillTimelineChart points={points} instrument={instrument} />
         )}
       </Section>
 
@@ -187,6 +201,48 @@ export default function InsightsPage() {
           precedent but no EPR yet is often where the next wave of bills lands.
         </p>
         <InstrumentMaterialMatrix />
+      </Section>
+
+      <Section
+        kicker="Battle of the bills"
+        title="Does each state pass circular-economy bills above or below its own average?"
+      >
+        <p className="text-text-secondary text-sm leading-relaxed">
+          A state&apos;s circular-economy passage rate means little in isolation — Minnesota passes ~1% of{' '}
+          <em>everything</em>. So we compare each state&apos;s advancing-CE rate against its <em>all-bills</em>{' '}
+          baseline (computed from the full legislative record). The gap is the real signal: where CE bills
+          clear the bar more readily than the average bill, and where they hit contested-policy drag.
+        </p>
+        <StateGapTable />
+      </Section>
+
+      <Section
+        kicker="By legislative cycle"
+        title="Is a state's circular-economy gap widening or closing?"
+      >
+        <p className="text-text-secondary text-sm leading-relaxed">
+          The same gap, broken out by two-year legislative cycle, so you can see the trend — where
+          circular-economy bills are gaining ground session over session, and where momentum has stalled.
+          Pick a state to trace its cycles.
+        </p>
+        <StateCyclesView />
+      </Section>
+
+      <Section
+        kicker="Champions"
+        title="Who's carrying these bills"
+      >
+        <p className="text-text-secondary text-sm leading-relaxed">
+          The legislators currently in office moving circular-economy bills, ranked by how many they
+          lead-sponsor. Pick a state to see its delegation; expand anyone to see their bills and sources.
+        </p>
+        <div className="rounded-lg border border-border-default bg-bg-primary p-3 text-sm text-text-secondary">
+          <span className="font-semibold text-text-primary">One non-obvious pattern:</span> bipartisan bills
+          (a sponsor from each party) become law at roughly <span className="text-text-primary font-semibold">
+          twice the rate</span> of single-party bills (~17% vs ~9%) — the rare Republican co-sponsor is the
+          strongest signal a CE bill will pass.
+        </div>
+        <ChampionRoster />
       </Section>
 
       <Section

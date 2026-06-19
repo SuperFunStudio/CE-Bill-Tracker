@@ -192,7 +192,7 @@ async def _load_candidates(
         (
             await db.execute(
                 select(Bill)
-                .where(Bill.created_at >= since, Bill.epr_relevant.is_(True))
+                .where(Bill.created_at >= since, Bill.ce_relevant.is_(True))
                 .order_by(Bill.created_at.desc())
             )
         )
@@ -206,7 +206,7 @@ async def _load_candidates(
                 select(FederalAction)
                 .where(
                     FederalAction.published_date >= since.date(),
-                    FederalAction.epr_relevant.is_(True),
+                    FederalAction.ce_relevant.is_(True),
                 )
                 .order_by(FederalAction.published_date.desc())
             )

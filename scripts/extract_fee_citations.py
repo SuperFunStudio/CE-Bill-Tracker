@@ -98,7 +98,7 @@ async def main() -> None:
     try:
         q = (
             "SELECT id, state, bill_number, title, status, compliance_details "
-            "FROM bills WHERE epr_relevant = true AND compliance_details IS NOT NULL "
+            "FROM bills WHERE ce_relevant = true AND compliance_details IS NOT NULL "
             "ORDER BY (status = 'enacted') DESC, state, bill_number"
         )
         if args.limit:

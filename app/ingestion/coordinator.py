@@ -125,23 +125,36 @@ def _jurisdiction_to_state_code(jurisdiction: dict) -> str | None:
 
 
 def _infer_openstates_status(bill_data: dict) -> str:
-    classification = [c.lower() for c in bill_data.get("classification", [])]
+    # Enactment is detected from OpenStates' NORMALIZED action classifications, not the free-text
+    # latest_action_description: every state phrases a signing differently ("Governor signed" in CO,
+    # "Filed, Chapter ..." etc.), so text alone missed signatures and left signed bills stuck at an
+    # upstream status — the daily-incremental staleness we had to backfill. The search cycle now
+    # requests include=["actions"]; the dump-import path passes none and falls back to the text below.
+    # NB: bill_data["classification"] is the BILL TYPE (['bill']/['resolution']) — never an action
+    # signal — so we read each action's own `classification` list instead.
+    action_classes = {
+        c.lower()
+        for a in (bill_data.get("actions") or [])
+        for c in (a.get("classification") or [])
+    }
     action = (bill_data.get("latest_action_description") or "").lower()
 
-    if "signed" in classification or any(k in action for k in ("signed by governor", "chaptered")):
+    if {"executive-signature", "became-law"} & action_classes or any(
+        k in action for k in ("signed by governor", "chaptered", "became law")
+    ):
         return "enacted"
-    if "vetoed" in classification or "vetoed" in action:
+    if "executive-veto" in action_classes or "vetoed" in action:
         return "vetoed"
-    if "failed" in classification or any(k in action for k in ("failed", "died", "tabled")):
+    # Upstream stages keep the text heuristic (the bill-type classification checks here were always
+    # no-ops, so this preserves prior behavior for non-enacted/non-vetoed bills).
+    if any(k in action for k in ("failed", "died", "tabled")):
         return "failed"
-    if "passed" in classification or any(k in action for k in ("passed", "adopted")):
+    if any(k in action for k in ("passed", "adopted")):
         return "passed"
     if any(k in action for k in ("committee", "referred", "hearing")):
         return "in_committee"
     if any(k in action for k in ("concurred", "second reading", "third reading")):
         return "passed_chamber"
-    if "introduced" in classification or any(k in action for k in ("introduced", "filed")):
-        return "introduced"
     return "introduced"
 
 
@@ -626,7 +639,7 @@ class IngestionCoordinator:
         return {"new_federal_actions": new_count, "classified_federal_actions": classified}
 
     async def _classify_federal_actions(self, actions: list[FederalAction]) -> int:
-        """Populate epr_relevant / preemption_risk / friction_type / instrument_type /
+        """Populate ce_relevant / preemption_risk / friction_type / instrument_type /
         ai_summary / material_categories on newly-ingested federal actions. Returns the
         number classified."""
         from app.classification.federal_classifier import FederalClassifier
@@ -648,7 +661,7 @@ class IngestionCoordinator:
                 continue
             # in_scope applies the confidence floor (mirrors the state-bill relevance gate);
             # a low-confidence is_relevant guess no longer counts as relevant.
-            action.epr_relevant = fr.in_scope
+            action.ce_relevant = fr.in_scope
             action.preemption_risk = fr.preemption_risk
             action.friction_type = fr.friction_type
             action.instrument_type = fr.instrument_type

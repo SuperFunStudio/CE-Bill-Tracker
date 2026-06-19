@@ -10,7 +10,7 @@ What it does (idempotent):
   1. Pull docs from the Federal Register using the calibrated QUOTED term list
      (app/ingestion/federal_register.py), back to --since, and insert any not already stored.
   2. Re-classify every row missing instrument_type (i.e. not yet scored on the 3-axis schema),
-     writing epr_relevant (via the confidence floor), preemption_risk, friction_type,
+     writing ce_relevant (via the confidence floor), preemption_risk, friction_type,
      instrument_type, ai_summary, material_categories.
 
 Run against prod via the Cloud SQL Auth Proxy:
@@ -107,7 +107,7 @@ async def reclassify(db, limit_classify: int | None) -> dict:
     results = [r for r in await asyncio.gather(*[run(a) for a in targets]) if r]
     relevant = 0
     for action, fr in results:
-        action.epr_relevant = fr.in_scope
+        action.ce_relevant = fr.in_scope
         action.preemption_risk = fr.preemption_risk
         action.friction_type = fr.friction_type
         action.instrument_type = fr.instrument_type
@@ -131,9 +131,9 @@ async def main():
             await pull_and_upsert(db, since)
         stats = await reclassify(db, args.limit_classify)
         total = (await db.execute(select(FederalAction))).scalars().all()
-        relevant_total = sum(1 for a in total if a.epr_relevant)
+        relevant_total = sum(1 for a in total if a.ce_relevant)
     print(f"\nDone. classified={stats['classified']} newly-relevant={stats['relevant']}")
-    print(f"Table now: {len(total)} rows, {relevant_total} epr_relevant=True")
+    print(f"Table now: {len(total)} rows, {relevant_total} ce_relevant=True")
 
 
 if __name__ == "__main__":

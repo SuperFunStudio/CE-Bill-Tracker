@@ -19,7 +19,7 @@ async def list_federal_actions(
     instrument_type: str | None = None,
     material_category: str | None = None,
     friction_type: str | None = None,
-    epr_relevant: bool | None = Query(
+    ce_relevant: bool | None = Query(
         default=True,
         description="Filter by EPR relevance. Defaults to true so the page only shows "
         "classified-relevant actions; pass false to inspect the rejected/noise rows.",
@@ -40,8 +40,8 @@ async def list_federal_actions(
         .order_by(FederalAction.published_date.desc())
         .limit(limit)
     )
-    if epr_relevant is not None:
-        q = q.where(FederalAction.epr_relevant == epr_relevant)
+    if ce_relevant is not None:
+        q = q.where(FederalAction.ce_relevant == ce_relevant)
     if action_type:
         q = q.where(FederalAction.action_type == action_type)
     if preemption_risk:

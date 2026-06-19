@@ -20,7 +20,7 @@ def main():
     args = ap.parse_args()
     engine = create_engine(args.prod_dsn or settings.database_url)
 
-    where = "b.state=:st and b.epr_relevant and b.status='enacted'"
+    where = "b.state=:st and b.ce_relevant and b.status='enacted'"
     params = {"st": args.state.upper()}
     if args.material:
         where += " and b.material_categories ? :mat"

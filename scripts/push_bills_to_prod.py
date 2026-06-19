@@ -9,7 +9,7 @@ NOT the integer PK, so it:
   - does NOT overwrite prod's `compliance_details` (prod has Sonnet extractions we didn't
     re-run locally), and never touches LegiScan rows.
 
-After upserting, any prod bill that is NOT in our clean set is marked epr_relevant=false so
+After upserting, any prod bill that is NOT in our clean set is marked ce_relevant=false so
 the dashboard shows exactly our curated set (no stale, bad-URL rows leaking through).
 
 Usage (with the Cloud SQL Auth Proxy running on some local port):
@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 _COLS = [
     "openstates_id", "state", "bill_number", "title", "description", "status",
     "status_date", "last_action_date", "source_url", "change_hash", "last_fetched_at",
-    "epr_relevant", "confidence_score", "material_categories", "instrument_type",
+    "ce_relevant", "confidence_score", "material_categories", "instrument_type",
     "urgency", "ai_summary",
 ]
 _UPDATE_COLS = [c for c in _COLS if c != "openstates_id"]
@@ -60,15 +60,15 @@ async def main() -> None:
             f"SELECT {', '.join(_COLS)} FROM bills WHERE openstates_id IS NOT NULL"
         )
         local_os_ids = [r["openstates_id"] for r in rows]
-        local_relevant = sum(1 for r in rows if r["epr_relevant"])
-        print(f"local: {len(rows)} bills with openstates_id ({local_relevant} epr_relevant)")
+        local_relevant = sum(1 for r in rows if r["ce_relevant"])
+        print(f"local: {len(rows)} bills with openstates_id ({local_relevant} ce_relevant)")
 
         prod_before = await prod.fetchrow(
-            "SELECT count(*) total, count(*) FILTER (WHERE epr_relevant) rel, "
+            "SELECT count(*) total, count(*) FILTER (WHERE ce_relevant) rel, "
             "count(*) FILTER (WHERE legiscan_bill_id IS NULL AND openstates_id IS NULL) seed "
             "FROM bills"
         )
-        print(f"prod before: total={prod_before['total']} epr_relevant={prod_before['rel']} "
+        print(f"prod before: total={prod_before['total']} ce_relevant={prod_before['rel']} "
               f"seed={prod_before['seed']}")
 
         if args.dry_run:
@@ -78,10 +78,10 @@ async def main() -> None:
             print(f"DRY RUN: would upsert {len(rows)} bills "
                   f"({overlap} already exist on prod -> update, {len(rows) - overlap} -> insert)")
             stale = await prod.fetchval(
-                "SELECT count(*) FROM bills WHERE epr_relevant AND legiscan_bill_id IS NULL "
+                "SELECT count(*) FROM bills WHERE ce_relevant AND legiscan_bill_id IS NULL "
                 "AND NOT (openstates_id = ANY($1::text[]))", local_os_ids
             )
-            print(f"DRY RUN: would hide {stale} stale epr_relevant prod rows not in our set")
+            print(f"DRY RUN: would hide {stale} stale ce_relevant prod rows not in our set")
             return
 
         # Upsert by openstates_id.
@@ -101,20 +101,20 @@ async def main() -> None:
         # Hide any stale prod EPR rows that aren't in our clean set (keep LegiScan untouched —
         # there are none on prod anyway).
         hidden = await prod.execute(
-            "UPDATE bills SET epr_relevant = false "
-            "WHERE epr_relevant AND legiscan_bill_id IS NULL "
+            "UPDATE bills SET ce_relevant = false "
+            "WHERE ce_relevant AND legiscan_bill_id IS NULL "
             "AND NOT (openstates_id = ANY($1::text[]))",
             local_os_ids,
         )
         print(f"hid stale prod rows: {hidden}")
 
         prod_after = await prod.fetchrow(
-            "SELECT count(*) total, count(*) FILTER (WHERE epr_relevant) rel, "
-            "count(*) FILTER (WHERE epr_relevant AND (source_url IS NULL OR source_url='' "
+            "SELECT count(*) total, count(*) FILTER (WHERE ce_relevant) rel, "
+            "count(*) FILTER (WHERE ce_relevant AND (source_url IS NULL OR source_url='' "
             "OR source_url LIKE 'ftp://%' OR source_url LIKE '%.xml')) bad_url FROM bills"
         )
-        print(f"prod after: total={prod_after['total']} epr_relevant={prod_after['rel']} "
-              f"epr_relevant_with_bad_url={prod_after['bad_url']}")
+        print(f"prod after: total={prod_after['total']} ce_relevant={prod_after['rel']} "
+              f"ce_relevant_with_bad_url={prod_after['bad_url']}")
     finally:
         await local.close()
         await prod.close()

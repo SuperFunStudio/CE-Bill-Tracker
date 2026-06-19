@@ -82,7 +82,7 @@ async def main():
     ap.add_argument("--prod-dsn", default=None)
     args = ap.parse_args()
     engine = create_engine(args.prod_dsn or settings.database_url)
-    base = "epr_relevant and state!='US' and status='enacted'"
+    base = "ce_relevant and state!='US' and status='enacted'"
     mm = "compliance_details->'management'->>'management_model'"
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key,
                                       timeout=90.0, max_retries=1)

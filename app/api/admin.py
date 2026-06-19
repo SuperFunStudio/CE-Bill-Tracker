@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import stripe
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,7 +91,7 @@ async def admin_stats(
     bills_total = (await db.execute(select(func.count()).select_from(Bill))).scalar() or 0
     bills_relevant = (
         await db.execute(
-            select(func.count()).select_from(Bill).where(Bill.epr_relevant.is_(True))
+            select(func.count()).select_from(Bill).where(Bill.ce_relevant.is_(True))
         )
     ).scalar() or 0
 
@@ -105,7 +105,7 @@ async def admin_stats(
     last_action = (
         await db.execute(
             select(func.max(Bill.last_action_date)).where(
-                Bill.epr_relevant.is_(True),
+                Bill.ce_relevant.is_(True),
                 Bill.last_action_date <= now.date(),
             )
         )
@@ -284,11 +284,14 @@ class GrantPro(BaseModel):
     days: int | None = None
     # Why it was granted (e.g. "early partner", "design jam attendee") — audit trail.
     note: str | None = None
+    # Optional recipient name, used only to personalise the "Dear …" line of the grant email.
+    name: str | None = None
 
 
 @router.post("/grant-pro")
 async def grant_pro(
     payload: GrantPro,
+    background_tasks: BackgroundTasks,
     admin: AuthedUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -325,6 +328,13 @@ async def grant_pro(
     await db.refresh(ent)
     log.info(
         "admin_grant_pro", target=email, by=admin.email, days=payload.days, indefinite=not payload.days
+    )
+    # Let the recipient know they've been granted complimentary access (best-effort, after the
+    # response is sent). Note: re-granting to refresh an expiry will re-send this notice.
+    from app.alerts.welcome_email import send_comp_grant_welcome
+
+    background_tasks.add_task(
+        send_comp_grant_welcome, email, days=payload.days, name=(payload.name or None)
     )
     return _entitlement_payload(ent)
 

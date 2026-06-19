@@ -75,7 +75,13 @@ class SonnetResult:
 
 class SonnetExtractor:
     def __init__(self, client: anthropic.AsyncAnthropic | None = None):
-        self._client = client or anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        # 120s timeout (extraction is heavier than Haiku classification, so longer than its 60s) so a
+        # hung call fails fast instead of pinning the caller — critically, the classification cycle
+        # holds a DB transaction across this call, and an unbounded hang there strands a connection
+        # idle-in-transaction holding bills locks (see ClassificationPipeline.run Stage 3).
+        self._client = client or anthropic.AsyncAnthropic(
+            api_key=settings.anthropic_api_key, timeout=120.0, max_retries=1
+        )
 
     async def extract(
         self,

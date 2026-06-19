@@ -68,7 +68,7 @@ const TIERS: Tier[] = [
     eyebrow: 'Kenny Arnold Design',
     name: 'Bespoke',
     price: 'By inquiry',
-    cadence: 'a scoped engagement, not a subscription',
+    cadence: 'a scoped engagement, mapped to your needs + complimentary subscription',
     who: 'For producers who need to know their own exposure, and what to redesign to reduce it.',
     features: [
       'A custom exposure map for your portfolio',
@@ -181,11 +181,11 @@ export default function PricingPage() {
               )}
             </div>
             {tier.id === 'pro' && (
-              <p className="mb-3 rounded-lg border border-green-accent/40 bg-green-dark/30 px-3 py-2 text-[11px] leading-relaxed text-green-accent">
+              <p className="mb-3 rounded-lg border border-green-accent/40 bg-green-dark/30 px-3 py-2 text-meta leading-relaxed text-green-accent">
                 {PRO.foundingNote}
               </p>
             )}
-            <p className="text-text-muted text-xs mb-4">{tier.who}</p>
+            <p className="text-text-muted text-meta mb-4">{tier.who}</p>
             <ul className="space-y-2 mb-5 flex-1">
               {tier.features.map(f => (
                 <li key={f} className="flex items-start gap-2 text-sm text-text-secondary">
@@ -214,7 +214,7 @@ export default function PricingPage() {
                 </Link>
               ) : (
                 <div className="space-y-2">
-                  {/* Self-serve: 90-day trial checkout, cancel anytime. */}
+                  {/* Self-serve: 90-day trial checkout, cancel anytime. The single primary action. */}
                   <button
                     onClick={startPro}
                     disabled={checkoutBusy}
@@ -222,14 +222,17 @@ export default function PricingPage() {
                   >
                     {checkoutBusy ? 'Starting…' : `${tier.cta} →`}
                   </button>
-                  <p className="text-[11px] text-text-muted text-center">90-day free trial · cancel anytime</p>
-                  {/* Assisted: book a short walkthrough (onboarding + invoicing) instead of self-serve card. */}
-                  <button
-                    onClick={() => openPlan('pro', 'Pro — walkthrough')}
-                    className="w-full rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-medium text-sm text-green-accent transition-opacity hover:opacity-90"
-                  >
-                    Set up a walkthrough →
-                  </button>
+                  <p className="text-meta text-text-muted text-center">90-day free trial · cancel anytime</p>
+                  {/* Assisted path demoted to a text link so the self-serve CTA clearly wins. */}
+                  <p className="text-meta text-text-muted text-center">
+                    Prefer a guided setup?{' '}
+                    <button
+                      onClick={() => openPlan('pro', 'Pro — walkthrough')}
+                      className="text-green-accent hover:underline"
+                    >
+                      Book a walkthrough →
+                    </button>
+                  </p>
                 </div>
               )
             ) : (

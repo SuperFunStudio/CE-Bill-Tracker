@@ -1,4 +1,4 @@
-"""Backfill Bill.policy_stance for already-classified (epr_relevant) bills.
+"""Backfill Bill.policy_stance for already-classified (ce_relevant) bills.
 
 A bill's instrument_type says *which* policy it touches; policy_stance says which
 *direction* it pushes that policy: "advances" (establish/strengthen/expand, or repeal a
@@ -16,7 +16,7 @@ Two modes:
 
 Examples:
     python scripts/classify_stance.py --mode heuristic
-    python scripts/classify_stance.py --mode ai                 # all epr_relevant bills
+    python scripts/classify_stance.py --mode ai                 # all ce_relevant bills
     python scripts/classify_stance.py --mode ai --only-missing  # skip bills already stance_source="ai"
     python scripts/classify_stance.py --mode ai --limit 50 --dry-run
 """
@@ -49,7 +49,7 @@ async def run_heuristic(dry_run: bool) -> None:
 
     async with AsyncSessionLocal() as db:
         bills = (await db.execute(
-            select(Bill).where(Bill.epr_relevant == True)  # noqa: E712
+            select(Bill).where(Bill.ce_relevant == True)  # noqa: E712
         )).scalars().all()
 
         hits = 0
@@ -60,7 +60,7 @@ async def run_heuristic(dry_run: bool) -> None:
                 if not dry_run:
                     b.policy_stance = "weakens"
                     b.stance_source = "heuristic"
-        print(f"heuristic: {hits} of {len(bills)} epr_relevant bills tagged 'weakens'"
+        print(f"heuristic: {hits} of {len(bills)} ce_relevant bills tagged 'weakens'"
               + (" (dry run, not written)" if dry_run else ""))
         if not dry_run:
             await db.commit()
@@ -79,7 +79,7 @@ async def run_ai(limit: int | None, only_missing: bool, dry_run: bool, concurren
     failures = 0
 
     async with AsyncSessionLocal() as db:
-        q = select(Bill).where(Bill.epr_relevant == True)  # noqa: E712
+        q = select(Bill).where(Bill.ce_relevant == True)  # noqa: E712
         if only_missing:
             q = q.where(or_(Bill.stance_source.is_(None), Bill.stance_source != "ai"))
         q = q.order_by(Bill.id)

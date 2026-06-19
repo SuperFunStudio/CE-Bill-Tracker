@@ -20,6 +20,9 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [shared, setShared] = useState(false);
+  const [trialBusy, setTrialBusy] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState(false);
 
   useEffect(() => {
     setMounted(true); // triggers the fade-in transition
@@ -55,21 +58,34 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
     return () => clearInterval(id);
   }, [user, shared, isPro, refreshEntitlement]);
 
-  const startTrial = useCallback(() => {
+  const startTrial = useCallback(async () => {
     track('deadlines_lock_cta', { action: 'trial' });
-    if (user) startProCheckout(getToken);
-    else openAuth();
+    if (!user) {
+      openAuth();
+      return;
+    }
+    setTrialError(null);
+    setTrialBusy(true);
+    try {
+      await startProCheckout(getToken);
+      // On success the browser redirects to Stripe; leave the button in its busy state.
+    } catch (e) {
+      setTrialError(e instanceof Error ? e.message : 'Could not start checkout. Please try again.');
+      setTrialBusy(false);
+    }
   }, [user, getToken, openAuth]);
 
   const copy = useCallback(async () => {
     if (!link) return;
+    setCopyError(false);
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
       setShared(true);
       track('referral_share', { method: 'copy' });
     } catch {
-      /* clipboard blocked */
+      // Clipboard blocked (insecure context / permissions) — tell the user to copy manually.
+      setCopyError(true);
     }
   }, [link]);
 
@@ -116,11 +132,13 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
         <div className="space-y-1.5">
           <button
             onClick={startTrial}
-            className="w-full rounded-lg bg-green-accent text-bg-primary px-4 py-2.5 font-medium text-sm hover:opacity-90 transition-opacity"
+            disabled={trialBusy}
+            className="w-full rounded-lg bg-green-accent text-bg-primary px-4 py-2.5 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            {user ? upgradeLabel() : 'Sign in to continue'}
+            {trialBusy ? 'Starting…' : user ? upgradeLabel() : 'Sign in to continue'}
           </button>
-          <p className="text-[11px] text-green-accent leading-relaxed">{PRO.foundingNote}</p>
+          {trialError && <p className="text-meta text-red-500 dark:text-red-400">{trialError}</p>}
+          <p className="text-meta text-green-accent leading-relaxed">{PRO.foundingNote}</p>
         </div>
 
         <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-text-muted">
@@ -173,6 +191,11 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
               >
                 Share to a colleague →
               </button>
+              {copyError && (
+                <p className="text-meta text-text-muted">
+                  Couldn&rsquo;t copy automatically — tap the link above to select it, then copy.
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-xs text-text-muted">Loading your link…</p>

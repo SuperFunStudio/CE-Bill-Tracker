@@ -47,10 +47,20 @@ async def list_bills(
     state: str | None = None,
     status: str | None = None,
     material_category: str | None = None,
-    epr_relevant: bool | None = None,
+    ce_relevant: bool | None = None,
     min_confidence: float = 0.0,
     urgency: str | None = None,
     instrument_type: str | None = None,
+    # policy_stance + year power the Insights chart drill-down: a (year, status) timeline point or a
+    # (year, stance) momentum bar maps to exactly these filters, so clicking it lists the bills behind
+    # it (each with its source_url). `year` filters on the year of status_date — the same bucketing the
+    # timeline/momentum endpoints use — so the drill-down list matches the bar's count.
+    policy_stance: str | None = None,
+    year: int | None = None,
+    # year_from/year_to bound status_date year — the per-cycle (biennium) drill-down passes the two
+    # years of a biennium so a cycle bar lists exactly its bills.
+    year_from: int | None = None,
+    year_to: int | None = None,
     limit: int = Query(default=100, le=5000),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
@@ -64,8 +74,8 @@ async def list_bills(
         q = q.where(Bill.state == state.upper())
     if status:
         q = q.where(Bill.status == status)
-    if epr_relevant is not None:
-        q = q.where(Bill.epr_relevant == epr_relevant)
+    if ce_relevant is not None:
+        q = q.where(Bill.ce_relevant == ce_relevant)
     if min_confidence > 0:
         q = q.where(Bill.confidence_score >= min_confidence)
     if material_category:
@@ -74,6 +84,14 @@ async def list_bills(
         q = q.where(Bill.urgency == urgency)
     if instrument_type:
         q = q.where(Bill.instrument_type == instrument_type)
+    if policy_stance:
+        q = q.where(Bill.policy_stance == policy_stance)
+    if year is not None:
+        q = q.where(func.extract("year", Bill.status_date) == year)
+    if year_from is not None:
+        q = q.where(func.extract("year", Bill.status_date) >= year_from)
+    if year_to is not None:
+        q = q.where(func.extract("year", Bill.status_date) <= year_to)
     q = q.order_by(Bill.last_action_date.desc().nullslast()).limit(limit).offset(offset)
     rows = (await db.execute(q)).all()
     results = []
@@ -94,9 +112,9 @@ async def get_map_summary(db: AsyncSession = Depends(get_db)):
             func.count()
             .filter(Bill.status.in_(["introduced", "in_committee", "passed_chamber"]))
             .label("pending_count"),
-            func.count().filter(Bill.epr_relevant).label("total_relevant"),
+            func.count().filter(Bill.ce_relevant).label("total_relevant"),
         )
-        .where(Bill.epr_relevant == True)
+        .where(Bill.ce_relevant == True)
         .group_by(Bill.state)
     )
     rows = (await db.execute(q)).all()
@@ -126,7 +144,7 @@ async def get_bill_timeline(
     year = func.extract("year", Bill.status_date)
     q = (
         select(year.cast(Integer).label("year"), Bill.status, func.count().label("count"))
-        .where(Bill.epr_relevant == True)
+        .where(Bill.ce_relevant == True)
         .where(Bill.status_date.isnot(None))
         .where(Bill.status.isnot(None))
         .group_by("year", Bill.status)
@@ -157,7 +175,7 @@ async def get_stance_momentum(
     year = func.extract("year", Bill.status_date)
     q = (
         select(year.cast(Integer).label("year"), Bill.policy_stance, func.count().label("count"))
-        .where(Bill.epr_relevant == True)
+        .where(Bill.ce_relevant == True)
         .where(Bill.status_date.isnot(None))
         .where(Bill.policy_stance.isnot(None))
         .where(Bill.confidence_score >= min_confidence)
@@ -191,7 +209,7 @@ async def get_instrument_material_matrix(
         )
         .select_from(Bill)
         .join(material, true())
-        .where(Bill.epr_relevant == True)
+        .where(Bill.ce_relevant == True)
         .where(Bill.instrument_type.isnot(None))
         .where(Bill.material_categories.isnot(None))
         .where(Bill.confidence_score >= min_confidence)
@@ -325,7 +343,7 @@ async def _merge_deadlines(
         )
 
     # 2. Dates embedded in each EPR bill's compliance_details.
-    bq = select(Bill).where(Bill.epr_relevant == True).where(Bill.compliance_details.isnot(None))  # noqa: E712
+    bq = select(Bill).where(Bill.ce_relevant == True).where(Bill.compliance_details.isnot(None))  # noqa: E712
     for bill in (await db.execute(bq)).scalars().all():
         details = bill.compliance_details or {}
         for cd in details.get("deadlines") or []:

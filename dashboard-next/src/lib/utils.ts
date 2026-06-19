@@ -39,17 +39,41 @@ export function formatDate(dateStr: string | null | undefined): string {
 const STATUS_GREEN = 'bg-green-100 dark:bg-green-900/40 border-green-400 dark:border-green-700/50 text-green-700 dark:text-green-300';
 const STATUS_GRAY = 'bg-gray-100 dark:bg-gray-800 border-border-default text-text-muted';
 const STATUS_DEFAULT = 'bg-bg-primary border-border-default text-text-secondary';
+const STATUS_RED = 'bg-red-100 dark:bg-red-900/40 border-red-400 dark:border-red-700/50 text-red-700 dark:text-red-300';
 
 /**
- * Visual treatment for a bill's status badge — colored by progression only (enacted=green,
- * failed/tabled=gray, else default). Policy-stance tinting (advances/weakens markers) was moved
- * off the live site to the internal /beta review tool: a mislabeled "weakens" exemption is more
- * harmful than no marker, so stance is no longer surfaced here. Returns an empty marker/label so
- * existing callers keep working unchanged.
+ * A bill "weakens" the circular economy when it exempts/narrows/repeals/preempts a policy rather
+ * than establishing one (e.g. OR HB-4030 exempting berry/seafood packaging from EPR). Surfacing
+ * that publicly is gated on HUMAN REVIEW, not the AI call alone.
+ *
+ * We measured the AI's precision on this exact label (scripts/measure_stance_precision.py):
+ * ~75% — roughly 1 in 4 auto-"weakens" calls is wrong, and the errors cluster in the worst
+ * category, branding EPR-*establishing* bills (RI HB-7023, NY bottle-bill modernizations) as
+ * harmful. A confidence_score floor doesn't help: that score is relevance confidence, not stance
+ * confidence, and every auto-"weakens" bill already clears 0.7. So a public red "weakens" flag
+ * requires a human spot-check (bills.reviewed). Unreviewed AI-"weakens" stays on /beta as the
+ * review queue; promoting one to reviewed is what earns it the public flag.
+ */
+export function isWeakening(bill: {
+  policy_stance?: string | null;
+  reviewed?: boolean;
+}): boolean {
+  return bill.policy_stance === 'weakens' && bill.reviewed === true;
+}
+
+/**
+ * Visual treatment for a bill's status badge. Normally colored by progression only (enacted=green,
+ * failed/tabled=gray, else default). When `weakening` is set (see isWeakening — AI-classified at the
+ * confidence floor), the badge flips to red and carries a "weakens circular economy" label so a
+ * harmful enacted law reads as harmful rather than as a neutral-green achievement.
  */
 export function statusBadge(
   status: string | null | undefined,
+  weakening = false,
 ): { cls: string; marker: string; markerCls: string; label: string } {
+  if (weakening) {
+    return { cls: STATUS_RED, marker: '', markerCls: '', label: 'weakens circular economy' };
+  }
   const s = (status ?? '').toLowerCase();
   const statusCls = s === 'enacted'
     ? STATUS_GREEN
@@ -57,6 +81,59 @@ export function statusBadge(
       ? STATUS_GRAY
       : STATUS_DEFAULT;
   return { cls: statusCls, marker: '', markerCls: '', label: '' };
+}
+
+/**
+ * Human-readable label for a raw status token. Replaces `_`/`-` separators with
+ * spaces and Title-cases — so `passed_chamber` renders "Passed Chamber" rather
+ * than the underscore-preserving "Passed_chamber" the badges used to show.
+ */
+export function formatStatusLabel(status: string | null | undefined): string {
+  if (!status) return '—';
+  return status
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Canonical color for a legislative stage, keyed off the status palette in
+ * theme.css (--status-*). One source of truth so the timeline dots, momentum
+ * chart, and any future status-colored surface stay in sync. Returns a CSS
+ * `var()` string usable both in className-free `style` props and in recharts.
+ */
+export const STATUS_COLORS = {
+  introduced: 'var(--status-introduced)',
+  committee:  'var(--status-committee)',
+  advancing:  'var(--status-advancing)',
+  enacted:    'var(--status-enacted)',
+  weakens:    'var(--status-weakens)',
+  dormant:    'var(--status-dormant)',
+} as const;
+
+export type StatusKey = keyof typeof STATUS_COLORS;
+
+export function statusColor(key: string | null | undefined): string {
+  const k = (key ?? '').toLowerCase();
+  if (k in STATUS_COLORS) return STATUS_COLORS[k as StatusKey];
+  if (k === 'failed' || k === 'tabled') return STATUS_COLORS.dormant;
+  if (k === 'passed_chamber' || k === 'passed') return STATUS_COLORS.advancing;
+  if (k === 'in_committee') return STATUS_COLORS.committee;
+  return STATUS_COLORS.dormant;
+}
+
+/**
+ * Maps a 0–100 risk/preemption score to a level with a TEXT label, so severity
+ * is never conveyed by color alone (WCAG 1.4.1). Thresholds mirror scoreColor().
+ */
+export function riskLevel(score: number | null | undefined): {
+  label: 'High' | 'Medium' | 'Low' | 'N/A';
+  textClass: string;
+} {
+  if (score == null || Number.isNaN(score)) return { label: 'N/A', textClass: 'text-text-muted' };
+  if (score >= 70) return { label: 'High', textClass: 'text-risk-high' };
+  if (score >= 40) return { label: 'Medium', textClass: 'text-risk-medium' };
+  return { label: 'Low', textClass: 'text-risk-low' };
 }
 
 /** Tailwind class for urgency level */

@@ -331,7 +331,7 @@ function ObligationsView() {
 // ─── Bill View ──────────────────────────────────────────────────────────────
 
 function BillView() {
-  const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [] } = useBills({ ce_relevant: true, limit: 5000 });
   const [selectedBillId, setSelectedBillId] = useState<number | undefined>(undefined);
   const { data: ranking = [], isLoading } = useExposureRanking(selectedBillId, 50);
 
@@ -523,7 +523,7 @@ function CompanyView() {
 
   const { data: companies = [], isLoading: companiesLoading } = useCompanies(search || undefined);
   const { data: company } = useCompany(selectedId);
-  const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [] } = useBills({ ce_relevant: true, limit: 5000 });
 
   return (
     <div className="space-y-6">

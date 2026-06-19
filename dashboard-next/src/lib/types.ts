@@ -34,7 +34,7 @@ export interface BillSummary {
   title: string | null;
   status: string | null;
   last_action_date: string | null;
-  epr_relevant: boolean;
+  ce_relevant: boolean;
   confidence_score: number | null;
   material_categories: string[] | null;
   instrument_type: string | null;
@@ -86,6 +86,58 @@ export interface InstrumentMaterialCell {
   instrument_type: string;
   material_category: string;
   count: number;
+}
+
+/** One state's CE-vs-baseline passage gap from /insights/state-gap. */
+export interface StateGapRow {
+  state: string;
+  ce_rate: number;
+  ce_enacted: number;
+  ce_total: number;
+  baseline_rate: number | null;
+  gap: number | null;
+}
+
+/** One legislative biennium for a state from /insights/state-cycles — the gap as a trend over cycles. */
+export interface StateCycleRow {
+  biennium: string;
+  start_year: number;
+  ce_total: number;
+  ce_enacted: number;
+  ce_rate: number | null;
+  baseline_introduced: number;
+  baseline_enacted: number;
+  baseline_rate: number | null;
+  gap: number | null;
+  in_flight: boolean;
+}
+
+/** One bill a champion sponsored (from /insights/champions/{id}/bills) — carries its source. */
+export interface ChampionBill {
+  bill_id: number | null;
+  state: string | null;
+  bill_number: string | null;
+  instrument: string | null;
+  enacted: boolean;
+  source_url: string | null;
+}
+
+/** A CE champion (legislator) from /insights/champions. */
+export interface ChampionSummary {
+  person_id: string | null;
+  name: string | null;
+  party: string | null;
+  chamber: string | null;
+  district: string | null;
+  active: boolean;
+  states: string[];
+  primary_sponsorships: number;
+  cosponsorships: number;
+  total_ce_bills: number;
+  enacted_count: number;
+  success_rate: number | null;
+  instruments: string[];
+  materials: string[];
 }
 
 export interface DeadlineSummary {
@@ -176,7 +228,7 @@ export interface FederalActionSummary {
   instrument_type: string | null;
   material_categories: string[] | null;
   ai_summary: string | null;
-  epr_relevant: boolean;
+  ce_relevant: boolean;
 }
 
 export interface LitigationEventSummary {
@@ -351,9 +403,19 @@ export interface BillParams {
   offset?: number;
   state?: string;
   status?: string;
-  epr_relevant?: boolean;
+  ce_relevant?: boolean;
   urgency?: string;
   material_category?: string;
+  instrument_type?: string;
+  /** "advances" | "weakens" | "neutral" — drill-down from the momentum chart. */
+  policy_stance?: string;
+  /** Year of status_date — drill-down from a timeline/momentum bucket. */
+  year?: number;
+  /** Inclusive status_date year range — per-cycle (biennium) drill-down. */
+  year_from?: number;
+  year_to?: number;
+  /** Confidence floor (momentum drill-down passes 0.7 to match the chart). */
+  min_confidence?: number;
   search?: string;
 }
 
@@ -374,5 +436,5 @@ export interface FederalActionParams {
   instrument_type?: string;
   material_category?: string;
   friction_type?: string;
-  epr_relevant?: boolean;
+  ce_relevant?: boolean;
 }

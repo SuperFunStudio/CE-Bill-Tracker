@@ -83,7 +83,7 @@ def fetch_all_bills():
     try:
         resp = httpx.get(
             f"{API_BASE}/bills",
-            params={"epr_relevant": True, "limit": 500},
+            params={"ce_relevant": True, "limit": 500},
             timeout=10,
         )
         resp.raise_for_status()

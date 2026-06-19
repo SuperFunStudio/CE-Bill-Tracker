@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { BillSummary } from '@/lib/types';
-import { fixEncoding, formatDate, formatInstrumentType, statusBadge } from '@/lib/utils';
+import { fixEncoding, formatDate, formatInstrumentType, isWeakening } from '@/lib/utils';
 import { BillModal } from '@/components/ui/BillModal';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { WatchStar } from '@/components/watchlist/WatchStar';
 import { track } from '@/lib/analytics';
 
@@ -11,16 +12,6 @@ interface BillTableProps {
   maxRows?: number;
   /** When set, show this many rows per page with manual Prev/Next paging. */
   autoPageSize?: number;
-}
-
-function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return <span className="text-text-muted text-xs">—</span>;
-  const { cls } = statusBadge(status);
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
-      {status.replace(/\b\w/g, c => c.toUpperCase())}
-    </span>
-  );
 }
 
 export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
@@ -92,6 +83,15 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
               <tr
                 key={bill.id}
                 onClick={() => openBill(bill)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openBill(bill);
+                  }
+                }}
+                tabIndex={0}
+                role="button"
+                aria-label={`Open ${bill.state} ${bill.bill_number ?? 'bill'} details`}
                 className="border-b border-border-default cursor-pointer transition-colors hover:bg-bg-secondary"
               >
                 <td className="px-3 py-2">
@@ -119,7 +119,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
                   {formatInstrumentType(bill.instrument_type)}
                 </td>
                 <td className="px-3 py-2">
-                  <StatusBadge status={bill.status} />
+                  <StatusBadge status={bill.status} weakening={isWeakening(bill)} />
                 </td>
                 <td className="px-3 py-2 text-text-muted text-xs">
                   {formatDate(bill.last_action_date)}
@@ -148,6 +148,15 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
           <div
             key={bill.id}
             onClick={() => openBill(bill)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openBill(bill);
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-label={`Open ${bill.state} ${bill.bill_number ?? 'bill'} details`}
             className="rounded-lg border border-border-default bg-bg-secondary cursor-pointer transition-colors p-3 space-y-1.5 active:bg-green-dark/20"
           >
             {/* Row 1: state / bill# / litigation */}
@@ -174,7 +183,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
             )}
             {/* Row 4: status + last action + expand indicator */}
             <div className="flex items-center justify-between text-xs">
-              <StatusBadge status={bill.status} />
+              <StatusBadge status={bill.status} weakening={isWeakening(bill)} />
               <div className="flex items-center gap-3 text-text-muted">
                 <span>{formatDate(bill.last_action_date)}</span>
                 <span>›</span>

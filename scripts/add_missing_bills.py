@@ -57,7 +57,7 @@ async def _evaluate(ls: LegiScanClient, sem: asyncio.Semaphore, haiku: HaikuClas
             hr = await haiku.classify(state=cand["state"], bill_number=_normalize_bill_number(cand["bill_number"] or ""),
                                       title=out["title"], description=out["desc"], text_excerpt=text)
             out["hr"] = hr
-            relevant = hr.confidence >= 0.4 and (hr.is_epr_relevant or hr.instrument_type in TRACKED_INSTRUMENTS)
+            relevant = hr.confidence >= 0.4 and (hr.is_ce_relevant or hr.instrument_type in TRACKED_INSTRUMENTS)
             out["insert"] = relevant
             out["reason"] = (f"{hr.instrument_type} conf={hr.confidence}" if relevant
                              else f"not-relevant ({hr.instrument_type} conf={hr.confidence})")
@@ -136,7 +136,7 @@ async def main() -> None:
             values = dict(
                 legiscan_bill_id=bid, state=c["state"], bill_number=norm, title=v["title"], description=v["desc"],
                 status=v["status"], status_date=v["last_action"], last_action_date=v["last_action"],
-                source_url=v["source_url"], epr_relevant=True, confidence_score=hr.confidence,
+                source_url=v["source_url"], ce_relevant=True, confidence_score=hr.confidence,
                 material_categories=hr.material_categories, instrument_type=hr.instrument_type,
                 urgency=hr.urgency, policy_stance=hr.stance, stance_source="ai", ai_summary=v["desc"],
                 last_fetched_at=datetime.now(timezone.utc),

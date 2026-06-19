@@ -1,0 +1,68 @@
+/*
+ * UI DESIGN REVIEW — THEME CONFIGURATION (Tier A foundation)
+ *
+ * This layer sits ON TOP of the existing tokens in globals.css (--bg-*, --text-*,
+ * --green-accent). It adds the design primitives that were previously hardcoded
+ * ad-hoc across components: a type scale, a radius/elevation scale, and the
+ * canonical bill-status palette. Import order: globals.css pulls this in first.
+ *
+ * Axis positions (adjust to taste):
+ *   Tone:    Serious [==|-------] Playful      — editorial "gazette" identity, restrained motion
+ *   Density: Minimal [====|-----] Maximal      — data-dense tables, but generous section spacing
+ *   Color:   Monotone [==|-------] Multicolored — one brand accent (blue/pink) + semantic status hues only
+ *   Weight:  Light    [====|-----] Heavy        — serif display, medium-weight body
+ *
+ * To shift an axis: change the variables in its section below. Component code
+ * references the tokens (via Tailwind: rounded-card, shadow-card, text-status-*),
+ * so a single edit here re-themes every surface.
+ */
+
+:root {
+  /* ── TYPE SCALE ─────────────────────────────────────────────────────────
+     Body copy floor is 1rem (16px). Reserve --fs-meta / Tailwind text-xs for
+     true chrome (pagination counts, timestamps) — never for primary reading. */
+  --fs-meta:    0.8125rem;  /* 13px — smallest permitted; metadata only          */
+  --fs-label:   0.8125rem;  /* 13px — uppercase field labels                     */
+  --fs-body:    1rem;       /* 16px — DEFAULT for all primary reading content     */
+  --fs-lead:    1.125rem;   /* 18px — lead paragraphs                             */
+  --leading-body: 1.55;
+
+  /* ── RADIUS (Density / Tone axis) ───────────────────────────────────────
+     Two radii only. Content cards vs. hero/gate panels. Drop ad-hoc rounded-2xl. */
+  --radius-card:  8px;
+  --radius-panel: 12px;
+
+  /* ── ELEVATION (Weight axis) ────────────────────────────────────────────
+     Surface depth maps to hierarchy: page < card < panel/popover. */
+  --shadow-card:  0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-panel: 0 4px 12px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04);
+
+  /* ── STATUS PALETTE (Color axis) ────────────────────────────────────────
+     ONE canonical source for "what color is a legislative stage". Consumed by
+     badges, the timeline dots, the momentum chart, and the state leaderboard so
+     a status reads as the same color everywhere (Norman: consistent code).
+     Stored as hex (recharts needs concrete colors). */
+  --status-introduced: #0ea5e9;  /* sky    */
+  --status-committee:  #f59e0b;  /* amber  */
+  --status-advancing:  #6366f1;  /* indigo */
+  --status-enacted:    #16a34a;  /* green  */
+  --status-weakens:    #dc2626;  /* red    */
+  --status-dormant:    #9ca3af;  /* gray   */
+}
+
+.dark {
+  /* Brighter status hues so they clear contrast on the dark surfaces. */
+  --status-introduced: #38bdf8;
+  --status-committee:  #fbbf24;
+  --status-advancing:  #818cf8;
+  --status-enacted:    #4ade80;
+  --status-weakens:    #f87171;
+  --status-dormant:    #6b7280;
+
+  --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.30);
+}
+
+/* The utility classes that consume these tokens (.text-body, .surface-card, …) live in
+   globals.css under `@layer utilities`, because @layer only resolves in the file that carries
+   the `@tailwind` directives — not in this @import-ed token file. */

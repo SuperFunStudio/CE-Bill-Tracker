@@ -27,7 +27,7 @@ async def main():
         all_companies = companies_result.scalars().all()
 
         bills_result = await db.execute(
-            select(Bill).where(Bill.epr_relevant == True)  # noqa: E712
+            select(Bill).where(Bill.ce_relevant == True)  # noqa: E712
         )
         all_bills = bills_result.scalars().all()
 
@@ -77,7 +77,7 @@ async def main():
             print(f"  cost_confidence: {row.cost_confidence:.0%}")
             print(f"  fee_basis: {(row.score_breakdown or {}).get('fee_basis')}")
         else:
-            print("\nApple / CA AB 1268 not found in scores (may not be epr_relevant or company not matched)")
+            print("\nApple / CA AB 1268 not found in scores (may not be ce_relevant or company not matched)")
 
 
 asyncio.run(main())

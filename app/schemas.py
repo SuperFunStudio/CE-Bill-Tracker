@@ -11,7 +11,7 @@ class BillSummary(BaseModel):
     title: str | None
     status: str | None
     last_action_date: date | None
-    epr_relevant: bool
+    ce_relevant: bool
     confidence_score: float | None
     material_categories: list | None
     instrument_type: str | None
@@ -80,6 +80,70 @@ class InstrumentMaterialCell(BaseModel):
     count: int
 
 
+class StateGapRow(BaseModel):
+    """One state's "Battle of the Bills" gap: its advancing-CE passage rate vs. its all-bills
+    baseline. The gap (ce_rate - baseline_rate) is the signal — positive = CE bills pass MORE
+    readily than the state's average bill; negative = contested-policy drag. baseline_rate comes
+    from the OpenStates dump (all-bills); the CE figures are live from our DB."""
+
+    state: str
+    ce_rate: float
+    ce_enacted: int
+    ce_total: int
+    baseline_rate: float | None = None
+    gap: float | None = None
+
+
+class StateCycleRow(BaseModel):
+    """One legislative biennium for a state: its advancing-CE passage rate vs. the all-bills baseline,
+    so the gap can be read as a trend across cycles. Bucketed by biennium (carryover-safe — a bill
+    introduced in year 1 and enacted in year 2 stays in the same cycle). `in_flight` flags the current
+    biennium, whose rate is deflated because bills are still moving."""
+
+    biennium: str
+    start_year: int
+    ce_total: int
+    ce_enacted: int
+    ce_rate: float | None = None
+    baseline_introduced: int
+    baseline_enacted: int
+    baseline_rate: float | None = None
+    gap: float | None = None
+    in_flight: bool = False
+
+
+class ChampionBill(BaseModel):
+    """One bill a champion sponsored — carries source_url so the roster honors the link-to-source rule."""
+
+    bill_id: int | None = None
+    state: str | None = None
+    bill_number: str | None = None
+    instrument: str | None = None
+    enacted: bool = False
+    source_url: str | None = None
+
+
+class ChampionSummary(BaseModel):
+    """A legislator advancing the circular economy. `active` = currently in office (per the dump's
+    current_role). `success_rate` = enacted / total of their sponsored CE bills. Slim by default —
+    the per-bill list (with sources) is fetched on expand via /insights/champions/{person_id}."""
+
+    person_id: str | None = None
+    name: str | None = None
+    party: str | None = None
+    chamber: str | None = None
+    district: str | None = None
+    active: bool = False
+    states: list[str] = []
+    primary_sponsorships: int = 0
+    cosponsorships: int = 0
+    total_ce_bills: int = 0
+    enacted_count: int = 0
+    success_rate: float | None = None
+    instruments: list[str] = []
+    materials: list[str] = []
+
+
 class DeadlineSummary(BaseModel):
     id: int
     state: str
@@ -124,7 +188,7 @@ class FederalActionSummary(BaseModel):
     instrument_type: str | None
     material_categories: list[str] | None
     ai_summary: str | None
-    epr_relevant: bool
+    ce_relevant: bool
 
     model_config = {"from_attributes": True}
 

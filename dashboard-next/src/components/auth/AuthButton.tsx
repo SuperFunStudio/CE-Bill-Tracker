@@ -4,8 +4,22 @@ import Link from 'next/link';
 import { useAuth } from './AuthContext';
 import { openBillingPortal } from '@/lib/billing';
 
-/** Top-nav auth control: "Sign in" when logged out; email + Pro badge + menu when logged in. */
-export function AuthButton() {
+/**
+ * Top-nav auth control. Two variants:
+ *  - `bar` (default): compact pill for the desktop section bar; logged-in state opens a nested
+ *    absolute-positioned dropdown.
+ *  - `menu`: flat, full-width rows for the mobile hamburger menu. The nested dropdown doesn't work
+ *    there (it gets clipped at the screen edge, and the menu's own close-on-tap would dismiss it
+ *    before it opens), so we inline every action as its own row instead. `onNavigate` lets the
+ *    parent close the mobile menu after a row is tapped.
+ */
+export function AuthButton({
+  variant = 'bar',
+  onNavigate,
+}: {
+  variant?: 'bar' | 'menu';
+  onNavigate?: () => void;
+} = {}) {
   const { user, loading, isPro, openAuth, signOut, getToken } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -20,13 +34,58 @@ export function AuthButton() {
 
   if (loading) return <span className="text-text-muted text-xs">…</span>;
 
+  // ── Mobile menu variant: flat rows, no nested dropdown ──────────────────────────────
+  if (variant === 'menu') {
+    const rowCls =
+      'flex w-full items-center gap-3 px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-primary hover:text-text-primary transition-colors text-left';
+    if (!user) {
+      return (
+        <button
+          onClick={() => { onNavigate?.(); openAuth(); }}
+          className="flex w-full items-center justify-center rounded-lg border border-green-accent bg-green-dark px-3 py-2 text-sm font-medium text-green-accent hover:opacity-90 transition-opacity"
+        >
+          Sign in / Sign up
+        </button>
+      );
+    }
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 px-3 py-1">
+          {isPro && (
+            <span className="text-[9px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-0.5">
+              Pro
+            </span>
+          )}
+          <span className="text-xs text-text-muted truncate">{user.email ?? 'Account'}</span>
+        </div>
+        <Link href="/account" onClick={onNavigate} className={rowCls}>Account settings</Link>
+        <Link href="/watchlist" onClick={onNavigate} className={rowCls}>My watchlist</Link>
+        {isPro && (
+          <button
+            onClick={async () => { onNavigate?.(); try { await openBillingPortal(getToken); } catch {} }}
+            className={rowCls}
+          >
+            Manage plan
+          </button>
+        )}
+        <button
+          onClick={async () => { onNavigate?.(); await signOut(); }}
+          className={rowCls}
+        >
+          Sign out
+        </button>
+      </div>
+    );
+  }
+
+  // ── Desktop bar variant (default) ───────────────────────────────────────────────────
   if (!user) {
     return (
       <button
         onClick={openAuth}
-        className="inline-flex items-center rounded-lg border border-green-accent bg-green-dark px-3 py-1 text-xs font-medium text-green-accent hover:opacity-90 transition-opacity"
+        className="inline-flex items-center rounded-lg border border-green-accent bg-green-accent px-3 py-1 text-xs font-medium text-bg-primary hover:opacity-90 transition-opacity"
       >
-        Sign in
+        Sign up
       </button>
     );
   }

@@ -85,11 +85,11 @@ async def pipeline_status(db: AsyncSession = Depends(get_db)):
                 .filter(Bill.confidence_score == -1.0)
                 .label("awaiting_llm"),
                 func.count()
-                .filter(Bill.epr_relevant.is_(True))
-                .label("epr_relevant"),
+                .filter(Bill.ce_relevant.is_(True))
+                .label("ce_relevant"),
                 func.count()
                 .filter(
-                    Bill.epr_relevant.is_(False),
+                    Bill.ce_relevant.is_(False),
                     Bill.confidence_score.isnot(None),
                     Bill.confidence_score >= 0,
                 )
@@ -142,7 +142,7 @@ async def pipeline_status(db: AsyncSession = Depends(get_db)):
         "classified": row.classified,
         "unclassified": row.unclassified,
         "awaiting_llm": row.awaiting_llm,
-        "epr_relevant": row.epr_relevant,
+        "ce_relevant": row.ce_relevant,
         "not_relevant": row.not_relevant,
         "sonnet_extracted": row.sonnet_extracted,
         "last_classified_at": row.last_classified_at.isoformat() if row.last_classified_at else None,
@@ -327,7 +327,7 @@ async def reset_classification(db: AsyncSession = Depends(get_db)):
             Bill.openstates_id.isnot(None),
             Bill.confidence_score == 0.0,
         )
-        .values(confidence_score=None, epr_relevant=False)
+        .values(confidence_score=None, ce_relevant=False)
     )
     await db.commit()
     return {"status": "reset", "rows_reset": result.rowcount}

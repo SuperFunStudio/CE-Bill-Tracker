@@ -1,8 +1,8 @@
-"""Backfill federal-action enrichment: epr_relevant, preemption_risk, ai_summary, material_categories.
+"""Backfill federal-action enrichment: ce_relevant, preemption_risk, ai_summary, material_categories.
 
 The Federal Register ingestion (app/ingestion/coordinator.py:run_federal_cycle) now classifies new
 actions inline, but rows ingested before that wiring existed are unclassified — preemption_risk is
-NULL and epr_relevant is the default False. This script runs the FederalClassifier over existing
+NULL and ce_relevant is the default False. This script runs the FederalClassifier over existing
 rows so the noisy raw feed becomes a usable federal-friction signal.
 
 The classifier filters feed noise (antidumping/trade/antitrust notices score is_relevant=false) and
@@ -66,7 +66,7 @@ async def run(limit: int | None, only_missing: bool, dry_run: bool, concurrency:
                 if fr.is_relevant:
                     relevant += 1
                 if not dry_run:
-                    a.epr_relevant = fr.is_relevant
+                    a.ce_relevant = fr.is_relevant
                     a.preemption_risk = fr.preemption_risk
                     a.ai_summary = fr.summary
                     a.material_categories = fr.material_categories

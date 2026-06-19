@@ -151,7 +151,7 @@ def fetch_epr_bills() -> list:
     try:
         resp = httpx.get(
             f"{API_BASE}/bills",
-            params={"epr_relevant": True, "limit": 500},
+            params={"ce_relevant": True, "limit": 500},
             timeout=15,
         )
         resp.raise_for_status()

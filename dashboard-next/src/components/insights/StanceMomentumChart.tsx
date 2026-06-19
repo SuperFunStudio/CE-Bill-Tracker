@@ -14,7 +14,8 @@ import {
 import { fetchStanceMomentum } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
-import type { BillStancePoint } from '@/lib/types';
+import { BillDrilldownPanel } from './BillDrilldownPanel';
+import type { BillStancePoint, BillParams } from '@/lib/types';
 
 /**
  * "Policy momentum" — a diverging bar chart that answers "is the field advancing or being rolled
@@ -35,19 +36,24 @@ const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = 
   ),
 ];
 
+// Reads the active theme's neutrals AND the canonical status palette (--status-*, see theme.css),
+// so "advances" green matches the enacted green used everywhere else instead of a one-off hex.
 function useThemeColors() {
-  const [colors, setColors] = useState({ muted: '#6b7280', border: '#dee2e6' });
+  const [colors, setColors] = useState({
+    muted: '#6b7280', border: '#dee2e6', advances: '#16a34a', weakens: '#dc2626',
+  });
   useEffect(() => {
     const root = getComputedStyle(document.documentElement);
-    const muted = root.getPropertyValue('--text-muted').trim();
-    const border = root.getPropertyValue('--border-default').trim();
-    setColors({ muted: muted || '#6b7280', border: border || '#dee2e6' });
+    const get = (v: string, fb: string) => root.getPropertyValue(v).trim() || fb;
+    setColors({
+      muted: get('--text-muted', '#6b7280'),
+      border: get('--border-default', '#dee2e6'),
+      advances: get('--status-enacted', '#16a34a'),
+      weakens: get('--status-weakens', '#dc2626'),
+    });
   }, []);
   return colors;
 }
-
-const ADVANCES = '#16a34a';
-const WEAKENS = '#ef4444';
 
 interface Row {
   year: number;
@@ -60,7 +66,19 @@ export function StanceMomentumChart() {
   const [points, setPoints] = useState<BillStancePoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [instrument, setInstrument] = useState<string | undefined>(undefined);
+  const [drill, setDrill] = useState<{ params: BillParams; title: string; subtitle: string } | null>(null);
   const colors = useThemeColors();
+
+  function openDrill(stance: 'advances' | 'weakens', d: { year?: number; payload?: { year?: number } }) {
+    const year = d?.year ?? d?.payload?.year;
+    if (!year) return;
+    setDrill({
+      params: { ce_relevant: true, policy_stance: stance, instrument_type: instrument, year, min_confidence: 0.7 },
+      title: `${stance === 'advances' ? 'Advancing' : 'Weakening'} bills · ${year}`,
+      subtitle: instrument ? formatInstrumentType(instrument) : 'All instruments',
+    });
+    track('insights_momentum_drilldown', { stance, year, instrument: instrument ?? 'all' });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -137,11 +155,11 @@ export function StanceMomentumChart() {
         <>
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: ADVANCES }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors.advances }} />
               Advances ({totals.advances.toLocaleString()})
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: WEAKENS }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors.weakens }} />
               Weakens ({totals.weakens.toLocaleString()})
             </span>
             <span className="text-text-muted">
@@ -179,8 +197,24 @@ export function StanceMomentumChart() {
                   labelStyle={{ color: 'var(--text-primary)', fontWeight: 600 }}
                   formatter={(value, name) => [Math.abs(Number(value)), name]}
                 />
-                <Bar dataKey="advances" name="Advances" stackId="stance" fill={ADVANCES} isAnimationActive={false} />
-                <Bar dataKey="weakens" name="Weakens" stackId="stance" fill={WEAKENS} isAnimationActive={false} />
+                <Bar
+                  dataKey="advances"
+                  name="Advances"
+                  stackId="stance"
+                  fill={colors.advances}
+                  isAnimationActive={false}
+                  cursor="pointer"
+                  onClick={(d) => openDrill('advances', d)}
+                />
+                <Bar
+                  dataKey="weakens"
+                  name="Weakens"
+                  stackId="stance"
+                  fill={colors.weakens}
+                  isAnimationActive={false}
+                  cursor="pointer"
+                  onClick={(d) => openDrill('weakens', d)}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -190,10 +224,20 @@ export function StanceMomentumChart() {
             policy stance. Above the line, bills that <span className="text-text-secondary">establish or strengthen</span>{' '}
             a circular-economy obligation; below it, bills that <span className="text-text-secondary">exempt, narrow,
             repeal, or preempt</span> one. Auto-classified at a 0.7 confidence floor; neutral
-            (administrative or study) bills carry no direction and are left off the axis.
+            (administrative or study) bills carry no direction and are left off the axis.{' '}
+            <span className="text-text-secondary">Click any bar to see the bills behind it, each linked to its source.</span>
           </p>
         </>
       )}
+
+      <BillDrilldownPanel
+        open={!!drill}
+        onClose={() => setDrill(null)}
+        title={drill?.title ?? ''}
+        subtitle={drill?.subtitle}
+        params={drill?.params ?? null}
+        source="momentum"
+      />
     </div>
   );
 }

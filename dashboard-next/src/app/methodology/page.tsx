@@ -31,7 +31,7 @@ const MATERIALS = [
 
 export default function MethodologyPage() {
   // Same query (and cache) the states page uses; snapshot-backed so it's never 0.
-  const { data: bills } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills } = useBills({ ce_relevant: true, limit: 5000 });
   const relevant = bills?.length ? bills.length.toLocaleString() : ENGINE.relevant;
 
   return (

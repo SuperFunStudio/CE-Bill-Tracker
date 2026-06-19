@@ -37,23 +37,24 @@ OUTCOMES = [
         material_categories=["organics"],
         direction="positive",
         metric_label="of oyster reef restored",
-        metric_value=25,
+        metric_value=45,
         metric_unit="acres",
         metric_display=None,
         summary=(
-            "TX HB3487 (effective Oct 1, 2025) lets restaurants deduct $2 per 50 lbs of oyster "
-            "shells recycled from their sales-and-use tax — a financial lever to scale the shell "
-            "recovery that feeds reef restoration. The programs it incentivizes, led by the "
-            "Sink Your Shucks initiative, have reclaimed 3M+ lbs of shell and restored ~25 acres of "
-            "reef across Copano, Aransas, and St. Charles Bays since 2009. The law is new, so the "
-            "acreage reflects the activity it now subsidizes, not the deduction alone."
+            "TX HB3487 (effective Oct 1, 2025) lets restaurants reduce their taxable sales base by $2 "
+            "for every 50 lbs of oyster shells recycled — roughly 16¢ of actual sales-tax relief per "
+            "50 lbs at an ~8% rate, a financial lever to scale the shell recovery that feeds reef "
+            "restoration. The programs it incentivizes, led by the Sink Your Shucks initiative, have "
+            "reclaimed 3M+ lbs of shell and restored more than 45 acres of reef across the "
+            "Mission-Aransas Estuary (Copano, Aransas, and St. Charles Bays) since 2009. The law is "
+            "new, so the acreage reflects the activity it now subsidizes, not the deduction alone."
         ),
         attribution="program",
         as_of_date="2025-10-01",
         source_name="Harte Research Institute — Sink Your Shucks",
         source_url="https://www.harteresearch.org/oyster-recycling-efforts-major-gulf-restoration-project",
         confidence=0.7,
-        reviewed=False,
+        reviewed=True,
     ),
     dict(
         slug="or-bottle-bill-redemption",
@@ -78,7 +79,7 @@ OUTCOMES = [
         source_name="Resource Recycling / Oregon OLCC",
         source_url="https://resource-recycling.com/recycling/2024/04/16/oregon-deposit-system-estimates-90-5-return-rate/",
         confidence=0.8,
-        reviewed=False,
+        reviewed=True,
     ),
     dict(
         slug="mi-bottle-bill-decline",
@@ -103,7 +104,7 @@ OUTCOMES = [
         source_name="Bridge Michigan",
         source_url="https://bridgemi.com/michigan-environment-watch/michigans-bottle-return-rates-keep-falling-it-time-change/",
         confidence=0.85,
-        reviewed=False,
+        reviewed=True,
     ),
     dict(
         slug="ca-sb270-bag-waste-increase",
@@ -129,7 +130,7 @@ OUTCOMES = [
         source_name="Policy Review at Berkeley / CalRecycle data",
         source_url="https://www.ocf.berkeley.edu/~prb/sb270-and-the-recycling-myth/",
         confidence=0.75,
-        reviewed=False,
+        reviewed=True,
     ),
     dict(
         slug="dc-bag-fee-reduction",
@@ -154,7 +155,7 @@ OUTCOMES = [
         source_name="Anacostia Riverkeeper / GW report",
         source_url="https://www.anacostiariverkeeper.org/evaluating-dcs-bag-fee-2024-gw-report/",
         confidence=0.75,
-        reviewed=False,
+        reviewed=True,
     ),
     dict(
         slug="paint-stewardship-epr-gallons",
@@ -179,7 +180,7 @@ OUTCOMES = [
         source_name="Product Stewardship Institute",
         source_url="https://productstewardship.us/paint-care-qa/",
         confidence=0.8,
-        reviewed=False,
+        reviewed=True,
     ),
     dict(
         slug="mattress-stewardship-epr-recycled",
@@ -192,10 +193,10 @@ OUTCOMES = [
         metric_label="mattresses recycled",
         metric_value=None,
         metric_unit=None,
-        metric_display="15M+ mattresses (555M+ lbs diverted)",
+        metric_display="15M+ mattresses (575M+ lbs diverted)",
         summary=(
             "Mattress-stewardship EPR laws fund the Mattress Recycling Council's Bye Bye Mattress program, "
-            "which has recycled more than 15 million mattresses and kept 555M+ lbs of steel, foam, fiber "
+            "which has recycled more than 15 million mattresses and kept 575M+ lbs of steel, foam, fiber "
             "and wood out of landfills across CA, CT, OR and RI. Aggregated across the state programs."
         ),
         attribution="program",
@@ -203,7 +204,7 @@ OUTCOMES = [
         source_name="Mattress Recycling Council",
         source_url="https://mattressrecyclingcouncil.org/who-we-are/",
         confidence=0.8,
-        reviewed=False,
+        reviewed=True,
     ),
     dict(
         slug="wa-ecycle-electronics-collected",
@@ -216,18 +217,18 @@ OUTCOMES = [
         metric_label="of electronics collected since 2009",
         metric_value=None,
         metric_unit=None,
-        metric_display="453M+ lbs since 2009",
+        metric_display="≈496M lbs since 2009",
         summary=(
             "One of the first U.S. electronics-EPR programs: manufacturers fund free e-waste collection, "
-            "which has taken in 453M+ lbs since 2009. Annual tonnage is now declining (≈13M lbs in 2023) — "
+            "which has taken in nearly 496 million pounds since 2009. Annual tonnage has eased over time — "
             "largely because devices keep getting lighter, not because less is recovered."
         ),
         attribution="direct",
-        as_of_date="2022-12-31",
-        source_name="Northwest Product Stewardship Council",
-        source_url="https://productstewardship.net/news/e-cycle-washington-collects-13-million-pounds-electronics-2022",
+        as_of_date=None,
+        source_name="Washington Dept. of Ecology — E-Cycle Washington",
+        source_url="https://ecology.wa.gov/waste-toxics/reducing-recycling-waste/our-recycling-programs/electronics-e-cycle",
         confidence=0.8,
-        reviewed=False,
+        reviewed=True,
     ),
     dict(
         slug="ca-ab2398-carpet-underperformance",
@@ -252,7 +253,7 @@ OUTCOMES = [
         source_name="CalRecycle",
         source_url="https://calrecycle.ca.gov/2021/03/30/press-release-21-01/",
         confidence=0.85,
-        reviewed=False,
+        reviewed=True,
     ),
 ]
 

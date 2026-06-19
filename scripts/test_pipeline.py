@@ -66,7 +66,7 @@ async def main(state: str, limit: int, classify: bool):
                     title=b.title or "",
                     description=b.description or "",
                 )
-                print(f"  {b.bill_number}: relevant={result.is_epr_relevant} "
+                print(f"  {b.bill_number}: relevant={result.is_ce_relevant} "
                       f"confidence={result.confidence:.2f} "
                       f"categories={result.material_categories}")
 

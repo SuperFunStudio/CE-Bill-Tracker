@@ -31,7 +31,7 @@ def main():
         rows = list(c.execute(text("""
             select state, bill_number, openstates_id, compliance_details->'management' as mgmt
             from bills
-            where epr_relevant and state!='US' and status='enacted'
+            where ce_relevant and state!='US' and status='enacted'
               and compliance_details->'management' is not null
         """)))
     print(f"local enacted laws with a management classification: {len(rows)}")

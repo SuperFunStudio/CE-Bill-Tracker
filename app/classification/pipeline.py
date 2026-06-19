@@ -46,7 +46,7 @@ class ClassificationPipeline:
         for bill in bills:
             if bill.id in non_candidates:
                 bill.confidence_score = 0.0
-                bill.epr_relevant = False
+                bill.ce_relevant = False
 
         if not candidates:
             await db.commit()
@@ -57,7 +57,7 @@ class ClassificationPipeline:
             # Mark as keyword-passed but not LLM-classified
             for bill in candidates:
                 bill.confidence_score = -1.0  # sentinel: awaiting LLM
-                bill.epr_relevant = True
+                bill.ce_relevant = True
                 kw_score = self.keyword_filter.score(bill.title or "", bill.description or "")
                 if kw_score.material_hints:
                     bill.material_categories = kw_score.material_hints
@@ -90,9 +90,9 @@ class ClassificationPipeline:
             # In scope if the classifier judged it EPR-relevant, OR it's tagged with an instrument
             # that's circular-economy policy by definition (right-to-repair, deposit-return, etc.),
             # at decent confidence. labeling/preemption are intentionally NOT in TRACKED_INSTRUMENTS
-            # — they're generic and ride in only via is_epr_relevant (see haiku_classifier.py).
-            bill_obj.epr_relevant = hr.confidence >= 0.4 and (
-                hr.is_epr_relevant or hr.instrument_type in TRACKED_INSTRUMENTS
+            # — they're generic and ride in only via is_ce_relevant (see haiku_classifier.py).
+            bill_obj.ce_relevant = hr.confidence >= 0.4 and (
+                hr.is_ce_relevant or hr.instrument_type in TRACKED_INSTRUMENTS
             )
             bill_obj.material_categories = hr.material_categories
             bill_obj.instrument_type = hr.instrument_type
@@ -101,7 +101,7 @@ class ClassificationPipeline:
             bill_obj.policy_stance = hr.stance
             bill_obj.stance_source = "ai"
 
-            if hr.confidence >= 0.7 and hr.is_epr_relevant:
+            if hr.confidence >= 0.7 and hr.is_ce_relevant:
                 high_confidence_bills.append(bill_obj)
 
         # Bills that passed keyword filter but Haiku failed — mark as awaiting LLM
@@ -110,7 +110,7 @@ class ClassificationPipeline:
             bill_obj = bill_dict["bill_obj"]
             if bill_obj.id not in classified_ids:
                 bill_obj.confidence_score = -1.0
-                bill_obj.epr_relevant = True
+                bill_obj.ce_relevant = True
 
         await db.commit()
 
@@ -125,6 +125,11 @@ class ClassificationPipeline:
                 try:
                     # Fetch the latest version's full text from OpenStates.
                     # (LegiScan is dormant — its free tier serves WV data; see migration 004.)
+                    # NOTE: these awaits (OpenStates fetch + Sonnet extract) run with NO open DB
+                    # transaction — the previous iteration's commit closed it — so the connection sits
+                    # plain `idle`, holding no locks, during the slow external calls. Holding a tx
+                    # across them is what previously stranded a connection idle-in-transaction on a
+                    # bills lock when a call hung (see the per-bill commit below).
                     full_text = ""
                     if bill.openstates_id:
                         full_text = await os_client.get_bill_text(bill.openstates_id)
@@ -155,10 +160,14 @@ class ClassificationPipeline:
                         )
                         db.add(cd)
 
+                    # Commit per bill: bounds the write transaction to a single bill and ensures the
+                    # NEXT iteration's external calls run outside any transaction (no held locks).
+                    await db.commit()
                     result.extracted_sonnet += 1
                 except Exception as e:
+                    # Discard this bill's partial work so the session is clean for the next iteration.
+                    await db.rollback()
                     log.error("sonnet_extraction_failed", bill_id=bill.id, error=str(e))
                     result.errors.append(str(e))
 
-        await db.commit()
         return result

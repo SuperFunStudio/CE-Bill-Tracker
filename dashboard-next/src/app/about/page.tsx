@@ -89,6 +89,13 @@ export default function AboutPage() {
 
       {/* Footer byline */}
       <footer className="border-t border-border-default pt-8 text-center text-sm text-text-muted">
+        <p className="mb-3 space-x-3">
+          <Link href="/faq" className="text-green-accent hover:underline">FAQ</Link>
+          <span>·</span>
+          <Link href="/terms" className="text-green-accent hover:underline">Terms of Service</Link>
+          <span>·</span>
+          <Link href="/methodology" className="text-green-accent hover:underline">Methodology</Link>
+        </p>
         Developed by{' '}
         <a
           href="https://www.kennyarnold.com"

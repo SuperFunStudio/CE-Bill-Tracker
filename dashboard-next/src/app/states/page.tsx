@@ -26,7 +26,7 @@ const STAGE_OF: Record<string, StageKey> = Object.fromEntries(
 type SortMode = 'active' | 'enacted';
 
 export default function StatesPage() {
-  const { data: bills = [], isLoading } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000 });
   const [sortBy, setSortBy] = useState<SortMode>('active');
 
   const ranking = useMemo(() => {
@@ -98,7 +98,14 @@ export default function StatesPage() {
         ))}
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <div className="surface-inset px-4 py-8 text-center space-y-2">
+          <p className="text-body text-text-primary">Couldn&rsquo;t load state standings.</p>
+          <button onClick={() => refetch()} className="text-sm text-green-accent hover:underline">
+            Try again
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="space-y-2">{[...Array(8)].map((_, i) => <div key={i} className="h-9 bg-bg-secondary rounded animate-pulse" />)}</div>
       ) : (
         <ol className="rounded-lg border border-border-default overflow-hidden">

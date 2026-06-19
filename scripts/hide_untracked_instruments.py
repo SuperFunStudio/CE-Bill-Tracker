@@ -1,13 +1,13 @@
 """Hide bills that are only in scope because of an instrument we no longer track.
 
-Some instrument_types used to flag bills as epr_relevant=True even though they aren't
+Some instrument_types used to flag bills as ce_relevant=True even though they aren't
 circular-economy legislation:
   - chemical_restriction: chemical-safety/health bills like CA SB-236 (hair relaxer ingredients)
   - budget: generic appropriations
 
 These are excluded from app/classification/haiku_classifier.TRACKED_INSTRUMENTS; this script
 applies the same rule to existing rows. Inverse of backfill_relevance.py: only flips
-epr_relevant True -> False for rows whose instrument_type is in the target set. Every other
+ce_relevant True -> False for rows whose instrument_type is in the target set. Every other
 instrument is untouched.
 
 Run against LOCAL first, then re-run push_bills_to_prod.py, OR point --dsn straight at prod
@@ -46,7 +46,7 @@ async def main() -> None:
         from app.config import settings
         dsn = settings.database_url
 
-    where = "epr_relevant = true AND instrument_type = ANY($1::text[])"
+    where = "ce_relevant = true AND instrument_type = ANY($1::text[])"
     conn = await asyncpg.connect(dsn)
     try:
         to_hide = await conn.fetch(
@@ -55,7 +55,7 @@ async def main() -> None:
             instruments,
         )
         total = sum(r["n"] for r in to_hide)
-        print(f"{total} bills would flip epr_relevant -> False (instruments={instruments})")
+        print(f"{total} bills would flip ce_relevant -> False (instruments={instruments})")
         for r in to_hide:
             print(f"  {r['instrument_type']:22s} {r['n']}")
 
@@ -64,7 +64,7 @@ async def main() -> None:
             return
 
         updated = await conn.execute(
-            f"UPDATE bills SET epr_relevant = false, updated_at = now() WHERE {where}",
+            f"UPDATE bills SET ce_relevant = false, updated_at = now() WHERE {where}",
             instruments,
         )
         print(f"\napplied: {updated}")

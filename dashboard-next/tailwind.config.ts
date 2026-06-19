@@ -33,6 +33,22 @@ const config: Config = {
         'risk-high':      '#ef4444',
         'risk-medium':    '#f59e0b',
         'risk-low':       '#22c55e',
+        // Canonical legislative-stage palette (see theme.css). Use these instead
+        // of ad-hoc sky/amber/green so a status reads as one color everywhere.
+        'status-introduced': 'var(--status-introduced)',
+        'status-committee':  'var(--status-committee)',
+        'status-advancing':  'var(--status-advancing)',
+        'status-enacted':    'var(--status-enacted)',
+        'status-weakens':    'var(--status-weakens)',
+        'status-dormant':    'var(--status-dormant)',
+      },
+      borderRadius: {
+        card:  'var(--radius-card)',
+        panel: 'var(--radius-panel)',
+      },
+      boxShadow: {
+        card:  'var(--shadow-card)',
+        panel: 'var(--shadow-panel)',
       },
     },
   },

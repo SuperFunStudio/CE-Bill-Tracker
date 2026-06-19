@@ -66,7 +66,7 @@ def _parse_date(value) -> date | None:
 
 async def _candidates(db: AsyncSession, status: str | None, only_missing: bool, limit: int,
                       materials: list[str] | None = None) -> list:
-    clauses = ["epr_relevant = true", "openstates_id IS NOT NULL"]
+    clauses = ["ce_relevant = true", "openstates_id IS NOT NULL"]
     params: dict = {"limit": limit}
     if status:
         clauses.append("status = :status")

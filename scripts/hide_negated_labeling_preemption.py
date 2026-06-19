@@ -5,13 +5,13 @@ policy (nutrition/ingredient labeling, country-of-origin; preemption of tobacco,
 employment, or tax rules). The old pipeline forced any bill tagged with one of them in scope
 via TRACKED_INSTRUMENTS, even when Haiku's own reasoning said it was "not product stewardship,
 EPR, or circular economy policy". The pipeline no longer does this (labeling/preemption now
-ride in only via is_epr_relevant — see app/classification/haiku_classifier.TRACKED_INSTRUMENTS),
+ride in only via is_ce_relevant — see app/classification/haiku_classifier.TRACKED_INSTRUMENTS),
 and this script applies the same correction to existing rows.
 
-We don't persist Haiku's raw is_epr_relevant, only the computed epr_relevant flag and the
+We don't persist Haiku's raw is_ce_relevant, only the computed ce_relevant flag and the
 reasoning (ai_summary), so we classify rows by their reasoning text:
 
-  HIDE  = epr_relevant AND instrument_type in {labeling, preemption}
+  HIDE  = ce_relevant AND instrument_type in {labeling, preemption}
           AND ai_summary has a NEGATION cue ("not / unrelated to / no connection to ... EPR")
           AND ai_summary has NO in-domain cue (plastics, recyclability claims, EPR relevance).
 
@@ -116,7 +116,7 @@ async def main() -> None:
     try:
         rows = await conn.fetch(
             "SELECT id, state, bill_number, instrument_type, coalesce(ai_summary,'') AS s "
-            "FROM bills WHERE epr_relevant = true AND instrument_type = ANY($1::text[]) "
+            "FROM bills WHERE ce_relevant = true AND instrument_type = ANY($1::text[]) "
             "ORDER BY instrument_type, state, bill_number",
             INSTRUMENTS,
         )
@@ -134,14 +134,14 @@ async def main() -> None:
         print(f"{len(rows)} labeling/preemption bills currently in scope")
         dump("KEEP (in-domain or no negation)", keep_rows)
         dump("HIDE (classifier judged out of scope)", hide_rows)
-        print(f"\n=> {len(hide_ids)} bills would flip epr_relevant -> False")
+        print(f"\n=> {len(hide_ids)} bills would flip ce_relevant -> False")
 
         if not args.apply:
             print("\n(dry run — pass --apply to write)")
             return
         if hide_ids:
             await conn.execute(
-                "UPDATE bills SET epr_relevant = false, updated_at = now() "
+                "UPDATE bills SET ce_relevant = false, updated_at = now() "
                 "WHERE id = ANY($1::int[])",
                 hide_ids,
             )

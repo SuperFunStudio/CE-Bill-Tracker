@@ -6,6 +6,10 @@ import type {
   BillTimelinePoint,
   BillStancePoint,
   InstrumentMaterialCell,
+  StateGapRow,
+  StateCycleRow,
+  ChampionSummary,
+  ChampionBill,
   DeadlineSummary,
   DeadlineParams,
   FederalActionSummary,
@@ -132,6 +136,32 @@ export async function fetchInstrumentMaterialMatrix(params?: {
   return apiFetch<InstrumentMaterialCell[]>(
     buildUrl('/bills/instrument-material-matrix', params as Record<string, string | number | boolean | undefined>),
   );
+}
+
+/** Per-state CE-vs-baseline passage gap — the Insights "Battle of the Bills" table. */
+export async function fetchStateGap(): Promise<StateGapRow[]> {
+  return apiFetch<StateGapRow[]>(buildUrl('/insights/state-gap'));
+}
+
+/** CE champion roster (slim). Active-only by default; filter by state. */
+export async function fetchChampions(params?: {
+  state?: string;
+  active_only?: boolean;
+  limit?: number;
+}): Promise<ChampionSummary[]> {
+  return apiFetch<ChampionSummary[]>(
+    buildUrl('/insights/champions', params as Record<string, string | number | boolean | undefined>),
+  );
+}
+
+/** One state's per-biennium CE-vs-baseline gap — the Insights per-cycle view. */
+export async function fetchStateCycles(state: string): Promise<StateCycleRow[]> {
+  return apiFetch<StateCycleRow[]>(buildUrl('/insights/state-cycles', { state }));
+}
+
+/** A champion's sponsored bills, each with its source_url. person_id contains a slash — pass it raw. */
+export async function fetchChampionBills(personId: string): Promise<ChampionBill[]> {
+  return apiFetch<ChampionBill[]>(buildUrl(`/insights/champions/${personId}/bills`));
 }
 
 /** Documented real-world outcomes of enacted laws — powers the Insights "Real-World Impact" spotlight. */

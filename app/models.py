@@ -41,7 +41,7 @@ class Bill(Base):
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Classification (populated by pipeline)
-    epr_relevant: Mapped[bool] = mapped_column(Boolean, default=False)
+    ce_relevant: Mapped[bool] = mapped_column(Boolean, default=False)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     material_categories: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     instrument_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -80,7 +80,7 @@ class Bill(Base):
     __table_args__ = (
         Index("idx_bills_state_status", "state", "status"),
         Index("idx_bills_last_action", "last_action_date"),
-        Index("idx_bills_relevant", "epr_relevant"),
+        Index("idx_bills_relevant", "ce_relevant"),
         Index("idx_bills_policy_stance", "policy_stance"),
         Index("idx_bills_material_categories", "material_categories", postgresql_using="gin"),
     )
@@ -324,7 +324,7 @@ class FederalAction(Base):
     comment_deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
     effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     document_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    epr_relevant: Mapped[bool] = mapped_column(Boolean, default=False)
+    ce_relevant: Mapped[bool] = mapped_column(Boolean, default=False)
     preemption_risk: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # friction_type / instrument_type: the other two classifier axes. friction_type is
     # federal-specific (how the action pressures state programs); instrument_type reuses the

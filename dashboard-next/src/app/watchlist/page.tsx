@@ -19,7 +19,7 @@ import {
 export default function WatchlistPage() {
   const { user, isPro, loading, openAuth, getToken } = useAuth();
   const { watched, ready } = useWatchlist();
-  const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [] } = useBills({ ce_relevant: true, limit: 5000 });
 
   const watchedBills = useMemo(
     () => bills.filter(b => watched.has(b.id)),

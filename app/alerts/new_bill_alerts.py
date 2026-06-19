@@ -65,7 +65,7 @@ async def _load_new_bills(db: AsyncSession, today: date, window_days: int) -> li
         await db.execute(
             select(Bill)
             .where(
-                Bill.epr_relevant.is_(True),
+                Bill.ce_relevant.is_(True),
                 Bill.new_bill_alert_sent.is_(False),
                 Bill.created_at >= since,
             )

@@ -74,7 +74,7 @@ export default function EmbedPage() {
     setSiteRoot(window.location.origin + '/');
   }, []);
 
-  const { data: bills = [], isLoading, error } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [], isLoading, error } = useBills({ ce_relevant: true, limit: 5000 });
 
   const tableBills = useMemo(() => applyBillFilters(bills, filters), [bills, filters]);
 

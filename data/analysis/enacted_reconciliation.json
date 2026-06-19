@@ -1,0 +1,1031 @@
+{
+  "counts": {
+    "both": 63,
+    "only_ours": 117,
+    "only_dump": 87,
+    "neither": 1270,
+    "no_osid": 77
+  },
+  "by_year": {
+    "1989": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "1990": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "1991": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "1992": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "1993": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "1996": {
+      "only_ours": 2,
+      "only_dump": 0
+    },
+    "2002": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "2003": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "2004": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "2005": {
+      "only_ours": 4,
+      "only_dump": 0
+    },
+    "2006": {
+      "only_ours": 4,
+      "only_dump": 0
+    },
+    "2007": {
+      "only_ours": 6,
+      "only_dump": 0
+    },
+    "2008": {
+      "only_ours": 13,
+      "only_dump": 0
+    },
+    "2009": {
+      "only_ours": 5,
+      "only_dump": 0
+    },
+    "2010": {
+      "only_ours": 9,
+      "only_dump": 0
+    },
+    "2011": {
+      "only_ours": 3,
+      "only_dump": 0
+    },
+    "2012": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "2013": {
+      "only_ours": 6,
+      "only_dump": 0
+    },
+    "2014": {
+      "only_ours": 5,
+      "only_dump": 0
+    },
+    "2015": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "2016": {
+      "only_ours": 2,
+      "only_dump": 0
+    },
+    "2017": {
+      "only_ours": 1,
+      "only_dump": 0
+    },
+    "2018": {
+      "only_ours": 4,
+      "only_dump": 0
+    },
+    "2019": {
+      "only_ours": 3,
+      "only_dump": 0
+    },
+    "2020": {
+      "only_ours": 0,
+      "only_dump": 1
+    },
+    "2021": {
+      "only_ours": 2,
+      "only_dump": 11
+    },
+    "2022": {
+      "only_ours": 4,
+      "only_dump": 9
+    },
+    "2023": {
+      "only_ours": 10,
+      "only_dump": 22
+    },
+    "2024": {
+      "only_ours": 7,
+      "only_dump": 14
+    },
+    "2025": {
+      "only_ours": 13,
+      "only_dump": 20
+    },
+    "2026": {
+      "only_ours": 4,
+      "only_dump": 10
+    }
+  },
+  "per_state_advances_2019plus": {
+    "CA": {
+      "total": 97,
+      "enacted": 32
+    },
+    "NY": {
+      "total": 154,
+      "enacted": 12
+    },
+    "MN": {
+      "total": 63,
+      "enacted": 1
+    },
+    "AK": {
+      "total": 2,
+      "enacted": 0
+    },
+    "IL": {
+      "total": 75,
+      "enacted": 8
+    },
+    "IA": {
+      "total": 21,
+      "enacted": 1
+    },
+    "HI": {
+      "total": 83,
+      "enacted": 1
+    },
+    "PA": {
+      "total": 9,
+      "enacted": 0
+    },
+    "FL": {
+      "total": 31,
+      "enacted": 0
+    },
+    "WA": {
+      "total": 32,
+      "enacted": 10
+    },
+    "VA": {
+      "total": 25,
+      "enacted": 5
+    },
+    "SC": {
+      "total": 7,
+      "enacted": 2
+    },
+    "KY": {
+      "total": 9,
+      "enacted": 1
+    },
+    "WI": {
+      "total": 22,
+      "enacted": 5
+    },
+    "MA": {
+      "total": 80,
+      "enacted": 0
+    },
+    "MO": {
+      "total": 28,
+      "enacted": 0
+    },
+    "IN": {
+      "total": 5,
+      "enacted": 0
+    },
+    "RI": {
+      "total": 61,
+      "enacted": 4
+    },
+    "ME": {
+      "total": 25,
+      "enacted": 15
+    },
+    "CO": {
+      "total": 23,
+      "enacted": 17
+    },
+    "VT": {
+      "total": 25,
+      "enacted": 2
+    },
+    "MT": {
+      "total": 21,
+      "enacted": 0
+    },
+    "NJ": {
+      "total": 55,
+      "enacted": 1
+    },
+    "TX": {
+      "total": 10,
+      "enacted": 3
+    },
+    "AL": {
+      "total": 2,
+      "enacted": 1
+    },
+    "MI": {
+      "total": 18,
+      "enacted": 1
+    },
+    "OK": {
+      "total": 16,
+      "enacted": 2
+    },
+    "CT": {
+      "total": 46,
+      "enacted": 9
+    },
+    "MD": {
+      "total": 59,
+      "enacted": 8
+    },
+    "UT": {
+      "total": 6,
+      "enacted": 4
+    },
+    "GA": {
+      "total": 3,
+      "enacted": 0
+    },
+    "NC": {
+      "total": 6,
+      "enacted": 0
+    },
+    "US": {
+      "total": 5,
+      "enacted": 0
+    },
+    "WV": {
+      "total": 15,
+      "enacted": 0
+    },
+    "AR": {
+      "total": 10,
+      "enacted": 2
+    },
+    "TN": {
+      "total": 8,
+      "enacted": 1
+    },
+    "NH": {
+      "total": 15,
+      "enacted": 1
+    },
+    "OR": {
+      "total": 36,
+      "enacted": 8
+    },
+    "DC": {
+      "total": 9,
+      "enacted": 6
+    },
+    "KS": {
+      "total": 6,
+      "enacted": 1
+    },
+    "NV": {
+      "total": 3,
+      "enacted": 1
+    },
+    "MS": {
+      "total": 1,
+      "enacted": 0
+    },
+    "OH": {
+      "total": 4,
+      "enacted": 0
+    },
+    "ID": {
+      "total": 3,
+      "enacted": 0
+    },
+    "NE": {
+      "total": 2,
+      "enacted": 0
+    },
+    "SD": {
+      "total": 3,
+      "enacted": 0
+    },
+    "NM": {
+      "total": 2,
+      "enacted": 0
+    },
+    "DE": {
+      "total": 4,
+      "enacted": 0
+    },
+    "WY": {
+      "total": 1,
+      "enacted": 0
+    }
+  },
+  "corrections": [
+    {
+      "bill_id": 36466,
+      "openstates_id": "ocd-bill/d6c93941-ad10-4aba-ba61-e217060ca993",
+      "state": "WI",
+      "bill_number": "AB-943",
+      "old_status": "introduced",
+      "enacted_date": "2022-04-08T05:00:00+00:00"
+    },
+    {
+      "bill_id": 36085,
+      "openstates_id": "ocd-bill/c94ff0e6-3dd9-44fc-9540-bd81643dcf70",
+      "state": "CO",
+      "bill_number": "HB-24-1121",
+      "old_status": "introduced",
+      "enacted_date": "2024-05-28T06:00:00+00:00"
+    },
+    {
+      "bill_id": 46084,
+      "openstates_id": "ocd-bill/71f5f56c-f3f1-4d6d-a849-83bf2cbbd275",
+      "state": "NY",
+      "bill_number": "S-5331",
+      "old_status": "introduced",
+      "enacted_date": "2024-12-12"
+    },
+    {
+      "bill_id": 36092,
+      "openstates_id": "ocd-bill/ee6491ca-ae6f-4d1c-96ee-569dadd1f3a1",
+      "state": "SC",
+      "bill_number": "H-4775",
+      "old_status": "introduced",
+      "enacted_date": "2022-06-17"
+    },
+    {
+      "bill_id": 39971,
+      "openstates_id": "ocd-bill/166f6c28-f17e-4097-a399-ab3bef063478",
+      "state": "UT",
+      "bill_number": "H.B.-27",
+      "old_status": "introduced",
+      "enacted_date": "2020-03-24"
+    },
+    {
+      "bill_id": 34270,
+      "openstates_id": "ocd-bill/8183bb57-5326-4855-8ef0-0a6c8c5a3405",
+      "state": "IL",
+      "bill_number": "HB-3677",
+      "old_status": "introduced",
+      "enacted_date": "2025-08-15"
+    },
+    {
+      "bill_id": 33354,
+      "openstates_id": "ocd-bill/5bd100d8-68a0-427a-89c5-393d4f2f1869",
+      "state": "NY",
+      "bill_number": "A-10284",
+      "old_status": "introduced",
+      "enacted_date": "2024-08-28"
+    },
+    {
+      "bill_id": 46274,
+      "openstates_id": "ocd-bill/8472d331-9520-4f08-9520-8c6984e70e8f",
+      "state": "NE",
+      "bill_number": "LB-794",
+      "old_status": "introduced",
+      "enacted_date": "2026-02-25"
+    },
+    {
+      "bill_id": 33554,
+      "openstates_id": "ocd-bill/ddacfa6e-2593-4449-aa70-f09444b8a990",
+      "state": "AL",
+      "bill_number": "HJR-316",
+      "old_status": "introduced",
+      "enacted_date": "2026-04-17T04:00:00+00:00"
+    },
+    {
+      "bill_id": 46486,
+      "openstates_id": "ocd-bill/9ad1cccb-7a37-431a-820e-c46508e6cdec",
+      "state": "CO",
+      "bill_number": "HB-23-1069",
+      "old_status": "introduced",
+      "enacted_date": "2023-05-18T06:00:00+00:00"
+    },
+    {
+      "bill_id": 34031,
+      "openstates_id": "ocd-bill/a12755d0-cad0-44a5-8f2c-55afd483ad07",
+      "state": "CO",
+      "bill_number": "HB-25-1059",
+      "old_status": "introduced",
+      "enacted_date": "2025-04-17T06:00:00+00:00"
+    },
+    {
+      "bill_id": 36368,
+      "openstates_id": "ocd-bill/5ff8120c-3378-4a8f-908f-093622427b03",
+      "state": "CO",
+      "bill_number": "HB-1219",
+      "old_status": "introduced",
+      "enacted_date": "2026-05-05"
+    },
+    {
+      "bill_id": 35963,
+      "openstates_id": "ocd-bill/c86db9c5-e2ec-42ac-a043-5a3bc7eea2fe",
+      "state": "CO",
+      "bill_number": "HB-25-1166",
+      "old_status": "introduced",
+      "enacted_date": "2025-04-18T06:00:00+00:00"
+    },
+    {
+      "bill_id": 35719,
+      "openstates_id": "ocd-bill/8d71240a-bf3d-40e3-9443-ad126ae440dc",
+      "state": "MD",
+      "bill_number": "HB-31",
+      "old_status": "introduced",
+      "enacted_date": "2025-05-13"
+    },
+    {
+      "bill_id": 31428,
+      "openstates_id": "ocd-bill/8fa0a430-b3cd-4304-b456-593d0d9f2bcf",
+      "state": "NY",
+      "bill_number": "S-2097",
+      "old_status": "introduced",
+      "enacted_date": "2025-07-29"
+    },
+    {
+      "bill_id": 36616,
+      "openstates_id": "ocd-bill/d1323b6d-a944-47a9-b85f-e02d5c68485d",
+      "state": "DC",
+      "bill_number": "PR-24-0498",
+      "old_status": "introduced",
+      "enacted_date": "2021-12-07T05:00:00+00:00"
+    },
+    {
+      "bill_id": 36747,
+      "openstates_id": "ocd-bill/b504d813-c126-4455-8427-81c71cbe544a",
+      "state": "AR",
+      "bill_number": "SB-585",
+      "old_status": "introduced",
+      "enacted_date": "2021-04-26T15:45:19+00:00"
+    },
+    {
+      "bill_id": 36825,
+      "openstates_id": "ocd-bill/0718d5bd-3838-4c56-8564-69b14993ae56",
+      "state": "AR",
+      "bill_number": "SB-508",
+      "old_status": "introduced",
+      "enacted_date": "2023-04-11T21:32:49+00:00"
+    },
+    {
+      "bill_id": 33304,
+      "openstates_id": "ocd-bill/7fd0994d-98be-48c4-95eb-cd3f51a931d9",
+      "state": "SC",
+      "bill_number": "H-4035",
+      "old_status": "introduced",
+      "enacted_date": "2021-05-17"
+    },
+    {
+      "bill_id": 34299,
+      "openstates_id": "ocd-bill/2e57dafe-4221-44fc-b3dc-55bfbc7b7865",
+      "state": "MD",
+      "bill_number": "SB-539",
+      "old_status": "introduced",
+      "enacted_date": "2021-05-18"
+    },
+    {
+      "bill_id": 35008,
+      "openstates_id": "ocd-bill/6fdb6974-1464-437b-a80a-8c28f47a03e4",
+      "state": "IL",
+      "bill_number": "HB-1780",
+      "old_status": "introduced",
+      "enacted_date": "2022-06-10"
+    },
+    {
+      "bill_id": 36332,
+      "openstates_id": "ocd-bill/e9432c44-b520-431c-b3d2-d9ac5a5bbc9c",
+      "state": "IL",
+      "bill_number": "HB-3098",
+      "old_status": "introduced",
+      "enacted_date": "2025-08-15"
+    },
+    {
+      "bill_id": 44976,
+      "openstates_id": "ocd-bill/06ec3824-3ba7-4090-9889-25c7246666cf",
+      "state": "NY",
+      "bill_number": "S-759",
+      "old_status": "introduced",
+      "enacted_date": "2025-02-14"
+    },
+    {
+      "bill_id": 46156,
+      "openstates_id": "ocd-bill/79e88043-d5f9-4905-9b3f-037efcbdcbca",
+      "state": "UT",
+      "bill_number": "HB-66",
+      "old_status": "introduced",
+      "enacted_date": "2026-02-27T21:53:23+00:00"
+    },
+    {
+      "bill_id": 35197,
+      "openstates_id": "ocd-bill/51971abe-def8-4995-ae70-6c5170986f25",
+      "state": "MD",
+      "bill_number": "SB-222",
+      "old_status": "introduced",
+      "enacted_date": "2023-05-08"
+    },
+    {
+      "bill_id": 47061,
+      "openstates_id": "ocd-bill/d14e2081-328c-4bfb-a388-8b5fb5b75e09",
+      "state": "VA",
+      "bill_number": "HB-1015",
+      "old_status": "introduced",
+      "enacted_date": "2024-03-28"
+    },
+    {
+      "bill_id": 36050,
+      "openstates_id": "ocd-bill/be34af60-3271-473b-8f30-1fb8ec519eca",
+      "state": "VA",
+      "bill_number": "SB-1525",
+      "old_status": "introduced",
+      "enacted_date": "2023-03-22"
+    },
+    {
+      "bill_id": 45940,
+      "openstates_id": "ocd-bill/640b200b-7889-4e5e-ad5d-aafa1e99d153",
+      "state": "WA",
+      "bill_number": "SB-6121",
+      "old_status": "introduced",
+      "enacted_date": "2024-03-26"
+    },
+    {
+      "bill_id": 34867,
+      "openstates_id": "ocd-bill/ffab6200-d840-4bba-a8e9-5de02a72e8ee",
+      "state": "TX",
+      "bill_number": "HB-2127",
+      "old_status": "introduced",
+      "enacted_date": "2023-06-14"
+    },
+    {
+      "bill_id": 36925,
+      "openstates_id": "ocd-bill/ed776f33-ed2c-4f95-ad7a-ea5e95ad7c6d",
+      "state": "HI",
+      "bill_number": "HB-750",
+      "old_status": "introduced",
+      "enacted_date": "2025-05-27"
+    },
+    {
+      "bill_id": 35033,
+      "openstates_id": "ocd-bill/713502f2-ab00-4b80-bbb8-90ec9caa1834",
+      "state": "WA",
+      "bill_number": "HB-1483",
+      "old_status": "introduced",
+      "enacted_date": "2025-05-19"
+    },
+    {
+      "bill_id": 35773,
+      "openstates_id": "ocd-bill/7cbc96dd-71bc-45c2-9dea-f2f65a2f7a6d",
+      "state": "WA",
+      "bill_number": "SB-5680",
+      "old_status": "introduced",
+      "enacted_date": "2025-05-19"
+    },
+    {
+      "bill_id": 33504,
+      "openstates_id": "ocd-bill/f66ddd46-4c9b-4947-a876-f6b1ebfeb800",
+      "state": "DC",
+      "bill_number": "B-24-0668",
+      "old_status": "introduced",
+      "enacted_date": "2022-11-21T05:00:00+00:00"
+    },
+    {
+      "bill_id": 33522,
+      "openstates_id": "ocd-bill/25058399-06e7-4cbb-8947-74bbdb1f0fc6",
+      "state": "CT",
+      "bill_number": "HB-6001",
+      "old_status": "introduced",
+      "enacted_date": "2022-11-29"
+    },
+    {
+      "bill_id": 35163,
+      "openstates_id": "ocd-bill/cede0732-a253-45b4-962c-ebba98984e5f",
+      "state": "NY",
+      "bill_number": "A-8596",
+      "old_status": "introduced",
+      "enacted_date": "2025-08-07"
+    },
+    {
+      "bill_id": 33693,
+      "openstates_id": "ocd-bill/8947c39c-8227-4d11-accc-347b2903092c",
+      "state": "IL",
+      "bill_number": "SB-294",
+      "old_status": "introduced",
+      "enacted_date": "2021-08-06"
+    },
+    {
+      "bill_id": 35646,
+      "openstates_id": "ocd-bill/a2f3828a-dfbb-41cd-848f-98a64531fa20",
+      "state": "NY",
+      "bill_number": "S-7458",
+      "old_status": "introduced",
+      "enacted_date": "2023-08-23"
+    },
+    {
+      "bill_id": 36116,
+      "openstates_id": "ocd-bill/0155f2ed-a7d9-40a8-90c0-99dec0d925d3",
+      "state": "CO",
+      "bill_number": "SB-24-123",
+      "old_status": "introduced",
+      "enacted_date": "2024-06-06T06:00:00+00:00"
+    },
+    {
+      "bill_id": 33674,
+      "openstates_id": "ocd-bill/a338b3d4-d10c-4232-91c8-4a3f0f3e574f",
+      "state": "TN",
+      "bill_number": "SB-2368",
+      "old_status": "introduced",
+      "enacted_date": "2024-05-28"
+    },
+    {
+      "bill_id": 33798,
+      "openstates_id": "ocd-bill/0af952b4-b047-4c3d-ab36-e019b36a8278",
+      "state": "UT",
+      "bill_number": "HB-110",
+      "old_status": "introduced",
+      "enacted_date": "2023-03-20"
+    },
+    {
+      "bill_id": 33932,
+      "openstates_id": "ocd-bill/b1065b54-3f00-4006-94d1-50755bf8f50d",
+      "state": "WA",
+      "bill_number": "SB-5175",
+      "old_status": "introduced",
+      "enacted_date": "2025-04-22"
+    },
+    {
+      "bill_id": 34759,
+      "openstates_id": "ocd-bill/8e82fce6-d86d-436c-bf15-9e0bebc15fad",
+      "state": "DC",
+      "bill_number": "B-24-0534",
+      "old_status": "introduced",
+      "enacted_date": "2021-12-22T05:00:00+00:00"
+    },
+    {
+      "bill_id": 33862,
+      "openstates_id": "ocd-bill/102b67d9-966e-4b32-9202-a03842a0f776",
+      "state": "VA",
+      "bill_number": "HB-2445",
+      "old_status": "introduced",
+      "enacted_date": "2023-03-22"
+    },
+    {
+      "bill_id": 30567,
+      "openstates_id": "ocd-bill/fa4074f0-2823-4da0-9db8-0d9a7b85c9a8",
+      "state": "OR",
+      "bill_number": "SB-992",
+      "old_status": "introduced",
+      "enacted_date": "2025-06-03T19:41:57+00:00"
+    },
+    {
+      "bill_id": 36425,
+      "openstates_id": "ocd-bill/1a6166a1-25fb-47ef-b1b1-056d21e39ef0",
+      "state": "NY",
+      "bill_number": "A-1285",
+      "old_status": "introduced",
+      "enacted_date": "2023-03-03"
+    },
+    {
+      "bill_id": 47479,
+      "openstates_id": "ocd-bill/fc20f531-5b7d-4f24-9550-2658868e46f2",
+      "state": "MD",
+      "bill_number": "SB-625",
+      "old_status": "introduced",
+      "enacted_date": "2026-05-12"
+    },
+    {
+      "bill_id": 35521,
+      "openstates_id": "ocd-bill/1aba7b3f-43a2-48b3-80ec-2f9e2effb14b",
+      "state": "AR",
+      "bill_number": "SB-310",
+      "old_status": "introduced",
+      "enacted_date": "2023-04-11T21:16:42+00:00"
+    },
+    {
+      "bill_id": 33368,
+      "openstates_id": "ocd-bill/af81131e-f7a1-4025-bb7d-c20090d84a2d",
+      "state": "IL",
+      "bill_number": "SB-3686",
+      "old_status": "introduced",
+      "enacted_date": "2024-08-09"
+    },
+    {
+      "bill_id": 33598,
+      "openstates_id": "ocd-bill/af972983-4a5d-4c45-8699-ba203d095f9c",
+      "state": "OR",
+      "bill_number": "SB-123",
+      "old_status": "introduced",
+      "enacted_date": "2023-05-19T21:48:00+00:00"
+    },
+    {
+      "bill_id": 45194,
+      "openstates_id": "ocd-bill/1c92aac3-c2f4-45ac-8b0a-96aa2227fa88",
+      "state": "CO",
+      "bill_number": "SB-23-092",
+      "old_status": "introduced",
+      "enacted_date": "2023-05-18T06:00:00+00:00"
+    },
+    {
+      "bill_id": 34122,
+      "openstates_id": "ocd-bill/a3399913-bb32-45da-8870-b93ec7316720",
+      "state": "WI",
+      "bill_number": "SB-248",
+      "old_status": "introduced",
+      "enacted_date": "2021-08-09T05:00:00+00:00"
+    },
+    {
+      "bill_id": 33973,
+      "openstates_id": "ocd-bill/ac5fb670-e4c5-4f24-961e-958407befdde",
+      "state": "CO",
+      "bill_number": "SB-25-163",
+      "old_status": "introduced",
+      "enacted_date": "2025-06-04T06:00:00+00:00"
+    },
+    {
+      "bill_id": 35430,
+      "openstates_id": "ocd-bill/66c68380-dd22-48ce-bcb5-634bf70970b9",
+      "state": "DC",
+      "bill_number": "PR-24-0911",
+      "old_status": "introduced",
+      "enacted_date": "2022-09-20T04:00:00+00:00"
+    },
+    {
+      "bill_id": 46709,
+      "openstates_id": "ocd-bill/b1e4e2bb-5cfa-4a0a-b6ff-b76dea35663e",
+      "state": "VA",
+      "bill_number": "SB-298",
+      "old_status": "introduced",
+      "enacted_date": "2024-03-28"
+    },
+    {
+      "bill_id": 36276,
+      "openstates_id": "ocd-bill/23af4f78-8223-41cd-ba83-0903ae2ac61a",
+      "state": "NH",
+      "bill_number": "SB-50",
+      "old_status": "introduced",
+      "enacted_date": "2023-06-02"
+    },
+    {
+      "bill_id": 35239,
+      "openstates_id": "ocd-bill/f250f2a6-9a85-495c-a401-8ace59ba388a",
+      "state": "MT",
+      "bill_number": "HB-26",
+      "old_status": "introduced",
+      "enacted_date": "2025-05-05T18:37:31+00:00"
+    },
+    {
+      "bill_id": 36042,
+      "openstates_id": "ocd-bill/b72a65ef-ea30-455b-921a-4c7ba62e1ae4",
+      "state": "WI",
+      "bill_number": "SB-866",
+      "old_status": "introduced",
+      "enacted_date": "2024-03-14T05:00:00+00:00"
+    },
+    {
+      "bill_id": 35049,
+      "openstates_id": "ocd-bill/275ef2cf-ed14-4bf3-b953-8fe8c0e58972",
+      "state": "NY",
+      "bill_number": "S-834",
+      "old_status": "introduced",
+      "enacted_date": "2023-03-03"
+    },
+    {
+      "bill_id": 34631,
+      "openstates_id": "ocd-bill/28f07b9d-1436-4420-b236-ca65486f0d62",
+      "state": "MD",
+      "bill_number": "SB-901",
+      "old_status": "introduced",
+      "enacted_date": "2025-05-13"
+    },
+    {
+      "bill_id": 34685,
+      "openstates_id": "ocd-bill/20729b97-fec3-4238-9398-2bb8334ada93",
+      "state": "OK",
+      "bill_number": "HB-1597",
+      "old_status": "introduced",
+      "enacted_date": "2023-04-19"
+    },
+    {
+      "bill_id": 34604,
+      "openstates_id": "ocd-bill/141570e0-38f1-430b-9ba2-e025d5201185",
+      "state": "CO",
+      "bill_number": "HB-23-1011",
+      "old_status": "introduced",
+      "enacted_date": "2023-04-25T06:00:00+00:00"
+    },
+    {
+      "bill_id": 34307,
+      "openstates_id": "ocd-bill/1048d741-ffc7-44f7-832e-a00cd0918d32",
+      "state": "IL",
+      "bill_number": "SB-1701",
+      "old_status": "introduced",
+      "enacted_date": "2023-08-04"
+    },
+    {
+      "bill_id": 36417,
+      "openstates_id": "ocd-bill/4b2158a1-fe0d-4b4e-914f-414b34027186",
+      "state": "MD",
+      "bill_number": "HB-752",
+      "old_status": "introduced",
+      "enacted_date": "2021-05-18"
+    },
+    {
+      "bill_id": 34805,
+      "openstates_id": "ocd-bill/81c797fc-57df-444a-8838-97c9b4de7950",
+      "state": "UT",
+      "bill_number": "HB-236",
+      "old_status": "introduced",
+      "enacted_date": "2021-03-16"
+    },
+    {
+      "bill_id": 34984,
+      "openstates_id": "ocd-bill/00743e71-b9a1-48f0-b634-6781a84b4a8a",
+      "state": "OK",
+      "bill_number": "HB-1597",
+      "old_status": "introduced",
+      "enacted_date": "2023-04-19"
+    },
+    {
+      "bill_id": 35133,
+      "openstates_id": "ocd-bill/4ceec6c2-d55a-419e-bc24-1217694520d2",
+      "state": "DC",
+      "bill_number": "B-24-0535",
+      "old_status": "introduced",
+      "enacted_date": "2022-01-24T05:00:00+00:00"
+    },
+    {
+      "bill_id": 36297,
+      "openstates_id": "ocd-bill/3061672e-6255-43d8-b37c-858cde246cd9",
+      "state": "MD",
+      "bill_number": "HB-1",
+      "old_status": "introduced",
+      "enacted_date": "2024-05-09"
+    },
+    {
+      "bill_id": 35162,
+      "openstates_id": "ocd-bill/bdfe9073-0003-45d3-afa9-4e9cbbe2e54d",
+      "state": "IL",
+      "bill_number": "SB-1555",
+      "old_status": "introduced",
+      "enacted_date": "2023-07-28"
+    },
+    {
+      "bill_id": 35409,
+      "openstates_id": "ocd-bill/67dfa1c9-208d-4a27-b547-389ae2f3602c",
+      "state": "OR",
+      "bill_number": "HB-4144",
+      "old_status": "introduced",
+      "enacted_date": "2026-04-07T22:30:54+00:00"
+    },
+    {
+      "bill_id": 35436,
+      "openstates_id": "ocd-bill/9a4153c3-2981-467c-95a4-8f53c15319ac",
+      "state": "MI",
+      "bill_number": "HB-4780",
+      "old_status": "introduced",
+      "enacted_date": "2021-12-15T05:00:00+00:00"
+    },
+    {
+      "bill_id": 35507,
+      "openstates_id": "ocd-bill/1c23c903-0851-4674-adb7-40d7dc550dfb",
+      "state": "AR",
+      "bill_number": "HB-1805",
+      "old_status": "introduced",
+      "enacted_date": "2021-04-30T20:30:01+00:00"
+    },
+    {
+      "bill_id": 36759,
+      "openstates_id": "ocd-bill/02c54016-ea1c-42c0-98ad-a53e7c082774",
+      "state": "CO",
+      "bill_number": "HB-25-1330",
+      "old_status": "introduced",
+      "enacted_date": "2025-06-03T06:00:00+00:00"
+    },
+    {
+      "bill_id": 33769,
+      "openstates_id": "ocd-bill/24062d5c-d616-4c97-bd58-8232163a37e7",
+      "state": "VA",
+      "bill_number": "HB-1287",
+      "old_status": "introduced",
+      "enacted_date": "2022-04-27"
+    },
+    {
+      "bill_id": 34054,
+      "openstates_id": "ocd-bill/4694b94b-31a4-4a02-a3a4-b271af9ca377",
+      "state": "MD",
+      "bill_number": "SB-325",
+      "old_status": "introduced",
+      "enacted_date": "2024-05-09"
+    },
+    {
+      "bill_id": 47362,
+      "openstates_id": "ocd-bill/ee369817-dc43-4ec7-b31e-9523ce179f09",
+      "state": "CO",
+      "bill_number": "SB-23-191",
+      "old_status": "introduced",
+      "enacted_date": "2023-05-17T06:00:00+00:00"
+    },
+    {
+      "bill_id": 35728,
+      "openstates_id": "ocd-bill/7cdbbc00-0c70-4d38-8a85-f553856b76d5",
+      "state": "ME",
+      "bill_number": "LD-222",
+      "old_status": "introduced",
+      "enacted_date": "2026-01-11"
+    },
+    {
+      "bill_id": 34193,
+      "openstates_id": "ocd-bill/fe0ce1a9-6df8-416c-a417-8751f55ce33e",
+      "state": "KS",
+      "bill_number": "HB-2700",
+      "old_status": "introduced",
+      "enacted_date": "2026-04-09"
+    },
+    {
+      "bill_id": 35826,
+      "openstates_id": "ocd-bill/92c3ca58-67b7-4ff5-b32d-dde4532853e4",
+      "state": "WA",
+      "bill_number": "HB-1422",
+      "old_status": "introduced",
+      "enacted_date": "2025-05-12"
+    },
+    {
+      "bill_id": 35844,
+      "openstates_id": "ocd-bill/6ff66711-9292-40d6-a618-1496e5b17df6",
+      "state": "NY",
+      "bill_number": "S-8832",
+      "old_status": "introduced",
+      "enacted_date": "2026-02-13"
+    },
+    {
+      "bill_id": 35903,
+      "openstates_id": "ocd-bill/b883c0d1-4a50-4762-8135-caebbe7b0e0f",
+      "state": "OR",
+      "bill_number": "SB-550",
+      "old_status": "introduced",
+      "enacted_date": "2025-06-09T21:13:01+00:00"
+    },
+    {
+      "bill_id": 35947,
+      "openstates_id": "ocd-bill/712d6d4e-d4aa-49b2-aaab-2f1c417bd2e3",
+      "state": "CO",
+      "bill_number": "HB-24-1449",
+      "old_status": "introduced",
+      "enacted_date": "2024-05-17T06:00:00+00:00"
+    },
+    {
+      "bill_id": 31374,
+      "openstates_id": "ocd-bill/3c29596d-1e6e-4a18-9b25-557348d127fc",
+      "state": "NY",
+      "bill_number": "S-73",
+      "old_status": "introduced",
+      "enacted_date": "2025-12-19"
+    },
+    {
+      "bill_id": 35999,
+      "openstates_id": "ocd-bill/3a5c8b03-42ad-4b7f-9f0e-49cb399d60d8",
+      "state": "IA",
+      "bill_number": "SF-2378",
+      "old_status": "introduced",
+      "enacted_date": "2022-06-17"
+    },
+    {
+      "bill_id": 33567,
+      "openstates_id": "ocd-bill/3fa5aa4e-dbf3-45d8-9d2d-a1b5966ae039",
+      "state": "WI",
+      "bill_number": "AB-713",
+      "old_status": "introduced",
+      "enacted_date": "2026-04-02T05:00:00+00:00"
+    },
+    {
+      "bill_id": 30599,
+      "openstates_id": "ocd-bill/4b335005-b920-4374-8824-669b7bcaea18",
+      "state": "OR",
+      "bill_number": "SB-1596",
+      "old_status": "introduced",
+      "enacted_date": "2024-03-27T19:48:17+00:00"
+    },
+    {
+      "bill_id": 30615,
+      "openstates_id": "ocd-bill/54ff407c-eac5-490a-8f34-933c1b879d1b",
+      "state": "OR",
+      "bill_number": "HB-3220",
+      "old_status": "introduced",
+      "enacted_date": "2023-07-13T19:20:02+00:00"
+    },
+    {
+      "bill_id": 35328,
+      "openstates_id": "ocd-bill/e23b3ef2-7042-475b-bff6-47d97979027f",
+      "state": "NM",
+      "bill_number": "SB-50",
+      "old_status": "introduced",
+      "enacted_date": "2023-04-07"
+    }
+  ]
+}

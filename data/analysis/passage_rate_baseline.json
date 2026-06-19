@@ -1,0 +1,4083 @@
+{
+  "since_year": 2019,
+  "per_state": [
+    {
+      "state": "AK",
+      "introduced": 12664,
+      "enacted": 1184,
+      "passage_rate": 0.0935
+    },
+    {
+      "state": "AL",
+      "introduced": 41592,
+      "enacted": 14248,
+      "passage_rate": 0.3426
+    },
+    {
+      "state": "AR",
+      "introduced": 34332,
+      "enacted": 19528,
+      "passage_rate": 0.5688
+    },
+    {
+      "state": "AZ",
+      "introduced": 57136,
+      "enacted": 8176,
+      "passage_rate": 0.1431
+    },
+    {
+      "state": "CA",
+      "introduced": 62676,
+      "enacted": 21908,
+      "passage_rate": 0.3495
+    },
+    {
+      "state": "CO",
+      "introduced": 23068,
+      "enacted": 13896,
+      "passage_rate": 0.6024
+    },
+    {
+      "state": "CT",
+      "introduced": 80560,
+      "enacted": 5348,
+      "passage_rate": 0.0664
+    },
+    {
+      "state": "DC",
+      "introduced": 41388,
+      "enacted": 19536,
+      "passage_rate": 0.472
+    },
+    {
+      "state": "DE",
+      "introduced": 17372,
+      "enacted": 6608,
+      "passage_rate": 0.3804
+    },
+    {
+      "state": "FL",
+      "introduced": 87416,
+      "enacted": 7304,
+      "passage_rate": 0.0836
+    },
+    {
+      "state": "GA",
+      "introduced": 78000,
+      "enacted": 12016,
+      "passage_rate": 0.1541
+    },
+    {
+      "state": "GU",
+      "introduced": 1920,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "HI",
+      "introduced": 174476,
+      "enacted": 4940,
+      "passage_rate": 0.0283
+    },
+    {
+      "state": "IA",
+      "introduced": 61408,
+      "enacted": 5100,
+      "passage_rate": 0.0831
+    },
+    {
+      "state": "ID",
+      "introduced": 22276,
+      "enacted": 10724,
+      "passage_rate": 0.4814
+    },
+    {
+      "state": "IL",
+      "introduced": 206672,
+      "enacted": 13248,
+      "passage_rate": 0.0641
+    },
+    {
+      "state": "IN",
+      "introduced": 39068,
+      "enacted": 5584,
+      "passage_rate": 0.1429
+    },
+    {
+      "state": "KS",
+      "introduced": 23764,
+      "enacted": 2772,
+      "passage_rate": 0.1166
+    },
+    {
+      "state": "KY",
+      "introduced": 48960,
+      "enacted": 6164,
+      "passage_rate": 0.1259
+    },
+    {
+      "state": "LA",
+      "introduced": 65592,
+      "enacted": 13948,
+      "passage_rate": 0.2126
+    },
+    {
+      "state": "MA",
+      "introduced": 270204,
+      "enacted": 4732,
+      "passage_rate": 0.0175
+    },
+    {
+      "state": "MD",
+      "introduced": 81768,
+      "enacted": 25240,
+      "passage_rate": 0.3087
+    },
+    {
+      "state": "ME",
+      "introduced": 29016,
+      "enacted": 10060,
+      "passage_rate": 0.3467
+    },
+    {
+      "state": "MI",
+      "introduced": 66168,
+      "enacted": 6364,
+      "passage_rate": 0.0962
+    },
+    {
+      "state": "MN",
+      "introduced": 168568,
+      "enacted": 2072,
+      "passage_rate": 0.0123
+    },
+    {
+      "state": "MO",
+      "introduced": 79696,
+      "enacted": 1140,
+      "passage_rate": 0.0143
+    },
+    {
+      "state": "MS",
+      "introduced": 114584,
+      "enacted": 11820,
+      "passage_rate": 0.1032
+    },
+    {
+      "state": "MT",
+      "introduced": 73612,
+      "enacted": 10456,
+      "passage_rate": 0.142
+    },
+    {
+      "state": "NC",
+      "introduced": 34104,
+      "enacted": 4004,
+      "passage_rate": 0.1174
+    },
+    {
+      "state": "ND",
+      "introduced": 16200,
+      "enacted": 9072,
+      "passage_rate": 0.56
+    },
+    {
+      "state": "NE",
+      "introduced": 30364,
+      "enacted": 5352,
+      "passage_rate": 0.1763
+    },
+    {
+      "state": "NH",
+      "introduced": 35756,
+      "enacted": 7992,
+      "passage_rate": 0.2235
+    },
+    {
+      "state": "NJ",
+      "introduced": 178864,
+      "enacted": 5456,
+      "passage_rate": 0.0305
+    },
+    {
+      "state": "NM",
+      "introduced": 33888,
+      "enacted": 6816,
+      "passage_rate": 0.2011
+    },
+    {
+      "state": "NV",
+      "introduced": 18368,
+      "enacted": 8868,
+      "passage_rate": 0.4828
+    },
+    {
+      "state": "NY",
+      "introduced": 388060,
+      "enacted": 20148,
+      "passage_rate": 0.0519
+    },
+    {
+      "state": "OH",
+      "introduced": 35820,
+      "enacted": 1240,
+      "passage_rate": 0.0346
+    },
+    {
+      "state": "OK",
+      "introduced": 141896,
+      "enacted": 19852,
+      "passage_rate": 0.1399
+    },
+    {
+      "state": "OR",
+      "introduced": 51748,
+      "enacted": 12184,
+      "passage_rate": 0.2354
+    },
+    {
+      "state": "PA",
+      "introduced": 79360,
+      "enacted": 3636,
+      "passage_rate": 0.0458
+    },
+    {
+      "state": "PR",
+      "introduced": 51172,
+      "enacted": 2224,
+      "passage_rate": 0.0435
+    },
+    {
+      "state": "RI",
+      "introduced": 80956,
+      "enacted": 12800,
+      "passage_rate": 0.1581
+    },
+    {
+      "state": "SC",
+      "introduced": 62732,
+      "enacted": 3752,
+      "passage_rate": 0.0598
+    },
+    {
+      "state": "SD",
+      "introduced": 18760,
+      "enacted": 7392,
+      "passage_rate": 0.394
+    },
+    {
+      "state": "TN",
+      "introduced": 154008,
+      "enacted": 71132,
+      "passage_rate": 0.4619
+    },
+    {
+      "state": "TX",
+      "introduced": 194500,
+      "enacted": 21224,
+      "passage_rate": 0.1091
+    },
+    {
+      "state": "UT",
+      "introduced": 29048,
+      "enacted": 17072,
+      "passage_rate": 0.5877
+    },
+    {
+      "state": "VA",
+      "introduced": 111228,
+      "enacted": 26504,
+      "passage_rate": 0.2383
+    },
+    {
+      "state": "VI",
+      "introduced": 852,
+      "enacted": 112,
+      "passage_rate": 0.1315
+    },
+    {
+      "state": "VT",
+      "introduced": 25920,
+      "enacted": 2848,
+      "passage_rate": 0.1099
+    },
+    {
+      "state": "WA",
+      "introduced": 51200,
+      "enacted": 11956,
+      "passage_rate": 0.2335
+    },
+    {
+      "state": "WI",
+      "introduced": 41156,
+      "enacted": 3940,
+      "passage_rate": 0.0957
+    },
+    {
+      "state": "WV",
+      "introduced": 86992,
+      "enacted": 9448,
+      "passage_rate": 0.1086
+    },
+    {
+      "state": "WY",
+      "introduced": 13708,
+      "enacted": 5000,
+      "passage_rate": 0.3648
+    }
+  ],
+  "per_session": [
+    {
+      "state": "AK",
+      "session": "31",
+      "start_date": "2019-01-21",
+      "introduced": 2696,
+      "enacted": 256,
+      "passage_rate": 0.095
+    },
+    {
+      "state": "AK",
+      "session": "32",
+      "start_date": "2021-01-19",
+      "introduced": 3324,
+      "enacted": 444,
+      "passage_rate": 0.1336
+    },
+    {
+      "state": "AK",
+      "session": "33",
+      "start_date": "2023-01-17",
+      "introduced": 3248,
+      "enacted": 356,
+      "passage_rate": 0.1096
+    },
+    {
+      "state": "AK",
+      "session": "34",
+      "start_date": "2025-01-21",
+      "introduced": 3396,
+      "enacted": 128,
+      "passage_rate": 0.0377
+    },
+    {
+      "state": "AL",
+      "session": "2019fs",
+      "start_date": "2019-03-06",
+      "introduced": 92,
+      "enacted": 12,
+      "passage_rate": 0.1304
+    },
+    {
+      "state": "AL",
+      "session": "2019rs",
+      "start_date": "2019-03-05",
+      "introduced": 5528,
+      "enacted": 1868,
+      "passage_rate": 0.3379
+    },
+    {
+      "state": "AL",
+      "session": "2020rs",
+      "start_date": "2020-02-04",
+      "introduced": 3988,
+      "enacted": 724,
+      "passage_rate": 0.1815
+    },
+    {
+      "state": "AL",
+      "session": "2021rs",
+      "start_date": "2021-02-02",
+      "introduced": 5472,
+      "enacted": 1820,
+      "passage_rate": 0.3326
+    },
+    {
+      "state": "AL",
+      "session": "2021s1",
+      "start_date": "2021-09-27",
+      "introduced": 148,
+      "enacted": 28,
+      "passage_rate": 0.1892
+    },
+    {
+      "state": "AL",
+      "session": "2022rs",
+      "start_date": "2022-01-11",
+      "introduced": 4704,
+      "enacted": 1472,
+      "passage_rate": 0.3129
+    },
+    {
+      "state": "AL",
+      "session": "2022s1",
+      "start_date": "2022-01-19",
+      "introduced": 60,
+      "enacted": 4,
+      "passage_rate": 0.0667
+    },
+    {
+      "state": "AL",
+      "session": "2023rs",
+      "start_date": "2023-03-07",
+      "introduced": 5052,
+      "enacted": 2236,
+      "passage_rate": 0.4426
+    },
+    {
+      "state": "AL",
+      "session": "2024rs",
+      "start_date": "2024-02-06",
+      "introduced": 4812,
+      "enacted": 1816,
+      "passage_rate": 0.3774
+    },
+    {
+      "state": "AL",
+      "session": "2025rs",
+      "start_date": "2025-02-04",
+      "introduced": 5708,
+      "enacted": 1824,
+      "passage_rate": 0.3196
+    },
+    {
+      "state": "AL",
+      "session": "2026rs",
+      "start_date": "2026-01-13",
+      "introduced": 6028,
+      "enacted": 2444,
+      "passage_rate": 0.4054
+    },
+    {
+      "state": "AR",
+      "session": "2019",
+      "start_date": "2019-01-14",
+      "introduced": 7476,
+      "enacted": 4360,
+      "passage_rate": 0.5832
+    },
+    {
+      "state": "AR",
+      "session": "2020F",
+      "start_date": "2020-04-08",
+      "introduced": 792,
+      "enacted": 752,
+      "passage_rate": 0.9495
+    },
+    {
+      "state": "AR",
+      "session": "2020S1",
+      "start_date": "2020-03-26",
+      "introduced": 16,
+      "enacted": 8,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "AR",
+      "session": "2021",
+      "start_date": "2021-01-11",
+      "introduced": 7612,
+      "enacted": 4432,
+      "passage_rate": 0.5822
+    },
+    {
+      "state": "AR",
+      "session": "2021S1",
+      "start_date": "2021-08-04",
+      "introduced": 92,
+      "enacted": 8,
+      "passage_rate": 0.087
+    },
+    {
+      "state": "AR",
+      "session": "2021S2",
+      "start_date": "2021-12-07",
+      "introduced": 184,
+      "enacted": 56,
+      "passage_rate": 0.3043
+    },
+    {
+      "state": "AR",
+      "session": "2022F",
+      "start_date": "2022-02-14",
+      "introduced": 1284,
+      "enacted": 904,
+      "passage_rate": 0.704
+    },
+    {
+      "state": "AR",
+      "session": "2022S3",
+      "start_date": "2022-08-08",
+      "introduced": 76,
+      "enacted": 12,
+      "passage_rate": 0.1579
+    },
+    {
+      "state": "AR",
+      "session": "2023",
+      "start_date": "2023-01-09",
+      "introduced": 6640,
+      "enacted": 3560,
+      "passage_rate": 0.5361
+    },
+    {
+      "state": "AR",
+      "session": "2023S1",
+      "start_date": "2023-08-08",
+      "introduced": 96,
+      "enacted": 44,
+      "passage_rate": 0.4583
+    },
+    {
+      "state": "AR",
+      "session": "2024F",
+      "start_date": "2024-04-10",
+      "introduced": 1152,
+      "enacted": 704,
+      "passage_rate": 0.6111
+    },
+    {
+      "state": "AR",
+      "session": "2024S2",
+      "start_date": "2024-06-17",
+      "introduced": 76,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "AR",
+      "session": "2025",
+      "start_date": "2025-01-13",
+      "introduced": 7712,
+      "enacted": 4104,
+      "passage_rate": 0.5322
+    },
+    {
+      "state": "AR",
+      "session": "2026F",
+      "start_date": "2026-04-08",
+      "introduced": 1116,
+      "enacted": 576,
+      "passage_rate": 0.5161
+    },
+    {
+      "state": "AR",
+      "session": "2026S1",
+      "start_date": "2026-05-04",
+      "introduced": 8,
+      "enacted": 8,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "AZ",
+      "session": "54th-1st-regular",
+      "start_date": "2019-01-14",
+      "introduced": 5672,
+      "enacted": 1284,
+      "passage_rate": 0.2264
+    },
+    {
+      "state": "AZ",
+      "session": "54th-2nd-regular",
+      "start_date": "2020-01-13",
+      "introduced": 6936,
+      "enacted": 360,
+      "passage_rate": 0.0519
+    },
+    {
+      "state": "AZ",
+      "session": "55th-1st-regular",
+      "start_date": "2021-01-11",
+      "introduced": 7596,
+      "enacted": 1784,
+      "passage_rate": 0.2349
+    },
+    {
+      "state": "AZ",
+      "session": "55th-1st-special",
+      "start_date": "2021-06-15",
+      "introduced": 8,
+      "enacted": 4,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "AZ",
+      "session": "55th-2nd-regular",
+      "start_date": "2022-01-10",
+      "introduced": 6988,
+      "enacted": 1544,
+      "passage_rate": 0.221
+    },
+    {
+      "state": "AZ",
+      "session": "56th-1st-regular",
+      "start_date": "2023-01-09",
+      "introduced": 6700,
+      "enacted": 820,
+      "passage_rate": 0.1224
+    },
+    {
+      "state": "AZ",
+      "session": "56th-2nd-regular",
+      "start_date": "2024-01-08",
+      "introduced": 7192,
+      "enacted": 1036,
+      "passage_rate": 0.144
+    },
+    {
+      "state": "AZ",
+      "session": "57th-1st-regular",
+      "start_date": "2025-01-13",
+      "introduced": 7416,
+      "enacted": 1060,
+      "passage_rate": 0.1429
+    },
+    {
+      "state": "AZ",
+      "session": "57th-2nd-regular",
+      "start_date": "2026-01-12",
+      "introduced": 8628,
+      "enacted": 284,
+      "passage_rate": 0.0329
+    },
+    {
+      "state": "CA",
+      "session": "20212022",
+      "start_date": "2020-12-07",
+      "introduced": 20516,
+      "enacted": 8384,
+      "passage_rate": 0.4087
+    },
+    {
+      "state": "CA",
+      "session": "20232024",
+      "start_date": "2022-12-05",
+      "introduced": 22176,
+      "enacted": 9172,
+      "passage_rate": 0.4136
+    },
+    {
+      "state": "CA",
+      "session": "20232024 Special Session 1",
+      "start_date": "2022-12-05",
+      "introduced": 60,
+      "enacted": 12,
+      "passage_rate": 0.2
+    },
+    {
+      "state": "CA",
+      "session": "20232024 Special Session 2",
+      "start_date": "2024-09-01",
+      "introduced": 44,
+      "enacted": 8,
+      "passage_rate": 0.1818
+    },
+    {
+      "state": "CA",
+      "session": "20252026",
+      "start_date": "2024-12-02",
+      "introduced": 19784,
+      "enacted": 4312,
+      "passage_rate": 0.218
+    },
+    {
+      "state": "CA",
+      "session": "20252026 Special Session 1",
+      "start_date": "2024-12-02",
+      "introduced": 96,
+      "enacted": 20,
+      "passage_rate": 0.2083
+    },
+    {
+      "state": "CO",
+      "session": "2019A",
+      "start_date": "2019-01-04",
+      "introduced": 2616,
+      "enacted": 1820,
+      "passage_rate": 0.6957
+    },
+    {
+      "state": "CO",
+      "session": "2020A",
+      "start_date": "2020-01-08",
+      "introduced": 2840,
+      "enacted": 1308,
+      "passage_rate": 0.4606
+    },
+    {
+      "state": "CO",
+      "session": "2020B",
+      "start_date": "2020-11-30",
+      "introduced": 152,
+      "enacted": 40,
+      "passage_rate": 0.2632
+    },
+    {
+      "state": "CO",
+      "session": "2021A",
+      "start_date": "2021-01-13",
+      "introduced": 2712,
+      "enacted": 2012,
+      "passage_rate": 0.7419
+    },
+    {
+      "state": "CO",
+      "session": "2022A",
+      "start_date": "2022-01-12",
+      "introduced": 2868,
+      "enacted": 2032,
+      "passage_rate": 0.7085
+    },
+    {
+      "state": "CO",
+      "session": "2023A",
+      "start_date": "2023-01-09",
+      "introduced": 2724,
+      "enacted": 1896,
+      "passage_rate": 0.696
+    },
+    {
+      "state": "CO",
+      "session": "2023B",
+      "start_date": "2023-11-18",
+      "introduced": 60,
+      "enacted": 8,
+      "passage_rate": 0.1333
+    },
+    {
+      "state": "CO",
+      "session": "2024A",
+      "start_date": "2024-01-10",
+      "introduced": 3112,
+      "enacted": 2080,
+      "passage_rate": 0.6684
+    },
+    {
+      "state": "CO",
+      "session": "2024B",
+      "start_date": "2024-08-26",
+      "introduced": 56,
+      "enacted": 8,
+      "passage_rate": 0.1429
+    },
+    {
+      "state": "CO",
+      "session": "2025A",
+      "start_date": "2025-01-08",
+      "introduced": 2932,
+      "enacted": 1908,
+      "passage_rate": 0.6508
+    },
+    {
+      "state": "CO",
+      "session": "2025B",
+      "start_date": "2025-08-26",
+      "introduced": 140,
+      "enacted": 44,
+      "passage_rate": 0.3143
+    },
+    {
+      "state": "CO",
+      "session": "2026A",
+      "start_date": "2026-01-14",
+      "introduced": 2856,
+      "enacted": 740,
+      "passage_rate": 0.2591
+    },
+    {
+      "state": "CT",
+      "session": "2019",
+      "start_date": "2019-01-09",
+      "introduced": 15572,
+      "enacted": 956,
+      "passage_rate": 0.0614
+    },
+    {
+      "state": "CT",
+      "session": "2020",
+      "start_date": "2020-02-05",
+      "introduced": 5032,
+      "enacted": 56,
+      "passage_rate": 0.0111
+    },
+    {
+      "state": "CT",
+      "session": "2021",
+      "start_date": "2021-01-06",
+      "introduced": 13124,
+      "enacted": 948,
+      "passage_rate": 0.0722
+    },
+    {
+      "state": "CT",
+      "session": "2022",
+      "start_date": "2022-02-09",
+      "introduced": 5000,
+      "enacted": 676,
+      "passage_rate": 0.1352
+    },
+    {
+      "state": "CT",
+      "session": "2023",
+      "start_date": "2023-01-04",
+      "introduced": 14512,
+      "enacted": 940,
+      "passage_rate": 0.0648
+    },
+    {
+      "state": "CT",
+      "session": "2024",
+      "start_date": "2024-01-04",
+      "introduced": 5884,
+      "enacted": 696,
+      "passage_rate": 0.1183
+    },
+    {
+      "state": "CT",
+      "session": "2025",
+      "start_date": "2025-01-08",
+      "introduced": 16304,
+      "enacted": 816,
+      "passage_rate": 0.05
+    },
+    {
+      "state": "CT",
+      "session": "2026",
+      "start_date": "2026-02-04",
+      "introduced": 5132,
+      "enacted": 260,
+      "passage_rate": 0.0507
+    },
+    {
+      "state": "DC",
+      "session": "23",
+      "start_date": "2019-01-02",
+      "introduced": 14740,
+      "enacted": 2224,
+      "passage_rate": 0.1509
+    },
+    {
+      "state": "DC",
+      "session": "24",
+      "start_date": "2021-01-02",
+      "introduced": 10348,
+      "enacted": 6868,
+      "passage_rate": 0.6637
+    },
+    {
+      "state": "DC",
+      "session": "25",
+      "start_date": "2023-01-02",
+      "introduced": 9944,
+      "enacted": 6936,
+      "passage_rate": 0.6975
+    },
+    {
+      "state": "DC",
+      "session": "26",
+      "start_date": "2025-01-02",
+      "introduced": 6356,
+      "enacted": 3508,
+      "passage_rate": 0.5519
+    },
+    {
+      "state": "DE",
+      "session": "150",
+      "start_date": "2019-01-08",
+      "introduced": 3180,
+      "enacted": 1200,
+      "passage_rate": 0.3774
+    },
+    {
+      "state": "DE",
+      "session": "151",
+      "start_date": "2021-01-12",
+      "introduced": 4588,
+      "enacted": 2156,
+      "passage_rate": 0.4699
+    },
+    {
+      "state": "DE",
+      "session": "152",
+      "start_date": "2022-01-10",
+      "introduced": 4908,
+      "enacted": 2120,
+      "passage_rate": 0.4319
+    },
+    {
+      "state": "DE",
+      "session": "153",
+      "start_date": "2025-01-14",
+      "introduced": 4696,
+      "enacted": 1132,
+      "passage_rate": 0.2411
+    },
+    {
+      "state": "FL",
+      "session": "2019",
+      "start_date": "2019-03-05",
+      "introduced": 14200,
+      "enacted": 668,
+      "passage_rate": 0.047
+    },
+    {
+      "state": "FL",
+      "session": "2020",
+      "start_date": "2020-01-14",
+      "introduced": 14196,
+      "enacted": 692,
+      "passage_rate": 0.0487
+    },
+    {
+      "state": "FL",
+      "session": "2021",
+      "start_date": "2021-03-02",
+      "introduced": 12592,
+      "enacted": 1044,
+      "passage_rate": 0.0829
+    },
+    {
+      "state": "FL",
+      "session": "2021A",
+      "start_date": "2021-05-12",
+      "introduced": 60,
+      "enacted": 16,
+      "passage_rate": 0.2667
+    },
+    {
+      "state": "FL",
+      "session": "2021B",
+      "start_date": "2021-11-15",
+      "introduced": 32,
+      "enacted": 16,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "FL",
+      "session": "2022",
+      "start_date": "2022-01-11",
+      "introduced": 14900,
+      "enacted": 1000,
+      "passage_rate": 0.0671
+    },
+    {
+      "state": "FL",
+      "session": "2022A",
+      "start_date": "2022-12-12",
+      "introduced": 36,
+      "enacted": 12,
+      "passage_rate": 0.3333
+    },
+    {
+      "state": "FL",
+      "session": "2022C",
+      "start_date": "2022-04-19",
+      "introduced": 24,
+      "enacted": 12,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "FL",
+      "session": "2022D",
+      "start_date": "2022-05-23",
+      "introduced": 52,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "FL",
+      "session": "2023",
+      "start_date": "2023-03-07",
+      "introduced": 7468,
+      "enacted": 1364,
+      "passage_rate": 0.1826
+    },
+    {
+      "state": "FL",
+      "session": "2023B",
+      "start_date": "2023-02-06",
+      "introduced": 56,
+      "enacted": 28,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "FL",
+      "session": "2023C",
+      "start_date": "2023-11-06",
+      "introduced": 84,
+      "enacted": 16,
+      "passage_rate": 0.1905
+    },
+    {
+      "state": "FL",
+      "session": "2024",
+      "start_date": "2024-01-09",
+      "introduced": 7812,
+      "enacted": 1196,
+      "passage_rate": 0.1531
+    },
+    {
+      "state": "FL",
+      "session": "2025",
+      "start_date": "2025-03-04",
+      "introduced": 7944,
+      "enacted": 992,
+      "passage_rate": 0.1249
+    },
+    {
+      "state": "FL",
+      "session": "2025A",
+      "start_date": "2025-01-27",
+      "introduced": 88,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "FL",
+      "session": "2025B",
+      "start_date": "2025-01-27",
+      "introduced": 8,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "FL",
+      "session": "2025C",
+      "start_date": "2025-02-11",
+      "introduced": 28,
+      "enacted": 8,
+      "passage_rate": 0.2857
+    },
+    {
+      "state": "FL",
+      "session": "2026",
+      "start_date": "2026-01-13",
+      "introduced": 7724,
+      "enacted": 236,
+      "passage_rate": 0.0306
+    },
+    {
+      "state": "FL",
+      "session": "2026D",
+      "start_date": "2026-04-28",
+      "introduced": 24,
+      "enacted": 4,
+      "passage_rate": 0.1667
+    },
+    {
+      "state": "FL",
+      "session": "2026E",
+      "start_date": "2026-05-12",
+      "introduced": 88,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "GA",
+      "session": "2019_20",
+      "start_date": "2019-01-14",
+      "introduced": 18216,
+      "enacted": 2508,
+      "passage_rate": 0.1377
+    },
+    {
+      "state": "GA",
+      "session": "2020_ss",
+      "start_date": "2020-03-16",
+      "introduced": 36,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "GA",
+      "session": "2021_22",
+      "start_date": "2021-01-11",
+      "introduced": 18092,
+      "enacted": 3548,
+      "passage_rate": 0.1961
+    },
+    {
+      "state": "GA",
+      "session": "2021_ss",
+      "start_date": "2021-11-03",
+      "introduced": 576,
+      "enacted": 24,
+      "passage_rate": 0.0417
+    },
+    {
+      "state": "GA",
+      "session": "2023_24",
+      "start_date": "2023-01-09",
+      "introduced": 18892,
+      "enacted": 2940,
+      "passage_rate": 0.1556
+    },
+    {
+      "state": "GA",
+      "session": "2023_ss",
+      "start_date": "2023-11-29",
+      "introduced": 268,
+      "enacted": 28,
+      "passage_rate": 0.1045
+    },
+    {
+      "state": "GA",
+      "session": "2025_26",
+      "start_date": "2025-01-13",
+      "introduced": 21920,
+      "enacted": 2968,
+      "passage_rate": 0.1354
+    },
+    {
+      "state": "GU",
+      "session": "37th",
+      "start_date": "2023-01-01",
+      "introduced": 1304,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "GU",
+      "session": "38th",
+      "start_date": "2025-01-01",
+      "introduced": 616,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "HI",
+      "session": "2019 Regular Session",
+      "start_date": "2019-01-16",
+      "introduced": 15976,
+      "enacted": 1080,
+      "passage_rate": 0.0676
+    },
+    {
+      "state": "HI",
+      "session": "2020 Regular Session",
+      "start_date": "2020-01-15",
+      "introduced": 24044,
+      "enacted": 276,
+      "passage_rate": 0.0115
+    },
+    {
+      "state": "HI",
+      "session": "2021 Regular Session",
+      "start_date": "2021-01-20",
+      "introduced": 17104,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "HI",
+      "session": "2022 Regular Session",
+      "start_date": "2022-01-19",
+      "introduced": 26592,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "HI",
+      "session": "2023 Regular Session",
+      "start_date": "2023-01-18",
+      "introduced": 17968,
+      "enacted": 1052,
+      "passage_rate": 0.0585
+    },
+    {
+      "state": "HI",
+      "session": "2024",
+      "start_date": "2024-01-17",
+      "introduced": 27880,
+      "enacted": 1012,
+      "passage_rate": 0.0363
+    },
+    {
+      "state": "HI",
+      "session": "2025",
+      "start_date": "2025-01-17",
+      "introduced": 18820,
+      "enacted": 1252,
+      "passage_rate": 0.0665
+    },
+    {
+      "state": "HI",
+      "session": "2026",
+      "start_date": "2026-01-21",
+      "introduced": 26092,
+      "enacted": 268,
+      "passage_rate": 0.0103
+    },
+    {
+      "state": "IA",
+      "session": "2019-2020",
+      "start_date": "2019-01-14",
+      "introduced": 14412,
+      "enacted": 1148,
+      "passage_rate": 0.0797
+    },
+    {
+      "state": "IA",
+      "session": "2021-2022",
+      "start_date": "2021-01-11",
+      "introduced": 14908,
+      "enacted": 1356,
+      "passage_rate": 0.091
+    },
+    {
+      "state": "IA",
+      "session": "2023-2024",
+      "start_date": "2023-01-09",
+      "introduced": 14636,
+      "enacted": 1404,
+      "passage_rate": 0.0959
+    },
+    {
+      "state": "IA",
+      "session": "2025-2026",
+      "start_date": "2025-01-13",
+      "introduced": 17452,
+      "enacted": 1192,
+      "passage_rate": 0.0683
+    },
+    {
+      "state": "ID",
+      "session": "2019",
+      "start_date": "2019-01-07",
+      "introduced": 2356,
+      "enacted": 1316,
+      "passage_rate": 0.5586
+    },
+    {
+      "state": "ID",
+      "session": "2020",
+      "start_date": "2020-01-06",
+      "introduced": 2516,
+      "enacted": 1364,
+      "passage_rate": 0.5421
+    },
+    {
+      "state": "ID",
+      "session": "2020spcl",
+      "start_date": "2020-08-24",
+      "introduced": 44,
+      "enacted": 12,
+      "passage_rate": 0.2727
+    },
+    {
+      "state": "ID",
+      "session": "2021",
+      "start_date": "2021-01-11",
+      "introduced": 2872,
+      "enacted": 1456,
+      "passage_rate": 0.507
+    },
+    {
+      "state": "ID",
+      "session": "2022",
+      "start_date": "2022-01-10",
+      "introduced": 2644,
+      "enacted": 1300,
+      "passage_rate": 0.4917
+    },
+    {
+      "state": "ID",
+      "session": "2022spcl",
+      "start_date": "2022-09-01",
+      "introduced": 4,
+      "enacted": 4,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "ID",
+      "session": "2023",
+      "start_date": "2023-01-09",
+      "introduced": 2540,
+      "enacted": 1248,
+      "passage_rate": 0.4913
+    },
+    {
+      "state": "ID",
+      "session": "2024",
+      "start_date": "2024-01-08",
+      "introduced": 2872,
+      "enacted": 1312,
+      "passage_rate": 0.4568
+    },
+    {
+      "state": "ID",
+      "session": "2025",
+      "start_date": "2025-01-06",
+      "introduced": 3160,
+      "enacted": 1344,
+      "passage_rate": 0.4253
+    },
+    {
+      "state": "ID",
+      "session": "2026",
+      "start_date": "2026-01-05",
+      "introduced": 3268,
+      "enacted": 1368,
+      "passage_rate": 0.4186
+    },
+    {
+      "state": "IL",
+      "session": "101st",
+      "start_date": "2019-01-09",
+      "introduced": 51040,
+      "enacted": 2604,
+      "passage_rate": 0.051
+    },
+    {
+      "state": "IL",
+      "session": "102nd",
+      "start_date": "2021-01-13",
+      "introduced": 51384,
+      "enacted": 4576,
+      "passage_rate": 0.0891
+    },
+    {
+      "state": "IL",
+      "session": "103rd",
+      "start_date": "2023-01-11",
+      "introduced": 53504,
+      "enacted": 4232,
+      "passage_rate": 0.0791
+    },
+    {
+      "state": "IL",
+      "session": "104th",
+      "start_date": "2025-01-08",
+      "introduced": 50744,
+      "enacted": 1836,
+      "passage_rate": 0.0362
+    },
+    {
+      "state": "IN",
+      "session": "2019",
+      "start_date": "2019-01-03",
+      "introduced": 5844,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "IN",
+      "session": "2020",
+      "start_date": "2020-01-06",
+      "introduced": 4704,
+      "enacted": 668,
+      "passage_rate": 0.142
+    },
+    {
+      "state": "IN",
+      "session": "2021",
+      "start_date": "2021-01-11",
+      "introduced": 5008,
+      "enacted": 872,
+      "passage_rate": 0.1741
+    },
+    {
+      "state": "IN",
+      "session": "2022",
+      "start_date": "2022-01-04",
+      "introduced": 4304,
+      "enacted": 700,
+      "passage_rate": 0.1626
+    },
+    {
+      "state": "IN",
+      "session": "2022ss1",
+      "start_date": "2022-07-25",
+      "introduced": 56,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "IN",
+      "session": "2023",
+      "start_date": "2023-01-10",
+      "introduced": 5460,
+      "enacted": 1020,
+      "passage_rate": 0.1868
+    },
+    {
+      "state": "IN",
+      "session": "2024",
+      "start_date": "2024-01-08",
+      "introduced": 3988,
+      "enacted": 684,
+      "passage_rate": 0.1715
+    },
+    {
+      "state": "IN",
+      "session": "2025",
+      "start_date": "2025-01-09",
+      "introduced": 5964,
+      "enacted": 984,
+      "passage_rate": 0.165
+    },
+    {
+      "state": "IN",
+      "session": "2026",
+      "start_date": "2026-01-09",
+      "introduced": 3740,
+      "enacted": 656,
+      "passage_rate": 0.1754
+    },
+    {
+      "state": "KS",
+      "session": "2019-2020",
+      "start_date": "2019-01-14",
+      "introduced": 5592,
+      "enacted": 316,
+      "passage_rate": 0.0565
+    },
+    {
+      "state": "KS",
+      "session": "2020S1",
+      "start_date": "2019-06-03",
+      "introduced": 148,
+      "enacted": 4,
+      "passage_rate": 0.027
+    },
+    {
+      "state": "KS",
+      "session": "2021-2022",
+      "start_date": "2021-01-11",
+      "introduced": 5828,
+      "enacted": 808,
+      "passage_rate": 0.1386
+    },
+    {
+      "state": "KS",
+      "session": "2021S1",
+      "start_date": "2021-11-22",
+      "introduced": 28,
+      "enacted": 4,
+      "passage_rate": 0.1429
+    },
+    {
+      "state": "KS",
+      "session": "2023-2024",
+      "start_date": "2023-01-09",
+      "introduced": 6236,
+      "enacted": 736,
+      "passage_rate": 0.118
+    },
+    {
+      "state": "KS",
+      "session": "2025-2026",
+      "start_date": "2025-01-13",
+      "introduced": 5932,
+      "enacted": 904,
+      "passage_rate": 0.1524
+    },
+    {
+      "state": "KY",
+      "session": "2019RS",
+      "start_date": "2019-01-08",
+      "introduced": 5140,
+      "enacted": 752,
+      "passage_rate": 0.1463
+    },
+    {
+      "state": "KY",
+      "session": "2019SS",
+      "start_date": "2019-07-19",
+      "introduced": 248,
+      "enacted": 4,
+      "passage_rate": 0.0161
+    },
+    {
+      "state": "KY",
+      "session": "2020RS",
+      "start_date": "2020-01-07",
+      "introduced": 5552,
+      "enacted": 500,
+      "passage_rate": 0.0901
+    },
+    {
+      "state": "KY",
+      "session": "2021RS",
+      "start_date": "2021-01-05",
+      "introduced": 5764,
+      "enacted": 816,
+      "passage_rate": 0.1416
+    },
+    {
+      "state": "KY",
+      "session": "2021SS",
+      "start_date": "2021-09-07",
+      "introduced": 144,
+      "enacted": 20,
+      "passage_rate": 0.1389
+    },
+    {
+      "state": "KY",
+      "session": "2022RS",
+      "start_date": "2022-01-05",
+      "introduced": 7308,
+      "enacted": 952,
+      "passage_rate": 0.1303
+    },
+    {
+      "state": "KY",
+      "session": "2022SS",
+      "start_date": "2022-08-24",
+      "introduced": 72,
+      "enacted": 4,
+      "passage_rate": 0.0556
+    },
+    {
+      "state": "KY",
+      "session": "2023RS",
+      "start_date": "2023-01-03",
+      "introduced": 4988,
+      "enacted": 756,
+      "passage_rate": 0.1516
+    },
+    {
+      "state": "KY",
+      "session": "2024RS",
+      "start_date": "2024-01-02",
+      "introduced": 7032,
+      "enacted": 896,
+      "passage_rate": 0.1274
+    },
+    {
+      "state": "KY",
+      "session": "2025RS",
+      "start_date": "2025-01-07",
+      "introduced": 5764,
+      "enacted": 648,
+      "passage_rate": 0.1124
+    },
+    {
+      "state": "KY",
+      "session": "2026RS",
+      "start_date": "2026-01-06",
+      "introduced": 6948,
+      "enacted": 816,
+      "passage_rate": 0.1174
+    },
+    {
+      "state": "LA",
+      "session": "2019",
+      "start_date": "2019-04-08",
+      "introduced": 6940,
+      "enacted": 1772,
+      "passage_rate": 0.2553
+    },
+    {
+      "state": "LA",
+      "session": "2020",
+      "start_date": "2020-03-09",
+      "introduced": 6852,
+      "enacted": 1460,
+      "passage_rate": 0.2131
+    },
+    {
+      "state": "LA",
+      "session": "2020s1",
+      "start_date": "2020-06-01",
+      "introduced": 1164,
+      "enacted": 148,
+      "passage_rate": 0.1271
+    },
+    {
+      "state": "LA",
+      "session": "2020s2",
+      "start_date": "2020-09-28",
+      "introduced": 1392,
+      "enacted": 236,
+      "passage_rate": 0.1695
+    },
+    {
+      "state": "LA",
+      "session": "2021",
+      "start_date": "2021-03-12",
+      "introduced": 6660,
+      "enacted": 1908,
+      "passage_rate": 0.2865
+    },
+    {
+      "state": "LA",
+      "session": "2022",
+      "start_date": "2022-03-14",
+      "introduced": 9200,
+      "enacted": 1120,
+      "passage_rate": 0.1217
+    },
+    {
+      "state": "LA",
+      "session": "2022s1",
+      "start_date": "2022-02-01",
+      "introduced": 228,
+      "enacted": 8,
+      "passage_rate": 0.0351
+    },
+    {
+      "state": "LA",
+      "session": "2022s2",
+      "start_date": "2022-06-15",
+      "introduced": 28,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "LA",
+      "session": "2023",
+      "start_date": "2023-04-10",
+      "introduced": 6468,
+      "enacted": 1864,
+      "passage_rate": 0.2882
+    },
+    {
+      "state": "LA",
+      "session": "2023s1",
+      "start_date": "2023-01-30",
+      "introduced": 24,
+      "enacted": 8,
+      "passage_rate": 0.3333
+    },
+    {
+      "state": "LA",
+      "session": "2024",
+      "start_date": "2024-03-11",
+      "introduced": 9048,
+      "enacted": 3168,
+      "passage_rate": 0.3501
+    },
+    {
+      "state": "LA",
+      "session": "2024s1",
+      "start_date": "2024-01-15",
+      "introduced": 132,
+      "enacted": 12,
+      "passage_rate": 0.0909
+    },
+    {
+      "state": "LA",
+      "session": "2024s2",
+      "start_date": "2024-02-19",
+      "introduced": 164,
+      "enacted": 88,
+      "passage_rate": 0.5366
+    },
+    {
+      "state": "LA",
+      "session": "2024s3",
+      "start_date": "2024-11-01",
+      "introduced": 148,
+      "enacted": 76,
+      "passage_rate": 0.5135
+    },
+    {
+      "state": "LA",
+      "session": "2025",
+      "start_date": "2025-04-14",
+      "introduced": 6780,
+      "enacted": 2064,
+      "passage_rate": 0.3044
+    },
+    {
+      "state": "LA",
+      "session": "2025s1",
+      "start_date": "2025-10-23",
+      "introduced": 48,
+      "enacted": 8,
+      "passage_rate": 0.1667
+    },
+    {
+      "state": "LA",
+      "session": "2026",
+      "start_date": "2026-03-09",
+      "introduced": 10316,
+      "enacted": 8,
+      "passage_rate": 0.0008
+    },
+    {
+      "state": "MA",
+      "session": "191st",
+      "start_date": "2019-01-02",
+      "introduced": 62500,
+      "enacted": 996,
+      "passage_rate": 0.0159
+    },
+    {
+      "state": "MA",
+      "session": "192nd",
+      "start_date": "2021-01-06",
+      "introduced": 68432,
+      "enacted": 1604,
+      "passage_rate": 0.0234
+    },
+    {
+      "state": "MA",
+      "session": "193rd",
+      "start_date": "2023-01-04",
+      "introduced": 67304,
+      "enacted": 1384,
+      "passage_rate": 0.0206
+    },
+    {
+      "state": "MA",
+      "session": "194th",
+      "start_date": "2025-01-01",
+      "introduced": 71968,
+      "enacted": 748,
+      "passage_rate": 0.0104
+    },
+    {
+      "state": "MD",
+      "session": "2019",
+      "start_date": "2019-01-09",
+      "introduced": 9924,
+      "enacted": 2196,
+      "passage_rate": 0.2213
+    },
+    {
+      "state": "MD",
+      "session": "2020",
+      "start_date": "2020-01-08",
+      "introduced": 11048,
+      "enacted": 2540,
+      "passage_rate": 0.2299
+    },
+    {
+      "state": "MD",
+      "session": "2021",
+      "start_date": "2021-01-13",
+      "introduced": 9444,
+      "enacted": 3176,
+      "passage_rate": 0.3363
+    },
+    {
+      "state": "MD",
+      "session": "2021s1",
+      "start_date": "2021-12-06",
+      "introduced": 56,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "MD",
+      "session": "2022",
+      "start_date": "2022-01-12",
+      "introduced": 10096,
+      "enacted": 3064,
+      "passage_rate": 0.3035
+    },
+    {
+      "state": "MD",
+      "session": "2023",
+      "start_date": "2023-01-11",
+      "introduced": 9136,
+      "enacted": 3224,
+      "passage_rate": 0.3529
+    },
+    {
+      "state": "MD",
+      "session": "2024",
+      "start_date": "2024-01-10",
+      "introduced": 10912,
+      "enacted": 4192,
+      "passage_rate": 0.3842
+    },
+    {
+      "state": "MD",
+      "session": "2025",
+      "start_date": "2025-01-08",
+      "introduced": 10468,
+      "enacted": 3388,
+      "passage_rate": 0.3237
+    },
+    {
+      "state": "MD",
+      "session": "2026",
+      "start_date": "2026-01-14",
+      "introduced": 10684,
+      "enacted": 3460,
+      "passage_rate": 0.3238
+    },
+    {
+      "state": "ME",
+      "session": "130",
+      "start_date": "2020-12-02",
+      "introduced": 9200,
+      "enacted": 3104,
+      "passage_rate": 0.3374
+    },
+    {
+      "state": "ME",
+      "session": "131",
+      "start_date": "2022-12-07",
+      "introduced": 10012,
+      "enacted": 3072,
+      "passage_rate": 0.3068
+    },
+    {
+      "state": "ME",
+      "session": "132",
+      "start_date": "2024-12-04",
+      "introduced": 9804,
+      "enacted": 3884,
+      "passage_rate": 0.3962
+    },
+    {
+      "state": "MI",
+      "session": "2019-2020",
+      "start_date": "2019-01-09",
+      "introduced": 17792,
+      "enacted": 1868,
+      "passage_rate": 0.105
+    },
+    {
+      "state": "MI",
+      "session": "2021-2022",
+      "start_date": "2021-01-13",
+      "introduced": 18080,
+      "enacted": 1768,
+      "passage_rate": 0.0978
+    },
+    {
+      "state": "MI",
+      "session": "2023-2024",
+      "start_date": "2023-01-11",
+      "introduced": 16172,
+      "enacted": 2376,
+      "passage_rate": 0.1469
+    },
+    {
+      "state": "MI",
+      "session": "2025-2026",
+      "start_date": "2025-01-08",
+      "introduced": 14124,
+      "enacted": 352,
+      "passage_rate": 0.0249
+    },
+    {
+      "state": "MN",
+      "session": "2019-2020",
+      "start_date": "2019-01-08",
+      "introduced": 38348,
+      "enacted": 472,
+      "passage_rate": 0.0123
+    },
+    {
+      "state": "MN",
+      "session": "2019s1",
+      "start_date": "2019-05-24",
+      "introduced": 180,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "MN",
+      "session": "2020s1",
+      "start_date": "2020-06-12",
+      "introduced": 1388,
+      "enacted": 40,
+      "passage_rate": 0.0288
+    },
+    {
+      "state": "MN",
+      "session": "2020s2",
+      "start_date": "2020-07-13",
+      "introduced": 720,
+      "enacted": 8,
+      "passage_rate": 0.0111
+    },
+    {
+      "state": "MN",
+      "session": "2020s3",
+      "start_date": "2020-08-12",
+      "introduced": 248,
+      "enacted": 8,
+      "passage_rate": 0.0323
+    },
+    {
+      "state": "MN",
+      "session": "2020s4",
+      "start_date": "2020-09-11",
+      "introduced": 248,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "MN",
+      "session": "2020s5",
+      "start_date": "2020-10-12",
+      "introduced": 388,
+      "enacted": 16,
+      "passage_rate": 0.0412
+    },
+    {
+      "state": "MN",
+      "session": "2020s6",
+      "start_date": "2020-11-12",
+      "introduced": 148,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "MN",
+      "session": "2020s7",
+      "start_date": "2020-12-14",
+      "introduced": 348,
+      "enacted": 8,
+      "passage_rate": 0.023
+    },
+    {
+      "state": "MN",
+      "session": "2021-2022",
+      "start_date": "2021-01-05",
+      "introduced": 38796,
+      "enacted": 396,
+      "passage_rate": 0.0102
+    },
+    {
+      "state": "MN",
+      "session": "2021s1",
+      "start_date": "2021-06-14",
+      "introduced": 620,
+      "enacted": 56,
+      "passage_rate": 0.0903
+    },
+    {
+      "state": "MN",
+      "session": "2023-2024",
+      "start_date": "2023-01-03",
+      "introduced": 44584,
+      "enacted": 508,
+      "passage_rate": 0.0114
+    },
+    {
+      "state": "MN",
+      "session": "2025-2026",
+      "start_date": "2025-01-14",
+      "introduced": 42360,
+      "enacted": 500,
+      "passage_rate": 0.0118
+    },
+    {
+      "state": "MN",
+      "session": "2025s1",
+      "start_date": "2025-06-08",
+      "introduced": 192,
+      "enacted": 60,
+      "passage_rate": 0.3125
+    },
+    {
+      "state": "MO",
+      "session": "2019",
+      "start_date": "2019-01-09",
+      "introduced": 7996,
+      "enacted": 348,
+      "passage_rate": 0.0435
+    },
+    {
+      "state": "MO",
+      "session": "2020",
+      "start_date": "2020-01-08",
+      "introduced": 9148,
+      "enacted": 136,
+      "passage_rate": 0.0149
+    },
+    {
+      "state": "MO",
+      "session": "2020S1",
+      "start_date": "2020-07-27",
+      "introduced": 372,
+      "enacted": 8,
+      "passage_rate": 0.0215
+    },
+    {
+      "state": "MO",
+      "session": "2020S2",
+      "start_date": "2020-11-05",
+      "introduced": 104,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "MO",
+      "session": "2021",
+      "start_date": "2021-01-06",
+      "introduced": 9104,
+      "enacted": 44,
+      "passage_rate": 0.0048
+    },
+    {
+      "state": "MO",
+      "session": "2021S1",
+      "start_date": "2021-06-23",
+      "introduced": 60,
+      "enacted": 4,
+      "passage_rate": 0.0667
+    },
+    {
+      "state": "MO",
+      "session": "2022",
+      "start_date": "2022-01-05",
+      "introduced": 9264,
+      "enacted": 192,
+      "passage_rate": 0.0207
+    },
+    {
+      "state": "MO",
+      "session": "2022S1",
+      "start_date": "2022-09-15",
+      "introduced": 172,
+      "enacted": 8,
+      "passage_rate": 0.0465
+    },
+    {
+      "state": "MO",
+      "session": "2023",
+      "start_date": "2023-01-04",
+      "introduced": 9360,
+      "enacted": 172,
+      "passage_rate": 0.0184
+    },
+    {
+      "state": "MO",
+      "session": "2024",
+      "start_date": "2024-01-03",
+      "introduced": 10480,
+      "enacted": 124,
+      "passage_rate": 0.0118
+    },
+    {
+      "state": "MO",
+      "session": "2025",
+      "start_date": "2025-01-08",
+      "introduced": 10760,
+      "enacted": 28,
+      "passage_rate": 0.0026
+    },
+    {
+      "state": "MO",
+      "session": "2025S1",
+      "start_date": "2025-06-02",
+      "introduced": 116,
+      "enacted": 8,
+      "passage_rate": 0.069
+    },
+    {
+      "state": "MO",
+      "session": "2025S2",
+      "start_date": "2025-09-03",
+      "introduced": 60,
+      "enacted": 4,
+      "passage_rate": 0.0667
+    },
+    {
+      "state": "MO",
+      "session": "2026",
+      "start_date": "2026-01-07",
+      "introduced": 12700,
+      "enacted": 64,
+      "passage_rate": 0.005
+    },
+    {
+      "state": "MS",
+      "session": "2019",
+      "start_date": "2019-01-08",
+      "introduced": 13744,
+      "enacted": 1404,
+      "passage_rate": 0.1022
+    },
+    {
+      "state": "MS",
+      "session": "2020",
+      "start_date": "2020-01-07",
+      "introduced": 13076,
+      "enacted": 1304,
+      "passage_rate": 0.0997
+    },
+    {
+      "state": "MS",
+      "session": "2021",
+      "start_date": "2021-01-05",
+      "introduced": 11876,
+      "enacted": 1324,
+      "passage_rate": 0.1115
+    },
+    {
+      "state": "MS",
+      "session": "2022",
+      "start_date": "2022-01-04",
+      "introduced": 14092,
+      "enacted": 1524,
+      "passage_rate": 0.1081
+    },
+    {
+      "state": "MS",
+      "session": "20221E",
+      "start_date": "2022-11-02",
+      "introduced": 12,
+      "enacted": 12,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "MS",
+      "session": "2023",
+      "start_date": "2023-01-03",
+      "introduced": 14100,
+      "enacted": 1696,
+      "passage_rate": 0.1203
+    },
+    {
+      "state": "MS",
+      "session": "2024",
+      "start_date": "2024-01-02",
+      "introduced": 15528,
+      "enacted": 1628,
+      "passage_rate": 0.1048
+    },
+    {
+      "state": "MS",
+      "session": "20241E",
+      "start_date": "2024-01-19",
+      "introduced": 12,
+      "enacted": 12,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "MS",
+      "session": "20242E",
+      "start_date": "2024-02-01",
+      "introduced": 12,
+      "enacted": 12,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "MS",
+      "session": "2025",
+      "start_date": "2025-01-07",
+      "introduced": 15244,
+      "enacted": 1036,
+      "passage_rate": 0.068
+    },
+    {
+      "state": "MS",
+      "session": "20251E",
+      "start_date": "2025-05-28",
+      "introduced": 424,
+      "enacted": 380,
+      "passage_rate": 0.8962
+    },
+    {
+      "state": "MS",
+      "session": "2026",
+      "start_date": "2025-01-06",
+      "introduced": 16464,
+      "enacted": 1488,
+      "passage_rate": 0.0904
+    },
+    {
+      "state": "MT",
+      "session": "2019",
+      "start_date": "2019-01-07",
+      "introduced": 5236,
+      "enacted": 1904,
+      "passage_rate": 0.3636
+    },
+    {
+      "state": "MT",
+      "session": "2021",
+      "start_date": "2021-01-04",
+      "introduced": 18400,
+      "enacted": 2308,
+      "passage_rate": 0.1254
+    },
+    {
+      "state": "MT",
+      "session": "2023",
+      "start_date": "2023-01-04",
+      "introduced": 25340,
+      "enacted": 3132,
+      "passage_rate": 0.1236
+    },
+    {
+      "state": "MT",
+      "session": "2025",
+      "start_date": "2025-01-06",
+      "introduced": 24636,
+      "enacted": 3112,
+      "passage_rate": 0.1263
+    },
+    {
+      "state": "NC",
+      "session": "2019",
+      "start_date": "2019-01-09",
+      "introduced": 8436,
+      "enacted": 1504,
+      "passage_rate": 0.1783
+    },
+    {
+      "state": "NC",
+      "session": "2021",
+      "start_date": "2021-01-13",
+      "introduced": 8380,
+      "enacted": 1132,
+      "passage_rate": 0.1351
+    },
+    {
+      "state": "NC",
+      "session": "2023",
+      "start_date": "2023-01-11",
+      "introduced": 8020,
+      "enacted": 916,
+      "passage_rate": 0.1142
+    },
+    {
+      "state": "NC",
+      "session": "2025",
+      "start_date": "2025-01-11",
+      "introduced": 9268,
+      "enacted": 452,
+      "passage_rate": 0.0488
+    },
+    {
+      "state": "ND",
+      "session": "66",
+      "start_date": "2019-01-03",
+      "introduced": 3948,
+      "enacted": 2108,
+      "passage_rate": 0.5339
+    },
+    {
+      "state": "ND",
+      "session": "67",
+      "start_date": "2021-01-05",
+      "introduced": 3740,
+      "enacted": 2080,
+      "passage_rate": 0.5561
+    },
+    {
+      "state": "ND",
+      "session": "67S1",
+      "start_date": "2021-11-08",
+      "introduced": 84,
+      "enacted": 72,
+      "passage_rate": 0.8571
+    },
+    {
+      "state": "ND",
+      "session": "68",
+      "start_date": "2023-01-03",
+      "introduced": 4024,
+      "enacted": 2388,
+      "passage_rate": 0.5934
+    },
+    {
+      "state": "ND",
+      "session": "69",
+      "start_date": "2025-01-07",
+      "introduced": 4404,
+      "enacted": 2424,
+      "passage_rate": 0.5504
+    },
+    {
+      "state": "NE",
+      "session": "106",
+      "start_date": "2019-01-09",
+      "introduced": 7068,
+      "enacted": 1548,
+      "passage_rate": 0.219
+    },
+    {
+      "state": "NE",
+      "session": "107",
+      "start_date": "2022-01-05",
+      "introduced": 7340,
+      "enacted": 1328,
+      "passage_rate": 0.1809
+    },
+    {
+      "state": "NE",
+      "session": "107S1",
+      "start_date": "2021-09-13",
+      "introduced": 56,
+      "enacted": 28,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "NE",
+      "session": "108",
+      "start_date": "2023-01-04",
+      "introduced": 8076,
+      "enacted": 1000,
+      "passage_rate": 0.1238
+    },
+    {
+      "state": "NE",
+      "session": "108S1",
+      "start_date": "2024-07-25",
+      "introduced": 436,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "NE",
+      "session": "109",
+      "start_date": "2025-01-08",
+      "introduced": 7388,
+      "enacted": 1448,
+      "passage_rate": 0.196
+    },
+    {
+      "state": "NH",
+      "session": "2019",
+      "start_date": "2019-01-02",
+      "introduced": 4000,
+      "enacted": 1340,
+      "passage_rate": 0.335
+    },
+    {
+      "state": "NH",
+      "session": "2020",
+      "start_date": "2020-01-08",
+      "introduced": 4860,
+      "enacted": 152,
+      "passage_rate": 0.0313
+    },
+    {
+      "state": "NH",
+      "session": "2021",
+      "start_date": "2021-01-06",
+      "introduced": 3104,
+      "enacted": 908,
+      "passage_rate": 0.2925
+    },
+    {
+      "state": "NH",
+      "session": "2022",
+      "start_date": "2022-01-05",
+      "introduced": 4840,
+      "enacted": 1384,
+      "passage_rate": 0.286
+    },
+    {
+      "state": "NH",
+      "session": "2023",
+      "start_date": "2023-01-04",
+      "introduced": 3768,
+      "enacted": 1012,
+      "passage_rate": 0.2686
+    },
+    {
+      "state": "NH",
+      "session": "2024",
+      "start_date": "2024-01-03",
+      "introduced": 5296,
+      "enacted": 1544,
+      "passage_rate": 0.2915
+    },
+    {
+      "state": "NH",
+      "session": "2025",
+      "start_date": "2025-01-08",
+      "introduced": 4312,
+      "enacted": 1248,
+      "passage_rate": 0.2894
+    },
+    {
+      "state": "NH",
+      "session": "2026",
+      "start_date": "2026-01-08",
+      "introduced": 5576,
+      "enacted": 404,
+      "passage_rate": 0.0725
+    },
+    {
+      "state": "NJ",
+      "session": "219",
+      "start_date": "2020-01-14",
+      "introduced": 45712,
+      "enacted": 2148,
+      "passage_rate": 0.047
+    },
+    {
+      "state": "NJ",
+      "session": "220",
+      "start_date": "2022-01-11",
+      "introduced": 43724,
+      "enacted": 1688,
+      "passage_rate": 0.0386
+    },
+    {
+      "state": "NJ",
+      "session": "221",
+      "start_date": "2024-01-09",
+      "introduced": 48508,
+      "enacted": 1620,
+      "passage_rate": 0.0334
+    },
+    {
+      "state": "NJ",
+      "session": "222",
+      "start_date": "2026-01-13",
+      "introduced": 40920,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "NM",
+      "session": "2019",
+      "start_date": "2019-01-15",
+      "introduced": 6652,
+      "enacted": 1792,
+      "passage_rate": 0.2694
+    },
+    {
+      "state": "NM",
+      "session": "2020",
+      "start_date": "2020-01-21",
+      "introduced": 3656,
+      "enacted": 576,
+      "passage_rate": 0.1575
+    },
+    {
+      "state": "NM",
+      "session": "2020S",
+      "start_date": "2020-06-18",
+      "introduced": 180,
+      "enacted": 40,
+      "passage_rate": 0.2222
+    },
+    {
+      "state": "NM",
+      "session": "2020S2",
+      "start_date": "2020-11-24",
+      "introduced": 28,
+      "enacted": 4,
+      "passage_rate": 0.1429
+    },
+    {
+      "state": "NM",
+      "session": "2021",
+      "start_date": "2021-01-19",
+      "introduced": 3664,
+      "enacted": 724,
+      "passage_rate": 0.1976
+    },
+    {
+      "state": "NM",
+      "session": "2021S",
+      "start_date": "2021-03-30",
+      "introduced": 40,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "NM",
+      "session": "2021S2",
+      "start_date": "2021-12-06",
+      "introduced": 124,
+      "enacted": 32,
+      "passage_rate": 0.2581
+    },
+    {
+      "state": "NM",
+      "session": "2022",
+      "start_date": "2022-01-18",
+      "introduced": 2568,
+      "enacted": 440,
+      "passage_rate": 0.1713
+    },
+    {
+      "state": "NM",
+      "session": "2022S3",
+      "start_date": "2022-04-05",
+      "introduced": 12,
+      "enacted": 12,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "NM",
+      "session": "2023",
+      "start_date": "2023-01-17",
+      "introduced": 5176,
+      "enacted": 1408,
+      "passage_rate": 0.272
+    },
+    {
+      "state": "NM",
+      "session": "2024",
+      "start_date": "2024-01-16",
+      "introduced": 3108,
+      "enacted": 416,
+      "passage_rate": 0.1338
+    },
+    {
+      "state": "NM",
+      "session": "2024S1",
+      "start_date": "2024-07-18",
+      "introduced": 68,
+      "enacted": 4,
+      "passage_rate": 0.0588
+    },
+    {
+      "state": "NM",
+      "session": "2025",
+      "start_date": "2025-01-21",
+      "introduced": 5312,
+      "enacted": 848,
+      "passage_rate": 0.1596
+    },
+    {
+      "state": "NM",
+      "session": "2025S1",
+      "start_date": "2025-10-01",
+      "introduced": 44,
+      "enacted": 20,
+      "passage_rate": 0.4545
+    },
+    {
+      "state": "NM",
+      "session": "2025S2",
+      "start_date": "2025-11-10",
+      "introduced": 8,
+      "enacted": 4,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "NM",
+      "session": "2026",
+      "start_date": "2026-01-20",
+      "introduced": 3248,
+      "enacted": 496,
+      "passage_rate": 0.1527
+    },
+    {
+      "state": "NV",
+      "session": "2020Special31",
+      "start_date": "2020-07-08",
+      "introduced": 88,
+      "enacted": 12,
+      "passage_rate": 0.1364
+    },
+    {
+      "state": "NV",
+      "session": "2020Special32",
+      "start_date": "2020-07-31",
+      "introduced": 88,
+      "enacted": 24,
+      "passage_rate": 0.2727
+    },
+    {
+      "state": "NV",
+      "session": "2021Special33",
+      "start_date": "2021-11-12",
+      "introduced": 52,
+      "enacted": 8,
+      "passage_rate": 0.1538
+    },
+    {
+      "state": "NV",
+      "session": "2023Special34",
+      "start_date": "2023-06-06",
+      "introduced": 20,
+      "enacted": 4,
+      "passage_rate": 0.2
+    },
+    {
+      "state": "NV",
+      "session": "2023Special35",
+      "start_date": "2023-06-07",
+      "introduced": 20,
+      "enacted": 4,
+      "passage_rate": 0.2
+    },
+    {
+      "state": "NV",
+      "session": "2025Special36",
+      "start_date": "2025-11-13",
+      "introduced": 108,
+      "enacted": 52,
+      "passage_rate": 0.4815
+    },
+    {
+      "state": "NV",
+      "session": "80",
+      "start_date": "2019-02-04",
+      "introduced": 4628,
+      "enacted": 2320,
+      "passage_rate": 0.5013
+    },
+    {
+      "state": "NV",
+      "session": "81",
+      "start_date": "2021-02-01",
+      "introduced": 4140,
+      "enacted": 2228,
+      "passage_rate": 0.5382
+    },
+    {
+      "state": "NV",
+      "session": "82",
+      "start_date": "2023-02-01",
+      "introduced": 4384,
+      "enacted": 2140,
+      "passage_rate": 0.4881
+    },
+    {
+      "state": "NV",
+      "session": "83",
+      "start_date": "2025-02-01",
+      "introduced": 4840,
+      "enacted": 2076,
+      "passage_rate": 0.4289
+    },
+    {
+      "state": "NY",
+      "session": "2019-2020",
+      "start_date": "2019-01-09",
+      "introduced": 96228,
+      "enacted": 4584,
+      "passage_rate": 0.0476
+    },
+    {
+      "state": "NY",
+      "session": "2021-2022",
+      "start_date": "2021-01-06",
+      "introduced": 94520,
+      "enacted": 6432,
+      "passage_rate": 0.068
+    },
+    {
+      "state": "NY",
+      "session": "2023-2024",
+      "start_date": "2023-01-04",
+      "introduced": 97076,
+      "enacted": 5824,
+      "passage_rate": 0.06
+    },
+    {
+      "state": "NY",
+      "session": "2025-2026",
+      "start_date": "2025-01-08",
+      "introduced": 100236,
+      "enacted": 3308,
+      "passage_rate": 0.033
+    },
+    {
+      "state": "OH",
+      "session": "133",
+      "start_date": "2019-01-07",
+      "introduced": 8964,
+      "enacted": 220,
+      "passage_rate": 0.0245
+    },
+    {
+      "state": "OH",
+      "session": "134",
+      "start_date": "2021-01-04",
+      "introduced": 8500,
+      "enacted": 520,
+      "passage_rate": 0.0612
+    },
+    {
+      "state": "OH",
+      "session": "135",
+      "start_date": "2023-01-02",
+      "introduced": 9124,
+      "enacted": 224,
+      "passage_rate": 0.0246
+    },
+    {
+      "state": "OH",
+      "session": "135S1",
+      "start_date": "2024-05-28",
+      "introduced": 20,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "OH",
+      "session": "136",
+      "start_date": "2025-01-06",
+      "introduced": 9212,
+      "enacted": 276,
+      "passage_rate": 0.03
+    },
+    {
+      "state": "OK",
+      "session": "2019-2020",
+      "start_date": "2019-01-08",
+      "introduced": 11792,
+      "enacted": 2064,
+      "passage_rate": 0.175
+    },
+    {
+      "state": "OK",
+      "session": "2020",
+      "start_date": "2019-02-03",
+      "introduced": 21184,
+      "enacted": 2688,
+      "passage_rate": 0.1269
+    },
+    {
+      "state": "OK",
+      "session": "2020SS1",
+      "start_date": "2020-04-06",
+      "introduced": 20,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "OK",
+      "session": "2021",
+      "start_date": "2021-02-01",
+      "introduced": 12876,
+      "enacted": 2336,
+      "passage_rate": 0.1814
+    },
+    {
+      "state": "OK",
+      "session": "2021SS1",
+      "start_date": "2021-11-15",
+      "introduced": 56,
+      "enacted": 24,
+      "passage_rate": 0.4286
+    },
+    {
+      "state": "OK",
+      "session": "2022",
+      "start_date": "2022-02-07",
+      "introduced": 22552,
+      "enacted": 3944,
+      "passage_rate": 0.1749
+    },
+    {
+      "state": "OK",
+      "session": "2022SS2",
+      "start_date": "2022-05-18",
+      "introduced": 504,
+      "enacted": 32,
+      "passage_rate": 0.0635
+    },
+    {
+      "state": "OK",
+      "session": "2022SS3",
+      "start_date": "2022-06-13",
+      "introduced": 96,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "OK",
+      "session": "2023",
+      "start_date": "2023-02-06",
+      "introduced": 13328,
+      "enacted": 1376,
+      "passage_rate": 0.1032
+    },
+    {
+      "state": "OK",
+      "session": "2023S1",
+      "start_date": "2023-05-17",
+      "introduced": 384,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "OK",
+      "session": "2023S2",
+      "start_date": "2023-10-03",
+      "introduced": 80,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "OK",
+      "session": "2024",
+      "start_date": "2024-02-05",
+      "introduced": 21952,
+      "enacted": 3156,
+      "passage_rate": 0.1438
+    },
+    {
+      "state": "OK",
+      "session": "2024S3",
+      "start_date": "2024-01-29",
+      "introduced": 16,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "OK",
+      "session": "2024S4",
+      "start_date": "2024-06-12",
+      "introduced": 4,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "OK",
+      "session": "2025",
+      "start_date": "2025-02-03",
+      "introduced": 13032,
+      "enacted": 592,
+      "passage_rate": 0.0454
+    },
+    {
+      "state": "OK",
+      "session": "2026",
+      "start_date": "2026-02-02",
+      "introduced": 24020,
+      "enacted": 3640,
+      "passage_rate": 0.1515
+    },
+    {
+      "state": "OR",
+      "session": "2019 Regular Session",
+      "start_date": "2019-01-14",
+      "introduced": 11072,
+      "enacted": 2800,
+      "passage_rate": 0.2529
+    },
+    {
+      "state": "OR",
+      "session": "2020 Regular Session",
+      "start_date": "2020-02-03",
+      "introduced": 1132,
+      "enacted": 12,
+      "passage_rate": 0.0106
+    },
+    {
+      "state": "OR",
+      "session": "2020S1",
+      "start_date": "2020-06-26",
+      "introduced": 104,
+      "enacted": 88,
+      "passage_rate": 0.8462
+    },
+    {
+      "state": "OR",
+      "session": "2020S2",
+      "start_date": "2020-08-10",
+      "introduced": 52,
+      "enacted": 36,
+      "passage_rate": 0.6923
+    },
+    {
+      "state": "OR",
+      "session": "2020S3",
+      "start_date": "2020-12-21",
+      "introduced": 28,
+      "enacted": 16,
+      "passage_rate": 0.5714
+    },
+    {
+      "state": "OR",
+      "session": "2021 Regular Session",
+      "start_date": "2021-01-11",
+      "introduced": 10076,
+      "enacted": 2720,
+      "passage_rate": 0.2699
+    },
+    {
+      "state": "OR",
+      "session": "2021S1",
+      "start_date": "2021-09-20",
+      "introduced": 16,
+      "enacted": 8,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "OR",
+      "session": "2021S2",
+      "start_date": "2021-12-13",
+      "introduced": 20,
+      "enacted": 16,
+      "passage_rate": 0.8
+    },
+    {
+      "state": "OR",
+      "session": "2022R1",
+      "start_date": "2022-02-01",
+      "introduced": 1100,
+      "enacted": 476,
+      "passage_rate": 0.4327
+    },
+    {
+      "state": "OR",
+      "session": "2023R1",
+      "start_date": "2023-01-09",
+      "introduced": 11880,
+      "enacted": 2440,
+      "passage_rate": 0.2054
+    },
+    {
+      "state": "OR",
+      "session": "2024R1",
+      "start_date": "2024-02-05",
+      "introduced": 1164,
+      "enacted": 460,
+      "passage_rate": 0.3952
+    },
+    {
+      "state": "OR",
+      "session": "2024S1",
+      "start_date": "2024-12-12",
+      "introduced": 8,
+      "enacted": 4,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "OR",
+      "session": "2025R1",
+      "start_date": "2025-01-21",
+      "introduced": 13864,
+      "enacted": 2532,
+      "passage_rate": 0.1826
+    },
+    {
+      "state": "OR",
+      "session": "2025S1",
+      "start_date": "2025-08-29",
+      "introduced": 16,
+      "enacted": 8,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "OR",
+      "session": "2026R1",
+      "start_date": "2026-02-02",
+      "introduced": 1216,
+      "enacted": 568,
+      "passage_rate": 0.4671
+    },
+    {
+      "state": "PA",
+      "session": "2019-2020",
+      "start_date": "2019-01-01",
+      "introduced": 22800,
+      "enacted": 1156,
+      "passage_rate": 0.0507
+    },
+    {
+      "state": "PA",
+      "session": "2021-2022",
+      "start_date": "2021-01-05",
+      "introduced": 18956,
+      "enacted": 1172,
+      "passage_rate": 0.0618
+    },
+    {
+      "state": "PA",
+      "session": "2023-2024",
+      "start_date": "2023-01-03",
+      "introduced": 19152,
+      "enacted": 956,
+      "passage_rate": 0.0499
+    },
+    {
+      "state": "PA",
+      "session": "2023-2024S1",
+      "start_date": "2023-01-09",
+      "introduced": 32,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "PA",
+      "session": "2025-2026",
+      "start_date": "2025-01-07",
+      "introduced": 18420,
+      "enacted": 352,
+      "passage_rate": 0.0191
+    },
+    {
+      "state": "PR",
+      "session": "2021-2024",
+      "start_date": "2021-01-11",
+      "introduced": 31680,
+      "enacted": 2224,
+      "passage_rate": 0.0702
+    },
+    {
+      "state": "PR",
+      "session": "2025-2028",
+      "start_date": "2025-01-13",
+      "introduced": 19492,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "RI",
+      "session": "2019",
+      "start_date": "2019-01-01",
+      "introduced": 9252,
+      "enacted": 1768,
+      "passage_rate": 0.1911
+    },
+    {
+      "state": "RI",
+      "session": "2020",
+      "start_date": "2020-01-07",
+      "introduced": 8536,
+      "enacted": 716,
+      "passage_rate": 0.0839
+    },
+    {
+      "state": "RI",
+      "session": "2021",
+      "start_date": "2021-01-05",
+      "introduced": 10024,
+      "enacted": 2148,
+      "passage_rate": 0.2143
+    },
+    {
+      "state": "RI",
+      "session": "2022",
+      "start_date": "2022-01-04",
+      "introduced": 10108,
+      "enacted": 2040,
+      "passage_rate": 0.2018
+    },
+    {
+      "state": "RI",
+      "session": "2023",
+      "start_date": "2023-01-03",
+      "introduced": 10700,
+      "enacted": 1896,
+      "passage_rate": 0.1772
+    },
+    {
+      "state": "RI",
+      "session": "2024",
+      "start_date": "2024-01-02",
+      "introduced": 10164,
+      "enacted": 2048,
+      "passage_rate": 0.2015
+    },
+    {
+      "state": "RI",
+      "session": "2025",
+      "start_date": "2025-01-02",
+      "introduced": 10400,
+      "enacted": 2036,
+      "passage_rate": 0.1958
+    },
+    {
+      "state": "RI",
+      "session": "2026",
+      "start_date": "2026-01-02",
+      "introduced": 11772,
+      "enacted": 148,
+      "passage_rate": 0.0126
+    },
+    {
+      "state": "SC",
+      "session": "2019-2020",
+      "start_date": "2019-01-08",
+      "introduced": 15580,
+      "enacted": 728,
+      "passage_rate": 0.0467
+    },
+    {
+      "state": "SC",
+      "session": "2021-2022",
+      "start_date": "2021-01-12",
+      "introduced": 15600,
+      "enacted": 1040,
+      "passage_rate": 0.0667
+    },
+    {
+      "state": "SC",
+      "session": "2023-2024",
+      "start_date": "2023-01-10",
+      "introduced": 15908,
+      "enacted": 968,
+      "passage_rate": 0.0608
+    },
+    {
+      "state": "SC",
+      "session": "2025-2026",
+      "start_date": "2025-01-14",
+      "introduced": 15644,
+      "enacted": 1016,
+      "passage_rate": 0.0649
+    },
+    {
+      "state": "SD",
+      "session": "2019",
+      "start_date": "2019-01-08",
+      "introduced": 2336,
+      "enacted": 872,
+      "passage_rate": 0.3733
+    },
+    {
+      "state": "SD",
+      "session": "2020",
+      "start_date": "2020-01-14",
+      "introduced": 2384,
+      "enacted": 964,
+      "passage_rate": 0.4044
+    },
+    {
+      "state": "SD",
+      "session": "2020s",
+      "start_date": "2020-10-05",
+      "introduced": 8,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "SD",
+      "session": "2021",
+      "start_date": "2021-01-12",
+      "introduced": 2204,
+      "enacted": 988,
+      "passage_rate": 0.4483
+    },
+    {
+      "state": "SD",
+      "session": "2021i",
+      "start_date": "2021-11-08",
+      "introduced": 12,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "SD",
+      "session": "2021r",
+      "start_date": "2021-11-09",
+      "introduced": 8,
+      "enacted": 4,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "SD",
+      "session": "2022",
+      "start_date": "2022-01-11",
+      "introduced": 2544,
+      "enacted": 988,
+      "passage_rate": 0.3884
+    },
+    {
+      "state": "SD",
+      "session": "2023",
+      "start_date": "2023-01-10",
+      "introduced": 2068,
+      "enacted": 836,
+      "passage_rate": 0.4043
+    },
+    {
+      "state": "SD",
+      "session": "2024",
+      "start_date": "2024-01-09",
+      "introduced": 2240,
+      "enacted": 932,
+      "passage_rate": 0.4161
+    },
+    {
+      "state": "SD",
+      "session": "2025",
+      "start_date": "2025-01-14",
+      "introduced": 2284,
+      "enacted": 844,
+      "passage_rate": 0.3695
+    },
+    {
+      "state": "SD",
+      "session": "2025s",
+      "start_date": "2025-09-03",
+      "introduced": 8,
+      "enacted": 4,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "SD",
+      "session": "2026",
+      "start_date": "2026-01-14",
+      "introduced": 2664,
+      "enacted": 960,
+      "passage_rate": 0.3604
+    },
+    {
+      "state": "TN",
+      "session": "111",
+      "start_date": "2019-01-08",
+      "introduced": 36396,
+      "enacted": 16400,
+      "passage_rate": 0.4506
+    },
+    {
+      "state": "TN",
+      "session": "111S1",
+      "start_date": "2019-08-23",
+      "introduced": 900,
+      "enacted": 148,
+      "passage_rate": 0.1644
+    },
+    {
+      "state": "TN",
+      "session": "111S2",
+      "start_date": "2020-08-11",
+      "introduced": 400,
+      "enacted": 264,
+      "passage_rate": 0.66
+    },
+    {
+      "state": "TN",
+      "session": "112",
+      "start_date": "2021-01-12",
+      "introduced": 38196,
+      "enacted": 21676,
+      "passage_rate": 0.5675
+    },
+    {
+      "state": "TN",
+      "session": "112S2",
+      "start_date": "2021-10-18",
+      "introduced": 184,
+      "enacted": 140,
+      "passage_rate": 0.7609
+    },
+    {
+      "state": "TN",
+      "session": "112S3",
+      "start_date": "2021-10-27",
+      "introduced": 928,
+      "enacted": 252,
+      "passage_rate": 0.2716
+    },
+    {
+      "state": "TN",
+      "session": "113",
+      "start_date": "2023-01-10",
+      "introduced": 38660,
+      "enacted": 16252,
+      "passage_rate": 0.4204
+    },
+    {
+      "state": "TN",
+      "session": "113S1",
+      "start_date": "2023-08-09",
+      "introduced": 1896,
+      "enacted": 232,
+      "passage_rate": 0.1224
+    },
+    {
+      "state": "TN",
+      "session": "114",
+      "start_date": "2025-01-14",
+      "introduced": 36368,
+      "enacted": 15720,
+      "passage_rate": 0.4322
+    },
+    {
+      "state": "TN",
+      "session": "114S1",
+      "start_date": "2025-01-27",
+      "introduced": 80,
+      "enacted": 48,
+      "passage_rate": 0.6
+    },
+    {
+      "state": "TX",
+      "session": "86",
+      "start_date": "2019-01-10",
+      "introduced": 43516,
+      "enacted": 5516,
+      "passage_rate": 0.1268
+    },
+    {
+      "state": "TX",
+      "session": "87",
+      "start_date": "2019-01-08",
+      "introduced": 40000,
+      "enacted": 4556,
+      "passage_rate": 0.1139
+    },
+    {
+      "state": "TX",
+      "session": "871",
+      "start_date": "2021-07-08",
+      "introduced": 2160,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "TX",
+      "session": "872",
+      "start_date": "2021-08-07",
+      "introduced": 2612,
+      "enacted": 4,
+      "passage_rate": 0.0015
+    },
+    {
+      "state": "TX",
+      "session": "873",
+      "start_date": "2021-09-20",
+      "introduced": 2700,
+      "enacted": 80,
+      "passage_rate": 0.0296
+    },
+    {
+      "state": "TX",
+      "session": "88",
+      "start_date": "2023-01-10",
+      "introduced": 47236,
+      "enacted": 5428,
+      "passage_rate": 0.1149
+    },
+    {
+      "state": "TX",
+      "session": "881",
+      "start_date": "2023-05-29",
+      "introduced": 468,
+      "enacted": 4,
+      "passage_rate": 0.0085
+    },
+    {
+      "state": "TX",
+      "session": "882",
+      "start_date": "2023-06-27",
+      "introduced": 676,
+      "enacted": 12,
+      "passage_rate": 0.0178
+    },
+    {
+      "state": "TX",
+      "session": "883",
+      "start_date": "2023-10-09",
+      "introduced": 2392,
+      "enacted": 4,
+      "passage_rate": 0.0017
+    },
+    {
+      "state": "TX",
+      "session": "884",
+      "start_date": "2023-11-08",
+      "introduced": 1596,
+      "enacted": 72,
+      "passage_rate": 0.0451
+    },
+    {
+      "state": "TX",
+      "session": "891",
+      "start_date": "2025-07-21",
+      "introduced": 2364,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "TX",
+      "session": "892",
+      "start_date": "2025-08-18",
+      "introduced": 2768,
+      "enacted": 124,
+      "passage_rate": 0.0448
+    },
+    {
+      "state": "TX",
+      "session": "89R",
+      "start_date": "2025-01-10",
+      "introduced": 46012,
+      "enacted": 5424,
+      "passage_rate": 0.1179
+    },
+    {
+      "state": "UT",
+      "session": "2019",
+      "start_date": "2019-01-28",
+      "introduced": 3376,
+      "enacted": 2152,
+      "passage_rate": 0.6374
+    },
+    {
+      "state": "UT",
+      "session": "2019S1",
+      "start_date": "2019-09-16",
+      "introduced": 24,
+      "enacted": 20,
+      "passage_rate": 0.8333
+    },
+    {
+      "state": "UT",
+      "session": "2019S2",
+      "start_date": "2019-12-11",
+      "introduced": 8,
+      "enacted": 8,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "UT",
+      "session": "2020",
+      "start_date": "2020-01-27",
+      "introduced": 3336,
+      "enacted": 1904,
+      "passage_rate": 0.5707
+    },
+    {
+      "state": "UT",
+      "session": "2020S3",
+      "start_date": "2020-04-16",
+      "introduced": 84,
+      "enacted": 52,
+      "passage_rate": 0.619
+    },
+    {
+      "state": "UT",
+      "session": "2020S4",
+      "start_date": "2020-04-23",
+      "introduced": 16,
+      "enacted": 16,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "UT",
+      "session": "2020S5",
+      "start_date": "2020-06-18",
+      "introduced": 120,
+      "enacted": 92,
+      "passage_rate": 0.7667
+    },
+    {
+      "state": "UT",
+      "session": "2020S6",
+      "start_date": "2020-08-20",
+      "introduced": 96,
+      "enacted": 76,
+      "passage_rate": 0.7917
+    },
+    {
+      "state": "UT",
+      "session": "2021",
+      "start_date": "2021-01-19",
+      "introduced": 3076,
+      "enacted": 1852,
+      "passage_rate": 0.6021
+    },
+    {
+      "state": "UT",
+      "session": "2021S1",
+      "start_date": "2021-05-19",
+      "introduced": 76,
+      "enacted": 60,
+      "passage_rate": 0.7895
+    },
+    {
+      "state": "UT",
+      "session": "2021S1H",
+      "start_date": "2021-05-19",
+      "introduced": 8,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "UT",
+      "session": "2021S1S",
+      "start_date": "2021-05-19",
+      "introduced": 8,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "UT",
+      "session": "2021S2",
+      "start_date": "2021-11-09",
+      "introduced": 48,
+      "enacted": 48,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "UT",
+      "session": "2022",
+      "start_date": "2022-01-18",
+      "introduced": 3256,
+      "enacted": 1976,
+      "passage_rate": 0.6069
+    },
+    {
+      "state": "UT",
+      "session": "2022S3",
+      "start_date": "2022-03-25",
+      "introduced": 8,
+      "enacted": 4,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "UT",
+      "session": "2023",
+      "start_date": "2023-01-17",
+      "introduced": 3716,
+      "enacted": 2196,
+      "passage_rate": 0.591
+    },
+    {
+      "state": "UT",
+      "session": "2023S1",
+      "start_date": "2023-05-17",
+      "introduced": 16,
+      "enacted": 12,
+      "passage_rate": 0.75
+    },
+    {
+      "state": "UT",
+      "session": "2023S2",
+      "start_date": "2023-06-14",
+      "introduced": 4,
+      "enacted": 4,
+      "passage_rate": 1.0
+    },
+    {
+      "state": "UT",
+      "session": "2024",
+      "start_date": "2024-01-16",
+      "introduced": 3736,
+      "enacted": 2220,
+      "passage_rate": 0.5942
+    },
+    {
+      "state": "UT",
+      "session": "2024S3",
+      "start_date": "2024-06-19",
+      "introduced": 28,
+      "enacted": 24,
+      "passage_rate": 0.8571
+    },
+    {
+      "state": "UT",
+      "session": "2024S4",
+      "start_date": "2024-08-21",
+      "introduced": 16,
+      "enacted": 12,
+      "passage_rate": 0.75
+    },
+    {
+      "state": "UT",
+      "session": "2025",
+      "start_date": "2025-01-21",
+      "introduced": 3836,
+      "enacted": 2216,
+      "passage_rate": 0.5777
+    },
+    {
+      "state": "UT",
+      "session": "2025S1",
+      "start_date": "2025-10-06",
+      "introduced": 72,
+      "enacted": 68,
+      "passage_rate": 0.9444
+    },
+    {
+      "state": "UT",
+      "session": "2025S2",
+      "start_date": "2025-12-09",
+      "introduced": 20,
+      "enacted": 12,
+      "passage_rate": 0.6
+    },
+    {
+      "state": "UT",
+      "session": "2026",
+      "start_date": "2026-01-20",
+      "introduced": 4064,
+      "enacted": 2048,
+      "passage_rate": 0.5039
+    },
+    {
+      "state": "VA",
+      "session": "2019",
+      "start_date": "2019-01-09",
+      "introduced": 12624,
+      "enacted": 2136,
+      "passage_rate": 0.1692
+    },
+    {
+      "state": "VA",
+      "session": "2019specialI",
+      "start_date": "2019-07-09",
+      "introduced": 636,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "VA",
+      "session": "2020",
+      "start_date": "2020-01-08",
+      "introduced": 15644,
+      "enacted": 5148,
+      "passage_rate": 0.3291
+    },
+    {
+      "state": "VA",
+      "session": "2020specialI",
+      "start_date": "2020-08-18",
+      "introduced": 1952,
+      "enacted": 224,
+      "passage_rate": 0.1148
+    },
+    {
+      "state": "VA",
+      "session": "2021",
+      "start_date": "2021-01-13",
+      "introduced": 8580,
+      "enacted": 2208,
+      "passage_rate": 0.2573
+    },
+    {
+      "state": "VA",
+      "session": "2021S2",
+      "start_date": "2021-08-02",
+      "introduced": 912,
+      "enacted": 4,
+      "passage_rate": 0.0044
+    },
+    {
+      "state": "VA",
+      "session": "2022",
+      "start_date": "2022-01-12",
+      "introduced": 12572,
+      "enacted": 3316,
+      "passage_rate": 0.2638
+    },
+    {
+      "state": "VA",
+      "session": "2022S1",
+      "start_date": "2022-04-04",
+      "introduced": 1452,
+      "enacted": 88,
+      "passage_rate": 0.0606
+    },
+    {
+      "state": "VA",
+      "session": "2023",
+      "start_date": "2023-01-11",
+      "introduced": 12116,
+      "enacted": 3244,
+      "passage_rate": 0.2677
+    },
+    {
+      "state": "VA",
+      "session": "2023S1",
+      "start_date": "2023-08-05",
+      "introduced": 212,
+      "enacted": 4,
+      "passage_rate": 0.0189
+    },
+    {
+      "state": "VA",
+      "session": "2024",
+      "start_date": "2024-01-10",
+      "introduced": 14380,
+      "enacted": 3348,
+      "passage_rate": 0.2328
+    },
+    {
+      "state": "VA",
+      "session": "2024S1",
+      "start_date": "2024-05-13",
+      "introduced": 1160,
+      "enacted": 16,
+      "passage_rate": 0.0138
+    },
+    {
+      "state": "VA",
+      "session": "2025",
+      "start_date": "2025-01-08",
+      "introduced": 14048,
+      "enacted": 2884,
+      "passage_rate": 0.2053
+    },
+    {
+      "state": "VA",
+      "session": "2026",
+      "start_date": "2026-01-14",
+      "introduced": 14548,
+      "enacted": 3884,
+      "passage_rate": 0.267
+    },
+    {
+      "state": "VA",
+      "session": "2026S1",
+      "start_date": "2026-04-23",
+      "introduced": 392,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "VI",
+      "session": "35",
+      "start_date": "2023-01-09",
+      "introduced": 260,
+      "enacted": 4,
+      "passage_rate": 0.0154
+    },
+    {
+      "state": "VI",
+      "session": "36",
+      "start_date": "2025-01-09",
+      "introduced": 592,
+      "enacted": 108,
+      "passage_rate": 0.1824
+    },
+    {
+      "state": "VT",
+      "session": "2019-2020",
+      "start_date": "2019-01-09",
+      "introduced": 7196,
+      "enacted": 740,
+      "passage_rate": 0.1028
+    },
+    {
+      "state": "VT",
+      "session": "2021-2022",
+      "start_date": "2021-01-06",
+      "introduced": 5436,
+      "enacted": 808,
+      "passage_rate": 0.1486
+    },
+    {
+      "state": "VT",
+      "session": "2021S1",
+      "start_date": "2021-11-22",
+      "introduced": 36,
+      "enacted": 4,
+      "passage_rate": 0.1111
+    },
+    {
+      "state": "VT",
+      "session": "2023-2024",
+      "start_date": "2023-01-04",
+      "introduced": 6380,
+      "enacted": 804,
+      "passage_rate": 0.126
+    },
+    {
+      "state": "VT",
+      "session": "2025-2026",
+      "start_date": "2025-01-08",
+      "introduced": 6872,
+      "enacted": 492,
+      "passage_rate": 0.0716
+    },
+    {
+      "state": "WA",
+      "session": "2019-2020",
+      "start_date": "2019-01-14",
+      "introduced": 15888,
+      "enacted": 3296,
+      "passage_rate": 0.2075
+    },
+    {
+      "state": "WA",
+      "session": "2021-2022",
+      "start_date": "2021-01-11",
+      "introduced": 9288,
+      "enacted": 2516,
+      "passage_rate": 0.2709
+    },
+    {
+      "state": "WA",
+      "session": "2023-2024",
+      "start_date": "2023-01-09",
+      "introduced": 12372,
+      "enacted": 3384,
+      "passage_rate": 0.2735
+    },
+    {
+      "state": "WA",
+      "session": "2025-2026",
+      "start_date": "2025-01-13",
+      "introduced": 13652,
+      "enacted": 2760,
+      "passage_rate": 0.2022
+    },
+    {
+      "state": "WI",
+      "session": "2019",
+      "start_date": "2019-01-07",
+      "introduced": 9052,
+      "enacted": 732,
+      "passage_rate": 0.0809
+    },
+    {
+      "state": "WI",
+      "session": "2021",
+      "start_date": "2021-01-04",
+      "introduced": 10468,
+      "enacted": 1080,
+      "passage_rate": 0.1032
+    },
+    {
+      "state": "WI",
+      "session": "2021S1",
+      "start_date": "2021-01-19",
+      "introduced": 8,
+      "enacted": 4,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "WI",
+      "session": "2023",
+      "start_date": "2023-01-03",
+      "introduced": 10620,
+      "enacted": 1120,
+      "passage_rate": 0.1055
+    },
+    {
+      "state": "WI",
+      "session": "2023S1",
+      "start_date": "2023-09-20",
+      "introduced": 4,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "WI",
+      "session": "2025",
+      "start_date": "2025-01-06",
+      "introduced": 10996,
+      "enacted": 1004,
+      "passage_rate": 0.0913
+    },
+    {
+      "state": "WI",
+      "session": "2026S1",
+      "start_date": "2026-05-13",
+      "introduced": 8,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "WV",
+      "session": "2019",
+      "start_date": "2019-01-09",
+      "introduced": 8556,
+      "enacted": 1024,
+      "passage_rate": 0.1197
+    },
+    {
+      "state": "WV",
+      "session": "20191S",
+      "start_date": "2019-03-10",
+      "introduced": 724,
+      "enacted": 184,
+      "passage_rate": 0.2541
+    },
+    {
+      "state": "WV",
+      "session": "2020",
+      "start_date": "2020-01-08",
+      "introduced": 10984,
+      "enacted": 1396,
+      "passage_rate": 0.1271
+    },
+    {
+      "state": "WV",
+      "session": "2021",
+      "start_date": "2021-01-13",
+      "introduced": 9408,
+      "enacted": 1120,
+      "passage_rate": 0.119
+    },
+    {
+      "state": "WV",
+      "session": "20211S",
+      "start_date": "2021-06-07",
+      "introduced": 56,
+      "enacted": 28,
+      "passage_rate": 0.5
+    },
+    {
+      "state": "WV",
+      "session": "20212S",
+      "start_date": "2021-06-24",
+      "introduced": 220,
+      "enacted": 84,
+      "passage_rate": 0.3818
+    },
+    {
+      "state": "WV",
+      "session": "20213S",
+      "start_date": "2021-10-11",
+      "introduced": 340,
+      "enacted": 52,
+      "passage_rate": 0.1529
+    },
+    {
+      "state": "WV",
+      "session": "2022",
+      "start_date": "2022-01-12",
+      "introduced": 10060,
+      "enacted": 672,
+      "passage_rate": 0.0668
+    },
+    {
+      "state": "WV",
+      "session": "20221S",
+      "start_date": "2021-02-10",
+      "introduced": 1260,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "WV",
+      "session": "20222S",
+      "start_date": "2022-06-25",
+      "introduced": 136,
+      "enacted": 24,
+      "passage_rate": 0.1765
+    },
+    {
+      "state": "WV",
+      "session": "20223S",
+      "start_date": "2022-07-25",
+      "introduced": 56,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "WV",
+      "session": "20224S",
+      "start_date": "2022-09-12",
+      "introduced": 40,
+      "enacted": 0,
+      "passage_rate": 0.0
+    },
+    {
+      "state": "WV",
+      "session": "2023",
+      "start_date": "2023-01-11",
+      "introduced": 10176,
+      "enacted": 1328,
+      "passage_rate": 0.1305
+    },
+    {
+      "state": "WV",
+      "session": "20231S",
+      "start_date": "2023-08-06",
+      "introduced": 356,
+      "enacted": 140,
+      "passage_rate": 0.3933
+    },
+    {
+      "state": "WV",
+      "session": "2024",
+      "start_date": "2024-01-11",
+      "introduced": 11316,
+      "enacted": 1084,
+      "passage_rate": 0.0958
+    },
+    {
+      "state": "WV",
+      "session": "20241S",
+      "start_date": "2024-05-21",
+      "introduced": 140,
+      "enacted": 60,
+      "passage_rate": 0.4286
+    },
+    {
+      "state": "WV",
+      "session": "20242S",
+      "start_date": "2024-09-30",
+      "introduced": 424,
+      "enacted": 148,
+      "passage_rate": 0.3491
+    },
+    {
+      "state": "WV",
+      "session": "2025",
+      "start_date": "2025-02-12",
+      "introduced": 10840,
+      "enacted": 972,
+      "passage_rate": 0.0897
+    },
+    {
+      "state": "WV",
+      "session": "2026",
+      "start_date": "2026-01-14",
+      "introduced": 11900,
+      "enacted": 1132,
+      "passage_rate": 0.0951
+    },
+    {
+      "state": "WY",
+      "session": "2019",
+      "start_date": "2019-01-08",
+      "introduced": 2012,
+      "enacted": 848,
+      "passage_rate": 0.4215
+    },
+    {
+      "state": "WY",
+      "session": "2020",
+      "start_date": "2020-02-10",
+      "introduced": 1596,
+      "enacted": 628,
+      "passage_rate": 0.3935
+    },
+    {
+      "state": "WY",
+      "session": "2020S1",
+      "start_date": "2020-05-15",
+      "introduced": 40,
+      "enacted": 12,
+      "passage_rate": 0.3
+    },
+    {
+      "state": "WY",
+      "session": "2021",
+      "start_date": "2021-01-12",
+      "introduced": 1764,
+      "enacted": 680,
+      "passage_rate": 0.3855
+    },
+    {
+      "state": "WY",
+      "session": "2021S1",
+      "start_date": "2021-10-26",
+      "introduced": 164,
+      "enacted": 4,
+      "passage_rate": 0.0244
+    },
+    {
+      "state": "WY",
+      "session": "2022",
+      "start_date": "2022-02-14",
+      "introduced": 1116,
+      "enacted": 432,
+      "passage_rate": 0.3871
+    },
+    {
+      "state": "WY",
+      "session": "2023",
+      "start_date": "2023-01-10",
+      "introduced": 1988,
+      "enacted": 776,
+      "passage_rate": 0.3903
+    },
+    {
+      "state": "WY",
+      "session": "2024",
+      "start_date": "2024-02-12",
+      "introduced": 1464,
+      "enacted": 472,
+      "passage_rate": 0.3224
+    },
+    {
+      "state": "WY",
+      "session": "2025",
+      "start_date": "2025-01-14",
+      "introduced": 2224,
+      "enacted": 704,
+      "passage_rate": 0.3165
+    },
+    {
+      "state": "WY",
+      "session": "2026",
+      "start_date": "2026-02-09",
+      "introduced": 1340,
+      "enacted": 444,
+      "passage_rate": 0.3313
+    }
+  ]
+}

@@ -13,6 +13,10 @@ import type { FederalActionSummary, LitigationCaseSummary } from '@/lib/types';
 
 const titleCase = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
+// Trial date for the Oregon NAW v. DEQ preemption case — single source so the banner phrasing
+// updates from the date rather than carrying a hand-typed "trial July 13, 2026" that goes stale.
+const NAW_TRIAL_DATE = '2026-07-13';
+
 function ActionTypeBadge({ type }: { type: string | null | undefined }) {
   if (!type) return null;
   return (
@@ -171,9 +175,9 @@ export default function FederalPage() {
   const [riskFilter, setRiskFilter] = useState('');
   const [expandedCaseId, setExpandedCaseId] = useState<number | null>(null);
 
-  // epr_relevant defaults true server-side; pass it explicitly so the page only ever shows
-  // classified-relevant federal actions (the API still supports epr_relevant=false to inspect noise).
-  const { data: actions = [], isLoading: actionsLoading } = useFederalActions({ limit: 100, epr_relevant: true, days_back: 3650 });
+  // ce_relevant defaults true server-side; pass it explicitly so the page only ever shows
+  // classified-relevant federal actions (the API still supports ce_relevant=false to inspect noise).
+  const { data: actions = [], isLoading: actionsLoading } = useFederalActions({ limit: 100, ce_relevant: true, days_back: 3650 });
   const { data: cases = [], isLoading: casesLoading } = useLitigationCases();
 
   const filteredActions = useMemo(() => {
@@ -185,6 +189,14 @@ export default function FederalPage() {
   }, [actions, instrumentFilter, materialFilter, riskFilter]);
 
   const highRisk = filteredActions.filter(a => (a.preemption_risk ?? '').toLowerCase() === 'high').length;
+  // Curated context, but the date drives the phrasing so the banner can't read as stale once the
+  // trial passes (it flips to "watch for a ruling" instead of advertising a date in the past).
+  const trialDays = daysUntil(NAW_TRIAL_DATE);
+  const trialPhrase =
+    trialDays == null ? `trial ${formatDate(NAW_TRIAL_DATE)}`
+    : trialDays > 0 ? `trial ${formatDate(NAW_TRIAL_DATE)}`
+    : trialDays === 0 ? 'trial underway'
+    : `trial concluded ${formatDate(NAW_TRIAL_DATE)} — watch for a ruling`;
   // Only surface facet options actually present in the data, so empty dropdowns don't appear.
   const instrumentOptions = Array.from(new Set(actions.map(a => a.instrument_type).filter((t): t is string => !!t && t !== 'other'))).sort();
   const materialOptions = MATERIAL_CATEGORIES.filter(m => m !== 'other' && actions.some(a => a.material_categories?.includes(m)));
@@ -193,17 +205,18 @@ export default function FederalPage() {
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
       <GazetteHeader title="Federal Actions" subtitle="Federal Register actions, preemption risk, and EPR litigation" />
 
-      {/* Preemption banner */}
-      <div className="bg-red-100 dark:bg-red-950/50 border border-red-400 dark:border-red-800 rounded-lg p-4 space-y-1">
-        <div className="flex items-center gap-2 text-red-700 dark:text-red-300 font-semibold text-sm">
-          <AlertIcon className="text-base shrink-0" /> Federal Preemption Context
+      {/* Preemption context — a standing editorial brief, not a live alert. Kept neutral so alarm-red
+          stays reserved for the data-driven "High Preemption Risk" metric below. */}
+      <div className="surface-card p-4 space-y-1">
+        <div className="flex items-center gap-2 text-text-secondary font-semibold text-sm">
+          <AlertIcon className="text-base shrink-0 text-amber-500" /> Federal Preemption Context
         </div>
-        <p className="text-red-700/80 dark:text-red-200/80 text-sm">
-          <strong>Oregon NAW v. Oregon DEQ</strong> (trial July 13, 2026) challenges Oregon's packaging EPR law under the Dormant Commerce Clause.
+        <p className="text-text-secondary text-sm">
+          <strong className="text-text-primary">Oregon NAW v. Oregon DEQ</strong> ({trialPhrase}) challenges Oregon&rsquo;s packaging EPR law under the Dormant Commerce Clause.
           A ruling could set precedent affecting all state EPR programs.
         </p>
-        <p className="text-red-700/80 dark:text-red-200/80 text-sm">
-          <strong>PACK Act</strong> (proposed federal packaging legislation) could preempt state programs if enacted.
+        <p className="text-text-secondary text-sm">
+          <strong className="text-text-primary">PACK Act</strong> (proposed federal packaging legislation) could preempt state programs if enacted.
           Monitor comment periods and committee activity.
         </p>
       </div>

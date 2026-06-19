@@ -1,7 +1,8 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useBills } from '@/hooks/useBills';
 import { STATE_NAMES, formatDate, fixEncoding, formatInstrumentType } from '@/lib/utils';
+import { CloseIcon } from '@/components/ui/icons';
 import type { BillSummary } from '@/lib/types';
 import sessionsData from './legislative-sessions.json';
 
@@ -26,7 +27,6 @@ const SESSIONS: Record<string, Session[]> = (sessionsData as { states: Record<st
 
 const AXIS_START = '2025-01-01';
 const AXIS_END = '2026-12-31';
-const TODAY = '2026-06-17';
 
 // The only hand-entered layer left — procedural cutoffs after which un-advanced bills are
 // effectively dead for the session. Approximate; OpenStates doesn't carry these.
@@ -78,9 +78,16 @@ const MONTH_TICKS = (() => {
 })();
 
 export function LegislativeTimeline() {
-  const { data: bills = [], isLoading } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [], isLoading } = useBills({ ce_relevant: true, limit: 5000 });
   const [hideEnacted, setHideEnacted] = useState(false);
   const [selected, setSelected] = useState<BillSummary | null>(null);
+  // Computed on the client after mount so the "today" marker stays current without a frozen literal
+  // (and without an SSR/CSR hydration mismatch on the marker's position).
+  const [today, setToday] = useState<string | null>(null);
+  useEffect(() => {
+    const d = new Date();
+    setToday(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  }, []);
 
   // Group in-window bills by state. Lane set is stable (ignores hideEnacted); only the dots filter.
   const { lanes, totalPlotted } = useMemo(() => {
@@ -221,8 +228,10 @@ export function LegislativeTimeline() {
                         style={{ left: `${pct(c.date)}%` }}
                       />
                     ))}
-                    {/* Today */}
-                    <span className="absolute top-0 bottom-0 w-px bg-text-primary/50" style={{ left: `${pct(TODAY)}%` }} />
+                    {/* Today — only when in the visible window, computed client-side after mount */}
+                    {today && pct(today) > 0 && pct(today) < 100 && (
+                      <span className="absolute top-0 bottom-0 w-px bg-text-primary/50" style={{ left: `${pct(today)}%` }} title={`Today — ${formatDate(today)}`} />
+                    )}
                     {/* Bills */}
                     {lane.bills.map((b, i) => {
                       const top = 6 + ((i * 7) % 28);
@@ -251,8 +260,12 @@ export function LegislativeTimeline() {
             <span className="font-mono text-green-accent">
               {selected.state} {selected.bill_number ?? ''}
             </span>
-            <button onClick={() => setSelected(null)} className="text-text-muted hover:text-text-primary text-xs">
-              close ✕
+            <button
+              onClick={() => setSelected(null)}
+              aria-label="Close"
+              className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-xs"
+            >
+              close <CloseIcon />
             </button>
           </div>
           <p className="text-text-primary">{fixEncoding(selected.title)}</p>

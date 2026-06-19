@@ -103,7 +103,7 @@ async def main(commit: bool) -> None:
                 status_date=_parse_date(law.get("enacted_date")),
                 last_action_date=_parse_date(law.get("enacted_date")),
                 source_url=law.get("source_url"),
-                epr_relevant=True,
+                ce_relevant=True,
                 confidence_score=1.0,
                 reviewed=True,  # researcher-verified, URL-checked
                 material_categories=law.get("material_categories", []),

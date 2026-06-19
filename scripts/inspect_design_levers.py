@@ -121,13 +121,13 @@ async def main() -> None:
     conn = await asyncpg.connect(args.dsn)
     try:
         total_bills = await conn.fetchval("SELECT count(*) FROM bills")
-        relevant = await conn.fetchval("SELECT count(*) FROM bills WHERE epr_relevant = true")
+        relevant = await conn.fetchval("SELECT count(*) FROM bills WHERE ce_relevant = true")
         analyzed = await conn.fetchval(
-            "SELECT count(*) FROM bills WHERE epr_relevant = true AND compliance_details IS NOT NULL"
+            "SELECT count(*) FROM bills WHERE ce_relevant = true AND compliance_details IS NOT NULL"
         )
         rows = await conn.fetch(
             "SELECT id, state, bill_number, policy_stance, compliance_details "
-            "FROM bills WHERE epr_relevant = true AND compliance_details IS NOT NULL"
+            "FROM bills WHERE ce_relevant = true AND compliance_details IS NOT NULL"
         )
     finally:
         await conn.close()
@@ -183,7 +183,7 @@ async def main() -> None:
     print("DESIGN-LEVER COVERAGE  (compliance_details scan, read-only)")
     print("=" * 78)
     print(f"  bills (total) ............ {total_bills}")
-    print(f"  epr_relevant ............. {relevant}")
+    print(f"  ce_relevant ............. {relevant}")
     print(f"  ...with compliance_details {analyzed}   <- analyzable corpus for this pass")
     if analyzed == 0:
         print("\n  No analyzable bills. Is this pointed at PROD? (local has empty compliance_details)")

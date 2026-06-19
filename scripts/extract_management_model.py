@@ -152,7 +152,7 @@ async def main():
     dsn = args.prod_dsn or settings.database_url
     engine = create_engine(dsn)
 
-    where = "epr_relevant and state!='US' and status='enacted'"
+    where = "ce_relevant and state!='US' and status='enacted'"
     if args.only_missing:
         where += " and (compliance_details->'management') is null"
     order = "random()"

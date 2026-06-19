@@ -26,13 +26,13 @@ const StateMap = dynamic(
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
 
-  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000 });
   const { data: federal = [] } = useFederalActions({ limit: 50 });
 
   const { scope } = useScope();
   const scopeActive = useScopeActive();
 
-  const { isPro } = useAuth();
+  const { isPro, user, openAuth } = useAuth();
   const gatePro = useProGate();
 
   const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
@@ -78,6 +78,36 @@ export default function HomePage() {
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
       {/* Scoped deadline banner — "3 deadlines hitting your plastic packaging" (only when a scope is set) */}
       <ScopedDeadlineBanner />
+
+      {/* Above-the-fold value prop + primary CTA — signed-out visitors only, so the app view stays
+          uncluttered for users who've already converted. The single loudest action is "start free". */}
+      {!user && (
+        <section className="rounded-xl border border-green-accent/30 bg-green-hero p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+          <div className="max-w-2xl">
+            <h1 className="font-serif text-2xl sm:text-3xl text-text-primary leading-tight text-balance">
+              Track every circular-economy bill and EPR deadline — across all 50 states.
+            </h1>
+            <p className="mt-2 text-text-secondary text-body leading-relaxed">
+              We read every bill and pull out the obligations and dates, so a deadline never slips past you.
+              Start free — no card required.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 shrink-0 sm:w-48">
+            <button
+              onClick={openAuth}
+              className="rounded-lg bg-green-accent text-bg-primary font-semibold px-5 py-2.5 hover:opacity-90 transition-opacity"
+            >
+              Start free →
+            </button>
+            <Link
+              href="/pricing"
+              className="text-center text-meta text-text-secondary hover:text-text-primary transition-colors"
+            >
+              See plans &amp; pricing
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* Top-states leaderboard line, right under the nav */}
       <StatesTicker

@@ -364,7 +364,7 @@ async def get_company_obligations(
     bills_result = await db.execute(
         select(Bill).where(
             Bill.status.in_(ENACTED_STATUSES),
-            Bill.epr_relevant.is_(True),
+            Bill.ce_relevant.is_(True),
             Bill.state.in_(list(presence_by_state.keys())),
         )
     )

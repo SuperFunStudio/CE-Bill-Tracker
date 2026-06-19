@@ -126,7 +126,7 @@ class FederalResult:
     @property
     def in_scope(self) -> bool:
         """Final relevance decision: the classifier flagged it AND was confident enough.
-        This is what should drive epr_relevant, mirroring the state-bill confidence floor."""
+        This is what should drive ce_relevant, mirroring the state-bill confidence floor."""
         return self.is_relevant and self.confidence >= RELEVANCE_CONFIDENCE_FLOOR
 
 

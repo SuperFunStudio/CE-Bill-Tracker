@@ -106,7 +106,7 @@ export function InstrumentMaterialMatrix() {
                         count === 1 ? 'bill' : 'bills'
                       }`}
                     >
-                      <span className={count > 0 ? 'text-text-primary font-medium' : 'text-text-muted/40'}>
+                      <span className={count > 0 ? 'text-text-primary font-medium' : 'text-text-muted/70'}>
                         {count > 0 ? count : '·'}
                       </span>
                     </td>
@@ -120,9 +120,9 @@ export function InstrumentMaterialMatrix() {
 
       <p className="text-text-muted text-xs leading-relaxed">
         Each cell counts EPR-relevant bills applying that instrument to that material; a bill spanning
-        several materials counts in each. Darker is denser. The blank cells are the live signal —
-        a material with deposit-return precedent but an empty EPR column is where the next bills tend to
-        land. Auto-classified at a 0.7 confidence floor.
+        several materials counts in each. Shading is relative, not linear — read the number, not just the
+        tint. The blank cells are the live signal — a material with deposit-return precedent but an empty
+        EPR column is where the next bills tend to land. Auto-classified at a 0.7 confidence floor.
       </p>
     </div>
   );

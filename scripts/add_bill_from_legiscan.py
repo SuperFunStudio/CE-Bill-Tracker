@@ -99,7 +99,7 @@ async def main() -> None:
 
         hr = await HaikuClassifier().classify(
             state=state, bill_number=norm, title=title, description=desc, text_excerpt=full_text)
-        relevant = hr.confidence >= 0.4 and (hr.is_epr_relevant or hr.instrument_type in TRACKED_INSTRUMENTS)
+        relevant = hr.confidence >= 0.4 and (hr.is_ce_relevant or hr.instrument_type in TRACKED_INSTRUMENTS)
         print(f"  Haiku: relevant={relevant} instrument={hr.instrument_type} materials={hr.material_categories} "
               f"conf={hr.confidence} stance={hr.stance} urgency={hr.urgency}")
 
@@ -112,7 +112,7 @@ async def main() -> None:
         values = dict(
             legiscan_bill_id=bill_id, state=state, bill_number=norm, title=title, description=desc,
             status=status, status_date=last_action, last_action_date=last_action, source_url=source_url,
-            epr_relevant=relevant, confidence_score=hr.confidence, material_categories=hr.material_categories,
+            ce_relevant=relevant, confidence_score=hr.confidence, material_categories=hr.material_categories,
             instrument_type=hr.instrument_type, urgency=hr.urgency, policy_stance=hr.stance,
             stance_source="ai", ai_summary=desc, last_fetched_at=datetime.now(timezone.utc),
         )

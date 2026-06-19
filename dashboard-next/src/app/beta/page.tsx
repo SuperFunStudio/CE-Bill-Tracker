@@ -57,7 +57,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 // ── Weakening Watch ───────────────────────────────────────────────────────────
 
 function WeakeningWatch() {
-  const { data: bills = [], isLoading } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [], isLoading } = useBills({ ce_relevant: true, limit: 5000 });
   const [stateFilter, setStateFilter] = useState('');
 
   const weakening = useMemo(() => {
@@ -95,8 +95,12 @@ function WeakeningWatch() {
         These are AI-flagged <span className="text-text-primary">&ldquo;weakens&rdquo;</span> calls. The confidence shown
         is the bill&rsquo;s <span className="text-text-primary">relevance</span> score —{' '}
         <span className="text-text-primary">there is no separate confidence for the stance</span>, and the call is made
-        from the bill caption + first 2,000 characters. Treat as a review queue, not a verdict: verify against full text
-        before acting. Known false positive: CA SB-1341 (a deposit-pricing calibration, not a rollback).
+        from the bill caption + first 2,000 characters. Measured precision is{' '}
+        <span className="text-text-primary">~75%</span> (scripts/measure_stance_precision.py) — about 1 in 4 is wrong,
+        and the errors skew toward branding EPR-<span className="text-text-primary">establishing</span> bills as harmful.
+        Treat as a review queue, not a verdict: verify against full text, then mark the bill{' '}
+        <span className="text-text-primary">reviewed</span> to earn it a public red flag. Known false positives:
+        RI HB-7023 (establishes packaging EPR), CA SB-1341 (deposit-pricing calibration, not a rollback).
       </div>
 
       {isLoading ? (

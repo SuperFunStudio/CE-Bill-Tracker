@@ -137,8 +137,8 @@ export function TopNav() {
         <nav className="sm:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
           <div className="max-w-6xl mx-auto p-3 space-y-1">
             {renderLinks('menu')}
-            <div className="pt-2 border-t border-border-default mt-2" onClick={() => setMenuOpen(false)}>
-              <AuthButton />
+            <div className="pt-2 border-t border-border-default mt-2">
+              <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />
             </div>
             <div className="text-text-muted text-xs text-center pt-2">
               Circularity legislation tracker · Beta

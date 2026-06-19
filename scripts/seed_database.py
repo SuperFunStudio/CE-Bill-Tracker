@@ -44,7 +44,7 @@ async def seed_known_laws():
                 status_date=_parse_date(law.get("enacted_date")),
                 last_action_date=_parse_date(law.get("enacted_date")),
                 source_url=law.get("source_url"),
-                epr_relevant=True,
+                ce_relevant=True,
                 confidence_score=1.0,  # manually verified
                 material_categories=law.get("material_categories", []),
                 instrument_type=law.get("instrument_type"),
@@ -105,7 +105,7 @@ async def seed_known_laws():
                     status_date=_parse_date(law.get("enacted_date")),
                     last_action_date=_parse_date(law.get("enacted_date")),
                     source_url=law.get("source_url"),
-                    epr_relevant=True,
+                    ce_relevant=True,
                     confidence_score=1.0,
                     material_categories=law.get("material_categories", []),
                     instrument_type=law.get("instrument_type"),

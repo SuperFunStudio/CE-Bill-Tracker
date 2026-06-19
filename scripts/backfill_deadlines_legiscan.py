@@ -236,7 +236,7 @@ async def main() -> None:
         for i, (s, b) in enumerate(pairs):
             params[f"s{i}"], params[f"b{i}"] = s.strip(), b.strip()
     else:
-        clauses = ["openstates_id LIKE 'hist:%'", "epr_relevant = true",
+        clauses = ["openstates_id LIKE 'hist:%'", "ce_relevant = true",
                    "(status_date IS NULL OR status_date >= :since)"]
         if not args.all:
             clauses.append("compliance_details IS NULL")

@@ -63,7 +63,7 @@ export default function DesignGuidePage() {
 
   // Bill tags on a flipped principle card open the shared BillModal. We resolve a bill id to a
   // full BillSummary from the same dataset the Bill Explorer uses.
-  const { data: bills = [] } = useBills({ epr_relevant: true, limit: 5000 });
+  const { data: bills = [] } = useBills({ ce_relevant: true, limit: 5000 });
   const billsById = useMemo(() => new Map(bills.map(b => [b.id, b])), [bills]);
   const [selectedBillId, setSelectedBillId] = useState<number | null>(null);
   const selectedBill = selectedBillId != null ? billsById.get(selectedBillId) ?? null : null;

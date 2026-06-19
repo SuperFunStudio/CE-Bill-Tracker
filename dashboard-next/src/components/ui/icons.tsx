@@ -96,6 +96,24 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+/** Close / dismiss — replaces ad-hoc ✕ glyphs so close controls align and size like text. */
+export function CloseIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </Icon>
+  );
+}
+
+/** Right chevron — expand/disclosure and "more" affordances, in place of › / ▾ glyphs. */
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 6l6 6-6 6" />
+    </Icon>
+  );
+}
+
 export function StarIcon(props: IconProps) {
   return (
     <Icon {...props} fill="currentColor" stroke="none">

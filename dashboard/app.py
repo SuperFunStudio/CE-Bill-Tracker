@@ -83,7 +83,7 @@ def fetch_bills():
     try:
         resp = httpx.get(
             f"{API_BASE}/bills",
-            params={"epr_relevant": True, "limit": 500},
+            params={"ce_relevant": True, "limit": 500},
             timeout=10,
         )
         resp.raise_for_status()
@@ -351,7 +351,7 @@ else:
     label = f"Bills — {selected_state} ({STATE_NAMES.get(selected_state, '')})" if selected_state else "Bills — All States"
     st.markdown(f'<div class="section-header">{label}</div>', unsafe_allow_html=True)
 
-    table_bills = [b for b in bills if b.get("epr_relevant")]
+    table_bills = [b for b in bills if b.get("ce_relevant")]
     if selected_state:
         table_bills = [b for b in table_bills if b.get("state") == selected_state]
     if enacted_only:

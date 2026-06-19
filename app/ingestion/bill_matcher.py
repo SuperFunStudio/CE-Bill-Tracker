@@ -150,7 +150,7 @@ async def match_case_to_bill(
 
     Steps:
       1. Infer state from court_id.
-      2. Load all epr_relevant bills for that state.
+      2. Load all ce_relevant bills for that state.
       3. Score each bill by token overlap + alias bonus.
       4. Return best match above threshold.
     """
@@ -170,7 +170,7 @@ async def match_case_to_bill(
     result = await db.execute(
         select(Bill).where(
             Bill.state == state,
-            Bill.epr_relevant == True,  # noqa: E712
+            Bill.ce_relevant == True,  # noqa: E712
         )
     )
     candidates = result.scalars().all()

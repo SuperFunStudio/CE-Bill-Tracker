@@ -208,7 +208,7 @@ async def mark_known_laws(db) -> int:
             return (is_enacted, -abs(yr - enacted_year) if enacted_year else 0)
 
         best = max(rows, key=_rank)
-        best.epr_relevant = True
+        best.ce_relevant = True
         best.confidence_score = 1.0
         if not best.urgency:
             best.urgency = "high"

@@ -5,13 +5,16 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import type { BillTimelinePoint } from '@/lib/types';
+import type { BillTimelinePoint, BillParams } from '@/lib/types';
 import { track } from '@/lib/analytics';
+import { formatInstrumentType } from '@/lib/utils';
+import { BillDrilldownPanel } from './BillDrilldownPanel';
 
 /**
  * "Shots on goal" timeline. Enacted is the headline series (cumulative laws on the books);
@@ -42,26 +45,49 @@ const STATUS_CONFIG: StatusConfig[] = [
   { key: 'failed', label: 'Failed / died', color: '#9ca3af', kind: 'shot' },
 ];
 
-// Reads the active theme's neutral colors so axes/grid match light & dark mode.
+// Reads the active theme's neutral colors (so axes/grid match light & dark) plus the canonical
+// enacted green (--status-enacted), so the headline line matches the enacted green used elsewhere.
 function useThemeColors() {
-  const [colors, setColors] = useState({ muted: '#6b7280', border: '#dee2e6' });
+  const [colors, setColors] = useState({ muted: '#6b7280', border: '#dee2e6', enacted: '#16a34a' });
   useEffect(() => {
     const root = getComputedStyle(document.documentElement);
-    const muted = root.getPropertyValue('--text-muted').trim();
-    const border = root.getPropertyValue('--border-default').trim();
-    setColors({ muted: muted || '#6b7280', border: border || '#dee2e6' });
+    const get = (v: string, fb: string) => root.getPropertyValue(v).trim() || fb;
+    setColors({
+      muted: get('--text-muted', '#6b7280'),
+      border: get('--border-default', '#dee2e6'),
+      enacted: get('--status-enacted', '#16a34a'),
+    });
   }, []);
   return colors;
 }
 
 type Mode = 'cumulative' | 'annual';
 
-export function BillTimelineChart({ points }: { points: BillTimelinePoint[] }) {
+export function BillTimelineChart({
+  points,
+  instrument,
+}: {
+  points: BillTimelinePoint[];
+  instrument?: string;
+}) {
   const [mode, setMode] = useState<Mode>('cumulative');
   // Enacted is the headline; upstream series start hidden so the page opens clean.
   const [visible, setVisible] = useState<Set<string>>(() => new Set(['enacted']));
+  const [drillYear, setDrillYear] = useState<number | null>(null);
 
   const colors = useThemeColors();
+
+  // Clicking the chart drills the whole year (the timeline is multi-series, so a single point isn't
+  // one status); the panel lists every bill active that year with its own status + source link.
+  function openDrill(e: { activeLabel?: string | number } | null) {
+    const year = e?.activeLabel != null ? Number(e.activeLabel) : NaN;
+    if (!Number.isFinite(year)) return;
+    setDrillYear(year);
+    track('insights_timeline_drilldown', { year, instrument: instrument ?? 'all' });
+  }
+
+  const drillParams: BillParams | null =
+    drillYear == null ? null : { ce_relevant: true, instrument_type: instrument, year: drillYear };
 
   // Build one row per year (gap-filled), with each status as a column, optionally cumulated.
   const { rows, statusesPresent } = useMemo(() => {
@@ -92,7 +118,23 @@ export function BillTimelineChart({ points }: { points: BillTimelinePoint[] }) {
     return { rows: out, statusesPresent: present };
   }, [points, mode]);
 
+  // First year any upstream (non-enacted) status has data. Before this, the only series with data is
+  // enacted (reconstructed historically), so upstream lines start mid-axis — without a marker the
+  // funnel looks like "more laws than introductions" in early years. Data-driven, so it self-updates.
+  const trackingStartYear = useMemo(() => {
+    let y = Infinity;
+    for (const p of points) if (p.status !== 'enacted') y = Math.min(y, p.year);
+    return Number.isFinite(y) ? y : null;
+  }, [points]);
+
   const series = STATUS_CONFIG.filter((c) => statusesPresent.has(c.key));
+
+  // Show the marker only when an upstream series is visible and there are earlier (enacted-only) years.
+  const showTrackingStart =
+    trackingStartYear != null &&
+    rows.length > 0 &&
+    (rows[0].year as number) < trackingStartYear &&
+    [...visible].some((k) => k !== 'enacted');
 
   function toggle(key: string) {
     setVisible((prev) => {
@@ -139,7 +181,12 @@ export function BillTimelineChart({ points }: { points: BillTimelinePoint[] }) {
 
       <div className="h-[360px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
+          <LineChart
+            data={rows}
+            margin={{ top: 8, right: 12, bottom: 4, left: -8 }}
+            onClick={openDrill}
+            className="cursor-pointer"
+          >
             <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
             <XAxis
               dataKey="year"
@@ -164,6 +211,19 @@ export function BillTimelineChart({ points }: { points: BillTimelinePoint[] }) {
               }}
               labelStyle={{ color: 'var(--text-primary)', fontWeight: 600 }}
             />
+            {showTrackingStart && (
+              <ReferenceLine
+                x={trackingStartYear!}
+                stroke={colors.muted}
+                strokeDasharray="4 3"
+                label={{
+                  value: 'continuous tracking begins',
+                  position: 'insideTopLeft',
+                  fontSize: 10,
+                  fill: colors.muted,
+                }}
+              />
+            )}
             {series
               .filter((c) => visible.has(c.key))
               .map((c) => (
@@ -172,7 +232,7 @@ export function BillTimelineChart({ points }: { points: BillTimelinePoint[] }) {
                   type="monotone"
                   dataKey={c.key}
                   name={c.label}
-                  stroke={c.color}
+                  stroke={c.key === 'enacted' ? colors.enacted : c.color}
                   strokeWidth={c.kind === 'score' ? 2.5 : 1.75}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -187,6 +247,7 @@ export function BillTimelineChart({ points }: { points: BillTimelinePoint[] }) {
       <div className="flex flex-wrap gap-2">
         {series.map((c) => {
           const on = visible.has(c.key);
+          const chipColor = c.key === 'enacted' ? colors.enacted : c.color;
           return (
             <button
               key={c.key}
@@ -200,7 +261,7 @@ export function BillTimelineChart({ points }: { points: BillTimelinePoint[] }) {
             >
               <span
                 className="h-2.5 w-2.5 rounded-full"
-                style={{ background: on ? c.color : 'transparent', border: `1.5px solid ${c.color}` }}
+                style={{ background: on ? chipColor : 'transparent', border: `1.5px solid ${chipColor}` }}
               />
               {c.label}
             </button>
@@ -211,10 +272,20 @@ export function BillTimelineChart({ points }: { points: BillTimelinePoint[] }) {
       <p className="text-text-muted text-xs leading-relaxed">
         Bills are bucketed by the year of their most recent status change, so each bill counts once,
         under its current status. The <span className="text-text-secondary">Enacted</span> line is a true
-        running tally of EPR laws on the books. Upstream-status data (introduced, in committee, …) only
-        begins around 2019, when continuous bill tracking started — earlier years reflect enacted laws
-        reconstructed from the historical record.
+        running tally of circular-economy laws on the books. Upstream-status data (introduced, in committee, …)
+        only begins around 2019, when continuous bill tracking started — earlier years reflect enacted laws
+        reconstructed from the historical record.{' '}
+        <span className="text-text-secondary">Click any year to see the bills behind it, each linked to its source.</span>
       </p>
+
+      <BillDrilldownPanel
+        open={drillYear != null}
+        onClose={() => setDrillYear(null)}
+        title={drillYear != null ? `Bills active in ${drillYear}` : ''}
+        subtitle={instrument ? formatInstrumentType(instrument) : 'All instruments'}
+        params={drillParams}
+        source="timeline"
+      />
     </div>
   );
 }

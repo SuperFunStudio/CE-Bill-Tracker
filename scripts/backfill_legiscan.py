@@ -110,7 +110,7 @@ async def main(apply: bool, historical_only: bool):
         return
 
     async with AsyncSessionLocal() as db:
-        q = select(Bill).where(Bill.legiscan_bill_id.is_(None), Bill.epr_relevant == True)  # noqa: E712
+        q = select(Bill).where(Bill.legiscan_bill_id.is_(None), Bill.ce_relevant == True)  # noqa: E712
         if historical_only:
             q = q.where(Bill.openstates_id.like("hist:%"))
         bills = (await db.execute(q)).scalars().all()

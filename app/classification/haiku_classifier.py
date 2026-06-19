@@ -12,7 +12,7 @@ log = structlog.get_logger()
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 # Instruments that are circular-economy policy by definition. A bill the classifier tags with
-# one of these is in scope on its own, independent of the narrow "is_epr_relevant" judgment:
+# one of these is in scope on its own, independent of the narrow "is_ce_relevant" judgment:
 # right-to-repair, deposit-return, etc. are tracked policy instruments even though they aren't
 # EPR in the strict sense (e.g. CA SB-244 "Right to Repair Act").
 TRACKED_INSTRUMENTS = frozenset({
@@ -23,7 +23,7 @@ TRACKED_INSTRUMENTS = frozenset({
 # but it's modeled on the MATERIAL axis (material_categories: "biobased", "agriculture",
 # "organics"), not as instruments. Those bills use ordinary policy levers (grants, incentives,
 # standards, disposal bans), so their instrument_type is whatever mechanism applies (often
-# "other"). They ride into scope via is_epr_relevant=True — the system prompt explicitly names
+# "other"). They ride into scope via is_ce_relevant=True — the system prompt explicitly names
 # the biological cycle as relevant — rather than a tracked-instrument tag. (We don't auto-track
 # on material because material_categories is a loose multi-value tag and would over-capture,
 # e.g. a pesticide bill tagged "agriculture".)
@@ -33,7 +33,7 @@ TRACKED_INSTRUMENTS = frozenset({
 # alone forced obvious non-EPR bills into the tracker (WV HB-4985 foreign-ownership preemption,
 # WI AB-1213 menstrual-product labeling, OK firearm preemption) whose own reasoning said "not
 # product stewardship, EPR, or circular economy policy". So a labeling/preemption bill now
-# counts as in scope only when the classifier independently set is_epr_relevant=True (recycling-
+# counts as in scope only when the classifier independently set is_ce_relevant=True (recycling-
 # label mandates, preemption of bottle-bill / EPR laws). scripts/hide_negated_labeling_preemption.py
 # applies the same correction to existing rows.
 # "chemical_restriction", "budget" (generic appropriations), and "other" are excluded for the
@@ -42,7 +42,7 @@ TRACKED_INSTRUMENTS = frozenset({
 # of these; it just won't count as in-scope on that basis alone.
 # "incentives" — the FINANCIAL lever (tax credits/deductions/rebates, appropriations/grants/
 # funding programs, procurement/tenders) — is also NOT tracked: it rides into scope via
-# is_epr_relevant, like the biological cycle, because money only counts when it funds a
+# is_ce_relevant, like the biological cycle, because money only counts when it funds a
 # circular-economy outcome (a recycling grant or compost tax credit — yes; a generic
 # appropriation — no). It supersedes the in-scope use of "budget", which now means only
 # circularity-unrelated appropriations. See scripts/reclassify_incentives.py.
@@ -69,7 +69,7 @@ Text excerpt (first 2000 chars):
 
 Return this exact JSON structure:
 {{
-  "is_epr_relevant": <true or false>,
+  "is_ce_relevant": <true or false>,
   "confidence": <float 0.0-1.0>,
   "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","other"]>,
   "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","incentives","labeling","chemical_restriction","preemption","budget","other">,
@@ -92,7 +92,7 @@ Biological cycle: bills on bio-based / biomanufactured materials (biopolymers, b
 compostable materials), regenerative agriculture & soil health (healthy soils, cover crops,
 carbon farming, biochar), or organics recycling / composting (source-separated organics,
 anaerobic digestion, compost market development) ARE circular-economy relevant — set
-is_epr_relevant=true. Tag their material as "biobased", "agriculture", or "organics"; set
+is_ce_relevant=true. Tag their material as "biobased", "agriculture", or "organics"; set
 instrument_type to the actual policy lever (a standard/ban → its type; a financial lever →
 "incentives"; else "other").
 
@@ -100,7 +100,7 @@ Incentives: when the bill's PRIMARY lever is financial — a tax credit / deduct
 appropriation / grant / funding program, or a public procurement / tender — and it funds a
 circular-economy or biological-cycle outcome (recycling, reuse, repair, composting, soil
 health, bio-based materials, an EPR/stewardship program), set instrument_type="incentives" and
-is_epr_relevant=true. A generic appropriation NOT tied to a circular-economy outcome is "budget".
+is_ce_relevant=true. A generic appropriation NOT tied to a circular-economy outcome is "budget".
 """
 
 
@@ -109,7 +109,7 @@ _VALID_STANCES = frozenset({"advances", "weakens", "neutral"})
 
 @dataclass
 class HaikuResult:
-    is_epr_relevant: bool
+    is_ce_relevant: bool
     confidence: float
     material_categories: list[str]
     instrument_type: str
@@ -162,7 +162,7 @@ class HaikuClassifier:
             else:
                 log.warning("haiku_json_parse_failed", raw=raw[:200])
                 return HaikuResult(
-                    is_epr_relevant=False,
+                    is_ce_relevant=False,
                     confidence=0.0,
                     material_categories=[],
                     instrument_type="other",
@@ -174,7 +174,7 @@ class HaikuClassifier:
         if stance not in _VALID_STANCES:
             stance = "neutral"
         return HaikuResult(
-            is_epr_relevant=data.get("is_epr_relevant", False),
+            is_ce_relevant=data.get("is_ce_relevant", False),
             confidence=float(data.get("confidence", 0.0)),
             material_categories=data.get("material_categories", []),
             instrument_type=data.get("instrument_type", "other"),

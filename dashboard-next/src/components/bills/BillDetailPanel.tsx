@@ -1,30 +1,23 @@
 'use client';
 import Link from 'next/link';
 import type { BillSummary } from '@/lib/types';
-import { fixEncoding, formatDate, formatInstrumentType, statusBadge } from '@/lib/utils';
+import { fixEncoding, formatDate, formatInstrumentType, isWeakening } from '@/lib/utils';
 import { useBill, useBillLitigationCases } from '@/hooks/useBills';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { RiskScore } from '@/components/ui/RiskScore';
+import { CloseIcon } from '@/components/ui/icons';
 
 interface BillDetailPanelProps {
   bill: BillSummary;
   onClose?: () => void;
 }
 
-function StatusBadge({ status }: { status: string | null }) {
-  if (!status) return null;
-  const { cls } = statusBadge(status);
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
-      {status.replace(/\b\w/g, c => c.toUpperCase())}
-    </span>
-  );
-}
-
 export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
   // compliance_details no longer rides along on the bulk list (it's the paid extraction) — fetch the
   // per-bill detail to populate the compliance layers. Free per-bill detail is intended; the gate is
   // on the *bulk* harvest, not single-bill views.
-  const { data: detail } = useBill(bill.id);
+  const { data: detail, isLoading, isError, refetch } = useBill(bill.id);
   const cd = detail?.compliance_details;
   const { data: litigationCases = [] } = useBillLitigationCases(
     bill.litigation_case_count > 0 ? bill.id : null
@@ -47,15 +40,19 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
             {bill.bill_number && (
               <span className="text-text-muted font-mono text-sm">{bill.bill_number}</span>
             )}
-            <StatusBadge status={bill.status} />
+            <StatusBadge status={bill.status} weakening={isWeakening(bill)} showCaption dashWhenEmpty={false} />
           </div>
           <h3 className="text-text-primary text-lg font-bold leading-snug">
             {fixEncoding(bill.title) || 'Untitled'}
           </h3>
         </div>
         {onClose && (
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary text-lg shrink-0 mt-0.5">
-            ✕
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="text-text-muted hover:text-text-primary text-lg shrink-0 mt-0.5"
+          >
+            <CloseIcon />
           </button>
         )}
       </div>
@@ -85,6 +82,25 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
         <div className="bg-bg-primary rounded p-3 text-sm text-text-secondary leading-relaxed">
           {fixEncoding(bill.ai_summary)}
         </div>
+      )}
+
+      {/* Compliance fetch status — the paid layers below render blank until this resolves, so
+          signal loading/error rather than letting the panel look complete-but-empty. */}
+      {isLoading && !detail && (
+        <div className="border-l-2 border-border-default pl-3 space-y-2" aria-live="polite">
+          <div className="h-2.5 w-32 animate-pulse rounded bg-bg-tertiary" />
+          <div className="h-2.5 w-full animate-pulse rounded bg-bg-tertiary" />
+          <div className="h-2.5 w-2/3 animate-pulse rounded bg-bg-tertiary" />
+          <span className="sr-only">Loading compliance details…</span>
+        </div>
+      )}
+      {isError && (
+        <p className="text-meta text-text-muted">
+          Couldn&apos;t load compliance details.{' '}
+          <button onClick={() => refetch()} className="text-green-accent hover:underline">
+            Retry
+          </button>
+        </p>
       )}
 
       {/* ── Layer 2: Primary compliance content ── */}
@@ -197,11 +213,7 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
                   )}
                 </div>
                 {c.preemption_risk !== null && (
-                  <span className={`font-bold text-sm shrink-0 ${
-                    c.preemption_risk >= 70 ? 'text-red-400'
-                    : c.preemption_risk >= 40 ? 'text-amber-400'
-                    : 'text-green-accent'
-                  }`}>{c.preemption_risk}</span>
+                  <RiskScore score={c.preemption_risk} label="preemption" className="shrink-0" />
                 )}
               </div>
               <div className="flex flex-wrap gap-3 text-xs text-text-muted">

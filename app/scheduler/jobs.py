@@ -242,7 +242,7 @@ async def _run_seed_legacy_disabled() -> None:
                         compliance_details=law.get("compliance_details"),
                         ai_summary=law.get("ai_summary"),
                         confidence_score=1.0,
-                        epr_relevant=True,
+                        ce_relevant=True,
                         material_categories=law.get("material_categories", []),
                         source_url=law.get("source_url"),
                         urgency=law.get("urgency"),
@@ -262,7 +262,7 @@ async def _run_seed_legacy_disabled() -> None:
                     status_date=_parse_date(law.get("enacted_date")),
                     last_action_date=_parse_date(law.get("enacted_date")),
                     source_url=law.get("source_url"),
-                    epr_relevant=True,
+                    ce_relevant=True,
                     confidence_score=1.0,
                     material_categories=law.get("material_categories", []),
                     instrument_type=law.get("instrument_type"),
@@ -373,7 +373,7 @@ async def run_classification_cycle() -> None:
                     for bill in unclassified:
                         if bill.confidence_score is None or bill.confidence_score == -1.0:
                             bill.confidence_score = 0.0
-                            bill.epr_relevant = False
+                            bill.ce_relevant = False
                     await db.commit()
                     log.warning("classification_cycle_stalled_resolved",
                                 force_resolved=len(unclassified))
@@ -431,7 +431,7 @@ async def run_scoring_cycle() -> None:
 
         # Load all EPR-relevant bills
         bills_result = await db.execute(
-            select(Bill).where(Bill.epr_relevant == True)  # noqa: E712
+            select(Bill).where(Bill.ce_relevant == True)  # noqa: E712
         )
         all_bills = bills_result.scalars().all()
 

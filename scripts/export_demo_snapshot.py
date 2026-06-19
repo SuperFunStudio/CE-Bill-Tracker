@@ -63,7 +63,7 @@ async def export_snapshot(bill_pattern: str, top_n: int) -> None:
         bills_result = await db.execute(
             select(Bill).where(
                 Bill.state == "OR",
-                Bill.epr_relevant == True,  # noqa: E712
+                Bill.ce_relevant == True,  # noqa: E712
             )
         )
         bills = bills_result.scalars().all()
@@ -76,7 +76,7 @@ async def export_snapshot(bill_pattern: str, top_n: int) -> None:
                 "status": bill.status,
                 "status_date": bill.status_date.isoformat() if bill.status_date else None,
                 "source_url": bill.source_url,
-                "epr_relevant": bill.epr_relevant,
+                "ce_relevant": bill.ce_relevant,
                 "confidence_score": bill.confidence_score,
                 "material_categories": bill.material_categories,
                 "compliance_details": bill.compliance_details,
@@ -97,7 +97,7 @@ async def export_snapshot(bill_pattern: str, top_n: int) -> None:
             select(Bill).where(
                 Bill.state == "OR",
                 Bill.bill_number.ilike(f"%{bill_pattern}%"),
-                Bill.epr_relevant == True,  # noqa: E712
+                Bill.ce_relevant == True,  # noqa: E712
             ).limit(1)
         )
         bill = bill_result.scalar_one_or_none()

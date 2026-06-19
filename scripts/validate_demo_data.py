@@ -107,7 +107,7 @@ async def run_checks(bill_pattern: str, top_n: int) -> bool:
             select(Bill).where(
                 Bill.state == "OR",
                 Bill.bill_number.ilike(f"%{bill_pattern}%"),
-                Bill.epr_relevant == True,  # noqa: E712
+                Bill.ce_relevant == True,  # noqa: E712
             ).limit(1)
         )
         bill = bill_result.scalar_one_or_none()

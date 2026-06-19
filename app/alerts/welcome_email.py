@@ -115,7 +115,7 @@ async def build_state_of_play(db: AsyncSession, sub: AlertSubscription) -> State
     bills = list(
         (
             await db.execute(
-                select(Bill).where(Bill.epr_relevant.is_(True))
+                select(Bill).where(Bill.ce_relevant.is_(True))
             )
         )
         .scalars()
@@ -550,4 +550,183 @@ async def send_account_welcome(email: str) -> bool:
         return ok
     except Exception as e:
         log.warning("account_welcome_failed", email=email, error=str(e))
+        return False
+
+
+# --- Complimentary Pro grant ---------------------------------------------------------------------
+# Fires when an admin grants complimentary ("comp") Pro from the admin console (POST /admin/grant-pro).
+# Distinct from the signup trial above: that one is automatic and self-serve; this is a gift we hand a
+# specific early user. Self-contained — the grant only knows the recipient's email, an optional name,
+# and the grant length (days, or None = indefinite). See grant_pro in app/api/admin.py.
+
+
+def _comp_duration_label(days: int | None) -> str:
+    """Human phrasing for the grant length, slotted after 'complimentary access for ...'."""
+    if not days:
+        return "the duration of our early-access period"
+    if days == 1:
+        return "1 day"
+    return f"{days} days"
+
+
+def render_comp_grant_subject() -> str:
+    return "Your complimentary access to Battle of the Bills"
+
+
+def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
+    greeting = f"Dear {name}," if name else "Hello,"
+    return f"""
+<html><body style="margin:0;padding:0;background:{_PAPER};">
+ <div style="max-width:640px;margin:0 auto;background:#fff;">
+  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
+    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
+         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
+      SignalScout · EPR Legislative Intelligence
+    </div>
+    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
+      Tracking circularity-aligned legislation across the USA</p>
+  </div>
+  <div style="padding:18px 28px 24px;">
+    <p style="font:16px {_SERIF};color:{_INK};margin:6px 0 14px;font-weight:bold;">{greeting}</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
+      Thank you for being an early user of <strong>Battle of the Bills</strong>. You've been granted
+      complimentary access for <strong>{duration_label}</strong>. Enjoy all of the features as we
+      continue to develop this product.</p>
+    <a href="{_DASHBOARD_URL}/compliance" style="display:inline-block;background:{_ACCENT};color:#fff;
+       text-decoration:none;font:bold 14px {_SERIF};padding:11px 24px;border-radius:4px;">
+      Open your dashboard →</a>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:22px 0 0;">
+      Kind regards,<br>
+      The SignalScout Team</p>
+  </div>
+  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
+       border-top:3px double {_INK};">
+    You're receiving this because you were granted complimentary access to SignalScout.
+  </div>
+ </div>
+</body></html>
+"""
+
+
+async def send_comp_grant_welcome(email: str, days: int | None = None, name: str | None = None) -> bool:
+    """Best-effort notice that an admin granted this email complimentary Pro (background-task
+    entrypoint). Self-contained — no DB needed. Gated on enable_welcome_email + a SendGrid key + an
+    email. Never raises — a send failure must never surface to the admin grant caller."""
+    if not settings.enable_welcome_email:
+        log.info("comp_grant_welcome_skipped_flag_off", email=email)
+        return False
+    if not email or not settings.sendgrid_api_key:
+        return False
+    try:
+        from app.alerts.sendgrid_sender import SendGridSender
+
+        html = render_comp_grant_html(_comp_duration_label(days), name=name)
+        ok = await SendGridSender().send_html(email, render_comp_grant_subject(), html)
+        log.info("comp_grant_welcome_sent", email=email, ok=ok, days=days)
+        return ok
+    except Exception as e:
+        log.warning("comp_grant_welcome_failed", email=email, error=str(e))
+        return False
+
+
+# --- Paid Pro purchase confirmation --------------------------------------------------------------
+# Fires once per paid conversion, from the Stripe checkout.session.completed webhook (NOT the
+# subscription.* events, which also fire on renewals). Doubles as purchase receipt + "Welcome to Pro".
+# A founding seat lands mid-trial (status "trialing", card on file, billed after the 90-day trial), so
+# the copy flexes between "your trial is live, billed later" and "your subscription is active".
+
+
+def render_pro_welcome_subject(is_trial: bool = False) -> str:
+    return (
+        "Your SignalScout Pro trial is live"
+        if is_trial
+        else "Welcome to SignalScout Pro — your purchase is confirmed"
+    )
+
+
+def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> str:
+    founding_badge = (
+        f"""
+    <p style="font:13px {_SERIF};color:{_ACCENT};margin:0 0 14px;font-weight:bold;
+        text-transform:uppercase;letter-spacing:0.06em;">★ Founding member · 50% off for life</p>"""
+        if founding
+        else ""
+    )
+    if is_trial:
+        confirm = (
+            "Your <strong>Pro trial</strong> is live and you have full access right now. You won't be "
+            "billed until the trial ends — manage or cancel any time from your account before then."
+        )
+    else:
+        confirm = (
+            "Your payment went through and your <strong>Pro subscription is active</strong>. This email "
+            "is your confirmation — manage your plan or grab a receipt any time from your account."
+        )
+    return f"""
+<html><body style="margin:0;padding:0;background:{_PAPER};">
+ <div style="max-width:640px;margin:0 auto;background:#fff;">
+  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
+    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
+         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
+      SignalScout · EPR Legislative Intelligence
+    </div>
+    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
+      Tracking circularity-aligned legislation across the USA</p>
+  </div>
+  <div style="padding:18px 28px 24px;">
+    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to Pro.</p>
+    {founding_badge}
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
+      Thank you for subscribing to <strong>SignalScout Pro</strong>. {confirm}</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 10px;">
+      You now have the full toolkit:</p>
+    <ul style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 16px;padding-left:20px;">
+      <li>The full <strong>Upcoming Deadlines</strong> timeline — every EPR compliance date, all 50 states</li>
+      <li>Personal &amp; shared <strong>watch lists</strong> with alerts</li>
+      <li>The complete dynamic <strong>Design Guide</strong></li>
+      <li><strong>CSV export</strong> of bills &amp; deadlines</li>
+    </ul>
+    <a href="{_DASHBOARD_URL}/compliance" style="display:inline-block;background:{_ACCENT};color:#fff;
+       text-decoration:none;font:bold 14px {_SERIF};padding:11px 24px;border-radius:4px;">
+      Open your dashboard →</a>
+    <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
+      Manage your subscription, update payment details, or download invoices any time from
+      <a href="{_DASHBOARD_URL}/account" style="color:{_ACCENT};">your account</a>.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
+      Kind regards,<br>
+      The SignalScout Team</p>
+  </div>
+  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
+       border-top:3px double {_INK};">
+    You're receiving this because you subscribed to SignalScout Pro.
+  </div>
+ </div>
+</body></html>
+"""
+
+
+async def send_pro_welcome(email: str, is_trial: bool = False, founding: bool = False) -> bool:
+    """Best-effort purchase confirmation / welcome for a paid Pro conversion (background-task
+    entrypoint). Self-contained — no DB needed. Gated on enable_welcome_email + a SendGrid key + an
+    email. Never raises — a send failure must never surface to the Stripe webhook caller."""
+    if not settings.enable_welcome_email:
+        log.info("pro_welcome_skipped_flag_off", email=email)
+        return False
+    if not email or not settings.sendgrid_api_key:
+        return False
+    try:
+        from app.alerts.sendgrid_sender import SendGridSender
+
+        html = render_pro_welcome_html(is_trial=is_trial, founding=founding)
+        ok = await SendGridSender().send_html(
+            email, render_pro_welcome_subject(is_trial=is_trial), html
+        )
+        log.info("pro_welcome_sent", email=email, ok=ok, is_trial=is_trial, founding=founding)
+        return ok
+    except Exception as e:
+        log.warning("pro_welcome_failed", email=email, error=str(e))
         return False

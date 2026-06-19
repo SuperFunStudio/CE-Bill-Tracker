@@ -1,12 +1,12 @@
-"""Backfill epr_relevant for bills already tagged with a tracked policy instrument.
+"""Backfill ce_relevant for bills already tagged with a tracked policy instrument.
 
-The classifier historically set epr_relevant=False for right-to-repair / deposit-return /
+The classifier historically set ce_relevant=False for right-to-repair / deposit-return /
 etc. because they aren't EPR in the strict sense, so the EPR-only dashboard hid them
 (e.g. CA SB-244 "Right to Repair Act"). The pipeline now treats any tracked instrument as
 in scope (see app/classification/haiku_classifier.TRACKED_INSTRUMENTS); this script applies
 the same rule to existing rows.
 
-Purely additive: only flips epr_relevant False -> True for rows with a tracked
+Purely additive: only flips ce_relevant False -> True for rows with a tracked
 instrument_type and confidence_score >= 0.4. Never clears relevance.
 
 Run against LOCAL first, then re-run push_bills_to_prod.py, OR point --dsn straight at prod
@@ -44,7 +44,7 @@ async def main() -> None:
     conn = await asyncpg.connect(dsn)
     try:
         where = (
-            "epr_relevant = false "
+            "ce_relevant = false "
             "AND confidence_score >= $1 "
             "AND instrument_type = ANY($2::text[])"
         )
@@ -58,7 +58,7 @@ async def main() -> None:
         for r in to_flip:
             by_instr[r["instrument_type"]] = by_instr.get(r["instrument_type"], 0) + r["n"]
 
-        print(f"{total} bills would flip epr_relevant -> True")
+        print(f"{total} bills would flip ce_relevant -> True")
         for instr, n in sorted(by_instr.items(), key=lambda x: -x[1]):
             print(f"  {instr:22s} {n}")
 
@@ -67,7 +67,7 @@ async def main() -> None:
             return
 
         updated = await conn.execute(
-            f"UPDATE bills SET epr_relevant = true, updated_at = now() WHERE {where}",
+            f"UPDATE bills SET ce_relevant = true, updated_at = now() WHERE {where}",
             MIN_CONFIDENCE, instruments,
         )
         print(f"\napplied: {updated}")

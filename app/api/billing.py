@@ -240,7 +240,11 @@ async def _apply_subscription(db: AsyncSession, customer_id: str | None, sub: di
 
 @router.post("/webhook")
 @limiter.exempt  # Stripe sends bursts + retries from many IPs; signature verification is the guard here
-async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+async def stripe_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     """Stripe → us. Verifies the signature (when a signing secret is set) and upserts entitlement.
 
     This, not the redirect, is the source of truth for Pro access.
@@ -296,6 +300,17 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
                 except Exception as e:
                     log.warning("stripe_sub_retrieve_failed", error=str(e))
             await db.commit()
+            # Confirm the purchase / welcome them to Pro (best-effort, after we ACK Stripe). Fired
+            # only here, on checkout.session.completed, so renewals via subscription.* don't re-send.
+            # A founding seat lands as "trialing" (billed after the 90-day trial) — flex the copy.
+            from app.alerts.welcome_email import send_pro_welcome
+
+            background_tasks.add_task(
+                send_pro_welcome,
+                email,
+                is_trial=(ent.status == "trialing"),
+                founding=bool(ent.founding),
+            )
 
     elif etype in ("customer.subscription.updated", "customer.subscription.created"):
         await _apply_subscription(db, obj.get("customer"), obj)

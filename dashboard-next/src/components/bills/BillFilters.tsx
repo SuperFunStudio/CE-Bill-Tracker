@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
-import { CheckIcon } from '@/components/ui/icons';
+import { CheckIcon, CloseIcon } from '@/components/ui/icons';
 
 export interface BillFilterState {
   state: string;
@@ -109,8 +109,16 @@ function MultiSelect({
     const onDoc = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    // Escape closes the popover, matching the native <select> it mimics.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
 
   const toggle = (v: string) =>
@@ -130,7 +138,9 @@ function MultiSelect({
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-left focus:outline-none focus:border-green-accent"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className="w-full flex items-center cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-left focus:border-green-accent"
         >
           <span className={`truncate ${values.length ? 'text-text-primary' : 'text-text-muted'}`}>{summary}</span>
         </button>
@@ -166,10 +176,61 @@ function MultiSelect({
   );
 }
 
+/** Pill toggle for a boolean filter — gives the hidden scope filters a visible, changeable control. */
+function Toggle({
+  label, checked, onChange, hint,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  hint?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      title={hint}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-meta transition-colors ${
+        checked
+          ? 'border-green-accent bg-green-dark text-text-primary'
+          : 'border-border-default bg-bg-primary text-text-secondary hover:border-text-primary/40'
+      }`}
+    >
+      <span
+        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+          checked ? 'border-green-accent bg-green-accent' : 'border-text-muted'
+        }`}
+      >
+        {checked && <CheckIcon className="text-[9px] text-bg-secondary" />}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+const URGENCY_OPTIONS = [
+  { value: '', label: 'All' },
+  ...URGENCY_LEVELS.map(u => ({ value: u, label: u.replace(/\b\w/, c => c.toUpperCase()) })),
+];
+
 export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
   // On a fixed-state context, reset preserves the locked state instead of clearing it.
   const reset = () => onChange(hideState ? { ...DEFAULT_FILTERS, state: filters.state } : DEFAULT_FILTERS);
+
+  // Count active refinements so Reset signals there's something to undo (and disables when clean).
+  const activeCount = [
+    !hideState && filters.state,
+    filters.status,
+    filters.instrumentType,
+    filters.materialCategories.length > 0,
+    filters.urgency,
+    filters.search,
+    filters.enactedOnly,
+    filters.hasLitigation,
+  ].filter(Boolean).length;
 
   const stateOptions = Object.entries(STATE_NAMES).map(([abbr, name]) => ({
     value: abbr,
@@ -195,7 +256,7 @@ export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) 
               className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary text-sm leading-none"
               aria-label="Clear search"
             >
-              ✕
+              <CloseIcon />
             </button>
           )}
         </div>
@@ -239,15 +300,39 @@ export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) 
           }))}
           placeholder="All"
         />
+        <Select
+          label="Urgency"
+          value={filters.urgency}
+          onChange={v => set({ urgency: v })}
+          options={URGENCY_OPTIONS.filter(o => o.value !== '')}
+          placeholder="Any urgency"
+        />
       </div>
 
-      {/* Reset */}
-      <div className="flex justify-end">
+      {/* Refinements within scope. Circular-economy relevance (eprOnly) is the product's fixed editorial
+          scope, not a user filter — it stays on and isn't surfaced, since the Instrument select already
+          refines within it. Exposing it would just invite off-scope noise. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Toggle
+            label="Enacted only"
+            checked={filters.enactedOnly}
+            onChange={v => set({ enactedOnly: v })}
+            hint="Show only bills signed into law"
+          />
+          <Toggle
+            label="In litigation"
+            checked={filters.hasLitigation}
+            onChange={v => set({ hasLitigation: v })}
+            hint="Show only bills with a related court case"
+          />
+        </div>
         <button
           onClick={reset}
-          className="text-green-accent text-xs hover:underline"
+          disabled={activeCount === 0}
+          className="rounded-full border border-border-default px-3 py-1 text-meta text-text-secondary transition-colors hover:border-text-primary/40 hover:text-text-primary disabled:opacity-40 disabled:hover:border-border-default disabled:hover:text-text-secondary"
         >
-          Reset filters
+          Reset{activeCount ? ` (${activeCount})` : ''}
         </button>
       </div>
     </div>
@@ -260,7 +345,7 @@ import { fixEncoding } from '@/lib/utils';
 
 export function applyBillFilters(bills: BillSummary[], f: BillFilterState): BillSummary[] {
   return bills.filter(b => {
-    if (f.eprOnly && !b.epr_relevant) return false;
+    if (f.eprOnly && !b.ce_relevant) return false;
     if (f.enactedOnly && b.status?.toLowerCase() !== 'enacted') return false;
     if (f.state && b.state !== f.state) return false;
     if (f.status && b.status?.toLowerCase() !== f.status.toLowerCase()) return false;

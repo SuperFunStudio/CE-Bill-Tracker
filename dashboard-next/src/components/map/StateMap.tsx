@@ -1,6 +1,6 @@
 'use client';
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
-import { FIPS_TO_ABBR } from '@/lib/utils';
+import { FIPS_TO_ABBR, STATE_NAMES } from '@/lib/utils';
 import { useTheme } from '@/components/layout/ThemeContext';
 
 const GEO_URL = '/us-states-10m.json';
@@ -36,6 +36,7 @@ export function StateMap({ data, selectedState, onStateClick, height = 400 }: St
   const level = (c: number) => (c <= 0 ? 0 : Math.min(4, Math.ceil((c / maxCount) * 4)));
 
   return (
+    <div>
     <div style={{ height }}>
       <ComposableMap projection="geoAlbersUsa" style={{ width: '100%', height: '100%' }}>
         <Geographies geography={GEO_URL}>
@@ -58,6 +59,20 @@ export function StateMap({ data, selectedState, onStateClick, height = 400 }: St
                   stroke={isSelected ? color : stroke}
                   strokeWidth={isSelected ? 1.6 : 1}
                   onClick={() => abbr && onStateClick?.(abbr)}
+                  // Keyboard parity with the click handler (WCAG 2.1.1): focusable + Enter/Space.
+                  tabIndex={onStateClick && abbr ? 0 : -1}
+                  role={onStateClick && abbr ? 'button' : undefined}
+                  aria-label={abbr ? `${STATE_NAMES[abbr] ?? abbr}: ${count} bills` : undefined}
+                  onKeyDown={
+                    onStateClick && abbr
+                      ? (e: React.KeyboardEvent) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onStateClick(abbr);
+                          }
+                        }
+                      : undefined
+                  }
                   style={{
                     default: { fill: baseFill, outline: 'none', cursor: onStateClick ? 'pointer' : 'default' },
                     hover: { fill: hoverFill, outline: 'none' },
@@ -69,6 +84,20 @@ export function StateMap({ data, selectedState, onStateClick, height = 400 }: St
           }
         </Geographies>
       </ComposableMap>
+    </div>
+      {/* Scale key — shading is relative to the busiest state, so state the range a shade maps to. */}
+      <div className="mt-1 flex items-center justify-center gap-1.5 text-meta text-text-muted">
+        <span>Fewer</span>
+        {LEVEL_OPACITY.map((op, i) => (
+          <span
+            key={i}
+            className="inline-block h-2.5 w-4 rounded-sm"
+            style={{ background: withAlpha(color, op) }}
+          />
+        ))}
+        <span>More</span>
+        <span className="ml-1">· relative to busiest state ({maxCount})</span>
+      </div>
     </div>
   );
 }

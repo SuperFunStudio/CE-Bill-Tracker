@@ -56,7 +56,7 @@ async def main() -> None:
             if args.dry_run:
                 continue
             await conn.execute(
-                "UPDATE bills SET status=$1, status_date=$2, epr_relevant=true, updated_at=now() "
+                "UPDATE bills SET status=$1, status_date=$2, ce_relevant=true, updated_at=now() "
                 "WHERE state=$3 AND bill_number=$4",
                 status, status_date, state, number,
             )

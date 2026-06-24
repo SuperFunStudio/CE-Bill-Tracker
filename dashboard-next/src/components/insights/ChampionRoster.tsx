@@ -81,7 +81,7 @@ function ChampionCard({ champ }: { champ: ChampionSummary }) {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-text-primary text-sm">{fixEncoding(champ.name ?? '—')}</span>
-            {chip && <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${chip.cls}`}>{chip.label}</span>}
+            {chip && <span className={`rounded-full border px-1.5 py-0.5 text-meta ${chip.cls}`}>{chip.label}</span>}
           </div>
           <div className="text-text-muted text-xs mt-0.5">
             {champ.states.join(', ')}{seat ? ` · ${seat}` : ''}
@@ -89,10 +89,10 @@ function ChampionCard({ champ }: { champ: ChampionSummary }) {
         </div>
         <div className="shrink-0 text-right">
           <div className="text-text-primary text-sm font-bold">{champ.primary_sponsorships}</div>
-          <div className="text-text-muted text-[10px]">lead bills</div>
+          <div className="text-text-muted text-meta">lead bills</div>
         </div>
       </button>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-text-muted">
         {champ.cosponsorships > 0 && <span>+{champ.cosponsorships} co-sponsored</span>}
         {champ.success_rate != null && <span>{(champ.success_rate * 100).toFixed(0)}% enacted</span>}
         {champ.instruments.length > 0 && (
@@ -154,7 +154,7 @@ export function ChampionRoster() {
           ))}
         </div>
       ) : champs.length === 0 ? (
-        <p className="text-text-muted text-sm">No active champions tracked for this state yet.</p>
+        <p className="text-text-secondary text-body">No active champions tracked for this state yet.</p>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
           {champs.map((c) => (

@@ -33,12 +33,12 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
           <h3 className="font-serif text-lg text-text-primary leading-tight mb-2">{title}</h3>
           <p className="text-text-primary text-sm font-medium mb-1.5">{lever.headline}</p>
           {lever.direction && (
-            <p className="text-text-secondary text-sm leading-relaxed mb-4">{lever.direction}</p>
+            <p className="text-text-secondary text-body leading-relaxed mb-4">{lever.direction}</p>
           )}
 
           {/* Applies to — the products / materials a designer should map this onto */}
           <div className="mt-auto">
-            <p className="text-[10px] uppercase tracking-wider text-text-muted mb-1.5">Applies to</p>
+            <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">Applies to</p>
             <div className="flex flex-wrap gap-1.5">
               {lever.focus.map(f => (
                 <span
@@ -88,7 +88,7 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
             </blockquote>
           )}
 
-          <p className="text-[10px] uppercase tracking-wider text-text-muted mb-1.5">
+          <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">
             {billCount} bill{billCount === 1 ? '' : 's'} · tap to read
           </p>
           <div className="flex flex-wrap content-start gap-1.5 flex-1 min-h-0 overflow-y-auto -mr-1 pr-1">
@@ -102,7 +102,7 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
                 }}
                 className="text-xs rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-text-secondary hover:border-green-accent hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/50 transition-colors"
               >
-                <span className="font-mono text-[10px] text-text-muted">{b.state}</span> {b.billNumber}
+                <span className="font-mono text-meta text-text-muted">{b.state}</span> {b.billNumber}
               </button>
             ))}
           </div>

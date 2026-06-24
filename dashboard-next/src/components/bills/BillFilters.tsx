@@ -72,7 +72,7 @@ function Select({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="font-serif text-text-muted text-[11px] uppercase tracking-wider">{label}</label>
+      <label className="font-serif text-text-muted text-meta uppercase tracking-wider">{label}</label>
       <div className="relative">
         <select
           value={value}
@@ -84,7 +84,7 @@ function Select({
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-[10px]">▾</span>
+        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-meta">▾</span>
       </div>
     </div>
   );
@@ -133,7 +133,7 @@ function MultiSelect({
 
   return (
     <div className="flex flex-col gap-1" ref={ref}>
-      <label className="font-serif text-text-muted text-[11px] uppercase tracking-wider">{label}</label>
+      <label className="font-serif text-text-muted text-meta uppercase tracking-wider">{label}</label>
       <div className="relative">
         <button
           type="button"
@@ -144,7 +144,7 @@ function MultiSelect({
         >
           <span className={`truncate ${values.length ? 'text-text-primary' : 'text-text-muted'}`}>{summary}</span>
         </button>
-        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-[10px]">▾</span>
+        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-meta">▾</span>
         {open && (
           <div className="absolute left-0 z-30 mt-1 w-max min-w-full max-h-60 overflow-y-auto rounded-md border border-border-default bg-bg-secondary shadow-lg p-1">
             {options.map(o => {
@@ -163,7 +163,7 @@ function MultiSelect({
                       on ? 'border-green-accent bg-green-dark' : 'border-border-default'
                     }`}
                   >
-                    {on && <CheckIcon className="text-[10px]" />}
+                    {on && <CheckIcon className="text-meta" />}
                   </span>
                   {o.label}
                 </button>
@@ -176,60 +176,18 @@ function MultiSelect({
   );
 }
 
-/** Pill toggle for a boolean filter — gives the hidden scope filters a visible, changeable control. */
-function Toggle({
-  label, checked, onChange, hint,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  hint?: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      title={hint}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-meta transition-colors ${
-        checked
-          ? 'border-green-accent bg-green-dark text-text-primary'
-          : 'border-border-default bg-bg-primary text-text-secondary hover:border-text-primary/40'
-      }`}
-    >
-      <span
-        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
-          checked ? 'border-green-accent bg-green-accent' : 'border-text-muted'
-        }`}
-      >
-        {checked && <CheckIcon className="text-[9px] text-bg-secondary" />}
-      </span>
-      {label}
-    </button>
-  );
-}
-
-const URGENCY_OPTIONS = [
-  { value: '', label: 'All' },
-  ...URGENCY_LEVELS.map(u => ({ value: u, label: u.replace(/\b\w/, c => c.toUpperCase()) })),
-];
-
 export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
   // On a fixed-state context, reset preserves the locked state instead of clearing it.
   const reset = () => onChange(hideState ? { ...DEFAULT_FILTERS, state: filters.state } : DEFAULT_FILTERS);
 
-  // Count active refinements so Reset signals there's something to undo (and disables when clean).
+  // Count active filters so Reset signals there's something to undo (and disables when clean).
   const activeCount = [
     !hideState && filters.state,
     filters.status,
     filters.instrumentType,
     filters.materialCategories.length > 0,
-    filters.urgency,
     filters.search,
-    filters.enactedOnly,
-    filters.hasLitigation,
   ].filter(Boolean).length;
 
   const stateOptions = Object.entries(STATE_NAMES).map(([abbr, name]) => ({
@@ -241,7 +199,7 @@ export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) 
     <div className="space-y-4 border-y border-text-primary/15 py-4">
       {/* Search */}
       <div className="flex flex-col gap-1">
-        <label className="font-serif text-text-muted text-[11px] uppercase tracking-wider">Search</label>
+        <label className="font-serif text-text-muted text-meta uppercase tracking-wider">Search</label>
         <div className="relative">
           <input
             type="text"
@@ -300,33 +258,13 @@ export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) 
           }))}
           placeholder="All"
         />
-        <Select
-          label="Urgency"
-          value={filters.urgency}
-          onChange={v => set({ urgency: v })}
-          options={URGENCY_OPTIONS.filter(o => o.value !== '')}
-          placeholder="Any urgency"
-        />
       </div>
 
-      {/* Refinements within scope. Circular-economy relevance (eprOnly) is the product's fixed editorial
-          scope, not a user filter — it stays on and isn't surfaced, since the Instrument select already
-          refines within it. Exposing it would just invite off-scope noise. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <Toggle
-            label="Enacted only"
-            checked={filters.enactedOnly}
-            onChange={v => set({ enactedOnly: v })}
-            hint="Show only bills signed into law"
-          />
-          <Toggle
-            label="In litigation"
-            checked={filters.hasLitigation}
-            onChange={v => set({ hasLitigation: v })}
-            hint="Show only bills with a related court case"
-          />
-        </div>
+      {/* Reset. (eprOnly — circular-economy relevance — is the product's fixed editorial scope, applied
+          by applyBillFilters but not surfaced as a control. enactedOnly/hasLitigation/urgency are also
+          enforced if set, but have no UI yet: enacted-only is redundant with the Status select, and the
+          litigation filter is held back until active-litigation tracking is wired up.) */}
+      <div className="flex justify-end">
         <button
           onClick={reset}
           disabled={activeCount === 0}

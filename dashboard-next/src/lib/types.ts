@@ -47,6 +47,10 @@ export interface BillSummary {
   /** Classification transparency: false = auto-classified only, true = human spot-checked. */
   reviewed?: boolean;
   source_url: string | null;
+  /** Source-link health from the auditor: "alive" | "redirected" | "dead" | "blocked"; null = unchecked. */
+  source_url_status?: string | null;
+  /** Resolved URL when source_url_status is "redirected" — where the page actually moved. */
+  source_url_final?: string | null;
   litigation_case_count: number;
   max_preemption_risk: number | null;
 }

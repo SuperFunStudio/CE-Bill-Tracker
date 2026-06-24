@@ -131,12 +131,12 @@ export function LegislativeTimeline() {
 
       <div className="rounded-lg border border-border-default bg-bg-primary/50 p-3 text-xs text-text-secondary leading-relaxed space-y-1.5">
         <p>
-          <span className="text-[rgb(var(--green-accent))] font-medium uppercase tracking-wider text-[10px]">Real data</span>{' '}
+          <span className="text-[rgb(var(--green-accent))] font-medium uppercase tracking-wider text-meta">Real data</span>{' '}
           Session windows are sourced from the <span className="text-text-primary">OpenStates monthly dump</span>; bills
           are real ({totalPlotted} plotted), placed by last action date.
         </p>
         <p>
-          <span className="text-amber-400 font-medium uppercase tracking-wider text-[10px]">Still curated</span>{' '}
+          <span className="text-amber-400 font-medium uppercase tracking-wider text-meta">Still curated</span>{' '}
           The dashed <span className="text-text-primary">house-of-origin / crossover</span> cutoffs are approximate.
           Biennium states (e.g. CA, NY, NJ) carry one 2-year session, so their band spans the whole window — the annual
           rhythm shows through the cutoffs, not the band.
@@ -144,7 +144,7 @@ export function LegislativeTimeline() {
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-text-muted">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-meta text-text-muted">
         <Legend cls="bg-amber-300/80" label="introduced" />
         <Legend cls="bg-amber-400" label="in committee" />
         <Legend cls="bg-sky-400" label="passed chamber" />
@@ -179,7 +179,7 @@ export function LegislativeTimeline() {
                   t.label ? (
                     <span
                       key={i}
-                      className="absolute -translate-x-1/2 text-[10px] text-text-muted"
+                      className="absolute -translate-x-1/2 text-meta text-text-muted"
                       style={{ left: `${t.pos}%` }}
                     >
                       {t.label}
@@ -195,7 +195,7 @@ export function LegislativeTimeline() {
                 <div key={lane.state} className="flex items-stretch">
                   <div className="w-16 shrink-0 flex items-center" title={STATE_NAMES[lane.state] ?? lane.state}>
                     <span className="font-mono text-green-accent text-sm">{lane.state}</span>
-                    <span className="ml-1 text-[10px] text-text-muted/70 tabular-nums">{lane.bills.length}</span>
+                    <span className="ml-1 text-meta text-text-muted/70 tabular-nums">{lane.bills.length}</span>
                   </div>
                   <div className="relative flex-1 h-11 rounded bg-bg-primary border border-border-default/60 overflow-hidden">
                     {/* Month gridlines */}

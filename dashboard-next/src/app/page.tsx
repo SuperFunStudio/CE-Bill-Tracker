@@ -132,7 +132,7 @@ export default function HomePage() {
             {!isPro && <LockIcon className="text-xs" />}
             ↓ Export CSV
             {!isPro && (
-              <span className="text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
+              <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
                 Pro
               </span>
             )}

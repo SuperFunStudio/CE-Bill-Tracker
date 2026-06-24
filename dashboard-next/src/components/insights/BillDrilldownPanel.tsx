@@ -35,7 +35,7 @@ function BillRow({ bill, source }: { bill: BillSummary; source: string }) {
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold text-text-primary text-sm">{label || `Bill #${bill.id}`}</span>
         {bill.status && (
-          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${badge.cls}`}>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-meta ${badge.cls}`}>
             {bill.status.replace(/_/g, ' ')}
           </span>
         )}
@@ -43,7 +43,7 @@ function BillRow({ bill, source }: { bill: BillSummary; source: string }) {
       {bill.title && (
         <p className="text-text-secondary text-xs leading-snug line-clamp-2">{fixEncoding(bill.title)}</p>
       )}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-text-muted">
         {bill.instrument_type && <span>{formatInstrumentType(bill.instrument_type)}</span>}
         {bill.source_url ? (
           <a
@@ -128,7 +128,7 @@ export function BillDrilldownPanel({ open, onClose, title, subtitle, params, sou
               ))}
             </div>
           ) : bills.length === 0 ? (
-            <p className="text-sm text-text-muted">No bills in this bucket.</p>
+            <p className="text-body text-text-secondary">No bills in this bucket.</p>
           ) : (
             bills.map((b) => <BillRow key={b.id} bill={b} source={source} />)
           )}

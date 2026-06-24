@@ -69,7 +69,7 @@ export function StateGapTable() {
       </div>
     );
   }
-  if (rows.length === 0) return <p className="text-text-muted text-sm">No states with enough volume yet.</p>;
+  if (rows.length === 0) return <p className="text-text-secondary text-body">No states with enough volume yet.</p>;
 
   return (
     <div className="space-y-4">

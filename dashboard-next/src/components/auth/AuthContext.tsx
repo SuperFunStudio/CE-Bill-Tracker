@@ -7,6 +7,7 @@ import {
   signInWithPopup,
   getAdditionalUserInfo,
   sendEmailVerification,
+  sendPasswordResetEmail,
   signOut as fbSignOut,
   type User,
 } from 'firebase/auth';
@@ -46,6 +47,8 @@ interface AuthState {
   emailVerified: boolean;
   /** Re-send the verification email to a signed-in but unverified account. */
   resendVerification: () => Promise<void>;
+  /** Send a Firebase password-reset email to the given address (no-op feedback handled by caller). */
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const AuthCtx = createContext<AuthState | null>(null);
@@ -179,6 +182,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const resetPassword = useCallback(async (email: string) => {
+    await sendPasswordResetEmail(auth, email);
+    track('password_reset_requested', { method: 'email' });
+  }, []);
+
   const signInEmail = useCallback(async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
     track('login', { method: 'email' });
@@ -220,6 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshEntitlement: () => fetchEntitlement(auth.currentUser),
     emailVerified: !!user?.emailVerified,
     resendVerification,
+    resetPassword,
   };
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

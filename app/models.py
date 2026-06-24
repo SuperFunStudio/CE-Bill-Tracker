@@ -35,6 +35,14 @@ class Bill(Base):
     status_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_action_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Health of source_url, set by scripts/audit_bill_source_links.py (see app/links/health.py).
+    # status: alive | redirected | dead | blocked; NULL = never checked (treat link as fine).
+    # final: resolved URL when redirected, so the UI can link to where the page actually moved.
+    source_url_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_url_final: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_url_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Change detection
     change_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext';
 
 /** Global sign-in / create-account modal, opened via useAuth().openAuth(). Email + Google. */
 export function AuthModal() {
-  const { authModalOpen, closeAuth, signInEmail, signUpEmail, signInGoogle, resendVerification } = useAuth();
+  const { authModalOpen, closeAuth, signInEmail, signUpEmail, signInGoogle, resendVerification, resetPassword } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -12,13 +12,39 @@ export function AuthModal() {
   const [error, setError] = useState('');
   const [verifySent, setVerifySent] = useState(false);
   const [resent, setResent] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   if (!authModalOpen) return null;
 
   function dismiss() {
     setVerifySent(false);
     setResent(false);
+    setResetSent(false);
+    setError('');
     closeAuth();
+  }
+
+  async function forgotPassword() {
+    setError('');
+    const addr = email.trim();
+    if (!addr) {
+      setError('Enter your email above, then tap “Forgot password?”.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await resetPassword(addr);
+    } catch (err) {
+      // Surface a malformed address, but stay neutral on user-not-found so the form can't be used to
+      // probe which emails have accounts.
+      if ((err as { code?: string })?.code === 'auth/invalid-email') {
+        setError('That doesn’t look like a valid email.');
+        setBusy(false);
+        return;
+      }
+    }
+    setResetSent(true);
+    setBusy(false);
   }
 
   async function submit(e: React.FormEvent) {
@@ -138,6 +164,11 @@ export function AuthModal() {
             />
           </div>
           {error && <p className="text-urgency-high text-sm">{error}</p>}
+          {resetSent && (
+            <p className="text-green-accent text-sm">
+              If an account exists for that email, we’ve sent a password-reset link. Check your inbox.
+            </p>
+          )}
           <button
             type="submit"
             disabled={busy}
@@ -145,11 +176,21 @@ export function AuthModal() {
           >
             {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
+          {mode === 'signin' && (
+            <button
+              type="button"
+              onClick={forgotPassword}
+              disabled={busy}
+              className="text-text-muted text-xs hover:text-green-accent transition-colors disabled:opacity-60"
+            >
+              Forgot password?
+            </button>
+          )}
         </form>
 
         <div className="flex items-center justify-between text-xs">
           <button
-            onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); }}
+            onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setResetSent(false); }}
             className="text-green-accent hover:underline"
           >
             {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}

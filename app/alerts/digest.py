@@ -24,6 +24,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.alerts.unsubscribe import unsubscribe_url
 from app.models import AlertSubscription, Bill, BillChange, FederalAction
 
 log = structlog.get_logger()
@@ -528,7 +529,8 @@ def render_digest_html(
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
     You're receiving this because you subscribed to SignalScout updates.<br>
-    Reply to this email to unsubscribe.
+    <a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">Unsubscribe</a>
+    · or reply to this email.
   </div>
  </div>
 </body></html>

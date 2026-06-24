@@ -41,6 +41,7 @@ from app.alerts.digest import (
     subscription_matches_federal,
     topic_label,
 )
+from app.alerts.unsubscribe import unsubscribe_url
 from app.models import AlertSubscription, ComplianceDeadline, FederalAction
 
 log = structlog.get_logger()
@@ -214,6 +215,8 @@ def _deadline_footer(sub: AlertSubscription) -> str:
     return (
         f"You're tracking {_topics_summary(sub)}{on_mats} in {_jurisdictions_summary(sub)}. "
         f'<a href="{_DASHBOARD_URL}/compliance" style="color:{_ACCENT};">Adjust what you follow →</a>'
+        f'<br><a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">'
+        "Unsubscribe</a> · or reply to this email."
     )
 
 

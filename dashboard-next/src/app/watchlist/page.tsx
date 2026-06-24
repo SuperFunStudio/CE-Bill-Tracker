@@ -54,7 +54,7 @@ export default function WatchlistPage() {
         <div className="rounded-xl border border-border-default bg-bg-secondary p-8 text-center space-y-2">
           <StarIcon className="text-2xl text-text-muted mx-auto" />
           <p className="text-text-primary font-medium">No bills yet</p>
-          <p className="text-text-muted text-sm">
+          <p className="text-text-secondary text-sm">
             Open the <Link href="/" className="text-green-accent hover:underline">Bill Explorer</Link> and tap the ☆ on any
             bill to start following it.
           </p>

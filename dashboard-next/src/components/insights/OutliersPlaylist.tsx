@@ -66,7 +66,7 @@ export function OutliersPlaylist() {
               ))}
             </div>
           ) : bills.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-text-muted">No outlier bills right now.</p>
+            <p className="px-4 py-3 text-body text-text-secondary">No outlier bills right now.</p>
           ) : (
             <ul className="max-h-96 divide-y divide-border-default overflow-y-auto">
               {bills.map((bill) => (
@@ -78,14 +78,14 @@ export function OutliersPlaylist() {
                     }}
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-bg-tertiary"
                   >
-                    <span className="shrink-0 font-mono text-text-muted text-[11px] w-16">
+                    <span className="shrink-0 font-mono text-text-muted text-meta w-16">
                       {bill.state} {bill.bill_number ?? ''}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-text-secondary text-sm">
                       {fixEncoding(bill.title) || 'Untitled'}
                     </span>
                     {bill.status && (
-                      <span className="shrink-0 text-text-muted text-[11px] capitalize">
+                      <span className="shrink-0 text-text-muted text-meta capitalize">
                         {bill.status.replace(/_/g, ' ')}
                       </span>
                     )}

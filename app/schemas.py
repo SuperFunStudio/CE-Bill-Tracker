@@ -21,6 +21,11 @@ class BillSummary(BaseModel):
     stance_source: str | None = None
     reviewed: bool = False
     source_url: str | None
+    # Source-link health (set by scripts/audit_bill_source_links.py): lets the UI offer a fallback
+    # instead of dropping the user on a dead/moved link. status is alive|redirected|dead|blocked,
+    # NULL = unchecked (treat as fine); final is the resolved URL when redirected.
+    source_url_status: str | None = None
+    source_url_final: str | None = None
     litigation_case_count: int = 0
     max_preemption_risk: int | None = None
 

@@ -160,6 +160,20 @@ def setup_scheduler() -> AsyncIOScheduler:
             replace_existing=True,
         )
 
+    # Source-link health audit — weekly Saturday 5am UTC (a quiet slot). Re-checks the most-stale
+    # batch of bill "View Source" links so the UI's fallback (redirect fix / LegiScan backup) stays
+    # current. Dormant unless enabled; preview via scripts/audit_bill_source_links.py --dry-run.
+    if settings.enable_link_audit:
+        scheduler.add_job(
+            run_source_link_audit_cycle,
+            "cron",
+            day_of_week="sat",
+            hour=5,
+            minute=0,
+            id="source_link_audit",
+            replace_existing=True,
+        )
+
     return scheduler
 
 
@@ -677,6 +691,7 @@ async def run_digest_cycle(
 
     from app.alerts.digest import build_digests, render_digest_html, render_digest_subject
     from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.unsubscribe import unsubscribe_url
     from app.database import AsyncSessionLocal
 
     if not settings.sendgrid_api_key:
@@ -694,7 +709,7 @@ async def run_digest_cycle(
     for sub, content in digests:
         subject = render_digest_subject(content, period_label)
         html = render_digest_html(sub, content, period_label)
-        if await sender.send_html(sub.email, subject, html):
+        if await sender.send_html(sub.email, subject, html, list_unsubscribe_url=unsubscribe_url(sub.id)):
             sent += 1
     log.info("digest_cycle_complete", period=period_label, recipients=len(digests), sent=sent)
 
@@ -720,6 +735,7 @@ async def run_deadline_alert_cycle() -> None:
         render_deadline_alert_subject,
     )
     from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.unsubscribe import unsubscribe_url
     from app.database import AsyncSessionLocal
     from app.models import ComplianceDeadline
 
@@ -738,7 +754,7 @@ async def run_deadline_alert_cycle() -> None:
         for sub, content in alerts:
             subject = render_deadline_alert_subject(content)
             html = render_deadline_alert_html(sub, content)
-            if await sender.send_html(sub.email, subject, html):
+            if await sender.send_html(sub.email, subject, html, list_unsubscribe_url=unsubscribe_url(sub.id)):
                 sent += 1
                 sent_deadline_ids.update(it.deadline.id for it in content.items)
 
@@ -805,6 +821,7 @@ async def run_new_bill_alert_cycle() -> None:
         render_new_bill_alert_subject,
     )
     from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.unsubscribe import unsubscribe_url
     from app.database import AsyncSessionLocal
     from app.models import Bill
 
@@ -822,7 +839,7 @@ async def run_new_bill_alert_cycle() -> None:
         for sub, content in alerts:
             subject = render_new_bill_alert_subject(content)
             html = render_new_bill_alert_html(sub, content)
-            if await sender.send_html(sub.email, subject, html):
+            if await sender.send_html(sub.email, subject, html, list_unsubscribe_url=unsubscribe_url(sub.id)):
                 sent += 1
                 sent_bill_ids.update(b.id for b in content.bills)
 
@@ -1195,3 +1212,81 @@ async def reconcile_bill_matches() -> None:
         log.info("cl_bill_match_reconcile_complete", **stats)
     except Exception as e:
         log.error("cl_bill_match_reconcile_failed", error=str(e))
+
+
+async def run_source_link_audit_cycle() -> None:
+    """Weekly: re-check the most-stale batch of bill "View Source" links and persist each verdict.
+
+    Pings each distinct bills.source_url with the shared link-health classifier (app/links/health.py)
+    and writes source_url_status / source_url_final / source_url_checked_at back onto every bill on
+    that URL. The frontend (resolveSourceLink) then degrades gracefully: redirected -> the resolved
+    URL, dead -> a LegiScan backup. "blocked" (WAF/timeout) is treated as could-not-verify, NOT
+    broken, so a flaky government site never downgrades a good link.
+
+    Bounded to settings.link_audit_batch_size distinct URLs per run, oldest-checked first, so the
+    whole table is swept over several weeks rather than hammered in one pass.
+    """
+    import asyncio
+    from datetime import datetime, timezone
+
+    import httpx
+    from sqlalchemy import text
+
+    from app.database import AsyncSessionLocal
+    from app.links.health import classify_async, normalize
+
+    if not settings.enable_link_audit:
+        log.info("source_link_audit_skipped", reason="enable_link_audit=false")
+        return
+
+    batch = settings.link_audit_batch_size
+    # Pick the most-stale distinct URLs (never-checked first), then gather the bills on each.
+    async with AsyncSessionLocal() as db:
+        url_rows = (await db.execute(text(
+            "select source_url from bills "
+            "where source_url is not null and source_url <> '' "
+            "group by source_url order by min(source_url_checked_at) asc nulls first "
+            "limit :batch"
+        ), {"batch": batch})).all()
+        urls = [r[0] for r in url_rows]
+        if not urls:
+            log.info("source_link_audit_skipped", reason="no source links")
+            return
+        bill_rows = (await db.execute(text(
+            "select id, source_url from bills where source_url = any(:urls)"
+        ), {"urls": urls})).all()
+
+    bills_by_url: dict[str, list[int]] = {}
+    for bid, url in bill_rows:
+        bills_by_url.setdefault(url, []).append(bid)
+
+    log.info("source_link_audit_start", urls=len(urls), bills=len(bill_rows))
+
+    # Distinct state hosts, so modest concurrency is polite; the semaphore just caps the burst.
+    sem = asyncio.Semaphore(10)
+    verdicts: dict[str, tuple[str, str | None]] = {}  # url -> (status, final_or_none)
+
+    async with httpx.AsyncClient() as client:
+        async def check(u: str) -> None:
+            async with sem:
+                res = await classify_async(u, client)
+            final = res.final_url if (
+                res.bucket == "redirected" and res.final_url
+                and normalize(res.final_url) != normalize(u)
+            ) else None
+            verdicts[u] = (res.bucket, final)
+
+        await asyncio.gather(*(check(u) for u in urls))
+
+    counts: dict[str, int] = {}
+    now = datetime.now(timezone.utc)
+    async with AsyncSessionLocal() as db:
+        for url, (status, final) in verdicts.items():
+            counts[status] = counts.get(status, 0) + 1
+            await db.execute(text(
+                "update bills set source_url_status = :status, source_url_final = :final, "
+                "source_url_checked_at = :ts where id = any(:ids)"
+            ), {"status": status, "final": final, "ts": now, "ids": bills_by_url[url]})
+        await db.commit()
+
+    log.info("source_link_audit_complete", urls=len(urls), bills=len(bill_rows), **counts)

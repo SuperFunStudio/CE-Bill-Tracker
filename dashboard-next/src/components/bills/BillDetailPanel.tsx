@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import type { BillSummary } from '@/lib/types';
-import { fixEncoding, formatDate, formatInstrumentType, isWeakening } from '@/lib/utils';
+import { fixEncoding, formatDate, formatInstrumentType, isWeakening, resolveSourceLink } from '@/lib/utils';
 import { useBill, useBillLitigationCases } from '@/hooks/useBills';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -79,7 +79,7 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
 
       {/* AI summary */}
       {bill.ai_summary && (
-        <div className="bg-bg-primary rounded p-3 text-sm text-text-secondary leading-relaxed">
+        <div className="bg-bg-primary rounded p-3 text-body text-text-secondary leading-relaxed">
           {fixEncoding(bill.ai_summary)}
         </div>
       )}
@@ -113,7 +113,7 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
               </div>
               <ul className="space-y-0.5">
                 {cd.covered_products.map((p, i) => (
-                  <li key={i} className="text-text-primary text-sm flex gap-2">
+                  <li key={i} className="text-text-primary text-body flex gap-2">
                     <span className="text-green-accent/60 shrink-0 select-none">·</span>
                     {p}
                   </li>
@@ -129,7 +129,7 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
               </div>
               <ul className="space-y-0.5">
                 {cd.producer_obligations.map((o, i) => (
-                  <li key={i} className="text-text-primary text-sm flex gap-2">
+                  <li key={i} className="text-text-primary text-body flex gap-2">
                     <span className="text-green-accent/60 shrink-0 select-none">·</span>
                     {o}
                   </li>
@@ -147,7 +147,7 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
                 {cd.deadlines.map((d, i) => (
                   <div key={i} className="flex gap-3">
                     <span className="text-green-accent font-mono text-xs shrink-0 pt-0.5">{formatDate(d.date)}</span>
-                    <span className="text-text-primary text-sm">{d.type}: {d.description}</span>
+                    <span className="text-text-primary text-body">{d.type}: {d.description}</span>
                   </div>
                 ))}
               </div>
@@ -158,7 +158,7 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
 
       {/* ── Layer 3: Secondary detail ── */}
       {hasSecondary && (
-        <div className="border-t border-border-default pt-3 space-y-3 text-sm">
+        <div className="border-t border-border-default pt-3 space-y-3 text-body">
           {cd?.producer_definition && (
             <div>
               <div className="text-text-muted text-xs uppercase mb-1">Producer Definition</div>
@@ -237,17 +237,26 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
         </div>
       )}
 
-      {/* Source link */}
-      {bill.source_url && (
-        <a
-          href={bill.source_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-green-accent text-sm hover:underline"
-        >
-          View Source ↗
-        </a>
-      )}
+      {/* Source link — resolves to the best available target (updated URL on a moved page, a LegiScan
+          backup on a dead one) so a click doesn't drop the user on a connection error. See
+          resolveSourceLink + scripts/audit_bill_source_links.py. */}
+      {(() => {
+        const link = resolveSourceLink(bill);
+        if (!link) return null;
+        return (
+          <div className="space-y-1">
+            <a
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-green-accent text-sm hover:underline"
+            >
+              {link.label}
+            </a>
+            {link.note && <p className="text-xs text-text-muted">{link.note}</p>}
+          </div>
+        );
+      })()}
     </div>
   );
 }

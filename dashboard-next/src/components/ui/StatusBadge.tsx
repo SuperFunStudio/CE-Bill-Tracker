@@ -38,7 +38,7 @@ export function StatusBadge({
         {formatStatusLabel(status)}
       </span>
       {showCaption && label && (
-        <span className="text-[11px] font-medium uppercase tracking-wide text-status-weakens">
+        <span className="text-meta font-medium uppercase tracking-wide text-status-weakens">
           {label}
         </span>
       )}

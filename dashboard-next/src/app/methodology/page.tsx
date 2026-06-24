@@ -76,7 +76,7 @@ export default function MethodologyPage() {
           </div>
           <div>
             <div className="text-text-muted text-xs uppercase tracking-wide mb-1">Material &amp; product streams (15)</div>
-            <p className="text-sm text-text-secondary leading-relaxed">
+            <p className="text-body text-text-secondary leading-relaxed">
               {MATERIALS.join(', ')}.
             </p>
           </div>
@@ -85,7 +85,7 @@ export default function MethodologyPage() {
 
       <section className="space-y-3">
         <h2 className="font-serif text-xl text-text-primary">How a bill gets classified</h2>
-        <ol className="space-y-3 text-sm text-text-secondary">
+        <ol className="space-y-3 text-body text-text-secondary">
           <li>
             <span className="text-text-primary font-medium">1. Ingest.</span> Every bill from all 50
             states and D.C. is pulled from Open States and refreshed as it moves.
@@ -119,25 +119,25 @@ export default function MethodologyPage() {
 
       <section className="space-y-3">
         <h2 className="font-serif text-xl text-text-primary">Auto-classified vs. reviewed</h2>
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           Each bill is first <strong className="text-text-primary">auto-classified</strong>: a language
           model reads the title, summary, and text and decides whether it touches one of the tracked
           instruments, with a confidence score and the material streams it affects. Compliance details
           (deadlines, covered products, producer obligations) are then extracted from the bill text.
         </p>
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           A bill marked <span className="text-green-accent">reviewed</span> has additionally been
           spot-checked by a human. Anything not yet reviewed carries only the automated call — shown
           on each bill so you always know which is which.
         </p>
-        <p className="text-text-muted text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           Classifications are automated and can contain errors; always verify against the primary
           source before acting. We continuously expand the reviewed set.
         </p>
       </section>
 
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <p className="text-text-secondary text-sm">See a miscall? Help us correct it.</p>
+        <p className="text-text-secondary text-body">See a miscall? Help us correct it.</p>
         <a
           href="mailto:kenny@superfun.studio?subject=SignalScout%20classification%20flag&body=Bill%20(state%20%2B%20number):%0AWhat%20looks%20wrong:%0A"
           className="shrink-0 rounded-lg border border-green-accent bg-green-dark px-5 py-2.5 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity text-center"

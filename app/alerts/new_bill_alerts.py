@@ -34,6 +34,7 @@ from app.alerts.digest import (
     subscription_matches_bill,
     topic_label,
 )
+from app.alerts.unsubscribe import unsubscribe_url
 from app.models import AlertSubscription, Bill
 
 log = structlog.get_logger()
@@ -162,7 +163,8 @@ def render_new_bill_alert_html(sub: AlertSubscription, content: NewBillAlertCont
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    {following}. Reply to this email to change your alerts or unsubscribe.
+    {following}. Reply to change your alerts, or
+    <a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">unsubscribe</a>.
   </div>
  </div>
 </body></html>

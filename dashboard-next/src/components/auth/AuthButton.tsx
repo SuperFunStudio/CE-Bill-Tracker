@@ -52,7 +52,7 @@ export function AuthButton({
       <div className="space-y-1">
         <div className="flex items-center gap-2 px-3 py-1">
           {isPro && (
-            <span className="text-[9px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-0.5">
+            <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-0.5">
               Pro
             </span>
           )}
@@ -98,7 +98,7 @@ export function AuthButton({
         className="inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-bg-primary px-3 py-1 text-xs text-text-secondary hover:text-text-primary transition-colors"
       >
         {isPro && (
-          <span className="text-[9px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-0.5">
+          <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-0.5">
             Pro
           </span>
         )}

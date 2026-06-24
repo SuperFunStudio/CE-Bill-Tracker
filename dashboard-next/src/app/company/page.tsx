@@ -73,7 +73,7 @@ function ObligationCard({ o }: { o: CompanyObligation }) {
           {dl ? (
             <>
               <div className="flex items-center justify-end gap-2">
-                <span className="text-text-muted text-[10px] uppercase tracking-wide">{DEADLINE_TYPE_LABEL[dl.deadline_type] ?? dl.deadline_type}</span>
+                <span className="text-text-muted text-meta uppercase tracking-wide">{DEADLINE_TYPE_LABEL[dl.deadline_type] ?? dl.deadline_type}</span>
                 <DeadlineCountdown date={dl.deadline_date} />
               </div>
               <div className="text-text-primary text-sm font-semibold mt-0.5">{formatDate(dl.deadline_date)}</div>
@@ -130,7 +130,7 @@ function StakesPanel({ ob }: { ob: CompanyObligationsResponse }) {
     <div className="bg-bg-secondary border border-border-default rounded-xl p-6 space-y-5">
       <div>
         <div className="text-text-muted text-xs uppercase tracking-wide mb-1">What&apos;s financially at stake</div>
-        <p className="text-text-secondary text-sm leading-relaxed max-w-3xl">
+        <p className="text-text-secondary text-body leading-relaxed max-w-3xl">
           Three things drive the cost of these enacted laws: the <span className="text-text-primary font-medium">penalty</span> for
           non-compliance, the recurring <span className="text-text-primary font-medium">program fees</span> you pay to a producer
           responsibility organization (PRO) on the packaging you put into each state, and the{' '}
@@ -142,14 +142,14 @@ function StakesPanel({ ob }: { ob: CompanyObligationsResponse }) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Penalty — grounded in statute, leads */}
         <div className="bg-bg-primary border border-urgency-high/30 rounded-lg p-4">
-          <div className="text-urgency-high text-[10px] uppercase tracking-wide font-semibold mb-1">Non-compliance penalty</div>
+          <div className="text-urgency-high text-meta uppercase tracking-wide font-semibold mb-1">Non-compliance penalty</div>
           <div className="text-2xl font-bold text-text-primary">{penalty != null ? `${fmtUsd(penalty)}` : '—'}<span className="text-sm font-normal text-text-muted">{penalty != null ? ' / day' : ''}</span></div>
           <div className="text-text-muted text-xs mt-1">Largest daily civil penalty across your affected laws — written into statute, per violation.</div>
         </div>
 
         {/* Annual program fee */}
         <div className="bg-bg-primary border border-border-default rounded-lg p-4">
-          <div className="text-text-muted text-[10px] uppercase tracking-wide font-semibold mb-1">Est. annual program fees</div>
+          <div className="text-text-muted text-meta uppercase tracking-wide font-semibold mb-1">Est. annual program fees</div>
           <div className="text-2xl font-bold text-green-light">
             {feeLow != null ? `${fmtUsd(feeLow)}–${fmtUsd(feeHigh)}` : '—'}
           </div>
@@ -162,13 +162,13 @@ function StakesPanel({ ob }: { ob: CompanyObligationsResponse }) {
 
         {/* Eco-modulation lever */}
         <div className="bg-bg-primary border border-green-accent/30 rounded-lg p-4">
-          <div className="text-green-accent text-[10px] uppercase tracking-wide font-semibold mb-1">Design lever (eco-modulation)</div>
+          <div className="text-green-accent text-meta uppercase tracking-wide font-semibold mb-1">Design lever (eco-modulation)</div>
           <div className="text-2xl font-bold text-green-accent">{swing != null ? `${fmtUsd(swing)}` : '—'}<span className="text-sm font-normal text-text-muted">{swing != null ? ' / yr' : ''}</span></div>
           <div className="text-text-muted text-xs mt-1">Annual fee swing between best-case recyclable formats and worst-case hard-to-recycle ones, on your materials.</div>
         </div>
       </div>
 
-      <p className="text-text-muted text-[11px] leading-relaxed">
+      <p className="text-text-muted text-meta leading-relaxed">
         Fees scale with the volume you sell in each state; we apportion your reported volume by state population as a proxy.
         Penalty figures are quoted verbatim from each statute. Fee ranges reflect each program&apos;s own published low–high scenario.
       </p>
@@ -191,7 +191,7 @@ function ObligationStakes({ s }: { s: FinancialStakes }) {
           <span>
             <span className="text-text-muted">Annual fee: </span>
             <span className="text-green-light font-semibold">{fmtUsd(s.fee.annual_fee_low_usd)}–{fmtUsd(s.fee.annual_fee_high_usd)}</span>
-            <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full border ${s.fee.annual_fee_grounded ? 'border-green-accent/40 text-green-accent' : 'border-border-default text-text-muted'}`}>
+            <span className={`ml-1.5 text-meta px-1.5 py-0.5 rounded-full border ${s.fee.annual_fee_grounded ? 'border-green-accent/40 text-green-accent' : 'border-border-default text-text-muted'}`}>
               {s.fee.annual_fee_grounded ? 'published rate' : 'estimate'}
             </span>
           </span>
@@ -204,13 +204,13 @@ function ObligationStakes({ s }: { s: FinancialStakes }) {
         )}
       </div>
       {s.fee?.eco_modulation_notes && s.fee.eco_modulation_notes.length > 0 && (
-        <div className="text-[11px] text-text-muted">
+        <div className="text-meta text-text-muted">
           <span className="text-green-accent">Design lever: </span>
           {s.fee.eco_modulation_notes.join('  ·  ')}
         </div>
       )}
       {s.fee?.fee_basis && (
-        <div className="text-[10px] text-text-muted italic">{s.fee.fee_basis}</div>
+        <div className="text-meta text-text-muted italic">{s.fee.fee_basis}</div>
       )}
     </div>
   );
@@ -257,7 +257,7 @@ function ObligationsView() {
       </div>
 
       {!selectedId && (
-        <div className="text-center text-text-muted py-12">
+        <div className="text-center text-text-secondary py-12 text-body">
           Select a company to see which enacted laws affect it and when its next deadline falls.
         </div>
       )}
@@ -272,7 +272,7 @@ function ObligationsView() {
           {obligations.affected_bill_count === 0 ? (
             <div className="bg-bg-secondary border border-border-default rounded-xl p-6 text-center">
               <div className="text-text-primary text-lg font-semibold mb-1">{obligations.company_name}</div>
-              <div className="text-text-muted text-sm">
+              <div className="text-text-secondary text-body">
                 No enacted laws currently match this company&apos;s materials and operating footprint.
               </div>
             </div>
@@ -365,7 +365,7 @@ function BillView() {
       </div>
 
       {selectedBillId === undefined && (
-        <div className="text-center text-text-muted py-12">Select a bill to see company exposure rankings.</div>
+        <div className="text-center text-text-secondary py-12 text-body">Select a bill to see company exposure rankings.</div>
       )}
 
       {selectedBillId !== undefined && (
@@ -460,8 +460,8 @@ function ExposureBriefPanel({ companyId, billId }: { companyId: string; billId: 
   const { data, isLoading, error } = useExposureBrief(companyId, billId);
 
   if (isLoading) return <div className="h-32 bg-bg-secondary rounded-lg animate-pulse" />;
-  if (error) return <div className="text-urgency-high text-sm">Failed to load exposure brief. The brief may not exist yet — run the interpretation job first.</div>;
-  if (!data?.brief_json) return <div className="text-text-muted text-sm">No brief available for this company/bill combination.</div>;
+  if (error) return <div className="text-urgency-high text-body">Failed to load exposure brief. The brief may not exist yet — run the interpretation job first.</div>;
+  if (!data?.brief_json) return <div className="text-text-secondary text-body">No brief available for this company/bill combination.</div>;
 
   const brief = data.brief_json as Record<string, unknown>;
 
@@ -476,7 +476,7 @@ function ExposureBriefPanel({ companyId, billId }: { companyId: string; billId: 
       {execSummary && (
         <div>
           <div className="text-text-muted text-xs uppercase mb-1">Executive Summary</div>
-          <p className="text-text-secondary leading-relaxed">{execSummary}</p>
+          <p className="text-text-secondary leading-relaxed text-body">{execSummary}</p>
         </div>
       )}
       {costEstimate && (
@@ -504,7 +504,7 @@ function ExposureBriefPanel({ companyId, billId }: { companyId: string; billId: 
       {recommendedAction && (
         <div className="bg-green-dark/40 border border-green-accent/20 rounded p-3">
           <div className="text-green-accent text-xs uppercase mb-1">Recommended Action</div>
-          <p className="text-green-light text-sm">{recommendedAction}</p>
+          <p className="text-green-light text-body">{recommendedAction}</p>
         </div>
       )}
       <div className="text-text-muted text-xs">
@@ -556,7 +556,7 @@ function CompanyView() {
       </div>
 
       {!selectedId && (
-        <div className="text-center text-text-muted py-12">Select a company to see its EPR exposure profile.</div>
+        <div className="text-center text-text-secondary py-12 text-body">Select a company to see its EPR exposure profile.</div>
       )}
 
       {selectedId && company && (
@@ -655,11 +655,11 @@ function AccessGate() {
         <div className="bg-bg-secondary border border-border-default rounded-2xl p-8 text-center space-y-5">
           <LockIcon className="text-4xl mx-auto text-text-muted" />
           <div>
-            <span className="inline-block mb-2 text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+            <span className="inline-block mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
               Bespoke · Kenny Arnold Design
             </span>
             <h1 className="text-2xl font-bold text-text-primary mb-2">Portfolio Exposure</h1>
-            <p className="text-text-muted text-sm leading-relaxed">
+            <p className="text-text-secondary text-body leading-relaxed">
               A custom exposure map for your portfolio — which enacted laws hit you, what each requires,
               and the material- and design-level moves that reduce it. Built from your own volume and
               material data, as a scoped engagement with Kenny Arnold Design.

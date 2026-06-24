@@ -34,9 +34,9 @@ function DeadlineEntry({ d, onSelect }: { d: DeadlineSummary; onSelect: (d: Dead
           {d.state} {d.bill_number ?? ''}
         </div>
         {d.description && (
-          <div className="text-text-muted text-[11px] leading-snug line-clamp-2">{d.description}</div>
+          <div className="text-text-muted text-meta leading-snug line-clamp-2">{d.description}</div>
         )}
-        <div className="text-text-muted text-[10px] font-mono mt-0.5">{formatDate(d.deadline_date)}</div>
+        <div className="text-text-muted text-meta font-mono mt-0.5">{formatDate(d.deadline_date)}</div>
       </div>
     </button>
   );
@@ -92,7 +92,7 @@ export function DeadlineTimeline({
             ))}
           </div>
         </div>
-        <p className="text-text-muted text-[11px] italic mt-1">
+        <p className="text-text-muted text-meta italic mt-1">
           Scroll horizontally to move through the timeline →
         </p>
       </div>

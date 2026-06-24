@@ -141,11 +141,11 @@ function PlanCard({
         value={
           isPaid ? (
             <span className="inline-flex items-center gap-1.5">
-              <span className="text-[9px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-0.5">
+              <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-0.5">
                 {PRO.name}
               </span>
               {founding && (
-                <span className="text-[9px] uppercase tracking-wider text-green-accent bg-green-dark/40 border border-green-accent/40 rounded-full px-1.5 py-0.5">
+                <span className="text-meta uppercase tracking-wider text-green-accent bg-green-dark/40 border border-green-accent/40 rounded-full px-1.5 py-0.5">
                   Founding Member
                 </span>
               )}

@@ -60,7 +60,7 @@ export function ScopeOnboarding() {
           <h2 id="scope-onboarding-title" className="font-serif text-xl sm:text-2xl text-text-primary">
             See what&apos;s coming for you.
           </h2>
-          <p className="text-text-secondary text-sm leading-relaxed">
+          <p className="text-text-secondary text-body leading-relaxed">
             Pick your products, materials &amp; states once. We&apos;ll surface the bills and
             deadlines that hit your portfolio — and skip the ones that don&apos;t.
           </p>
@@ -68,7 +68,7 @@ export function ScopeOnboarding() {
 
         {/* Materials */}
         <fieldset>
-          <legend className="font-serif text-text-muted text-[11px] uppercase tracking-wider mb-2">
+          <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
             Materials &amp; Products
           </legend>
           <div className="flex flex-wrap gap-2">
@@ -96,7 +96,7 @@ export function ScopeOnboarding() {
 
         {/* States */}
         <fieldset>
-          <legend className="font-serif text-text-muted text-[11px] uppercase tracking-wider mb-2">
+          <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
             States
           </legend>
           <div className="max-h-44 overflow-y-auto rounded-md border border-border-default bg-bg-primary p-2 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1">

@@ -133,7 +133,7 @@ function Pill({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 
     red: 'text-red-400 border-red-400/40',
   };
   return (
-    <span className={`text-[9px] uppercase tracking-wider border rounded-full px-1.5 py-0.5 ${tones[tone]}`}>
+    <span className={`text-meta uppercase tracking-wider border rounded-full px-1.5 py-0.5 ${tones[tone]}`}>
       {children}
     </span>
   );
@@ -183,7 +183,7 @@ function StatsPanel({ stats, error }: { stats: AdminStats | null; error: string 
         <Stat label="Fed actions" value={f.federal_last_published ? '✓' : '—'} sub="see freshness" />
       </div>
       <div className="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary space-y-1">
-        <p className="text-text-muted uppercase tracking-wider text-[10px] mb-1">Data freshness</p>
+        <p className="text-text-muted uppercase tracking-wider text-meta mb-1">Data freshness</p>
         <p>Bills last synced (fetched): <span className="text-text-primary">{fmtDateTime(f.bills_last_fetched)}</span></p>
         <p>Bills last updated in DB: <span className="text-text-primary">{fmtDateTime(f.bills_last_updated)}</span></p>
         <p>Latest tracked action <span className="text-text-muted">(EPR-relevant)</span>: <span className="text-text-primary">{fmtDate(f.bills_last_action)}</span></p>
@@ -196,9 +196,9 @@ function StatsPanel({ stats, error }: { stats: AdminStats | null; error: string 
 function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
   return (
     <div className="rounded-lg border border-border-default bg-bg-primary p-3">
-      <p className="text-text-muted text-[10px] uppercase tracking-wider">{label}</p>
+      <p className="text-text-muted text-meta uppercase tracking-wider">{label}</p>
       <p className="font-serif text-2xl text-text-primary leading-tight">{value}</p>
-      {sub && <p className="text-text-muted text-[10px]">{sub}</p>}
+      {sub && <p className="text-text-muted text-meta">{sub}</p>}
     </div>
   );
 }
@@ -441,7 +441,7 @@ function AccountPanel({ getToken, adminEmail, onChange }: { getToken: GetToken; 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border-default bg-bg-primary px-3 py-2">
-      <p className="text-text-muted text-[10px] uppercase tracking-wider">{label}</p>
+      <p className="text-text-muted text-meta uppercase tracking-wider">{label}</p>
       <p className="text-text-primary text-sm">{value}</p>
     </div>
   );
@@ -504,7 +504,7 @@ function EntitlementsPanel({ getToken, reloadKey, onChange }: { getToken: GetTok
                 <Td className="text-text-secondary whitespace-nowrap">{e.current_period_end ? fmtDate(e.current_period_end) : e.comp ? 'Indefinite' : '—'}</Td>
                 <Td className="text-text-muted max-w-[16rem]">
                   {e.comp_note || '—'}
-                  {e.comp_granted_by && <span className="block text-[10px] text-text-muted/70">by {e.comp_granted_by}</span>}
+                  {e.comp_granted_by && <span className="block text-meta text-text-muted/70">by {e.comp_granted_by}</span>}
                 </Td>
                 <Td>
                   {e.comp && e.plan === 'pro' && (

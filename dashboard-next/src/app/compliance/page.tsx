@@ -221,7 +221,7 @@ export default function CompliancePage() {
             {!isPro && <LockIcon className="text-xs" />}
             ↓ Export CSV
             {!isPro && (
-              <span className="text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
+              <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
                 Pro
               </span>
             )}
@@ -249,7 +249,7 @@ export default function CompliancePage() {
         {(isLoading || loading) ? (
           <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
         ) : allDeadlines.length === 0 ? (
-          <div className="text-center text-text-muted py-12">No deadlines found for the selected filters.</div>
+          <div className="text-center text-text-secondary py-12">No deadlines found for the selected filters.</div>
         ) : (
           <div className="space-y-2">
             {allDeadlines.map((d, i) => <DeadlineRow key={`${d.id}-${i}`} deadline={d} onSelect={setSelected} />)}

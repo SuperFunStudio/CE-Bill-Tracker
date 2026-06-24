@@ -64,14 +64,24 @@ class SendGridSender:
     def __init__(self):
         self._sg = SendGridAPIClient(api_key=settings.sendgrid_api_key)
 
-    async def send_html(self, to_email: str, subject: str, html: str) -> bool:
-        """Send a fully-rendered HTML email (e.g. the monthly digest)."""
+    async def send_html(
+        self, to_email: str, subject: str, html: str, list_unsubscribe_url: str | None = None
+    ) -> bool:
+        """Send a fully-rendered HTML email (e.g. the monthly digest).
+
+        Pass `list_unsubscribe_url` for the recurring/marketing emails so mail clients render a native
+        unsubscribe control and Gmail/Outlook honour one-click (RFC 8058)."""
         message = Mail(
             from_email=settings.sendgrid_from_email,
             to_emails=to_email,
             subject=subject,
             html_content=html,
         )
+        if list_unsubscribe_url:
+            from sendgrid.helpers.mail import Header
+
+            message.header = Header("List-Unsubscribe", f"<{list_unsubscribe_url}>")
+            message.header = Header("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
         try:
             response = self._sg.send(message)
             success = response.status_code in (200, 202)

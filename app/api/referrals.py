@@ -14,7 +14,7 @@ import secrets
 import string
 
 import structlog
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,6 +81,7 @@ class AttributeRequest(BaseModel):
 async def attribute(
     request: Request,
     payload: AttributeRequest,
+    background_tasks: BackgroundTasks,
     user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -123,4 +124,10 @@ async def attribute(
     grant_comp_days(referrer, _REFERRAL_GRANT_DAYS)
     await db.commit()
     log.info("referral_granted", referrer_uid=referrer.firebase_uid, referred_uid=user.uid)
+    # Tell the referrer they earned free Pro days — without it, the share-to-unlock loop has no payoff
+    # signal and they'd have to notice the change by polling the page. Best-effort, after commit.
+    if referrer.email:
+        from app.alerts.welcome_email import send_referral_reward
+
+        background_tasks.add_task(send_referral_reward, referrer.email, _REFERRAL_GRANT_DAYS)
     return {"granted": True}

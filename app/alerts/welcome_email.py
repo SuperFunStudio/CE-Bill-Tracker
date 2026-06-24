@@ -42,6 +42,7 @@ from app.alerts.digest import (
     subscription_matches_bill,
     topic_label,
 )
+from app.alerts.unsubscribe import unsubscribe_url
 from app.config import settings
 from app.models import AlertSubscription, Bill
 
@@ -411,7 +412,8 @@ def render_welcome_html(
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
     You're receiving this because you just subscribed to SignalScout updates.<br>
-    Reply to this email to unsubscribe.
+    <a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">Unsubscribe</a>
+    · or reply to this email.
   </div>
  </div>
 </body></html>
@@ -729,4 +731,203 @@ async def send_pro_welcome(email: str, is_trial: bool = False, founding: bool = 
         return ok
     except Exception as e:
         log.warning("pro_welcome_failed", email=email, error=str(e))
+        return False
+
+
+# --- Billing lifecycle + referral notices --------------------------------------------------------
+# Three transactional notices that close gaps in the alert map: a dunning email when a Pro renewal
+# payment fails, a confirmation when a subscription is canceled, and a reward notice when a referral
+# pays off. All self-contained (no DB), gated on enable_welcome_email + a SendGrid key like the rest,
+# and best-effort so a send failure can never surface into the Stripe webhook / referral caller.
+
+
+def _lifecycle_shell(title_line: str, body_inner: str, colophon: str) -> str:
+    """The shared Gazette masthead + colophon wrapper, so the lifecycle notices stay on-brand without
+    each re-pasting the masthead. `body_inner` is the inner HTML between masthead and colophon."""
+    return f"""
+<html><body style="margin:0;padding:0;background:{_PAPER};">
+ <div style="max-width:640px;margin:0 auto;background:#fff;">
+  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
+    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
+         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
+      SignalScout · EPR Legislative Intelligence
+    </div>
+    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">{title_line}</p>
+  </div>
+  <div style="padding:18px 28px 24px;">
+    {body_inner}
+  </div>
+  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
+       border-top:3px double {_INK};">
+    {colophon}
+  </div>
+ </div>
+</body></html>
+"""
+
+
+def _cta_button(href: str, label: str) -> str:
+    return (
+        f'<a href="{href}" style="display:inline-block;background:{_ACCENT};color:#fff;'
+        f'text-decoration:none;font:bold 14px {_SERIF};padding:11px 24px;border-radius:4px;">{label}</a>'
+    )
+
+
+# --- Payment failed (dunning) --------------------------------------------------------------------
+# Fired from the Stripe invoice.payment_failed webhook. A Pro whose renewal card fails would otherwise
+# be silently downgraded to free; this is the warning + path back. NOTE: requires the Stripe dashboard
+# webhook to be subscribed to invoice.payment_failed (the endpoint historically only took 4 events).
+
+
+def render_payment_failed_subject() -> str:
+    return "Action needed — your SignalScout Pro payment didn't go through"
+
+
+def render_payment_failed_html() -> str:
+    body = f"""
+    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
+      A quick heads-up about your subscription.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
+      We tried to process the payment for your <strong>SignalScout Pro</strong> subscription, but it
+      didn't go through. This is most often an expired or replaced card — nothing's lost yet.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 16px;">
+      Update your payment details to keep your Pro access uninterrupted. If the payment isn't resolved,
+      your account will drop back to the free plan.</p>
+    {_cta_button(f"{_DASHBOARD_URL}/account", "Update payment details →")}
+    <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
+      Already fixed it, or want to check your status? Manage everything from
+      <a href="{_DASHBOARD_URL}/account" style="color:{_ACCENT};">your account</a>.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
+      Kind regards,<br>The SignalScout Team</p>"""
+    return _lifecycle_shell(
+        "Tracking circularity-aligned legislation across the USA",
+        body,
+        "You're receiving this because a payment on your SignalScout Pro subscription needs attention.",
+    )
+
+
+async def send_payment_failed(email: str) -> bool:
+    """Best-effort dunning notice for a failed Pro renewal (background-task entrypoint). Gated on
+    enable_welcome_email + a SendGrid key + an email. Never raises."""
+    if not settings.enable_welcome_email:
+        log.info("payment_failed_email_skipped_flag_off", email=email)
+        return False
+    if not email or not settings.sendgrid_api_key:
+        return False
+    try:
+        from app.alerts.sendgrid_sender import SendGridSender
+
+        ok = await SendGridSender().send_html(
+            email, render_payment_failed_subject(), render_payment_failed_html()
+        )
+        log.info("payment_failed_email_sent", email=email, ok=ok)
+        return ok
+    except Exception as e:
+        log.warning("payment_failed_email_failed", email=email, error=str(e))
+        return False
+
+
+# --- Subscription canceled -----------------------------------------------------------------------
+# Fired from the Stripe customer.subscription.deleted webhook (the seat has lapsed to free). Cancels
+# happen inside the Stripe-hosted portal, so this email is the only acknowledgement a user can get.
+
+
+def render_subscription_canceled_subject() -> str:
+    return "Your SignalScout Pro subscription has been canceled"
+
+
+def render_subscription_canceled_html() -> str:
+    body = f"""
+    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
+      Your Pro subscription has ended.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
+      We've canceled your <strong>SignalScout Pro</strong> subscription and your account is back on the
+      free plan. You won't be billed again. You'll keep free access to the bill explorer and public
+      pages — the Pro tools (full deadlines timeline, watch-list alerts, the Design Guide and CSV
+      export) are paused.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 16px;">
+      Changed your mind, or canceled by accident? You can pick Pro back up any time.</p>
+    {_cta_button(f"{_DASHBOARD_URL}/account", "Reactivate Pro →")}
+    <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
+      We'd genuinely value a line on what we could have done better — just reply to this email.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
+      Kind regards,<br>The SignalScout Team</p>"""
+    return _lifecycle_shell(
+        "Tracking circularity-aligned legislation across the USA",
+        body,
+        "You're receiving this because your SignalScout Pro subscription was canceled.",
+    )
+
+
+async def send_subscription_canceled(email: str) -> bool:
+    """Best-effort cancellation confirmation (background-task entrypoint). Gated on
+    enable_welcome_email + a SendGrid key + an email. Never raises."""
+    if not settings.enable_welcome_email:
+        log.info("subscription_canceled_email_skipped_flag_off", email=email)
+        return False
+    if not email or not settings.sendgrid_api_key:
+        return False
+    try:
+        from app.alerts.sendgrid_sender import SendGridSender
+
+        ok = await SendGridSender().send_html(
+            email, render_subscription_canceled_subject(), render_subscription_canceled_html()
+        )
+        log.info("subscription_canceled_email_sent", email=email, ok=ok)
+        return ok
+    except Exception as e:
+        log.warning("subscription_canceled_email_failed", email=email, error=str(e))
+        return False
+
+
+# --- Referral reward earned ----------------------------------------------------------------------
+# Fired from POST /referrals/attribute when a new account signs up via someone's link and the referrer
+# is granted comp days. Closes the share-to-unlock loop's missing payoff — the referrer previously had
+# to poll the page to notice their reward.
+
+
+def render_referral_reward_subject(days: int) -> str:
+    return f"You just earned {days} free days of SignalScout Pro"
+
+
+def render_referral_reward_html(days: int) -> str:
+    body = f"""
+    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
+      Your referral paid off.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
+      Someone just signed up for <strong>Battle of the Bills</strong> using your referral link — so
+      we've added <strong>{days} days of Pro</strong> to your account. It's live right now; nothing to
+      claim.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 16px;">
+      Thanks for spreading the word. Keep sharing your link and the free days keep stacking up.</p>
+    {_cta_button(f"{_DASHBOARD_URL}/compliance", "Open your dashboard →")}
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
+      Kind regards,<br>The SignalScout Team</p>"""
+    return _lifecycle_shell(
+        "Tracking circularity-aligned legislation across the USA",
+        body,
+        "You're receiving this because a friend signed up using your SignalScout referral link.",
+    )
+
+
+async def send_referral_reward(email: str, days: int = 30) -> bool:
+    """Best-effort 'you earned free Pro days' notice to a referrer (background-task entrypoint). Gated
+    on enable_welcome_email + a SendGrid key + an email. Never raises."""
+    if not settings.enable_welcome_email:
+        log.info("referral_reward_email_skipped_flag_off", email=email)
+        return False
+    if not email or not settings.sendgrid_api_key:
+        return False
+    try:
+        from app.alerts.sendgrid_sender import SendGridSender
+
+        ok = await SendGridSender().send_html(
+            email, render_referral_reward_subject(days), render_referral_reward_html(days)
+        )
+        log.info("referral_reward_email_sent", email=email, ok=ok, days=days)
+        return ok
+    except Exception as e:
+        log.warning("referral_reward_email_failed", email=email, error=str(e))
         return False

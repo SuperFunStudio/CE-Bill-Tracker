@@ -45,7 +45,7 @@ function DeadlineOnlyPanel({ deadline, onClose }: { deadline: DeadlineSummary; o
       </div>
 
       {deadline.description && (
-        <div className="bg-bg-primary rounded p-3 text-sm text-text-secondary leading-relaxed">
+        <div className="bg-bg-primary rounded p-3 text-body text-text-secondary leading-relaxed">
           {deadline.description}
         </div>
       )}

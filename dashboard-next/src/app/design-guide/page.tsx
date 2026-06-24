@@ -113,11 +113,11 @@ export default function DesignGuidePage() {
         subtitle="What circular-economy law already requires you to design for — and what ignoring it will cost."
       />
 
-      <p className="text-text-secondary text-sm leading-relaxed max-w-3xl">
+      <p className="text-text-secondary text-body leading-relaxed max-w-3xl">
         The Battle of the Bills online design guide is built dynamically from the bills ingested into
         the foundational database. Every design principle below is sourced from enacted and proposed
-        US bills and it stays current as legislation moves. Stay ahead of non-compliant SKUs, fee
-        penalties, and ensure you adapt to changing market conditions. Assembled from{' '}
+        US bills, and it stays current as legislation moves. Stay ahead of non-compliant SKUs and fee
+        penalties, and adapt to changing market conditions. Assembled from{' '}
         <span className="text-text-primary font-medium">{GUIDE_COVERAGE.bills} bills</span> across{' '}
         <span className="text-text-primary font-medium">{GUIDE_COVERAGE.states} states</span>.
       </p>
@@ -159,11 +159,11 @@ export default function DesignGuidePage() {
           <div className="flex items-center gap-2 mb-1">
             <CompassIcon className="text-green-accent text-lg" />
             <h3 className="font-serif text-xl text-text-primary">The full Design Guide</h3>
-            <span className="text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+            <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
               Pro
             </span>
           </div>
-          <p className="text-text-secondary text-sm leading-relaxed">
+          <p className="text-text-secondary text-body leading-relaxed">
             Every lever, 3–6 canonical imperatives each, the concrete numeric targets (recycled-content
             %, dates), and the verbatim statutory language behind every line — print-ready and kept
             current as bills move. The teaser is the headline; this is the playbook.
@@ -185,7 +185,7 @@ export default function DesignGuidePage() {
 
       {/* Enterprise / consulting line */}
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <p className="text-text-secondary text-sm leading-relaxed max-w-2xl">
+        <p className="text-text-secondary text-body leading-relaxed max-w-2xl">
           Need this scoped to your own products and the states you sell in — your SKUs mapped to the
           exact imperatives and deadlines that hit them? That&apos;s built per engagement.
         </p>

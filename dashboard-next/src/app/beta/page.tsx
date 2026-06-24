@@ -91,7 +91,7 @@ function WeakeningWatch() {
 
       {/* Honest caveat — the whole reason this is internal-only. */}
       <div className="rounded-lg border border-amber-400/40 bg-amber-400/5 p-3 text-xs text-text-secondary leading-relaxed">
-        <span className="text-amber-400 font-medium uppercase tracking-wider text-[10px]">Unverified</span>{' '}
+        <span className="text-amber-400 font-medium uppercase tracking-wider text-meta">Unverified</span>{' '}
         These are AI-flagged <span className="text-text-primary">&ldquo;weakens&rdquo;</span> calls. The confidence shown
         is the bill&rsquo;s <span className="text-text-primary">relevance</span> score —{' '}
         <span className="text-text-primary">there is no separate confidence for the stance</span>, and the call is made
@@ -144,7 +144,7 @@ function WeakeningRow({ b }: { b: BillSummary }) {
       </td>
       <td className="px-2 py-1.5 text-text-muted max-w-[20rem]">
         {b.ai_summary || '—'}
-        {b.last_action_date && <span className="block text-[10px] text-text-muted/70">last action {formatDate(b.last_action_date)}</span>}
+        {b.last_action_date && <span className="block text-meta text-text-muted/70">last action {formatDate(b.last_action_date)}</span>}
       </td>
     </tr>
   );

@@ -79,7 +79,7 @@ export default function StatesPage() {
         </div>
       </div>
 
-      <p className="text-text-muted text-sm -mt-2">
+      <p className="text-text-secondary text-body -mt-2">
         {sortBy === 'enacted'
           ? 'Ranked by bills signed into law. The bar shows each state’s momentum — how far its bills have advanced.'
           : 'Ranked by total bills introduced. The bar shows each state’s momentum — how far its bills have advanced.'}
@@ -150,7 +150,7 @@ export default function StatesPage() {
       {dormant.length > 0 && (
         <section className="border-t border-border-default pt-5">
           <h2 className="font-serif text-xl text-text-primary mb-1">On the bench</h2>
-          <p className="text-text-muted text-sm mb-3">
+          <p className="text-text-secondary text-body mb-3">
             {dormant.length} states have no tracked circularity legislation yet — wide-open territory.
           </p>
           <div className="flex flex-wrap gap-2">

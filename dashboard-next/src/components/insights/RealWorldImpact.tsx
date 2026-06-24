@@ -64,7 +64,7 @@ function OutcomeCard({ outcome }: { outcome: BillOutcome }) {
           )}
         </div>
         <span
-          className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${dir.chip}`}
+          className={`shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-meta font-semibold ${dir.chip}`}
         >
           <span className={`h-1.5 w-1.5 rounded-full ${dir.dot}`} />
           {dir.label}
@@ -80,7 +80,7 @@ function OutcomeCard({ outcome }: { outcome: BillOutcome }) {
         </div>
       )}
 
-      <p className="text-text-secondary text-sm leading-relaxed">{outcome.summary}</p>
+      <p className="text-text-secondary text-body leading-relaxed">{outcome.summary}</p>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
         {outcome.attribution && ATTRIBUTION_NOTE[outcome.attribution] && (
@@ -130,7 +130,7 @@ export function RealWorldImpact() {
   }
   if (outcomes.length === 0) {
     return (
-      <p className="text-text-muted text-sm">
+      <p className="text-text-secondary text-body">
         No documented outcomes recorded yet — measured impacts are rare and get added as they surface.
       </p>
     );

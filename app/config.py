@@ -143,6 +143,15 @@ class Settings(BaseSettings):
     enable_welcome_email: bool = True
     enable_welcome_recap: bool = True
 
+    # Source-link health audit — pings each bill's "View Source" URL and records the verdict
+    # (source_url_status/_final/_checked_at) so the UI can fall back to a working link instead of
+    # dropping the user on a connection error. When on, run_source_link_audit_cycle re-checks the
+    # most-stale batch weekly. Bounded per run (link_audit_batch_size) so flipping it on can't fan
+    # out across the whole table at once. Dormant by default; preview via
+    # scripts/audit_bill_source_links.py --dry-run before enabling.
+    enable_link_audit: bool = False
+    link_audit_batch_size: int = 400
+
     # Where "request access / pricing" lead notifications go. Each capture also auto-replies to the
     # requester. Both sends are best-effort and require sendgrid_api_key + a verified from-address.
     access_request_notify_email: str = "kenny@superfun.studio"
@@ -182,6 +191,13 @@ class Settings(BaseSettings):
         return v
     # Dashboard origin Stripe Checkout returns to (success/cancel) and that we allow for auth.
     app_base_url: str = "https://ce-bill-tracker.web.app"
+    # Public origin of THIS API (Cloud Run), used to build absolute links into the backend from emails
+    # — e.g. the one-click unsubscribe endpoint. The frontend is a static SPA, so it can't proxy these.
+    api_base_url: str = "https://signalscout-api-pes3nxocda-uc.a.run.app"
+    # HMAC key for signing one-click unsubscribe tokens. Falls back to stripe_webhook_secret (always set
+    # in prod) when unset, so unsubscribe links work without provisioning a new secret. See
+    # app/alerts/unsubscribe.py.
+    unsubscribe_secret: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

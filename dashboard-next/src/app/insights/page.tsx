@@ -112,7 +112,7 @@ export default function InsightsPage() {
             : 'Shots on goal: circularity bills, introduced through enacted'
         }
       >
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           The headline line is the running count of circular-economy laws on the books — across every
           instrument we track (EPR, deposit-return, right-to-repair, recycled-content, and more), not
           EPR alone. Toggle the upstream statuses to see the full pipeline — how many bills get
@@ -182,7 +182,7 @@ export default function InsightsPage() {
         kicker="Momentum"
         title="Policy momentum: advancing vs. being rolled back"
       >
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           Counting bills misses the most important question: which direction are they pushing? Above
           the line are bills that <em>establish or strengthen</em> a circular-economy obligation; below
           it, bills that <em>exempt, narrow, repeal, or preempt</em> one. Slice by instrument to see
@@ -195,7 +195,7 @@ export default function InsightsPage() {
         kicker="Coverage"
         title="Where instruments meet materials"
       >
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           Which policy tools have been aimed at which materials. The dense cells are well-trodden
           ground; the empty ones are the white space — a material with deposit-return or labeling
           precedent but no EPR yet is often where the next wave of bills lands.
@@ -207,7 +207,7 @@ export default function InsightsPage() {
         kicker="Battle of the bills"
         title="Does each state pass circular-economy bills above or below its own average?"
       >
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           A state&apos;s circular-economy passage rate means little in isolation — Minnesota passes ~1% of{' '}
           <em>everything</em>. So we compare each state&apos;s advancing-CE rate against its <em>all-bills</em>{' '}
           baseline (computed from the full legislative record). The gap is the real signal: where CE bills
@@ -220,7 +220,7 @@ export default function InsightsPage() {
         kicker="By legislative cycle"
         title="Is a state's circular-economy gap widening or closing?"
       >
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           The same gap, broken out by two-year legislative cycle, so you can see the trend — where
           circular-economy bills are gaining ground session over session, and where momentum has stalled.
           Pick a state to trace its cycles.
@@ -232,11 +232,11 @@ export default function InsightsPage() {
         kicker="Champions"
         title="Who's carrying these bills"
       >
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           The legislators currently in office moving circular-economy bills, ranked by how many they
           lead-sponsor. Pick a state to see its delegation; expand anyone to see their bills and sources.
         </p>
-        <div className="rounded-lg border border-border-default bg-bg-primary p-3 text-sm text-text-secondary">
+        <div className="rounded-lg border border-border-default bg-bg-primary p-3 text-body text-text-secondary">
           <span className="font-semibold text-text-primary">One non-obvious pattern:</span> bipartisan bills
           (a sponsor from each party) become law at roughly <span className="text-text-primary font-semibold">
           twice the rate</span> of single-party bills (~17% vs ~9%) — the rare Republican co-sponsor is the
@@ -249,7 +249,7 @@ export default function InsightsPage() {
         kicker="Field notes"
         title="Real-world impact: what enacted laws actually did"
       >
-        <p className="text-text-secondary text-sm leading-relaxed">
+        <p className="text-text-secondary text-body leading-relaxed">
           Everywhere else we track what a law <em>requires</em>. This is what enacted laws have been
           documented to <em>produce</em> — measured outcomes, positive and negative, each anchored to
           a citation. Measured impacts are rare and uneven, so the list grows as evidence surfaces.

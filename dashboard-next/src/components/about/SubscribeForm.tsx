@@ -87,7 +87,7 @@ export function SubscribeForm() {
       <div className="border border-green-accent/40 bg-green-dark/30 rounded-lg p-6 text-center space-y-2">
         <CheckIcon className="text-3xl mx-auto text-green-accent" />
         <p className="font-serif text-text-primary text-lg">You&apos;re on the list.</p>
-        <p className="text-text-secondary text-sm">
+        <p className="text-text-secondary text-body">
           We&apos;ll send updates to <span className="text-text-primary">{email}</span> as matching
           legislation moves. No charge, unsubscribe anytime.
         </p>
@@ -99,7 +99,7 @@ export function SubscribeForm() {
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Topics */}
       <fieldset>
-        <legend className="font-serif text-text-muted text-[11px] uppercase tracking-wider mb-2">
+        <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
           Topics
         </legend>
         <div className="flex flex-wrap gap-2">
@@ -128,7 +128,7 @@ export function SubscribeForm() {
 
       {/* Materials & Products */}
       <fieldset>
-        <legend className="font-serif text-text-muted text-[11px] uppercase tracking-wider mb-2">
+        <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
           Materials &amp; Products
         </legend>
         <div className="flex flex-wrap gap-2">
@@ -157,7 +157,7 @@ export function SubscribeForm() {
 
       {/* Jurisdictions */}
       <fieldset>
-        <legend className="font-serif text-text-muted text-[11px] uppercase tracking-wider mb-2">
+        <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
           Jurisdictions
         </legend>
         <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
@@ -195,7 +195,7 @@ export function SubscribeForm() {
       <div className="flex flex-col gap-1">
         <label
           htmlFor="subscribe-email"
-          className="font-serif text-text-muted text-[11px] uppercase tracking-wider"
+          className="font-serif text-text-muted text-meta uppercase tracking-wider"
         >
           Email
         </label>
@@ -214,7 +214,7 @@ export function SubscribeForm() {
       <div className="flex flex-col gap-1">
         <label
           htmlFor="subscribe-org"
-          className="font-serif text-text-muted text-[11px] uppercase tracking-wider"
+          className="font-serif text-text-muted text-meta uppercase tracking-wider"
         >
           Organization <span className="normal-case tracking-normal text-text-muted/70">(optional)</span>
         </label>
@@ -228,7 +228,7 @@ export function SubscribeForm() {
         />
       </div>
 
-      {status === 'error' && <p className="text-urgency-high text-sm">{error}</p>}
+      {status === 'error' && <p className="text-urgency-high text-body">{error}</p>}
 
       <button
         type="submit"

@@ -137,7 +137,7 @@ export default function PricingPage() {
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-green-accent">{PRO.annual.save}</span>
+        <span className="text-meta text-green-accent">{PRO.annual.save}</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
@@ -151,7 +151,7 @@ export default function PricingPage() {
             }`}
           >
             {tier.eyebrow && (
-              <span className="self-start mb-2 text-[10px] uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+              <span className="self-start mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
                 {tier.eyebrow}
               </span>
             )}
@@ -162,7 +162,7 @@ export default function PricingPage() {
                   <>
                     <span className="text-2xl font-bold text-text-primary">{PRO.annual.price}</span>
                     <span className="text-text-muted text-sm"> {PRO.annual.cadence}</span>
-                    <p className="text-text-muted text-[11px] mt-0.5">
+                    <p className="text-text-muted text-meta mt-0.5">
                       {PRO.annual.perMonth} · {PRO.seatsNote}
                     </p>
                   </>
@@ -170,7 +170,7 @@ export default function PricingPage() {
                   <>
                     <span className="text-2xl font-bold text-text-primary">{PRO.monthly.price}</span>
                     <span className="text-text-muted text-sm"> {PRO.monthly.cadence}</span>
-                    <p className="text-text-muted text-[11px] mt-0.5">{PRO.seatsNote}</p>
+                    <p className="text-text-muted text-meta mt-0.5">{PRO.seatsNote}</p>
                   </>
                 )
               ) : (
@@ -238,7 +238,7 @@ export default function PricingPage() {
             ) : (
               <button
                 onClick={() => openPlan(tier.inquiryPlan ?? 'enterprise', tier.name)}
-                className="rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-medium text-sm text-green-accent transition-opacity hover:opacity-90"
+                className="block w-full text-center rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-serif font-medium text-green-accent transition-opacity hover:opacity-90"
               >
                 {tier.cta} →
               </button>

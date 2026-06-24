@@ -141,7 +141,7 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
           <p className="text-meta text-green-accent leading-relaxed">{PRO.foundingNote}</p>
         </div>
 
-        <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-text-muted">
+        <div className="flex items-center gap-3 text-meta uppercase tracking-wider text-text-muted">
           <span className="h-px flex-1 bg-border-default" /> or <span className="h-px flex-1 bg-border-default" />
         </div>
 
@@ -165,7 +165,7 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
                 {copied ? 'Link copied! ' : 'Shared! '}Your month of Pro unlocks the moment a colleague
                 creates their account through your link.
               </p>
-              <button onClick={() => refreshEntitlement()} className="text-[11px] text-green-accent underline">
+              <button onClick={() => refreshEntitlement()} className="text-meta text-green-accent underline">
                 Check access now
               </button>
             </div>

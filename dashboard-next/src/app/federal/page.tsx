@@ -61,13 +61,13 @@ function FederalActionCard({ action }: { action: FederalActionSummary }) {
       </div>
 
       {action.ai_summary && (
-        <p className="text-text-secondary text-sm">{fixEncoding(action.ai_summary)}</p>
+        <p className="text-text-secondary text-body">{fixEncoding(action.ai_summary)}</p>
       )}
 
       {action.material_categories && action.material_categories.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {action.material_categories.filter(m => m !== 'other').map(m => (
-            <span key={m} className="bg-bg-primary border border-border-default rounded px-1.5 py-0.5 text-[11px] text-text-muted">
+            <span key={m} className="bg-bg-primary border border-border-default rounded px-1.5 py-0.5 text-meta text-text-muted">
               {titleCase(m)}
             </span>
           ))}
@@ -152,7 +152,7 @@ function LitigationCaseRow({ caseData, onSelect, isSelected }: {
 
 function LitigationCaseDetail({ caseId }: { caseId: number }) {
   const { data } = useLitigationCase(caseId);
-  if (!data?.events?.length) return <div className="text-text-muted text-sm px-4 py-2">No events recorded.</div>;
+  if (!data?.events?.length) return <div className="text-text-secondary text-sm px-4 py-2">No events recorded.</div>;
   return (
     <div className="bg-bg-primary border border-border-default rounded-lg mx-1 p-4 space-y-3">
       <div className="text-text-muted text-xs uppercase mb-2">Case Events</div>
@@ -275,7 +275,7 @@ export default function FederalPage() {
         {actionsLoading ? (
           <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-28 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
         ) : filteredActions.length === 0 ? (
-          <div className="text-center text-text-muted py-8">No federal actions found.</div>
+          <div className="text-center text-text-secondary py-8">No federal actions found.</div>
         ) : (
           <div className="space-y-3">
             {filteredActions.map(a => <FederalActionCard key={a.id} action={a} />)}
@@ -292,7 +292,7 @@ export default function FederalPage() {
         {casesLoading ? (
           <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
         ) : cases.length === 0 ? (
-          <div className="text-center text-text-muted py-8">No litigation cases tracked.</div>
+          <div className="text-center text-text-secondary py-8">No litigation cases tracked.</div>
         ) : (
           <div className="space-y-2">
             {cases.map(c => (

@@ -324,5 +324,24 @@ async def stripe_webhook(
             ent.plan = "free"
             ent.status = "canceled"
             await db.commit()
+            # The cancel happened in the Stripe-hosted portal, so this email is the only acknowledgement
+            # the user gets. Best-effort, after we ACK Stripe.
+            if ent.email:
+                from app.alerts.welcome_email import send_subscription_canceled
+
+                background_tasks.add_task(send_subscription_canceled, ent.email)
+
+    elif etype == "invoice.payment_failed":
+        # A Pro renewal card failed — warn them and point at the portal before the seat lapses to free.
+        # Requires this event to be subscribed on the Stripe dashboard webhook to ever fire.
+        res = await db.execute(
+            select(Entitlement).where(Entitlement.stripe_customer_id == obj.get("customer"))
+        )
+        ent = res.scalar_one_or_none()
+        email = (ent.email if ent else None) or (obj.get("customer_email") or "").lower().strip()
+        if email:
+            from app.alerts.welcome_email import send_payment_failed
+
+            background_tasks.add_task(send_payment_failed, email)
 
     return {"received": True}

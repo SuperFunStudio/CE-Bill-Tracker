@@ -21,11 +21,11 @@ function pct(n: number | null | undefined): string {
 }
 
 function GapBadge({ gap }: { gap: number | null }) {
-  if (gap == null) return <span className="text-text-muted text-[11px]">—</span>;
+  if (gap == null) return <span className="text-text-muted text-meta">—</span>;
   const positive = gap >= 0;
   return (
     <span
-      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+      className={`shrink-0 rounded-full border px-2 py-0.5 text-meta font-semibold ${
         positive
           ? 'border-[rgb(var(--green-accent))] text-[rgb(var(--green-accent))]'
           : 'border-red-500 text-red-600 dark:text-red-400'
@@ -109,7 +109,7 @@ export function StateCyclesView() {
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-text-muted text-sm">No tracked circular-economy cycles for {STATE_NAMES[state] ?? state} yet.</p>
+        <p className="text-text-secondary text-body">No tracked circular-economy cycles for {STATE_NAMES[state] ?? state} yet.</p>
       ) : (
         <div className="space-y-2">
           {rows.map((r) => (
@@ -120,7 +120,7 @@ export function StateCyclesView() {
             >
               <div className="w-24 shrink-0">
                 <div className="font-semibold text-text-primary text-sm">{r.biennium}</div>
-                {r.in_flight && <div className="text-text-muted text-[10px]">in progress</div>}
+                {r.in_flight && <div className="text-text-muted text-meta">in progress</div>}
               </div>
               <MiniBars ce={r.ce_rate} base={r.baseline_rate} />
               <div className="min-w-0 flex-1 text-xs text-text-muted">

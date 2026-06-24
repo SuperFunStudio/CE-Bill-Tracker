@@ -217,6 +217,73 @@ export const FIPS_TO_ABBR: Record<string, string> = {
   '56': 'WY',
 };
 
+/**
+ * A LegiScan deep link for a bill — a reliable backup when the primary source link is dead.
+ * LegiScan's stable scheme is legiscan.com/{STATE}/bill/{NUMBER} (works for "US" federal bills too);
+ * it resolves to the latest matching session. Returns null when we lack a state or bill number.
+ */
+export function legiscanUrl(state?: string | null, billNumber?: string | null): string | null {
+  if (!state || !billNumber) return null;
+  const num = billNumber.replace(/\s+/g, '');
+  if (!num) return null;
+  return `https://legiscan.com/${state.toUpperCase()}/bill/${encodeURIComponent(num)}`;
+}
+
+export interface SourceLink {
+  href: string;
+  label: string;
+  /** true when href is a fallback (resolved redirect or LegiScan), not the original source_url. */
+  isFallback: boolean;
+  /** Short user-facing note explaining the fallback, or null when the original link is used as-is. */
+  note: string | null;
+}
+
+/**
+ * Resolve the best outbound "View Source" link for a bill, honoring audited link health
+ * (source_url_status, set by scripts/audit_bill_source_links.py) so a click never lands on a
+ * dead/moved page when we already know better:
+ *   - redirected -> link to the resolved URL (the page moved)
+ *   - dead       -> link to a LegiScan backup (or keep the original with a warning if none exists)
+ *   - alive / blocked / unchecked (null) -> the original source_url as-is. "blocked" means we
+ *     couldn't verify (a WAF/timeout), NOT that it's broken — we never downgrade an unproven link.
+ * Returns null only when there's no usable link at all.
+ */
+export function resolveSourceLink(bill: {
+  source_url: string | null;
+  source_url_status?: string | null;
+  source_url_final?: string | null;
+  state: string;
+  bill_number: string | null;
+}): SourceLink | null {
+  const { source_url, source_url_status, source_url_final, state, bill_number } = bill;
+
+  if (source_url_status === 'redirected' && source_url_final) {
+    return { href: source_url_final, label: 'View Source ↗', isFallback: true,
+             note: 'The original source page moved — this is the updated link.' };
+  }
+
+  if (source_url_status === 'dead') {
+    const ls = legiscanUrl(state, bill_number);
+    if (ls) {
+      return { href: ls, label: 'View on LegiScan ↗', isFallback: true,
+               note: 'The original source link is unavailable — showing the bill on LegiScan instead.' };
+    }
+    if (source_url) {
+      return { href: source_url, label: 'View Source ↗', isFallback: false,
+               note: 'This source link may be unavailable.' };
+    }
+    return null;
+  }
+
+  if (source_url) {
+    return { href: source_url, label: 'View Source ↗', isFallback: false, note: null };
+  }
+
+  // No source_url at all — offer LegiScan if we can build one.
+  const ls = legiscanUrl(state, bill_number);
+  return ls ? { href: ls, label: 'View on LegiScan ↗', isFallback: true, note: null } : null;
+}
+
 /** Download data as a CSV file from the browser */
 export function downloadCsv(filename: string, rows: Record<string, unknown>[]): void {
   if (!rows.length) return;

@@ -117,7 +117,7 @@ export function StateProfile({ abbr }: { abbr: string }) {
     return (
       <div className="p-6 max-w-3xl mx-auto space-y-4">
         <GazetteHeader title="Unknown state" />
-        <p className="text-text-muted text-sm">
+        <p className="text-text-secondary text-body">
           We don&rsquo;t recognize &ldquo;{abbr}&rdquo;.{' '}
           <Link href="/states/" className="text-green-accent hover:underline">Back to State Standings</Link>
         </p>
@@ -153,21 +153,21 @@ export function StateProfile({ abbr }: { abbr: string }) {
         </div>
 
         {stats.stages.enacted === 0 ? (
-          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-body text-text-secondary">
             No enacted EPR law in {name} yet — there&rsquo;s nothing to comply with here.
           </p>
         ) : pathwaysLoading && pathways.length === 0 ? (
           <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="h-20 bg-bg-secondary rounded animate-pulse" />)}</div>
         ) : pathwaysError ? (
-          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-text-muted">
+          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-body text-text-secondary">
             Couldn&rsquo;t load compliance details right now — please try again shortly.
           </p>
         ) : pathways.length === 0 ? (
-          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-text-muted">
+          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-body text-text-secondary">
             Compliance pathways for {name} aren&rsquo;t available yet.
           </p>
         ) : actionable.length === 0 ? (
-          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-sm text-text-secondary">
+          <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-3 text-body text-text-secondary">
             {name} has enacted circularity legislation, but none yet imposes a producer-compliance
             obligation (e.g. labeling, disposal-ban, or study laws).
           </p>
@@ -261,12 +261,12 @@ export function StateProfile({ abbr }: { abbr: string }) {
             {programs.map((p, i) => (
               <li key={i} className="rounded-lg border border-border-default bg-bg-secondary p-4">
                 <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className="font-mono text-[10px] uppercase tracking-wide text-green-accent border border-green-accent/40 rounded px-1.5 py-0.5">
+                  <span className="font-mono text-meta uppercase tracking-wide text-green-accent border border-green-accent/40 rounded px-1.5 py-0.5">
                     {PROGRAM_KIND_LABEL[p.kind]}
                   </span>
                   <h3 className="font-serif text-text-primary">{p.title}</h3>
                 </div>
-                <p className="text-text-secondary text-sm mt-1.5 leading-relaxed">{p.summary}</p>
+                <p className="text-text-secondary text-body mt-1.5 leading-relaxed">{p.summary}</p>
                 {(p.url || p.source) && (
                   <p className="text-xs text-text-muted mt-2">
                     {p.url ? (
@@ -318,11 +318,11 @@ export function StateProfile({ abbr }: { abbr: string }) {
             {filteredBills.length > 0 ? (
               <BillTable bills={filteredBills} autoPageSize={8} />
             ) : (
-              <p className="text-text-muted text-sm py-2">No bills match these filters.</p>
+              <p className="text-text-secondary text-body py-2">No bills match these filters.</p>
             )}
           </>
         ) : (
-          <p className="text-text-muted text-sm">
+          <p className="text-text-secondary text-body">
             No tracked circularity legislation in {name} yet — wide-open territory.
           </p>
         )}
@@ -336,7 +336,7 @@ function PathwayCard({ p }: { p: CompliancePathway }) {
   return (
     <li className="rounded-lg border border-border-default bg-bg-secondary p-4">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <span className="font-mono text-[10px] uppercase tracking-wide text-green-accent border border-green-accent/40 rounded px-1.5 py-0.5">
+        <span className="font-mono text-meta uppercase tracking-wide text-green-accent border border-green-accent/40 rounded px-1.5 py-0.5">
           {actionLabel}
         </span>
         <h3 className="font-serif text-text-primary">
@@ -344,7 +344,7 @@ function PathwayCard({ p }: { p: CompliancePathway }) {
           {p.bill_title && <span className="text-text-secondary font-sans text-sm"> · {p.bill_title}</span>}
         </h3>
       </div>
-      <p className="text-text-secondary text-sm mt-1.5 leading-relaxed">{p.action_summary}</p>
+      <p className="text-text-secondary text-body mt-1.5 leading-relaxed">{p.action_summary}</p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-text-muted">
         {p.entity && (
           p.registration_url ? (

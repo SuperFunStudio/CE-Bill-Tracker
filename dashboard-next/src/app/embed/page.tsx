@@ -128,7 +128,7 @@ export default function EmbedPage() {
         <BillTable bills={tableBills} autoPageSize={config.rows} />
       )}
 
-      <div className="text-text-muted text-[11px] text-right pt-1">
+      <div className="text-text-muted text-meta text-right pt-1">
         Powered by{' '}
         <a href={siteRoot} target="_blank" rel="noopener noreferrer" className="hover:underline">
           Battle of the Bills

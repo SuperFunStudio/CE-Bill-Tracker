@@ -9,11 +9,11 @@ export const metadata: Metadata = {
     'service: accounts, subscriptions, acceptable use, data, disclaimers, and liability.',
 };
 
-// NOTE FOR REVIEW (Kenny): the bracketed placeholders below — legal entity name, governing-law
-// state, and effective date — need to be confirmed with counsel before this is treated as final.
-const EFFECTIVE_DATE = '[EFFECTIVE DATE]';
-const ENTITY = 'Kenny Arnold Design ("we," "us," or "the Company")';
-const GOVERNING_STATE = '[STATE]';
+// NOTE FOR REVIEW (Kenny): have counsel review before treating this as final, but the entity,
+// governing-law state, and effective year below are confirmed.
+const EFFECTIVE_DATE = '2024';
+const ENTITY = 'SUPERFUN STUDIO LLC ("we," "us," or "the Company")';
+const GOVERNING_STATE = 'New York';
 
 function Section({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (

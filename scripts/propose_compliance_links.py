@@ -23,7 +23,6 @@ Usage:
 """
 import argparse
 import json
-import os
 import sys
 import time
 
@@ -35,8 +34,7 @@ from app.config import settings
 
 # Reuse the layer-1 four-bucket classifier so a proposed link is verified the same way the
 # existing links are audited (dead candidates are dropped; blocked = correct-but-WAF'd is kept).
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from audit_compliance_links import classify  # noqa: E402
+from app.links.health import classify
 
 MODEL = "claude-opus-4-8"  # default per house guidance; override with --model (e.g. claude-sonnet-4-6 for cost)
 

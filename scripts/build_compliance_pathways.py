@@ -240,6 +240,201 @@ BILL_OVERRIDES = {
         action_summary="A paint manufacturer must register its company and brands with PaintCare, "
                        "the designated paint stewardship organization, to comply with California's "
                        "architectural paint stewardship program."),
+    # === Layer-3 homepage batch, applied 2026-06-19 (verified links; see compliance_link_proposals_homepage_full.txt) ===
+    # CA AB899 — AB 899 (Ch. 627, 2025) amends PRC §14549.7 to raise the Glass Market Development Payment rate, and this is the official CalRecycle .gov program page describing how glass beverage container manufacturers qualify, report, and claim that government-run payment.
+    #   verify: [alive] ok  |  confidence=0.74  |  suggested entity: California Department of Resources Recycling and Recovery (CalRecycle) — Glass Market Development Payment (GMDP) Program (agency)
+    ("CA", _norm_bn("AB899")): dict(
+        url="https://calrecycle.ca.gov/bevcontainer/wine-spirits/",
+        action_type="report_to_program",
+        action_summary="A California glass beverage container manufacturer that buys in-state recycled glass should file a GMD Determination of Eligibility and submit quarterly Glass Market Development Payment claim/reports to CalRecycle (Statistical Information Section, MarketInformation@calrecycle.ca.gov) under PRC \u00a714549.7 to receive the per-ton payment."),
+    # CA SB-1181 — SB-1181 amends the state-run California Tire Recycling Act (manifest/hauler tracking moving to CalRecycle's electronic system); CalRecycle's official tires program page is the authoritative state registration/reporting hub, as there is no designated producer PRO for tires in California.
+    #   verify: [alive] ok  |  confidence=0.55  |  suggested entity: California Department of Resources Recycling and Recovery (CalRecycle) (agency)
+    ("CA", _norm_bn("SB-1181")): dict(
+        url="https://calrecycle.ca.gov/tires/",
+        action_type="register_with_state",
+        action_summary="Register with CalRecycle's Waste Tire Management Program (e.g., as a waste/used tire hauler obtain a Tire Program ID and use CalRecycle's electronic manifest system under SB-1181), and register a California Tire Fee account with CDTFA to report and remit the tire fee."),
+    # CA SB-1723 — This is DPR's official program page implementing FAC 12841.4, which states the section requires every covered pesticide registrant to participate in a recycling program and annually certify compliance to the director.
+    #   verify: [redirected] redirected to a different location  |  confidence=0.9  |  suggested entity: California Department of Pesticide Regulation (DPR) (agency)
+    ("CA", _norm_bn("SB-1723")): dict(
+        url="https://www.cdpr.ca.gov/docs/mill/container_recycling/pest_container.htm",
+        action_type="report_to_program",
+        action_summary="If you are a registrant of a production agricultural- or structural-use pesticide sold in California in rigid nonrefillable HDPE containers of 55 gallons or less, establish or participate in an ANSI/ASABE S596-compliant recycling program and submit an annual certifying document to the Department of Pesticide Regulation director."),
+    # CA SB-212 — This is CalRecycle's official SB 212 'Covered Entities' requirements page, which spells out exactly what sharps producers must do to comply, citing the governing Public Resources Code sections.
+    #   verify: [alive] ok  |  confidence=0.92  |  suggested entity: California Department of Resources Recycling and Recovery (CalRecycle) (agency)
+    ("CA", _norm_bn("SB-212")): dict(
+        entity_slug="med-project",
+        url="https://calrecycle.ca.gov/epr/pharmasharps/coveredentities/",
+        action_type="join_pro",
+        action_summary="A sharps manufacturer (covered entity) must establish and implement a CalRecycle-approved home-generated sharps stewardship program\u2014typically by joining the designated stewardship organization MED-Project\u2014and submit product lists to the Board of Pharmacy plus a stewardship plan, budget, and annual reports to CalRecycle."),
+    # CA SB-38 — This is CalRecycle's official registration page stating that distributors and manufacturers must register with the state to meet the program's reporting and payment requirements for beverage containers (glass, metal, plastic).
+    #   verify: [alive] ok  |  confidence=0.92  |  suggested entity: California Department of Resources Recycling and Recovery (CalRecycle) (agency)
+    ("CA", _norm_bn("SB-38")): dict(
+        url="https://www2.calrecycle.ca.gov/BevContainerDetermination/",
+        action_type="register_with_state",
+        action_summary="Beverage manufacturers and distributors must register with CalRecycle by submitting the Beverage Manufacturer & Distributor Registration Form to meet the reporting and payment requirements of California's Beverage Container Recycling and Litter Reduction Act."),
+    # CO HB26-1111 — The CDA Pesticides Program page is the official state agency page administering the HB26-1111 Pesticide Disposal and Recycling Program, explicitly developing rules for product registration and disposal fees for pesticide registrants.
+    #   verify: [alive] ok  |  confidence=0.85  |  suggested entity: Colorado Department of Agriculture (CDA), Pesticides Program — Pesticide Disposal and Recycling Program (agency)
+    ("CO", _norm_bn("HB26-1111")): dict(
+        url="https://ag.colorado.gov/plants/pesticides",
+        action_type="register_with_state",
+        action_summary="Pesticide producers/registrants must register their products with and pay disposal fees to the Colorado Department of Agriculture's Pesticide Disposal and Recycling Program (Enterprise) created by HB26-1111."),
+    # CT HB-7249 — This is the official CT DEEP program page that explicitly states manufacturers must register their brand(s) with DEEP using the ERCC online registration to comply with the CT Electronics Recycling Law (CGS §§22a-629–640).
+    #   verify: [alive] ok  |  confidence=0.95  |  suggested entity: Connecticut Department of Energy and Environmental Protection (DEEP) (agency)
+    ("CT", _norm_bn("HB-7249")): dict(
+        url="https://portal.ct.gov/DEEP/Reduce-Reuse-Recycle/Electronics/Requirements-for-Manufacturers",
+        action_type="register_with_state",
+        action_summary="Manufacturers of covered electronic devices (computers, monitors, printers, televisions) must register their brands annually with Connecticut DEEP via the Electronics Recycling Coordination Clearinghouse (ERCC) online 'eCycle' registration system and pay the annual registration fee."),
+    # FL Fla. Stat. 403.7192 — It is the Florida DEP (state agency) program page that specifically administers and explains the Fla. Stat. 403.7192 manufacturer/marketer 'unit management system' obligation for rechargeable batteries; the statute creates no separate online producer-registration portal or designated PRO.
+    #   verify: [blocked] server refused / unavailable  |  confidence=0.8  |  suggested entity: Florida Department of Environmental Protection (DEP) (agency)
+    ("FL", _norm_bn("Fla. Stat. 403.7192")): dict(
+        url="https://floridadep.gov/waste/permitting-compliance-assistance/content/battery-main-page",
+        action_type="file_individual_plan",
+        action_summary="A manufacturer or marketer of nickel-cadmium or small sealed lead-acid rechargeable batteries (and products containing them) sold in Florida must implement and operate a 'unit management program' for collection, labeling, and recycling/disposal of the units\u2014done individually, through a representative manufacturers' organization, or by contract\u2014per Fla. Stat. 403.7192 as administered by the Florida DEP."),
+    # IN HB-1589 — This is the official IDEM (in.gov) Indiana E-Cycle program page implementing the Indiana E-Waste Law (IC 13-20.5), which explicitly states manufacturers must submit online registration and an annual report.
+    #   verify: [alive] ok  |  confidence=0.97  |  suggested entity: Indiana Department of Environmental Management (IDEM) — Indiana E-Cycle Program (agency)
+    ("IN", _norm_bn("HB-1589")): dict(
+        url="https://www.in.gov/idem/recycle/indiana-e-cycle/",
+        action_type="register_with_state",
+        action_summary="Manufacturers of video display devices sold to Indiana households must submit an online manufacturer registration and annual report to IDEM's Indiana E-Cycle Program (via its Re-TRAC portal) by March 1 and pay the registration fee."),
+    # MD HB-575 — This official MDE .gov program page describes the Statewide Electronics Recycling Program's manufacturer registration requirement and links directly to the registration form and guidelines.
+    #   verify: [alive] ok  |  confidence=0.95  |  suggested entity: Maryland Department of the Environment (MDE) — Statewide Electronics Recycling Program (agency)
+    ("MD", _norm_bn("HB-575")): dict(
+        url="https://mde.maryland.gov/programs/land/WasteManagement/Pages/eCycling.aspx",
+        action_type="register_with_state",
+        action_summary="A covered electronic device manufacturer must register annually with the Maryland Department of the Environment (by March) and pay the annual fee, using MDE's Electronic Manufacturer Registration Form."),
+    # ME LD-1921 — This is the official Maine DEP (Bureau of Remediation and Waste Management) program page specifically for mercury auto-switch recycling under 38 MRSA §1665-A, and it names ELVS as the collective compliance program manufacturers pay into.
+    #   verify: [alive] ok  |  confidence=0.82  |  suggested entity: End of Life Vehicle Solutions (ELVS) — national mercury switch recovery program designated by Maine DEP (pro)
+    ("ME", _norm_bn("LD-1921")): dict(
+        entity_slug="elv-solutions",
+        url="https://www.maine.gov/dep/waste/motorvehiclerecycling/hg-recycling.html",
+        action_type="join_pro",
+        action_summary="A motor vehicle manufacturer satisfies its 38 MRSA \u00a71665-A 'individually or collectively' obligation by funding/participating in the ELVS collective mercury auto-switch collection and recycling program that Maine DEP directs producers to (sign up at elvsolutions.org, $4/switch), rather than running a separate plan."),
+    # MI SB-897 — This is the official EGLE state agency program page for Michigan's Electronics Recycling Act (Act 451, Part 173), which explicitly states manufacturers must annually register brands and links to the Ecycle registration portal.
+    #   verify: [alive] ok  |  confidence=0.95  |  suggested entity: Michigan Department of Environment, Great Lakes, and Energy (EGLE) (agency)
+    ("MI", _norm_bn("SB-897")): dict(
+        url="https://www.michigan.gov/egle/about/organization/materials-management/ewaste/takeback-program",
+        action_type="register_with_state",
+        action_summary="Manufacturers of covered electronic devices must annually register each of their brands with Michigan EGLE's Electronic Waste Takeback Program (via the Ecycle registration system at ecycleregistration.org) and operate a free consumer takeback program."),
+    # MN HF-854 — This is the MPCA's official program page for electronics manufacturers under the Minnesota Electronics Recycling Act, detailing the required registration form, fee, and recycling obligation.
+    #   verify: [alive] ok  |  confidence=0.96  |  suggested entity: Minnesota Pollution Control Agency (MPCA) (agency)
+    ("MN", _norm_bn("HF-854")): dict(
+        url="https://www.pca.state.mn.us/business-with-us/electronics-manufacturers",
+        action_type="register_with_state",
+        action_summary="Manufacturers of video display devices must register with the Minnesota Pollution Control Agency (MPCA), pay an annual registration fee, and meet a recycling obligation based on their Minnesota market share by filing the manufacturer registration form (w-gen2-52) by August 15 each year."),
+    # NC SB-1492 — This is the official NC DEQ state program page for electronics management that lists the manufacturer registration deadlines, fees, annual reporting, and links to the e-Cycle Registration portal and required forms.
+    #   verify: [alive] ok  |  confidence=0.95  |  suggested entity: North Carolina Department of Environmental Quality (NC DEQ), Division of Waste Management, Solid Waste Section (agency)
+    ("NC", _norm_bn("SB-1492")): dict(
+        url="https://www.deq.nc.gov/about/divisions/waste-management/solid-waste-section/special-wastes-and-alternative-handling/electronics-management",
+        action_type="register_with_state",
+        action_summary="Computer and television manufacturers must register annually with NC DEQ's Division of Waste Management (via the e-Cycle Registration portal linked on the Electronics Management page), pay annual registration fees, and submit annual reports; computer manufacturers must also file a recycling plan."),
+    # NJ A-3572 — This is the official NJDEP E-Cycle Manufacturers program page on the state's dep.nj.gov domain, dedicated specifically to manufacturer obligations under the NJ Electronic Waste Management Act.
+    #   verify: [alive] ok  |  confidence=0.92  |  suggested entity: New Jersey Department of Environmental Protection (NJDEP), Division of Sustainable Waste Management — E-Cycle Program (agency)
+    ("NJ", _norm_bn("A-3572")): dict(
+        url="https://dep.nj.gov/dshw/rhwm/e-waste/e-cycle-manu/",
+        action_type="register_with_state",
+        action_summary="Manufacturers of covered electronic devices must register annually with the NJDEP E-Cycle program and submit a collection/recycling plan to comply."),
+    # OK SB-1631 — This is the official Oklahoma DEQ program page for OCERA (27A O.S. § 2-11-601, SB-1631) that links the statute, rules, recovery plan guide, and annual report form, and details manufacturer registration/reporting obligations.
+    #   verify: [alive] ok  |  confidence=0.97  |  suggested entity: Oklahoma Department of Environmental Quality (DEQ) (agency)
+    ("OK", _norm_bn("SB-1631")): dict(
+        url="https://oklahoma.gov/deq/divisions/land-protection/sust-materials-management/recycling/electronics-recycling/ocera.html",
+        action_type="file_individual_plan",
+        action_summary="A manufacturer that sells, imports, or produces 50+ covered computers/monitors per year in Oklahoma must implement an individual take-back recovery plan, submit an annual manufacturer report, and pay an annual fee to the Oklahoma DEQ by March 1 each year (email OCERA.Reporting@deq.ok.gov / cat.ecker@deq.ok.gov)."),
+    # OR HB-2626 — This is the official Oregon.gov DEQ Oregon E-Cycles 'For Manufacturers' page that states covered electronics manufacturers must register with DEQ by Dec. 31 and provides the registration process and fees.
+    #   verify: [alive] ok  |  confidence=0.97  |  suggested entity: Oregon Department of Environmental Quality (DEQ) — Oregon E-Cycles (agency)
+    ("OR", _norm_bn("HB-2626")): dict(
+        url="https://www.oregon.gov/deq/ecycles/pages/manufacturers.aspx",
+        action_type="register_with_state",
+        action_summary="Manufacturers of computers, monitors, TVs, and desktop printers sold in or into Oregon must register their brands with Oregon DEQ (and submit annual sales data) to comply with the Oregon E-Cycles program."),
+    # OR HB-3273 — This is the official Oregon DEQ program page that administers HB-3273 (ORS 459A.200+), names the DEQ-approved program operators manufacturers must join, and links the manufacturer participation guidance.
+    #   verify: [alive] ok  |  confidence=0.9  |  suggested entity: Oregon Department of Environmental Quality (DEQ) (agency)
+    ("OR", _norm_bn("HB-3273")): dict(
+        entity_slug="med-project",
+        url="https://www.oregon.gov/deq/mm/pages/drugtakeback.aspx",
+        action_type="join_pro",
+        action_summary="A covered drug manufacturer must participate in and fund a DEQ-approved drug take-back program operator (e.g., Drug Takeback Solutions Foundation or MED-Project USA, LLC) and ensure its covered drugs are listed via the Oregon Board of Pharmacy registration, as overseen by Oregon DEQ."),
+    # SC H-4093 — This is the official SCDES program page implementing the Act, which expressly states manufacturers must register and pay fees and provides the registration contact/portal.
+    #   verify: [alive] ok  |  confidence=0.92  |  suggested entity: South Carolina Department of Environmental Services (SCDES) (agency)
+    ("SC", _norm_bn("H-4093")): dict(
+        url="https://des.sc.gov/community/recycling-waste-reduction/electronics-recycling/electronics-recycling-businesses-retailers-and-manufacturers",
+        action_type="register_with_state",
+        action_summary="Manufacturers of covered computer/monitor/television devices must register with the SC Department of Environmental Services (SCDES) through its e-permitting system (contact e-register@des.sc.gov), pay the applicable fee, and provide or fund a no-cost recovery program."),
+    # TX HB-2714 — This is the official TCEQ program page for HB 2714's Texas Recycles Computers Program, citing 30 TAC 328.137 and providing the manufacturer notification/recovery-plan and annual report forms.
+    #   verify: [alive] ok  |  confidence=0.95  |  suggested entity: Texas Commission on Environmental Quality (TCEQ) — Texas Recycles Computers Program (agency)
+    ("TX", _norm_bn("HB-2714")): dict(
+        url="https://www.tceq.texas.gov/p2/recycle/electronics/computer-recycling.html",
+        action_type="file_individual_plan",
+        action_summary="A computer-equipment manufacturer selling new equipment in or into Texas must submit a notification and recovery plan (TCEQ-20597) to the TCEQ Texas Recycles Computers Program to get on TCEQ's manufacturer list, and file an annual recycling report by January 31 each year."),
+    # UT SB-184 — The enacted statute (Utah Code 19-6-1203, the codification of SB-184) is the authoritative source that defines the manufacturer's annual reporting obligation 'to the department' (Utah DEQ), and DEQ provides no separate dedicated e-waste producer reporting portal.
+    #   verify: [alive] ok  |  confidence=0.78  |  suggested entity: Utah Department of Environmental Quality, Division of Waste Management and Radiation Control (agency)
+    ("UT", _norm_bn("SB-184")): dict(
+        url="https://le.utah.gov/xcode/Title19/Chapter6/C19-6-P12_1800010118000101.pdf",
+        action_type="report_to_program",
+        action_summary="A manufacturer of consumer electronic devices must prepare and submit an annual report (listing eligible recycling programs) to the Utah Department of Environmental Quality on or before August 1 each year before offering devices for sale in Utah."),
+    # VA HB-344 — This is the official Virginia DEQ statewide-recycling program page for the Computer Recovery and Recycling Act and hosts the Computer Manufacturer Registration Form, Annual Report Form, and recovery-plan requirements.
+    #   verify: [blocked] server refused / unavailable  |  confidence=0.97  |  suggested entity: Virginia Department of Environmental Quality (DEQ) (agency)
+    ("VA", _norm_bn("HB-344")): dict(
+        url="https://www.deq.virginia.gov/land-waste/waste-management/recycling/statewide-recycling-programs/computer-electronics-recycling",
+        action_type="file_individual_plan",
+        action_summary="A computer manufacturer that sold more than 500 computer units under its brand in Virginia must file its own recovery/recycling plan with the Virginia DEQ (using the Computer Manufacturer Registration Form) before its products can be sold in the state."),
+    # VT S-77 — This is the official Vermont DEC (.gov) E-Cycles program page for manufacturers, which states non-exempt manufacturers must register with the state and links directly to the state registration form.
+    #   verify: [alive] ok  |  confidence=0.97  |  suggested entity: Vermont Department of Environmental Conservation – E-Cycles Program (agency)
+    ("VT", _norm_bn("S-77")): dict(
+        url="https://dec.vermont.gov/e-cycles-manufacturers-and-retailers",
+        action_type="register_with_state",
+        action_summary="An electronics manufacturer selling covered devices (computers, monitors, printers, TVs) in Vermont must register and pay registration and implementation fees through the Vermont DEC E-Cycles Program before its brand can be legally sold in the state."),
+    # WA SB-5939 — This is the official Washington Department of Ecology (.gov) program page dedicated to the PV Module Stewardship and Takeback Program created by SB 5939, citing the statute and linking to the manufacturer stewardship-plan guidance.
+    #   verify: [alive] ok  |  confidence=0.92  |  suggested entity: Washington State Department of Ecology (agency)
+    ("WA", _norm_bn("SB-5939")): dict(
+        url="https://ecology.wa.gov/waste-toxics/reducing-recycling-waste/our-recycling-programs/solar-panels",
+        action_type="file_individual_plan",
+        action_summary="A solar panel (PV module) manufacturer must develop and submit a stewardship/takeback plan to the Washington Department of Ecology for approval (per Chapter 70A.510.010 RCW), following Ecology's manufacturer plan guidance, before selling modules in or into Washington."),
+    # WI SB-107 — This is the official Wisconsin DNR program page specifically for electronics manufacturers, detailing who must register and the registration requirements under the E-Cycle Wisconsin law.
+    #   verify: [alive] ok  |  confidence=0.97  |  suggested entity: E-Cycle Wisconsin, Wisconsin Department of Natural Resources (DNR) (agency)
+    ("WI", _norm_bn("SB-107")): dict(
+        url="https://dnr.wisconsin.gov/topic/Ecycle/Manufacturers.html",
+        action_type="register_with_state",
+        action_summary="Manufacturers of covered electronic devices sold to Wisconsin households or K-12 schools must register annually with E-Cycle Wisconsin (administered by the Wisconsin DNR) and meet their assigned recycling targets."),
+    # WV SB-746 — This is WVDEP's official .gov 'Covered Electronic Device Manufacturer and Retailer Compliance Information' page, which directly cites SB-746 and the WV Code §22-15A-25 manufacturer registration requirement.
+    #   verify: [alive] ok  |  confidence=0.97  |  suggested entity: West Virginia Department of Environmental Protection (WVDEP), Rehabilitation Environmental Action Plan (REAP) – Covered Electronic Devices Program (agency)
+    ("WV", _norm_bn("SB-746")): dict(
+        url="https://dep.wv.gov/environmental-advocate/reap/cedprogram/Pages/default.aspx",
+        action_type="register_with_state",
+        action_summary="A manufacturer that sells or leases covered electronic devices in West Virginia must register annually (by January 1 each year) with the WV Department of Environmental Protection's REAP Covered Electronic Devices program and pay the registration fee."),
+    # CA AB-1311 — beverage-container law; Layer-3 candidate 404'd on a stale /Registration/
+    #   subpath, substituted CalRecycle's working bev-distributor/manufacturer page (verified 200).
+    ("CA", _norm_bn("AB-1311")): dict(
+        entity_slug="calrecycle",
+        url="https://calrecycle.ca.gov/bevcontainer/bevdistman/",
+        action_type="register_with_state",
+        action_summary="Beverage manufacturers and distributors of covered containers must register with CalRecycle's Beverage Container Recycling Program (Beverage Distributor/Manufacturer registration) and file the required reports and CRV/processing-fee payments."),
+    # CA AB-962 — beverage-container law; Layer-3 candidate 404'd on a stale /Registration/
+    #   subpath, substituted CalRecycle's working bev-distributor/manufacturer page (verified 200).
+    ("CA", _norm_bn("AB-962")): dict(
+        entity_slug="calrecycle",
+        url="https://calrecycle.ca.gov/bevcontainer/bevdistman/",
+        action_type="register_with_state",
+        action_summary="Beverage manufacturers and distributors of covered containers must register with CalRecycle's Beverage Container Recycling Program (Beverage Distributor/Manufacturer registration) and file the required reports and CRV/processing-fee payments."),
+    # CA SB1113 — beverage-container law; Layer-3 candidate 404'd on a stale /Registration/
+    #   subpath, substituted CalRecycle's working bev-distributor/manufacturer page (verified 200).
+    ("CA", _norm_bn("SB1113")): dict(
+        entity_slug="calrecycle",
+        url="https://calrecycle.ca.gov/bevcontainer/bevdistman/",
+        action_type="register_with_state",
+        action_summary="Beverage manufacturers and distributors of covered containers must register with CalRecycle's Beverage Container Recycling Program (Beverage Distributor/Manufacturer registration) and file the required reports and CRV/processing-fee payments."),
+    # CA SB353 — beverage-container law; Layer-3 candidate 404'd on a stale /Registration/
+    #   subpath, substituted CalRecycle's working bev-distributor/manufacturer page (verified 200).
+    ("CA", _norm_bn("SB353")): dict(
+        entity_slug="calrecycle",
+        url="https://calrecycle.ca.gov/bevcontainer/bevdistman/",
+        action_type="register_with_state",
+        action_summary="Beverage manufacturers and distributors of covered containers must register with CalRecycle's Beverage Container Recycling Program (Beverage Distributor/Manufacturer registration) and file the required reports and CRV/processing-fee payments."),
+    # CA SB-20 — Electronic Waste Recycling Act of 2003; recovered CalRecycle CEW manufacturer
+    #   page (verified 200) after the Layer-3 candidate 404'd.
+    ("CA", _norm_bn("SB-20")): dict(
+        entity_slug="calrecycle",
+        url="https://calrecycle.ca.gov/electronics/manufacturer/",
+        action_type="register_with_state",
+        action_summary="Manufacturers of covered electronic devices must comply with CalRecycle's Covered Electronic Waste (CEW) program requirements for manufacturers under the Electronic Waste Recycling Act of 2003 (SB 20)."),
 }
 
 

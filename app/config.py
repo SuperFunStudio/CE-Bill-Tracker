@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # Free "OC" id from https://open.law.go.kr signup (the registered email prefix); the calling
     # IP/domain must also be registered there. Empty = KR ingest disabled.
     lawgokr_oc: str = ""
+    # Laws.Africa Indigo Content API (pan-African — app/ingestion/foreign.py LawsAfrica* clients).
+    # Free token from https://platform.laws.africa/api-keys/ (sandbox: 100 calls/day, 1 country).
+    # NOTE: commons content is CC-BY-NC-SA — clear commercial licensing before full-text ingest.
+    # Empty = Africa ingest disabled.
+    lawsafrica_token: str = ""
 
     @field_validator(
         "anthropic_api_key",

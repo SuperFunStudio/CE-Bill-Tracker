@@ -67,6 +67,17 @@ REGION_LABELS = {
     "CH": "Switzerland",
     "PL": "Poland",
     "KR": "South Korea",
+    "ZA": "South Africa",
+    "KE": "Kenya",
+    "DK": "Denmark",
+    "FI": "Finland",
+    "LU": "Luxembourg",
+    "EE": "Estonia",
+    "LV": "Latvia",
+    "SK": "Slovakia",
+    "LT": "Lithuania",
+    "SI": "Slovenia",
+    "CZ": "Czechia",
 }
 
 

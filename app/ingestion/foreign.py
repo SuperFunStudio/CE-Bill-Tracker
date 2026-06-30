@@ -36,6 +36,7 @@ _BROWSER_HEADERS = {
     )
 }
 
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.S | re.I)
 _TAG_RE = re.compile(r"<[^>]+>")
 # Collapse runs of horizontal whitespace, incl. the JP full-width space (　) and the non-breaking
 # space (\xa0) that pervades European legal XML/HTML — otherwise tokens glue together oddly.
@@ -1580,6 +1581,549 @@ class KoreaLawGoKrClient(ForeignSourceClient):
         )
 
 
+# --------------------------------------------------------------------------------------------------
+# Laws.Africa (Indigo Content API) — pan-African Akoma Ntoso. ONE API/format covers many African
+# jurisdictions (FRBR-URI document model). Archetype B: every content endpoint is token-gated (free
+# token at platform.laws.africa; sandbox = 100 calls/day, 1 country). Per-country subclasses set the
+# region + FRBR place code + seed URIs. Stays dormant until settings.lawsafrica_token is set.
+# **LICENSING**: commons content is CC-BY-NC-SA (non-commercial) — clear commercial licensing with
+# Laws.Africa before ingesting full text into the paid product (metadata + link-out is the safe mode).
+# UNVERIFIED end-to-end (no token during build); confirm response shape on first authenticated run.
+#   law text: GET api.laws.africa/v2/{frbr_uri}/eng.xml  (Bearer token) ; /eng.json for the title
+# --------------------------------------------------------------------------------------------------
+
+LAWSAFRICA_API = "https://api.laws.africa/v2"
+AFRICA_EPR_TERMS = ("waste", "packaging", "extended producer", "plastic", "e-waste",
+                    "recycling", "circular economy", "deposit")
+
+
+class LawsAfricaClient(ForeignSourceClient):
+    """Indigo Content API base. Subclass per country: set region, place (FRBR code), reader, SEEDS."""
+
+    source = "lawsafrica"
+    place: str = ""          # FRBR place code, e.g. "za"
+    reader: str = "https://lawlibrary.org.za"
+    SEEDS: list[dict] = []
+
+    @staticmethod
+    def _token() -> str:
+        from app.config import settings
+        return settings.lawsafrica_token
+
+    def _hdr(self) -> dict:
+        return {**_BROWSER_HEADERS, "Authorization": f"Bearer {self._token()}"}
+
+    async def discover(self) -> list[tuple[str, str]]:
+        if not self._token():
+            log.warning("lawsafrica_no_token",
+                        hint="set lawsafrica_token (platform.laws.africa); clear CC-BY-NC-SA commercial licensing")
+            return []
+        out: dict[str, str] = {s["uri"]: s["en"] for s in self.SEEDS}
+        # Best-effort: enumerate the country's works and keyword-filter titles for the EPR cluster.
+        try:
+            r = await self.http.get(f"{LAWSAFRICA_API}/akn/{self.place}/.json", headers=self._hdr())
+            if r.status_code == 200:
+                for w in r.json().get("results", []):
+                    uri = (w.get("frbr_uri") or "").lstrip("/")
+                    title = (w.get("title") or "").lower()
+                    if uri and any(t in title for t in AFRICA_EPR_TERMS):
+                        out.setdefault(uri, "")
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("lawsafrica_list_failed", place=self.place, error=str(e))
+        log.info("lawsafrica_discovered", place=self.place, total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        if not self._token():
+            return None
+        hdr = self._hdr()
+        title = english_label or source_id
+        try:
+            j = await self.http.get(f"{LAWSAFRICA_API}/{source_id}/eng.json", headers=hdr)
+            if j.status_code == 200:
+                title = j.json().get("title") or title
+            x = await self.http.get(f"{LAWSAFRICA_API}/{source_id}/eng.xml", headers=hdr)
+            x.raise_for_status()
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("lawsafrica_fetch_failed", uri=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(x.text)
+        if len(full_text) < 100:
+            log.warning("lawsafrica_thin_text", uri=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=f"{self.reader}/{source_id}", english_label=english_label,
+        )
+
+
+class LawsAfricaZAClient(LawsAfricaClient):
+    region = "ZA"
+    place = "za"
+    reader = "https://lawlibrary.org.za"
+    SEEDS = [
+        {"uri": "akn/za/act/2008/59", "en": "National Environmental Management: Waste Act 59 of 2008"},
+        {"uri": "akn/za/act/gn/2020/1184", "en": "Extended Producer Responsibility Regulations, 2020"},
+    ]
+
+
+class LawsAfricaKEClient(LawsAfricaClient):
+    region = "KE"
+    place = "ke"
+    reader = "https://new.kenyalaw.org"
+    SEEDS = [
+        {"uri": "akn/ke/act/2022/31", "en": "Sustainable Waste Management Act, No. 31 of 2022"},
+    ]
+
+
+# --------------------------------------------------------------------------------------------------
+# Denmark — retsinformation.dk. Open, no key. No search API (SPA filters client-side), so seed ELI
+# ids and fetch the server-rendered LexDania XML. Archetype A.
+#   law text: GET /eli/lta/{year}/{number}/xml   (LexDania XML; <DocumentTitle> in <Meta>)
+# --------------------------------------------------------------------------------------------------
+
+DK_BASE = "https://www.retsinformation.dk/eli"
+DK_SEED_LAWS: list[dict] = [
+    {"id": "lta/2025/1146", "en": "Packaging Ordinance — EPR for packaging (Emballagebekendtgørelsen)"},
+    {"id": "lta/2025/882", "en": "Extended Producer Responsibility for certain single-use plastic products"},
+    {"id": "lta/2014/130", "en": "Waste Electrical and Electronic Equipment (WEEE) Ordinance"},
+    {"id": "lta/2015/1453", "en": "Batteries and Accumulators Ordinance"},
+    {"id": "lta/2019/1337", "en": "End-of-Life Vehicles Ordinance"},
+    {"id": "lta/2019/1218", "en": "Environmental Protection Act (framework)"},
+]
+_DK_TITLE_RE = re.compile(r"<DocumentTitle[^>]*>(.*?)</DocumentTitle>", re.S)
+
+
+class DenmarkRetsinfoClient(ForeignSourceClient):
+    """retsinformation.dk adapter. Danish consolidated law, LexDania XML, no key (curated seeds)."""
+
+    region = "DK"
+    source = "retsinfo"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("dk_discovered", total=len(DK_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in DK_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{DK_BASE}/{source_id}/xml")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("dk_fetch_failed", id=source_id, error=str(e))
+            return None
+        tm = _DK_TITLE_RE.search(r.text)
+        title = _strip_tags(tm.group(1)) if tm else (english_label or source_id)
+        full_text = _strip_tags(r.text)
+        if len(full_text) < 100:
+            log.warning("dk_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=f"{DK_BASE}/{source_id}", english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Finland — opendata.finlex.fi (new 2024 Finlex). Open, no key. Akoma Ntoso 3.0 (same family as CH).
+# Fetch-by-id (no clean enumeration), so seed statute ids. Request /fin@ for clean Finnish text.
+#   law text: GET /finlex/avoindata/v1/akn/fi/act/statute/{year}/{number}/fin@  (AKN; <docTitle>)
+# --------------------------------------------------------------------------------------------------
+
+FI_BASE = "https://opendata.finlex.fi/finlex/avoindata/v1/akn/fi/act/statute"
+FI_SEED_LAWS: list[dict] = [
+    {"id": "2011/646", "en": "Waste Act (Jätelaki — framework)"},
+    {"id": "2021/714", "en": "Act amending the Waste Act (EPR / single-use plastics)"},
+    {"id": "2014/519", "en": "Government Decree on Waste Electrical and Electronic Equipment (WEEE)"},
+    {"id": "2014/520", "en": "Government Decree on Batteries and Accumulators"},
+    {"id": "2021/1029", "en": "Government Decree on Packaging and Packaging Waste (EPR)"},
+    {"id": "2015/123", "en": "Government Decree on End-of-Life Vehicles"},
+    {"id": "2021/771", "en": "Government Decree on Certain (single-use) Plastic Products"},
+]
+_FI_TITLE_RE = re.compile(r"<docTitle[^>]*>(.*?)</docTitle>", re.S)
+
+
+class FinlandFinlexClient(ForeignSourceClient):
+    """opendata.finlex.fi adapter. Finnish statutes, Akoma Ntoso XML, no key (curated seeds)."""
+
+    region = "FI"
+    source = "finlex"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("fi_discovered", total=len(FI_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in FI_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{FI_BASE}/{source_id}/fin@")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("fi_fetch_failed", id=source_id, error=str(e))
+            return None
+        tm = _FI_TITLE_RE.search(r.text)
+        title = _strip_tags(tm.group(1)) if tm else (english_label or source_id)
+        full_text = _strip_tags(r.text)
+        if len(full_text) < 100:
+            log.warning("fi_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=f"{FI_BASE}/{source_id}/fin@", english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Luxembourg — legilux / data.legilux.public.lu. Open, no key. SAME JOLux + Akoma Ntoso stack as CH
+# Fedlex. The ELI is an RDF id (content-neg 404s); fetch the explicit /fr/xml manifestation. Seed the
+# ELI expression paths (SPARQL title search also works). Archetype A. French only.
+#   law text: GET http://data.legilux.public.lu/{eli}/xml   (Akoma Ntoso 3.0)
+# --------------------------------------------------------------------------------------------------
+
+LU_BASE = "http://data.legilux.public.lu"  # http:// on the data host (https manifestation 404s)
+LU_SEED_LAWS: list[dict] = [
+    {"eli": "eli/etat/leg/loi/2017/03/21/a330/jo/fr", "en": "Law on packaging and packaging waste"},
+    {"eli": "eli/etat/leg/loi/2022/06/09/a266/jo/fr", "en": "Law on waste electrical and electronic equipment (WEEE)"},
+    {"eli": "eli/etat/leg/loi/2022/06/09/a269/jo/fr", "en": "Law on single-use plastic products (SUP)"},
+    {"eli": "eli/etat/leg/loi/1994/06/17/n4/jo/fr", "en": "Waste management framework law"},
+    {"eli": "eli/etat/leg/rgd/2018/07/02/a562/jo/fr", "en": "Grand-ducal regulation on end-of-life vehicles"},
+]
+_LU_TITLE_RE = re.compile(r"<docTitle[^>]*>(.*?)</docTitle>", re.S)
+
+
+class LuxembourgLegiluxClient(ForeignSourceClient):
+    """legilux adapter. Luxembourg consolidated law, Akoma Ntoso XML (JOLux), no key (curated seeds)."""
+
+    region = "LU"
+    source = "legilux"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("lu_discovered", total=len(LU_SEED_LAWS))
+        return [(s["eli"], s["en"]) for s in LU_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{LU_BASE}/{source_id}/xml")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("lu_fetch_failed", eli=source_id, error=str(e))
+            return None
+        tm = _LU_TITLE_RE.search(r.text)
+        title = _strip_tags(tm.group(1)) if tm else (english_label or source_id)
+        full_text = _strip_tags(r.text)
+        if len(full_text) < 100:
+            log.warning("lu_thin_text", eli=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=f"https://legilux.public.lu/{source_id}", english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Estonia — Riigi Teataja public-api. Open, no key (the Angular site calls this REST API). Seed
+# numeric akt ids; fetch the consolidated HTML (or /xml). Archetype A. English exists for headline
+# acts under separate EN ids (we ingest Estonian; classifier is region-aware).
+#   law text: GET /public-api/api/v1/akt/{id}/blob-html
+# --------------------------------------------------------------------------------------------------
+
+EE_BASE = "https://www.riigiteataja.ee/public-api/api/v1"
+EE_PAGE = "https://www.riigiteataja.ee/akt/{id}"
+EE_SEED_LAWS: list[dict] = [
+    {"id": "749804", "en": "Waste Act (Jäätmeseadus — framework: WEEE, batteries, ELV, tyres)"},
+    {"id": "113032019103", "en": "Packaging Act (Pakendiseadus)"},
+    {"id": "918053", "en": "Packaging Excise Duty Act (Pakendiaktsiisi seadus — EPR fiscal instrument)"},
+]
+
+
+class EstoniaRiigiClient(ForeignSourceClient):
+    """Riigi Teataja adapter. Estonian consolidated law via the public REST API, no key (seeds)."""
+
+    region = "EE"
+    source = "riigiteataja"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("ee_discovered", total=len(EE_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in EE_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{EE_BASE}/akt/{source_id}/blob-html")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("ee_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(r.text)
+        if len(full_text) < 100:
+            log.warning("ee_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=EE_PAGE.format(id=source_id), english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Latvia — likumi.lv. Open (robots allows /ta/id/, Crawl-delay 1). The JSON API is metadata-only, so
+# scrape the server-rendered HTML full text (clean, UTF-8, no OCR). Seed ids; cut to the content div.
+# Archetype C (no search API) but seed-fetchable like the A adapters.
+#   law text: GET https://likumi.lv/ta/id/{id}   (HTML; body in div.doc / div.text)
+# --------------------------------------------------------------------------------------------------
+
+LV_BASE = "https://likumi.lv/ta/id"
+LV_SEED_LAWS: list[dict] = [
+    {"id": "221378", "en": "Waste Management Law (batteries/ELV/SUP/WEEE umbrella)"},
+    {"id": "57207", "en": "Packaging Law"},
+    {"id": "124707", "en": "Natural Resources Tax Law (packaging/EPR fiscal instrument)"},
+    {"id": "267716", "en": "Waste Electrical and Electronic Equipment regulation"},
+]
+
+
+class LatviaLikumiClient(ForeignSourceClient):
+    """likumi.lv adapter. Latvian consolidated law, server-rendered HTML, no key (curated seeds)."""
+
+    region = "LV"
+    source = "likumi"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("lv_discovered", total=len(LV_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in LV_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{LV_BASE}/{source_id}")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("lv_fetch_failed", id=source_id, error=str(e))
+            return None
+        # Cut leading site nav: start at the law-body container.
+        raw = r.text
+        i = raw.find('class="doc"')
+        if i == -1:
+            i = raw.find('class="text"')
+        full_text = _strip_tags(raw[i:] if i != -1 else raw)
+        if len(full_text) < 100:
+            log.warning("lv_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=f"{LV_BASE}/{source_id}", english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Slovakia — Slov-Lex. Open, no key. The site is a React SPA, but its <noscript> static full-text
+# mirror serves consolidated HTML in a dated directory tree. Seed act ids; pick the newest version
+# file ≤ today. Archetype A.
+#   index:    GET static.slov-lex.sk/static/SK/ZZ/{year}/{num}/   (lists {YYYYMMDD}.html versions)
+#   law text: GET static.slov-lex.sk/static/SK/ZZ/{year}/{num}/{YYYYMMDD}.html
+# --------------------------------------------------------------------------------------------------
+
+SK_BASE = "https://static.slov-lex.sk/static/SK/ZZ"
+SK_PAGE = "https://www.slov-lex.sk/pravne-predpisy/SK/ZZ/{id}/"
+SK_SEED_LAWS: list[dict] = [
+    {"id": "2015/79", "en": "Waste Act (umbrella EPR: packaging, WEEE, batteries, ELV, tyres)"},
+    {"id": "2015/373", "en": "Decree on Extended Producer Responsibility (core EPR implementing decree)"},
+    {"id": "2015/366", "en": "Decree on EPR record-keeping and reporting obligations"},
+    {"id": "2019/302", "en": "Deposit-return scheme for single-use beverage packaging"},
+]
+_SK_DATE_RE = re.compile(r"(\d{8})\.html")
+
+
+class SlovakiaSlovLexClient(ForeignSourceClient):
+    """Slov-Lex adapter. Slovak consolidated law via the static HTML mirror, no key (curated seeds)."""
+
+    region = "SK"
+    source = "slovlex"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("sk_discovered", total=len(SK_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in SK_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        import datetime
+
+        base = f"{SK_BASE}/{source_id}"
+        try:
+            idx = await self.http.get(f"{base}/")
+            idx.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("sk_index_failed", id=source_id, error=str(e))
+            return None
+        today = datetime.date.today().strftime("%Y%m%d")
+        dates = sorted(d for d in set(_SK_DATE_RE.findall(idx.text)) if d <= today)
+        if not dates:
+            log.warning("sk_no_version", id=source_id)
+            return None
+        try:
+            doc = await self.http.get(f"{base}/{dates[-1]}.html")
+            doc.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("sk_doc_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(doc.text)
+        if len(full_text) < 100:
+            log.warning("sk_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=SK_PAGE.format(id=source_id), english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Lithuania — e-seimas.lrs.lt (Seimas legal acts register / TAR). Open, no key. The `/rs/legalact/`
+# machine path returns the full document directly (the `/portal/` path is a JSF SPA; e-tar.lt 403s).
+# Seed act ids (TAIS.* or 32-hex GUID). Archetype A. Browser UA required.
+#   law text: GET /rs/legalact/TAD/{id}/   (HTML)
+# --------------------------------------------------------------------------------------------------
+
+LT_BASE = "https://e-seimas.lrs.lt/rs/legalact/TAD"
+LT_PAGE = "https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/{id}"
+LT_SEED_LAWS: list[dict] = [
+    {"id": "TAIS.59267", "en": "Law on Waste Management (framework, incl. EPR)"},
+    {"id": "TAIS.161216", "en": "Law on Management of Packaging and Packaging Waste"},
+    {"id": "TAIS.80721", "en": "Law on Pollution Tax (EPR fee instrument)"},
+    {"id": "TAIS.325345", "en": "Producer-responsibility waste rules (WEEE / batteries / ELV)"},
+]
+
+
+class LithuaniaESeimasClient(ForeignSourceClient):
+    """e-seimas.lrs.lt adapter. Lithuanian law via the /rs/ machine path, no key (curated seeds)."""
+
+    region = "LT"
+    source = "eseimas"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("lt_discovered", total=len(LT_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in LT_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{LT_BASE}/{source_id}/")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("lt_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(r.text)
+        if len(full_text) < 100:
+            log.warning("lt_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=LT_PAGE.format(id=source_id), english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Slovenia — PISRS / Uradni list. Open, no key. PISRS has a JSON filter API, but full text lives on
+# the official journal uradni-list.si addressed by the `sop` id. Seed sop ids. Archetype A.
+#   law text: GET uradni-list.si/glasilo-uradni-list-rs/vsebina/{sop}   (HTML)
+# --------------------------------------------------------------------------------------------------
+
+SI_BASE = "https://www.uradni-list.si/glasilo-uradni-list-rs/vsebina"
+SI_SEED_LAWS: list[dict] = [
+    {"id": "2021-01-1053", "en": "Decree on packaging and packaging waste"},
+    {"id": "2015-01-1513", "en": "Decree on waste (framework)"},
+    {"id": "2010-01-0111", "en": "Decree on batteries and accumulators"},
+    {"id": "2024-01-2498", "en": "Decree implementing the EU Batteries Regulation"},
+    {"id": "2021-01-2724", "en": "Decree banning certain single-use plastic products"},
+]
+
+
+class SloveniaUradniClient(ForeignSourceClient):
+    """Uradni list adapter. Slovenian consolidated law by sop id, no key (curated seeds)."""
+
+    region = "SI"
+    source = "uradnilist"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("si_discovered", total=len(SI_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in SI_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{SI_BASE}/{source_id}")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("si_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(r.text)
+        if len(full_text) < 100:
+            log.warning("si_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=f"{SI_BASE}/{source_id}", english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Czechia — e-Sbírka open data (Virtuoso SPARQL). Open, no key. The act's latest consolidated text is
+# assembled from text-fragments. Quirks: send a NON-browser UA (Mozilla → HTTP 500) and the vocab
+# IRI carries literal Czech accents. Archetype A.
+#   law text: POST opendata.eselpoint.gov.cz/sparql (fragments of má-poslední-znění) -> concat ?txt
+# --------------------------------------------------------------------------------------------------
+
+CZ_SPARQL = "https://opendata.eselpoint.gov.cz/sparql"
+CZ_PAGE = "https://www.e-sbirka.cz/sb/{year}/{num}"
+CZ_SEED_LAWS: list[dict] = [
+    {"id": "2001/477", "en": "Packaging Act (zákon o obalech)"},
+    {"id": "2020/541", "en": "Waste Act (zákon o odpadech)"},
+    {"id": "2020/542", "en": "End-of-Life Products Act — WEEE, batteries, ELV, tyres"},
+]
+# Latest-consolidated full text: the version path on the fragment URLs drops the "/cz" segment that
+# the version IRI carries, so strip through "/eli/cz" to build the "/sb/{year}/{num}/{date}" prefix.
+_CZ_QUERY = (
+    "PREFIX s: <https://slovník.gov.cz/datový/sbírka/pojem/> "
+    "SELECT ?u ?txt WHERE {{ "
+    "<https://opendata.eselpoint.gov.cz/esel-esb/eli/cz/sb/{year}/{num}> s:má-poslední-znění ?v . "
+    'BIND(REPLACE(STR(?v),"^.*/eli/cz","") AS ?vp) '
+    "?frag s:url-fragmentu-znění ?u . "
+    "?frag s:obsahuje-fragment ?obs . ?obs s:text-fragmentu ?txt . "
+    "FILTER(STRSTARTS(STR(?u), ?vp)) }} ORDER BY ?u"
+)
+
+
+class CzechiaESbirkaClient(ForeignSourceClient):
+    """e-Sbírka adapter. Czech consolidated law assembled via SPARQL text-fragments, no key (seeds)."""
+
+    region = "CZ"
+    source = "esbirka"
+    _HDR = {"User-Agent": "curl/8.0", "Accept": "application/sparql-results+json"}
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("cz_discovered", total=len(CZ_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in CZ_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        year, num = source_id.split("/")
+        try:
+            r = await self.http.post(
+                CZ_SPARQL, data={"query": _CZ_QUERY.format(year=year, num=num)}, headers=self._HDR
+            )
+            r.raise_for_status()
+            bindings = r.json()["results"]["bindings"]
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("cz_fetch_failed", id=source_id, error=str(e))
+            return None
+        if not bindings:
+            log.warning("cz_no_fragments", id=source_id)
+            return None
+        full_text = _strip_tags("\n".join(b["txt"]["value"] for b in bindings))
+        if len(full_text) < 100:
+            log.warning("cz_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=CZ_PAGE.format(year=year, num=num), english_label=english_label,
+        )
+
+
 # Registry of available foreign adapters, by region code. New countries: add the subclass + register.
 # Note: a registry key is just a lookup handle (e.g. "FR_CODE"); the client's own `.region` drives the
 # row's region (LegifranceCodeClient writes region="FR"), so JORF + codified FR data co-exist.
@@ -1600,6 +2144,17 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "CH": SwitzerlandFedlexClient,
     "PL": PolandEliClient,
     "KR": KoreaLawGoKrClient,
+    "ZA": LawsAfricaZAClient,
+    "KE": LawsAfricaKEClient,
+    "DK": DenmarkRetsinfoClient,
+    "FI": FinlandFinlexClient,
+    "LU": LuxembourgLegiluxClient,
+    "EE": EstoniaRiigiClient,
+    "LV": LatviaLikumiClient,
+    "SK": SlovakiaSlovLexClient,
+    "LT": LithuaniaESeimasClient,
+    "SI": SloveniaUradniClient,
+    "CZ": CzechiaESbirkaClient,
 }
 
 

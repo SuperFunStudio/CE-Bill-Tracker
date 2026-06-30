@@ -65,6 +65,8 @@ REGION_LABELS = {
     "AT": "Austria",
     "BR": "Brazil",
     "CH": "Switzerland",
+    "PL": "Poland",
+    "KR": "South Korea",
 }
 
 

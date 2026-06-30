@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     # Free OAuth2 client-credentials from https://piste.gouv.fr/registration. Empty = FR ingest disabled.
     legifrance_client_id: str = ""
     legifrance_client_secret: str = ""
+    # law.go.kr DRF Open API (South Korea — app/ingestion/foreign.py KoreaLawGoKrClient).
+    # Free "OC" id from https://open.law.go.kr signup (the registered email prefix); the calling
+    # IP/domain must also be registered there. Empty = KR ingest disabled.
+    lawgokr_oc: str = ""
 
     @field_validator(
         "anthropic_api_key",

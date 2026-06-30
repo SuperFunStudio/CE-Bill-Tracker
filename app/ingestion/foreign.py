@@ -1420,6 +1420,166 @@ class SwitzerlandFedlexClient(ForeignSourceClient):
         )
 
 
+# --------------------------------------------------------------------------------------------------
+# Poland — Sejm ELI API (api.sejm.gov.pl/eli). Open, no key, OpenAPI 3.0.3. Catalog search + per-act
+# metadata + text.html / text.pdf. Modern acts serve structured HTML; older consolidated texts
+# (obwieszczenia jednolity tekst) are PDF-only — we ingest the HTML-available ones and skip PDF
+# (no extraction layer). Archetype A.
+#   discover: GET /acts/search?title=<term>  -> {publisher, year, pos, textHTML}
+#   law text: GET /acts/{pub}/{year}/{pos}        (JSON metadata: title, textHTML)
+#             GET /acts/{pub}/{year}/{pos}/text.html
+# --------------------------------------------------------------------------------------------------
+
+PL_API = "https://api.sejm.gov.pl/eli/acts"
+PL_PAGE = "https://api.sejm.gov.pl/eli/acts/{id}/text.html"
+PL_MAXREC = 25  # per term
+# Polish title-search terms for the EPR / waste cluster.
+PL_DISCOVERY_TERMS = [
+    "odpadach",                                  # on waste (framework)
+    "gospodarce opakowaniami",                   # packaging management (EPR)
+    "zużytym sprzęcie elektrycznym",             # WEEE
+    "bateriach i akumulatorach",                 # batteries & accumulators
+    "pojazdach wycofanych z eksploatacji",       # end-of-life vehicles
+    "rozszerzonej odpowiedzialności producenta", # extended producer responsibility
+]
+
+
+class PolandEliClient(ForeignSourceClient):
+    """Sejm ELI API adapter. Polish consolidated law, REST catalog + per-act HTML, no key.
+    Skips PDF-only consolidated texts (no extraction layer)."""
+
+    region = "PL"
+    source = "eli"
+    _JSON = {"Accept": "application/json"}
+
+    async def discover(self) -> list[tuple[str, str]]:
+        from urllib.parse import quote
+
+        out: dict[str, str] = {}
+        for term in PL_DISCOVERY_TERMS:
+            url = f"{PL_API}/search?title={quote(term)}&limit={PL_MAXREC}"
+            try:
+                resp = await self.http.get(url, headers=self._JSON)
+                resp.raise_for_status()
+                items = resp.json().get("items", [])
+            except (httpx.HTTPError, ValueError) as e:
+                log.warning("pl_search_failed", term=term, error=str(e))
+                continue
+            for it in items:
+                if not it.get("textHTML"):  # skip PDF-only consolidated texts
+                    continue
+                pub, year, pos = it.get("publisher"), it.get("year"), it.get("pos")
+                if pub and year and pos:
+                    out.setdefault(f"{pub}/{year}/{pos}", "")
+        log.info("pl_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            meta = await self.http.get(f"{PL_API}/{source_id}", headers=self._JSON)
+            meta.raise_for_status()
+            md = meta.json()
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("pl_meta_failed", id=source_id, error=str(e))
+            return None
+        if not md.get("textHTML"):
+            log.warning("pl_no_html", id=source_id)
+            return None
+        title = md.get("title") or english_label or source_id
+        try:
+            h = await self.http.get(f"{PL_API}/{source_id}/text.html")
+            h.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("pl_text_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(h.text)
+        if len(full_text) < 100:
+            log.warning("pl_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=PL_PAGE.format(id=source_id), english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# South Korea — law.go.kr DRF Open API. Requires a free "OC" id (registered email prefix at
+# open.law.go.kr) AND the calling IP/domain registered there — so this stays dormant until
+# settings.lawgokr_oc is set (mirrors the FR PISTE account-side setup). Korean full text (XML).
+# NOTE: written to the documented DRF contract but UNVERIFIED end-to-end (no OC during build); the
+# first real run should confirm the Korean response tag names below.
+#   discover: GET lawSearch.do?OC=&target=law&type=XML&query=<term>  -> 법령일련번호 (MST) list
+#   law text: GET lawService.do?OC=&target=law&type=XML&MST=<mst>    -> full law XML
+# --------------------------------------------------------------------------------------------------
+
+KR_SEARCH = "https://www.law.go.kr/DRF/lawSearch.do"
+KR_SERVICE = "https://www.law.go.kr/DRF/lawService.do"
+KR_PAGE = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq={mst}"
+KR_MAXREC = 20
+KR_DISCOVERY_TERMS = ["자원순환", "재활용", "순환경제", "포장재", "전기·전자제품 및 자동차"]
+_KR_MST_RE = re.compile(r"<법령일련번호>(\d+)</법령일련번호>")
+_KR_NAME_RE = re.compile(r"<법령명_?한글>(.*?)</법령명_?한글>", re.S)
+_KR_FAIL = "검증에 실패"  # "verification failed" — bad/unregistered OC
+
+
+class KoreaLawGoKrClient(ForeignSourceClient):
+    """law.go.kr DRF adapter. Korean national EPR law, XML. Dormant until lawgokr_oc is configured."""
+
+    region = "KR"
+    source = "lawgokr"
+
+    @staticmethod
+    def _oc() -> str:
+        from app.config import settings
+        return settings.lawgokr_oc
+
+    async def discover(self) -> list[tuple[str, str]]:
+        oc = self._oc()
+        if not oc:
+            log.warning("kr_no_oc", hint="set lawgokr_oc in .env (register at open.law.go.kr)")
+            return []
+        out: dict[str, str] = {}
+        for term in KR_DISCOVERY_TERMS:
+            params = {"OC": oc, "target": "law", "type": "XML", "query": term, "display": KR_MAXREC}
+            try:
+                resp = await self.http.get(KR_SEARCH, params=params)
+                resp.raise_for_status()
+            except httpx.HTTPError as e:
+                log.warning("kr_search_failed", term=term, error=str(e))
+                continue
+            if _KR_FAIL in resp.text:
+                log.warning("kr_oc_invalid", hint="OC or calling IP/domain not registered at open.law.go.kr")
+                return []
+            for mst in _KR_MST_RE.findall(resp.text):
+                out.setdefault(mst, "")
+        log.info("kr_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        oc = self._oc()
+        if not oc:
+            return None
+        params = {"OC": oc, "target": "law", "type": "XML", "MST": source_id}
+        try:
+            r = await self.http.get(KR_SERVICE, params=params)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("kr_fetch_failed", mst=source_id, error=str(e))
+            return None
+        if _KR_FAIL in r.text:
+            return None
+        tm = _KR_NAME_RE.search(r.text)
+        title = _strip_tags(tm.group(1)) if tm else (english_label or source_id)
+        full_text = _strip_tags(r.text)
+        if len(full_text) < 100:
+            log.warning("kr_thin_text", mst=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=KR_PAGE.format(mst=source_id), english_label=english_label,
+        )
+
+
 # Registry of available foreign adapters, by region code. New countries: add the subclass + register.
 # Note: a registry key is just a lookup handle (e.g. "FR_CODE"); the client's own `.region` drives the
 # row's region (LegifranceCodeClient writes region="FR"), so JORF + codified FR data co-exist.
@@ -1438,6 +1598,8 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "AT": AustriaRisClient,
     "BR": BrazilPlanaltoClient,
     "CH": SwitzerlandFedlexClient,
+    "PL": PolandEliClient,
+    "KR": KoreaLawGoKrClient,
 }
 
 

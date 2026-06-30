@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchInstrumentMaterialMatrix } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { formatMaterial } from '@/components/scope/ScopeOnboarding';
+import { track } from '@/lib/analytics';
+import { BillDrilldownPanel } from './BillDrilldownPanel';
 import type { InstrumentMaterialCell } from '@/lib/types';
 
 /**
@@ -29,6 +31,12 @@ function cellStyle(count: number, max: number): React.CSSProperties {
 export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {}) {
   const [cells, setCells] = useState<InstrumentMaterialCell[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Clicking a cell drills into the bills it counts. region for the drill: a single selected region
+  // narrows to it; All / multi-select falls back to "all" (the bills list endpoint is single-region
+  // today — the global multi-region filter refines this). Each drilled bill shows its own region.
+  const [drill, setDrill] = useState<{ instrument: string; material: string } | null>(null);
+  const selectedRegions = (regions ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const regionForDrill = selectedRegions.length === 1 ? selectedRegions[0] : 'all';
 
   useEffect(() => {
     let cancelled = false;
@@ -99,18 +107,32 @@ export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {})
                 </td>
                 {instruments.map((inst) => {
                   const count = lookup.get(`${inst}|${mat}`) ?? 0;
+                  const clickable = count > 0;
                   return (
                     <td
                       key={inst}
-                      className="border border-border-default p-2 text-center tabular-nums"
+                      className={`border border-border-default p-0 text-center tabular-nums ${
+                        clickable ? 'cursor-pointer hover:ring-1 hover:ring-inset hover:ring-[rgb(var(--green-accent))]' : ''
+                      }`}
                       style={cellStyle(count, max)}
                       title={`${formatInstrumentType(inst)} × ${formatMaterial(mat)}: ${count} ${
                         count === 1 ? 'bill' : 'bills'
-                      }`}
+                      }${clickable ? ' — click to see them' : ''}`}
                     >
-                      <span className={count > 0 ? 'text-text-primary font-medium' : 'text-text-muted/70'}>
-                        {count > 0 ? count : '·'}
-                      </span>
+                      {clickable ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDrill({ instrument: inst, material: mat });
+                            track('insights_coverage_drilldown', { instrument: inst, material: mat, regions: regionForDrill });
+                          }}
+                          className="w-full h-full p-2 text-text-primary font-medium"
+                        >
+                          {count}
+                        </button>
+                      ) : (
+                        <span className="block p-2 text-text-muted/70">·</span>
+                      )}
                     </td>
                   );
                 })}
@@ -125,7 +147,26 @@ export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {})
         several materials counts in each. Shading is relative, not linear — read the number, not just the
         tint. The blank cells are the live signal — a material with deposit-return precedent but an empty
         EPR column is where the next bills tend to land. Auto-classified at a 0.7 confidence floor.
+        <span className="text-text-secondary"> Click any cell to see the bills counted in it.</span>
       </p>
+
+      <BillDrilldownPanel
+        open={drill != null}
+        onClose={() => setDrill(null)}
+        title={drill ? `${formatInstrumentType(drill.instrument)} × ${formatMaterial(drill.material)}` : ''}
+        subtitle="Bills counted in this cell"
+        params={
+          drill
+            ? {
+                ce_relevant: true,
+                instrument_type: drill.instrument,
+                material_category: drill.material,
+                region: regionForDrill,
+              }
+            : null
+        }
+        source="coverage_matrix"
+      />
     </div>
   );
 }

@@ -39,7 +39,7 @@ export function TopNav() {
   const scrolled = useScrolled(80);
   const { theme, toggle } = useTheme();
   const { isPro } = useAuth();
-  const { region, def } = useRegion();
+  const { region } = useRegion();
 
   // Hide US-only destinations outside the US, then swap Pricing→Account for Pro users.
   const navItems = NAV_ITEMS
@@ -113,7 +113,7 @@ export function TopNav() {
               scrolled ? 'max-h-0 opacity-0' : 'mt-2 max-h-10 opacity-100 text-sm sm:text-base'
             }`}
           >
-            Tracking circularity-aligned legislation {def.blurb}
+            Tracking circularity legislation across the world
           </p>
         </Link>
 

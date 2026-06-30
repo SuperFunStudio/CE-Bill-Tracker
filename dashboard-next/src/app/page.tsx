@@ -1,7 +1,7 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { useBills } from '@/hooks/useBills';
+import { useBills, useBillTextSearch } from '@/hooks/useBills';
 import { BillModal } from '@/components/ui/BillModal';
 import { useFederalActions } from '@/hooks/useFederal';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
@@ -11,7 +11,6 @@ import { FederalWatchBanner } from '@/components/ui/FederalWatchBanner';
 import { StatesTicker } from '@/components/ui/StatesTicker';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillFilters, DEFAULT_FILTERS, applyBillFilters, resinOptionsFromBills, type BillFilterState } from '@/components/bills/BillFilters';
-import { FullTextMatches } from '@/components/bills/FullTextMatches';
 import { SkeletonList } from '@/components/ui/SkeletonList';
 import { ScopedDeadlineBanner } from '@/components/scope/ScopedDeadlineBanner';
 import { ScopeBar } from '@/components/scope/ScopeBar';
@@ -92,9 +91,21 @@ export default function HomePage() {
     return counts;
   }, [mapSource, billFilters]);
 
-  const tableBills = useMemo(() => applyBillFilters(tableSource, billFilters), [tableSource, billFilters]);
-  // IDs already in the table — the deep full-text search surfaces only matches NOT shown here.
-  const tableBillIds = useMemo(() => new Set(tableBills.map(b => b.id)), [tableBills]);
+  // Full-text search: bills whose statute text matches the term (their title/summary may not). These
+  // are merged into the one table below so search is just another filter — no separate results list.
+  const { data: textHits = [] } = useBillTextSearch(billFilters.search);
+
+  const tableBills = useMemo(() => {
+    const base = applyBillFilters(tableSource, billFilters);
+    const q = (billFilters.search ?? '').trim();
+    if (q.length < 2 || textHits.length === 0) return base;
+    // Append full-text-only hits: pass the non-search filters, drop any already shown.
+    const baseIds = new Set(base.map(b => b.id));
+    const extra = applyBillFilters(textHits, { ...billFilters, search: '' }).filter(
+      (b) => !baseIds.has(b.id),
+    );
+    return extra.length ? [...base, ...extra] : base;
+  }, [tableSource, billFilters, textHits]);
 
   // CSV export is a Pro feature: gatePro routes anon → sign-in, Free → checkout, Pro → the download.
   function handleExport() {
@@ -192,15 +203,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Deep search: bills whose statute text matches the term but whose title/summary don't.
-            Sits right under the search so full-text hits are visible even when the table reads "0 bills". */}
-        <div className="mt-3">
-          <FullTextMatches
-            query={billFilters.search}
-            shownIds={tableBillIds}
-            filters={billFilters}
-          />
-        </div>
       </section>
 
       {/* Map — US states choropleth, or the EU member-states shell (Phase B: national-law coverage) */}

@@ -74,8 +74,8 @@ export function RegionFilter({
         : `${selected.length} regions`;
 
   return (
-    <div className="flex flex-col gap-1" ref={ref}>
-      <label className="font-serif text-text-muted text-meta uppercase tracking-wider">Regions</label>
+    <div className="flex flex-row items-center gap-2" ref={ref}>
+      <label className="font-serif text-text-muted text-meta uppercase tracking-wider shrink-0">Regions</label>
       <div className="relative">
         <button
           type="button"

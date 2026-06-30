@@ -1,3 +1,5 @@
+import re
+
 import structlog
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -6,6 +8,22 @@ from app.config import settings
 from app.models import Bill, BillChange
 
 log = structlog.get_logger()
+
+
+def html_to_text(html: str) -> str:
+    """Cheap HTML→plain-text for the multipart/alternative part. A mail with *only* an HTML body
+    scores worse with spam filters; every send gets a text alternative, either one a caller supplied
+    or this stripped-down fallback. Not a full renderer — drops markup, keeps link targets, collapses
+    whitespace."""
+    text = re.sub(r"(?is)<(script|style).*?</\1>", "", html)
+    # Surface href targets so links survive as readable URLs in the text part.
+    text = re.sub(r'(?i)<a\s[^>]*href="([^"]+)"[^>]*>(.*?)</a>', r"\2 (\1)", text)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</(p|div|tr|h1|h2|h3|li)>", "\n", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
+    return text.strip()
 
 
 def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context: str = "") -> str:
@@ -29,7 +47,7 @@ def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context:
     return f"""
 <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
   <div style="background: #1a4d2e; padding: 16px 24px;">
-    <h1 style="color: white; margin: 0; font-size: 20px;">SignalScout Alert</h1>
+    <h1 style="color: white; margin: 0; font-size: 20px;">Battle of the Bills</h1>
     <p style="color: #a8d5b5; margin: 4px 0 0;">EPR Legislative Update</p>
   </div>
   <div style="padding: 24px; background: #f9fafb; border: 1px solid #e5e7eb;">
@@ -54,7 +72,7 @@ def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context:
     </a>
   </div>
   <div style="padding: 12px 24px; font-size: 12px; color: #9ca3af; text-align: center;">
-    SignalScout — EPR Legislative Intelligence
+    Battle of the Bills — EPR Legislative Intelligence
   </div>
 </body></html>
 """
@@ -65,16 +83,24 @@ class SendGridSender:
         self._sg = SendGridAPIClient(api_key=settings.sendgrid_api_key)
 
     async def send_html(
-        self, to_email: str, subject: str, html: str, list_unsubscribe_url: str | None = None
+        self,
+        to_email: str,
+        subject: str,
+        html: str,
+        list_unsubscribe_url: str | None = None,
+        text: str | None = None,
     ) -> bool:
         """Send a fully-rendered HTML email (e.g. the monthly digest).
 
-        Pass `list_unsubscribe_url` for the recurring/marketing emails so mail clients render a native
+        Always multipart/alternative: pass `text` for a hand-written plain-text part, otherwise one is
+        derived from the HTML (an HTML-only body scores worse with spam filters). Pass
+        `list_unsubscribe_url` for the recurring/marketing emails so mail clients render a native
         unsubscribe control and Gmail/Outlook honour one-click (RFC 8058)."""
         message = Mail(
             from_email=settings.sendgrid_from_email,
             to_emails=to_email,
             subject=subject,
+            plain_text_content=text or html_to_text(html),
             html_content=html,
         )
         if list_unsubscribe_url:
@@ -97,20 +123,21 @@ class SendGridSender:
         html = f"""
 <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
   <div style="background: #1a4d2e; padding: 16px 24px;">
-    <h1 style="color: white; margin: 0; font-size: 20px;">SignalScout Alert</h1>
+    <h1 style="color: white; margin: 0; font-size: 20px;">Battle of the Bills</h1>
     <p style="color: #a8d5b5; margin: 4px 0 0;">EPR Litigation Update</p>
   </div>
   <div style="padding: 24px; background: #f9fafb; border: 1px solid #e5e7eb; white-space: pre-line;">
     {body_text}
   </div>
   <div style="padding: 12px 24px; font-size: 12px; color: #9ca3af; text-align: center;">
-    SignalScout — EPR Legislative Intelligence
+    Battle of the Bills — EPR Legislative Intelligence
   </div>
 </body></html>"""
         message = Mail(
             from_email=settings.sendgrid_from_email,
             to_emails=to_email,
             subject=subject,
+            plain_text_content=body_text,
             html_content=html,
         )
         try:
@@ -128,13 +155,14 @@ class SendGridSender:
         litigation_context: str = "",
     ) -> bool:
         bill_num = bill.bill_number or "Bill"
-        subject = f"[SignalScout] {bill.state} {bill_num} — Legislative Update"
+        subject = f"[Battle of the Bills] {bill.state} {bill_num} — Legislative Update"
         html_content = _build_email_html(bill, changes, litigation_context=litigation_context)
 
         message = Mail(
             from_email=settings.sendgrid_from_email,
             to_emails=to_email,
             subject=subject,
+            plain_text_content=html_to_text(html_content),
             html_content=html_content,
         )
         try:

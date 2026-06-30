@@ -42,13 +42,14 @@ from app.alerts.digest import (
     subscription_matches_bill,
     topic_label,
 )
+from app.alerts.applinks import bill_url
 from app.alerts.unsubscribe import unsubscribe_url
 from app.config import settings
 from app.models import AlertSubscription, Bill
 
 log = structlog.get_logger()
 
-_DASHBOARD_URL = "https://ce-bill-tracker.web.app"
+_DASHBOARD_URL = "https://battleofbills.com"
 
 # Status buckets for the cumulative snapshot. "Enacted" = signed into law; "dead" = no longer moving;
 # everything else in between is "active". Mirrors the enacted/pending split in /bills/map-summary.
@@ -252,11 +253,13 @@ async def render_recap_paragraph(sub: AlertSubscription, sop: StateOfPlay) -> st
 
 
 def render_welcome_subject(sub: AlertSubscription) -> str:
-    return "Welcome to Battle of the Bills — your opening state of play"
+    # Deliberately NOT "Welcome to…" — the account-signup email owns that, and two near-identical
+    # "Welcome to Battle of the Bills" subjects in one inbox read as a confusing duplicate.
+    return "Your Battle of the Bills alerts are live — opening state of play"
 
 
 def _bill_line(b: Bill, badge: str = "") -> str:
-    url = b.source_url or "#"
+    url = bill_url(b.id)  # open the in-app detail panel rather than the external legislature page
     return f"""
       <tr>
         <td style="padding:11px 0;border-bottom:1px solid {_RULE};font:15px {_SERIF};color:{_INK};">
@@ -379,7 +382,7 @@ def render_welcome_html(
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · EPR Legislative Intelligence
+      Battle of the Bills · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
         color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
@@ -411,7 +414,7 @@ def render_welcome_html(
   <!-- Colophon -->
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you just subscribed to SignalScout updates.<br>
+    You're receiving this because you just subscribed to Battle of the Bills updates.<br>
     <a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">Unsubscribe</a>
     · or reply to this email.
   </div>
@@ -488,7 +491,8 @@ async def send_welcome_for_subscription(subscription_id: int) -> None:
 
 
 def render_account_welcome_subject() -> str:
-    return "Welcome to SignalScout — your 7-day Pro trial is live"
+    # Public brand is "Battle of the Bills" — never the internal "SignalScout" codename in a subject.
+    return "Welcome to Battle of the Bills — your 7-day Pro trial is live"
 
 
 def render_account_welcome_html() -> str:
@@ -498,7 +502,7 @@ def render_account_welcome_html() -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · EPR Legislative Intelligence
+      Battle of the Bills · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
         color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
@@ -508,7 +512,7 @@ def render_account_welcome_html() -> str:
   <div style="padding:18px 28px 24px;">
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to the ring.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 14px;">
-      You've just created a free SignalScout account — and the next <strong>7 days are on us</strong>.
+      You've just created a free Battle of the Bills account — and the next <strong>7 days are on us</strong>.
       Your Pro trial is live right now, no card required:</p>
     <ul style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 16px;padding-left:20px;">
       <li>The full <strong>Upcoming Deadlines</strong> timeline — every EPR compliance date, all 50 states</li>
@@ -526,7 +530,7 @@ def render_account_welcome_html() -> str:
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you just created a SignalScout account.
+    You're receiving this because you just created a Battle of the Bills account.
   </div>
  </div>
 </body></html>
@@ -583,7 +587,7 @@ def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · EPR Legislative Intelligence
+      Battle of the Bills · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
         color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
@@ -601,11 +605,11 @@ def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
       Open your dashboard →</a>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:22px 0 0;">
       Kind regards,<br>
-      The SignalScout Team</p>
+      The Battle of the Bills Team</p>
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you were granted complimentary access to SignalScout.
+    You're receiving this because you were granted complimentary access to Battle of the Bills.
   </div>
  </div>
 </body></html>
@@ -642,9 +646,9 @@ async def send_comp_grant_welcome(email: str, days: int | None = None, name: str
 
 def render_pro_welcome_subject(is_trial: bool = False) -> str:
     return (
-        "Your SignalScout Pro trial is live"
+        "Your Battle of the Bills Pro trial is live"
         if is_trial
-        else "Welcome to SignalScout Pro — your purchase is confirmed"
+        else "You're in — your Battle of the Bills Pro plan is active"
     )
 
 
@@ -672,7 +676,7 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · EPR Legislative Intelligence
+      Battle of the Bills · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
         color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
@@ -683,7 +687,7 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to Pro.</p>
     {founding_badge}
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
-      Thank you for subscribing to <strong>SignalScout Pro</strong>. {confirm}</p>
+      Thank you for subscribing to <strong>Battle of the Bills Pro</strong>. {confirm}</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 10px;">
       You now have the full toolkit:</p>
     <ul style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 16px;padding-left:20px;">
@@ -700,11 +704,11 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
       <a href="{_DASHBOARD_URL}/account" style="color:{_ACCENT};">your account</a>.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
       Kind regards,<br>
-      The SignalScout Team</p>
+      The Battle of the Bills Team</p>
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you subscribed to SignalScout Pro.
+    You're receiving this because you subscribed to Battle of the Bills Pro.
   </div>
  </div>
 </body></html>
@@ -750,7 +754,7 @@ def _lifecycle_shell(title_line: str, body_inner: str, colophon: str) -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · EPR Legislative Intelligence
+      Battle of the Bills · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
         color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
@@ -782,7 +786,7 @@ def _cta_button(href: str, label: str) -> str:
 
 
 def render_payment_failed_subject() -> str:
-    return "Action needed — your SignalScout Pro payment didn't go through"
+    return "Action needed — your Battle of the Bills Pro payment didn't go through"
 
 
 def render_payment_failed_html() -> str:
@@ -790,7 +794,7 @@ def render_payment_failed_html() -> str:
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
       A quick heads-up about your subscription.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
-      We tried to process the payment for your <strong>SignalScout Pro</strong> subscription, but it
+      We tried to process the payment for your <strong>Battle of the Bills Pro</strong> subscription, but it
       didn't go through. This is most often an expired or replaced card — nothing's lost yet.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 16px;">
       Update your payment details to keep your Pro access uninterrupted. If the payment isn't resolved,
@@ -800,11 +804,11 @@ def render_payment_failed_html() -> str:
       Already fixed it, or want to check your status? Manage everything from
       <a href="{_DASHBOARD_URL}/account" style="color:{_ACCENT};">your account</a>.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
-      Kind regards,<br>The SignalScout Team</p>"""
+      Kind regards,<br>The Battle of the Bills Team</p>"""
     return _lifecycle_shell(
         "Tracking circularity-aligned legislation across the USA",
         body,
-        "You're receiving this because a payment on your SignalScout Pro subscription needs attention.",
+        "You're receiving this because a payment on your Battle of the Bills Pro subscription needs attention.",
     )
 
 
@@ -835,7 +839,7 @@ async def send_payment_failed(email: str) -> bool:
 
 
 def render_subscription_canceled_subject() -> str:
-    return "Your SignalScout Pro subscription has been canceled"
+    return "Your Battle of the Bills Pro subscription has been canceled"
 
 
 def render_subscription_canceled_html() -> str:
@@ -843,7 +847,7 @@ def render_subscription_canceled_html() -> str:
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
       Your Pro subscription has ended.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
-      We've canceled your <strong>SignalScout Pro</strong> subscription and your account is back on the
+      We've canceled your <strong>Battle of the Bills Pro</strong> subscription and your account is back on the
       free plan. You won't be billed again. You'll keep free access to the bill explorer and public
       pages — the Pro tools (full deadlines timeline, watch-list alerts, the Design Guide and CSV
       export) are paused.</p>
@@ -853,11 +857,11 @@ def render_subscription_canceled_html() -> str:
     <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
       We'd genuinely value a line on what we could have done better — just reply to this email.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
-      Kind regards,<br>The SignalScout Team</p>"""
+      Kind regards,<br>The Battle of the Bills Team</p>"""
     return _lifecycle_shell(
         "Tracking circularity-aligned legislation across the USA",
         body,
-        "You're receiving this because your SignalScout Pro subscription was canceled.",
+        "You're receiving this because your Battle of the Bills Pro subscription was canceled.",
     )
 
 
@@ -889,7 +893,7 @@ async def send_subscription_canceled(email: str) -> bool:
 
 
 def render_referral_reward_subject(days: int) -> str:
-    return f"You just earned {days} free days of SignalScout Pro"
+    return f"You just earned {days} free days of Battle of the Bills Pro"
 
 
 def render_referral_reward_html(days: int) -> str:
@@ -904,11 +908,11 @@ def render_referral_reward_html(days: int) -> str:
       Thanks for spreading the word. Keep sharing your link and the free days keep stacking up.</p>
     {_cta_button(f"{_DASHBOARD_URL}/compliance", "Open your dashboard →")}
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
-      Kind regards,<br>The SignalScout Team</p>"""
+      Kind regards,<br>The Battle of the Bills Team</p>"""
     return _lifecycle_shell(
         "Tracking circularity-aligned legislation across the USA",
         body,
-        "You're receiving this because a friend signed up using your SignalScout referral link.",
+        "You're receiving this because a friend signed up using your Battle of the Bills referral link.",
     )
 
 

@@ -58,7 +58,7 @@ export function OutliersPlaylist() {
       {open && (
         <div className="border-t border-border-default">
           {error ? (
-            <p className="px-4 py-3 text-sm text-red-600 dark:text-red-400">{error}</p>
+            <p className="px-4 py-3 text-sm text-error">{error}</p>
           ) : !bills ? (
             <div className="space-y-2 p-4">
               {Array.from({ length: 5 }).map((_, i) => (

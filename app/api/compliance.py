@@ -19,7 +19,8 @@ router = APIRouter(prefix="/compliance", tags=["compliance"])
 
 @router.get("/pathways", response_model=list[CompliancePathwaySummary])
 async def list_pathways(
-    state: str | None = Query(default=None, description="Two-letter state code"),
+    state: str | None = Query(default=None, description="Sub-jurisdiction code (e.g. CA, EU)"),
+    region: str | None = Query(default=None, description="Jurisdiction family: US (default), EU, or all"),
     db: AsyncSession = Depends(get_db),
 ):
     q = (
@@ -32,6 +33,11 @@ async def list_pathways(
             Bill.bill_number,
         )
     )
+    # Default to US so the existing state pages are unaffected; region="all" spans every region.
+    if region is None:
+        q = q.where(Bill.region == "US")
+    elif region.lower() != "all":
+        q = q.where(Bill.region == region.upper())
     if state:
         q = q.where(Bill.state == state.upper())
     rows = (await db.execute(q)).all()

@@ -2,12 +2,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
 import { CheckIcon, CloseIcon } from '@/components/ui/icons';
+import { useRegion } from '@/components/layout/RegionContext';
 
 export interface BillFilterState {
   state: string;
   status: string;
   instrumentType: string;
   materialCategories: string[];
+  polymers: string[];
   urgency: string;
   search: string;
   eprOnly: boolean;
@@ -20,12 +22,17 @@ export const DEFAULT_FILTERS: BillFilterState = {
   status: '',
   instrumentType: '',
   materialCategories: [],
+  polymers: [],
   urgency: '',
   search: '',
   eprOnly: true,
   enactedOnly: false,
   hasLitigation: false,
 };
+
+// Example search terms cycled through the placeholder — one bill number, one material, one topic.
+// Search matches bill_number, title, and ai_summary (see applyBillFilters below).
+const SEARCH_EXAMPLES = ['SB 707', 'HDPE', 'solar'];
 
 // Values must match the canonical statuses stored on bills (see app/ingestion/coordinator.py).
 const STATUSES = [
@@ -53,12 +60,34 @@ export const MATERIAL_CATEGORIES = ['plastic_packaging', 'paper_packaging', 'gla
   'electronics', 'batteries', 'paint', 'carpet', 'mattresses', 'tires',
   'pharmaceuticals', 'solar_panels', 'textiles', 'organics', 'biobased', 'agriculture', 'other'];
 const URGENCY_LEVELS = ['high', 'medium', 'low'];
+// Resin code → display name. Mirrors the controlled vocabulary in app/classification/polymers.py;
+// codes are written to bills.polymers by scripts/scan_bill_polymers.py. The filter only offers the
+// resins actually present in the loaded bills (passed via resinOptions), so this is just for labels.
+const RESIN_NAMES: Record<string, string> = {
+  PET: 'PET — Polyethylene terephthalate',
+  HDPE: 'HDPE — High-density polyethylene',
+  PVC: 'PVC — Polyvinyl chloride',
+  LDPE: 'LDPE — Low-density polyethylene',
+  PP: 'PP — Polypropylene',
+  PS: 'PS — Polystyrene',
+  PLA: 'PLA — Polylactic acid',
+  PC: 'PC — Polycarbonate',
+  ABS: 'ABS — Acrylonitrile butadiene styrene',
+  EVA: 'EVA — Ethylene-vinyl acetate',
+  PUR: 'PUR — Polyurethane',
+  PA: 'PA — Polyamide / nylon',
+  PE: 'PE — Polyethylene',
+};
 
 interface BillFiltersProps {
   filters: BillFilterState;
   onChange: (f: BillFilterState) => void;
   /** Omit the State select — for contexts where the state is already fixed (e.g. a state profile). */
   hideState?: boolean;
+  /** Resin codes present in the current bill set. When non-empty, a "Resin / polymer" filter appears;
+      derive with `resinOptionsFromBills(bills)`. Omitted/empty → the filter is hidden (e.g. before the
+      polymer scan has populated any data), so no surface shows a dead control. */
+  resinOptions?: string[];
 }
 
 function Select({
@@ -176,17 +205,34 @@ function MultiSelect({
   );
 }
 
-export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) {
+export function BillFilters({ filters, onChange, hideState, resinOptions }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
+
+  // EU-central law is EU-wide (no sub-jurisdiction yet), so the State select is hidden in EU mode —
+  // it returns with member-state national law (Phase B). Region itself is the global nav selector.
+  const { region } = useRegion();
+  const showState = !hideState && region === 'US';
+
+  // Rotate example terms through the placeholder to hint what's searchable (bill #, material, topic).
+  const [exampleIdx, setExampleIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setExampleIdx(i => (i + 1) % SEARCH_EXAMPLES.length), 2500);
+    return () => clearInterval(id);
+  }, []);
   // On a fixed-state context, reset preserves the locked state instead of clearing it.
   const reset = () => onChange(hideState ? { ...DEFAULT_FILTERS, state: filters.state } : DEFAULT_FILTERS);
 
+  // The resin filter only appears once the polymer scan has tagged bills (resinOptions non-empty),
+  // so no surface shows a control that can only return nothing.
+  const showResin = (resinOptions?.length ?? 0) > 0;
+
   // Count active filters so Reset signals there's something to undo (and disables when clean).
   const activeCount = [
-    !hideState && filters.state,
+    showState && filters.state,
     filters.status,
     filters.instrumentType,
     filters.materialCategories.length > 0,
+    filters.polymers.length > 0,
     filters.search,
   ].filter(Boolean).length;
 
@@ -205,7 +251,7 @@ export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) 
             type="text"
             value={filters.search}
             onChange={e => set({ search: e.target.value })}
-            placeholder="Search title, summary…"
+            placeholder={`Search e.g. ${SEARCH_EXAMPLES[exampleIdx]}`}
             className="w-full rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent pr-8"
           />
           {filters.search && (
@@ -220,9 +266,14 @@ export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) 
         </div>
       </div>
 
-      {/* Filter row */}
-      <div className={`grid grid-cols-2 gap-3 ${hideState ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
-        {!hideState && (
+      {/* Filter row. Column count tracks how many controls render: State (US only) + Status +
+          Instrument + Materials, plus Resin when the polymer scan has data. */}
+      <div className={`grid grid-cols-2 gap-3 ${
+        { 3: 'md:grid-cols-3', 4: 'md:grid-cols-4', 5: 'md:grid-cols-5' }[
+          (showState ? 4 : 3) + (showResin ? 1 : 0)
+        ]
+      }`}>
+        {showState && (
           <Select
             label="State"
             value={filters.state}
@@ -258,6 +309,15 @@ export function BillFilters({ filters, onChange, hideState }: BillFiltersProps) 
           }))}
           placeholder="All"
         />
+        {showResin && (
+          <MultiSelect
+            label="Resin / Polymer"
+            values={filters.polymers}
+            onChange={v => set({ polymers: v })}
+            options={resinOptions!.map(code => ({ value: code, label: RESIN_NAMES[code] ?? code }))}
+            placeholder="Any"
+          />
+        )}
       </div>
 
       {/* Reset. (eprOnly — circular-economy relevance — is the product's fixed editorial scope, applied
@@ -287,10 +347,14 @@ export function applyBillFilters(bills: BillSummary[], f: BillFilterState): Bill
     if (f.enactedOnly && b.status?.toLowerCase() !== 'enacted') return false;
     if (f.state && b.state !== f.state) return false;
     if (f.status && b.status?.toLowerCase() !== f.status.toLowerCase()) return false;
-    if (f.instrumentType && b.instrument_type !== f.instrumentType) return false;
+    // Match the instrument anywhere in the law's set (primary + secondary), not just the primary.
+    if (f.instrumentType && !(b.instrument_types ?? (b.instrument_type ? [b.instrument_type] : [])).includes(f.instrumentType)) return false;
     if (f.urgency && b.urgency?.toLowerCase() !== f.urgency.toLowerCase()) return false;
     if (f.materialCategories.length &&
         !f.materialCategories.some(m => (b.material_categories ?? []).includes(m))) return false;
+    // Resin filter: keep bills naming ANY of the selected resins (OR), mirroring material categories.
+    if (f.polymers.length &&
+        !f.polymers.some(p => (b.polymers ?? []).includes(p))) return false;
     if (f.hasLitigation && !(b.litigation_case_count > 0)) return false;
     if (f.search) {
       const q = f.search.toLowerCase();
@@ -302,4 +366,12 @@ export function applyBillFilters(bills: BillSummary[], f: BillFilterState): Bill
     }
     return true;
   });
+}
+
+/** Distinct resin codes present across a bill set, ordered by the canonical RESIN_NAMES list, for
+ *  feeding BillFilters' `resinOptions`. Empty when no bill carries polymers (pre-scan) → filter hidden. */
+export function resinOptionsFromBills(bills: BillSummary[]): string[] {
+  const present = new Set<string>();
+  for (const b of bills) for (const code of b.polymers ?? []) present.add(code);
+  return Object.keys(RESIN_NAMES).filter(code => present.has(code));
 }

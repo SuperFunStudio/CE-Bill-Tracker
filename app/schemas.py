@@ -6,6 +6,9 @@ from pydantic import BaseModel
 
 class BillSummary(BaseModel):
     id: int
+    # "US" (default) or "EU". The `state` field below is the sub-jurisdiction within the region
+    # ("CA"/"US" federal for US, "EU" for EU-wide). See migration 031.
+    region: str = "US"
     state: str
     bill_number: str | None
     title: str | None
@@ -14,7 +17,12 @@ class BillSummary(BaseModel):
     ce_relevant: bool
     confidence_score: float | None
     material_categories: list | None
+    # Resin codes detected in the full bill text (compliance_details['polymers']), surfaced here so
+    # the Bill Explorer can filter to a specific resin (HDPE, EVA…). Null until the polymer scan runs.
+    polymers: list[str] | None = None
     instrument_type: str | None
+    # Full instrument set (a law is often several at once); instrument_type is the primary. See migration 034.
+    instrument_types: list | None = None
     urgency: str | None
     ai_summary: str | None
     policy_stance: str | None = None
@@ -40,6 +48,25 @@ class BillDetail(BillSummary):
     compliance_details: dict | None
     created_at: datetime
     updated_at: datetime
+
+
+class BillSearchHit(BillSummary):
+    """A full-text search result (GET /bills/search): the bill summary plus the highlighted
+    snippet(s) where the query matched in the bill's full text. `snippets` come from Postgres
+    `ts_headline` — the matched term wrapped in <mark>…</mark>, on text that was already HTML-stripped
+    at ingest, so the only markup is the highlight. `text_indexed` is always True here (only indexed
+    bills can match) but is carried so the UI can mark a result as a deep-text hit vs. a summary hit."""
+    snippets: list[str] = []
+    text_indexed: bool = True
+
+
+class TextCoverageStats(BaseModel):
+    """How many ce_relevant bills have indexed full text (GET /bills/text-coverage). Lets the UI be
+    honest that full-text search isn't exhaustive — a thin/empty deep-search result means 'not in the
+    text we've indexed', not 'nowhere in any bill'. indexed_bills == 0 means the index isn't populated
+    on this environment yet (so the deep-search UI stays hidden)."""
+    indexed_bills: int
+    total_bills: int
 
 
 class StateMapSummary(BaseModel):
@@ -151,6 +178,7 @@ class ChampionSummary(BaseModel):
 
 class DeadlineSummary(BaseModel):
     id: int
+    region: str = "US"
     state: str
     deadline_type: str
     deadline_date: date
@@ -202,7 +230,11 @@ class SubscriptionCreate(BaseModel):
     email: str | None = None
     organization: str | None = None
     slack_webhook: str | None = None
+    # LEGACY flat jurisdiction list (kept for back-compat). Prefer region_scope below.
     states: list[str] = ["ALL"]
+    # Region-keyed jurisdiction scope: {"US": ["CA","OR"], "EU": ["*"]}. Empty {} = match all
+    # regions. If omitted but `states` is given, the API maps it to {"US": states}. See migration 032.
+    region_scope: dict[str, list[str]] = {}
     material_categories: list[str] = ["ALL"]
     instrument_types: list[str] = ["ALL"]
     min_confidence: float = 0.7
@@ -516,5 +548,10 @@ class BillOutcomeSummary(BaseModel):
     source_url: str | None = None
     confidence: float | None = None
     reviewed: bool = False
+    # Remediation arc (negative/mixed outcomes only): the later law that fixed the problem.
+    # remediated_by_bill_id is set when that law is a tracked row (→ clickable).
+    remediation_note: str | None = None
+    remediation_bill_number: str | None = None
+    remediated_by_bill_id: int | None = None
 
     model_config = {"from_attributes": True}

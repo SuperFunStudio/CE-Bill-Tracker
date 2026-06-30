@@ -113,9 +113,16 @@ class ScoringEngine:
         self,
         state_presences: list["CompanyStatePresence"],
         bill_state: str,
+        bill_region: str = "US",
     ) -> float:
-        """Max presence-type weight for the bill's state."""
-        matching = [p for p in state_presences if p.state == bill_state]
+        """Max presence-type weight for the bill's (region, jurisdiction). A presence matches only
+        when both its region and jurisdiction code equal the bill's — so an EU presence never scores
+        against a US bill and vice versa."""
+        matching = [
+            p
+            for p in state_presences
+            if p.state == bill_state and getattr(p, "region", "US") == bill_region
+        ]
         if not matching:
             return 0.0
         return max(PRESENCE_WEIGHTS.get(p.presence_type, 0.0) for p in matching)
@@ -170,7 +177,7 @@ class ScoringEngine:
         material_score, volume_confidence = self.score_material(
             company_materials, bill_categories, all_companies_volumes, company.id
         )
-        geographic_score = self.score_geographic(state_presences, bill.state)
+        geographic_score = self.score_geographic(state_presences, bill.state, bill.region)
         severity_score = self.score_severity(bill)
 
         composite = (

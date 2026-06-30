@@ -3,6 +3,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeContext';
+import { useRegion } from './RegionContext';
+import { RegionSwitcher } from './RegionSwitcher';
 import { useScrolled } from '@/hooks/useScrolled';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
@@ -10,11 +12,13 @@ import {
   HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
 } from '@/components/ui/icons';
 
+// `usOnly` items are hidden outside the US: Federal Actions has no EU analog yet (EU-central law is
+// shown in the Bill Explorer), and company impact scoring is US-only. See RegionContext.
 const NAV_ITEMS = [
   { href: '/', label: 'Bill Explorer', Icon: HomeIcon },
   { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon },
-  { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon },
-  { href: '/company', label: 'Portfolio Exposure', Icon: FactoryIcon },
+  { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon, usOnly: true },
+  { href: '/company', label: 'My Portfolio', Icon: FactoryIcon, usOnly: true },
   { href: '/design-guide', label: 'Design Guide', Icon: CompassIcon },
   { href: '/pricing', label: 'Pricing', Icon: TagIcon },
   { href: '/about', label: 'About', Icon: InfoIcon },
@@ -35,11 +39,12 @@ export function TopNav() {
   const scrolled = useScrolled(80);
   const { theme, toggle } = useTheme();
   const { isPro } = useAuth();
+  const { region, def } = useRegion();
 
-  // Pro users get "Account" in place of "Pricing"; everyone else keeps the Pricing link.
-  const navItems = isPro
-    ? NAV_ITEMS.map(item => (item.href === '/pricing' ? ACCOUNT_ITEM : item))
-    : NAV_ITEMS;
+  // Hide US-only destinations outside the US, then swap Pricing→Account for Pro users.
+  const navItems = NAV_ITEMS
+    .filter(item => region === 'US' || !item.usOnly)
+    .map(item => (isPro && item.href === '/pricing' ? ACCOUNT_ITEM : item));
 
   const isActive = (href: string) =>
     pathname === href || (href !== '/' && pathname.startsWith(href));
@@ -108,7 +113,7 @@ export function TopNav() {
               scrolled ? 'max-h-0 opacity-0' : 'mt-2 max-h-10 opacity-100 text-sm sm:text-base'
             }`}
           >
-            Tracking circularity-aligned legislation across the USA
+            Tracking circularity-aligned legislation {def.blurb}
           </p>
         </Link>
 
@@ -126,6 +131,9 @@ export function TopNav() {
 
       {/* Desktop section bar — visible at sm+ */}
       <nav className="relative hidden sm:flex items-center justify-center flex-wrap gap-x-5 gap-y-1 border-t border-border-default px-4 py-2">
+        <div className="absolute left-4 top-1/2 -translate-y-1/2">
+          <RegionSwitcher />
+        </div>
         {renderLinks('bar')}
         <div className="absolute right-4 top-1/2 -translate-y-1/2">
           <AuthButton />
@@ -136,6 +144,9 @@ export function TopNav() {
       {menuOpen && (
         <nav className="sm:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
           <div className="max-w-6xl mx-auto p-3 space-y-1">
+            <div className="pb-2 mb-1 border-b border-border-default">
+              <RegionSwitcher />
+            </div>
             {renderLinks('menu')}
             <div className="pt-2 border-t border-border-default mt-2">
               <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />

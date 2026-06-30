@@ -2,7 +2,7 @@
 // not secrets). Access is controlled by Firebase Auth + backend ID-token verification, not by hiding
 // this config. Retrieved via `firebase apps:sdkconfig WEB`. See gating-and-monetization-plan.
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, OAuthProvider, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyDEhG3X9ufgPu1ffP190L9XLhJDSeDRs94',
@@ -17,3 +17,5 @@ const firebaseConfig = {
 export const firebaseApp: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 export const auth: Auth = getAuth(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
+// Microsoft (Entra ID / personal MSAs) via the generic OAuth provider keyed on the microsoft.com id.
+export const microsoftProvider = new OAuthProvider('microsoft.com');

@@ -1,7 +1,8 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useBills } from '@/hooks/useBills';
+import { BillModal } from '@/components/ui/BillModal';
 import { useFederalActions } from '@/hooks/useFederal';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
 import { AlertBanner } from '@/components/ui/AlertBanner';
@@ -9,9 +10,12 @@ import { FreshnessNote } from '@/components/ui/FreshnessNote';
 import { FederalWatchBanner } from '@/components/ui/FederalWatchBanner';
 import { StatesTicker } from '@/components/ui/StatesTicker';
 import { BillTable } from '@/components/bills/BillTable';
-import { BillFilters, DEFAULT_FILTERS, applyBillFilters, type BillFilterState } from '@/components/bills/BillFilters';
+import { BillFilters, DEFAULT_FILTERS, applyBillFilters, resinOptionsFromBills, type BillFilterState } from '@/components/bills/BillFilters';
+import { FullTextMatches } from '@/components/bills/FullTextMatches';
+import { SkeletonList } from '@/components/ui/SkeletonList';
 import { ScopedDeadlineBanner } from '@/components/scope/ScopedDeadlineBanner';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
+import { useRegion } from '@/components/layout/RegionContext';
 import { inScope } from '@/lib/scope';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
@@ -23,11 +27,36 @@ const StateMap = dynamic(
   { ssr: false, loading: () => <div className="h-80 bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
+const EuMemberMap = dynamic(
+  () => import('@/components/map/EuMemberMap').then(m => ({ default: m.EuMemberMap })),
+  { ssr: false, loading: () => <div className="h-80 bg-bg-secondary rounded-lg animate-pulse" /> }
+);
+
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
+  const { region } = useRegion();
 
-  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000 });
+  // The global region selector (top nav) drives which jurisdiction family the server returns.
+  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, region });
   const { data: federal = [] } = useFederalActions({ limit: 50 });
+
+  // Deep link from emails: /?bill=123 opens that bill's detail panel. Resolved against the FULL bill
+  // set (not the filtered table) so an active scope/filter can't hide a directly-linked bill.
+  const [deepLinkId, setDeepLinkId] = useState<number | null>(null);
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get('bill');
+    const id = raw ? parseInt(raw, 10) : NaN;
+    if (Number.isFinite(id)) setDeepLinkId(id);
+  }, []);
+  const deepLinkedBill = useMemo(
+    () => (deepLinkId == null ? null : bills.find(b => b.id === deepLinkId) ?? null),
+    [bills, deepLinkId],
+  );
+  function closeDeepLink() {
+    setDeepLinkId(null);
+    // Drop the ?bill param so a refresh/back doesn't reopen it.
+    window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+  }
 
   const { scope } = useScope();
   const scopeActive = useScopeActive();
@@ -36,6 +65,10 @@ export default function HomePage() {
   const gatePro = useProGate();
 
   const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
+
+  // Resin filter options come from the full bill set, so the choices are stable regardless of the
+  // active scope/filters. Empty (and the filter stays hidden) until the polymer scan tags bills.
+  const resinOptions = useMemo(() => resinOptionsFromBills(bills), [bills]);
 
   // When a scope is active, the table defaults to the reader's states + materials. The map applies
   // only the material side of the scope so every state stays visible/clickable (matching the
@@ -58,6 +91,8 @@ export default function HomePage() {
   }, [mapSource, billFilters]);
 
   const tableBills = useMemo(() => applyBillFilters(tableSource, billFilters), [tableSource, billFilters]);
+  // IDs already in the table — the deep full-text search surfaces only matches NOT shown here.
+  const tableBillIds = useMemo(() => new Set(tableBills.map(b => b.id)), [tableBills]);
 
   // CSV export is a Pro feature: gatePro routes anon → sign-in, Free → checkout, Pro → the download.
   function handleExport() {
@@ -69,6 +104,7 @@ export default function HomePage() {
       Urgency: b.urgency ?? '',
       Instrument: b.instrument_type ?? '',
       Materials: (b.material_categories ?? []).join('; '),
+      Resins: (b.polymers ?? []).join('; '),
       'Last Action': formatDate(b.last_action_date),
       'Source URL': b.source_url ?? '',
     }))), 'csv_export_bills');
@@ -109,11 +145,14 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Top-states leaderboard line, right under the nav */}
-      <StatesTicker
-        data={mapData}
-        onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
-      />
+      {/* Top-states leaderboard line, right under the nav. US-only — the EU member-state leaderboard
+          arrives with national-law ingestion (Phase B); EU-central law is EU-wide, no per-state split. */}
+      {region === 'US' && (
+        <StatesTicker
+          data={mapData}
+          onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
+        />
+      )}
 
       {/* Bill Explorer: search + filters sit above the map */}
       <section>
@@ -139,9 +178,9 @@ export default function HomePage() {
           </button>
         </div>
 
-        <BillFilters filters={billFilters} onChange={setBillFilters} />
+        <BillFilters filters={billFilters} onChange={setBillFilters} resinOptions={resinOptions} />
 
-        {billFilters.state && (
+        {region === 'US' && billFilters.state && (
           <div className="mt-2 text-sm text-text-muted">
             Showing <span className="text-green-accent font-medium">{STATE_NAMES[billFilters.state] ?? billFilters.state}</span>
             {' — '}
@@ -150,16 +189,30 @@ export default function HomePage() {
             <button onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className="underline hover:text-text-secondary">clear</button>
           </div>
         )}
+
+        {/* Deep search: bills whose statute text matches the term but whose title/summary don't.
+            Sits right under the search so full-text hits are visible even when the table reads "0 bills". */}
+        <div className="mt-3">
+          <FullTextMatches
+            query={billFilters.search}
+            shownIds={tableBillIds}
+            filters={billFilters}
+          />
+        </div>
       </section>
 
-      {/* Map */}
+      {/* Map — US states choropleth, or the EU member-states shell (Phase B: national-law coverage) */}
       <section>
-        <StateMap
-          data={mapData}
-          selectedState={billFilters.state || null}
-          onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
-          height={380}
-        />
+        {region === 'US' ? (
+          <StateMap
+            data={mapData}
+            selectedState={billFilters.state || null}
+            onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
+            height={380}
+          />
+        ) : (
+          <EuMemberMap height={380} />
+        )}
       </section>
 
       {/* Bill results table — below the map */}
@@ -168,7 +221,7 @@ export default function HomePage() {
             last-known data shows with a quiet FreshnessNote instead of a scary banner. */}
         {billsError && <AlertBanner variant="red" message="We're having trouble loading bill data right now — please refresh in a moment." className="mb-3" />}
         {billsLoading ? (
-          <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-bg-secondary rounded animate-pulse" />)}</div>
+          <SkeletonList rows={5} />
         ) : (
           <BillTable bills={tableBills} autoPageSize={5} />
         )}
@@ -213,6 +266,9 @@ export default function HomePage() {
           View Federal Actions &rarr;
         </Link>
       </section>
+
+      {/* Deep-linked bill from an email (/?bill=123) — opens over the page, independent of the table. */}
+      <BillModal bill={deepLinkedBill} onClose={closeDeepLink} />
 
       {/* Footer */}
       <footer className="border-t border-border-default pt-6 pb-2 text-center">

@@ -26,9 +26,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import base64
 import json
-import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -40,19 +38,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.classification.polymers import BY_CODE, detect_polymers  # noqa: E402
 from app.config import settings  # noqa: E402
+# Shared fetch ladder (LegiScan → OpenStates → source_url, returns clean tag-free text).
+from app.ingestion.bill_text import fetch_clean_text  # noqa: E402
 from app.ingestion.legiscan import LegiScanClient  # noqa: E402
-from app.ingestion.openstates import OpenStatesClient, _extract_pdf_text  # noqa: E402
+from app.ingestion.openstates import OpenStatesClient  # noqa: E402
 
 DEFAULT_MATERIALS = ["plastic_packaging", "plastic_products"]
-
-
-def _canon(num: str | None) -> str:
-    """Normalize a bill number for cross-source matching (drop punctuation, zero-pad)."""
-    if not num:
-        return ""
-    raw = num.upper().replace("-", "").replace(" ", "").replace(".", "")
-    m = re.match(r"^([A-Z]+)0*(\d+)", raw)
-    return f"{m.group(1)}{m.group(2)}" if m else raw
 
 
 def _normalize_dsn(dsn: str) -> str:
@@ -81,81 +72,6 @@ async def _candidates(db: AsyncSession, materials: list[str] | None, only_missin
            f"FROM bills WHERE {' AND '.join(clauses)} "
            "ORDER BY status_date DESC NULLS LAST LIMIT :limit")
     return list((await db.execute(text(sql), params)).all())
-
-
-async def _resolve_legiscan_id(client: LegiScanClient, b) -> int | None:
-    """LegiScan bill_id: stored id, else an exact bill#/state search match."""
-    if b.legiscan_bill_id:
-        return int(b.legiscan_bill_id)
-    target = _canon(b.bill_number)
-    if not target:
-        return None
-    try:
-        res = await client.search((b.bill_number or "").replace("-", " "), state=b.state)
-    except Exception:  # noqa: BLE001
-        return None
-    for r in res:
-        if r.get("state") == b.state and _canon(r.get("bill_number")) == target:
-            return int(r["bill_id"])
-    return None
-
-
-async def _legiscan_text(client: LegiScanClient, legiscan_bill_id: int) -> str:
-    """Full bill text from LegiScan: pick the best text doc, decode HTML/PDF/plain."""
-    bill = await client.get_bill(int(legiscan_bill_id))
-    docs = bill.get("texts") or []
-
-    def rank(d):
-        return (1 if "html" in (d.get("mime") or "").lower() else 0)
-
-    for d in sorted(docs, key=rank, reverse=True):
-        doc_id = d.get("doc_id")
-        if not doc_id:
-            continue
-        data = await client._get("getBillText", id=int(doc_id))
-        encoded = (data.get("text") or {}).get("doc", "")
-        if not encoded:
-            continue
-        try:
-            blob = base64.b64decode(encoded)
-        except Exception:  # noqa: BLE001
-            continue
-        if blob[:5] == b"%PDF-" or "pdf" in (d.get("mime") or "").lower():
-            txt = _extract_pdf_text(blob)
-        else:
-            try:
-                txt = blob.decode("utf-8")
-            except UnicodeDecodeError:
-                txt = blob.decode("latin-1", errors="replace")
-        if txt and len(txt) > 400:
-            return txt
-    return ""
-
-
-async def _fetch_full_text(ls_client: LegiScanClient, os_client: OpenStatesClient, b,
-                           os_delay: float) -> tuple[str, str]:
-    """(text, source_label). LegiScan is primary (reliable full text + fresh quota); the
-    OpenStates versions API is the throttled fallback; the source_url scrape is last because
-    for many states it returns the bill's overview/landing page, not the document."""
-    try:
-        lid = await _resolve_legiscan_id(ls_client, b)
-        if lid:
-            txt = await _legiscan_text(ls_client, lid)
-            if txt:
-                return txt, "legiscan"
-    except Exception:  # noqa: BLE001
-        pass
-    if b.openstates_id and not str(b.openstates_id).startswith("hist:"):
-        if os_delay:
-            await asyncio.sleep(os_delay)  # respect OpenStates free-tier rate limit
-        txt = await os_client.get_bill_text(b.openstates_id)
-        if txt:
-            return txt, "openstates"
-    if b.source_url:
-        txt = await os_client.get_text_from_source(b.source_url)
-        if txt:
-            return txt, "source_url?"
-    return "", "none"
 
 
 async def main() -> None:
@@ -190,7 +106,7 @@ async def main() -> None:
             for b in bills:
                 tag = f"{b.state} {b.bill_number or '?'}"
                 try:
-                    full_text, src = await _fetch_full_text(ls_client, os_client, b, args.os_delay)
+                    full_text, src = await fetch_clean_text(ls_client, os_client, b, args.os_delay)
                 except Exception as e:  # noqa: BLE001
                     print(f"  [fail] {tag}: {type(e).__name__}: {e}")
                     continue

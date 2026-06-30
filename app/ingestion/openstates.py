@@ -17,6 +17,10 @@ BASE_URL = "https://v3.openstates.org"
 # Preference order for which bill-version document to feed the Sonnet extractor.
 _TEXT_MEDIA_PREFERENCE = ("text/plain", "text/html", "application/pdf")
 _TAG_RE = re.compile(r"<[^>]+>")
+# Strip these blocks content-and-all before tag-stripping, so a landing-page scrape doesn't leave
+# inline JS/CSS text (e.g. gtag('config', …)) baked into the "bill text" we hand to the Sonnet
+# extractor / store for full-text search. Plain tag-stripping alone removes <script> but keeps the code.
+_SCRIPT_STYLE_RE = re.compile(r"<(script|style|head)\b[^>]*>.*?</\1>", re.I | re.S)
 
 
 # Some state legislature sites reject the default httpx User-Agent or serve
@@ -100,6 +104,7 @@ async def _document_text(url: str, media_hint: str = "") -> str:
         return text
     text = resp.text
     if media_hint in ("text/html", "application/pdf") or "<" in text[:2000]:
+        text = _SCRIPT_STYLE_RE.sub(" ", text)
         text = html.unescape(_TAG_RE.sub(" ", text))
         text = re.sub(r"\s+", " ", text).strip()
     return text

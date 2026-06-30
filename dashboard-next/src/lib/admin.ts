@@ -188,3 +188,92 @@ export const setAccountDisabled = (getToken: GetToken, email: string, disabled: 
     method: 'POST',
     body: JSON.stringify({ email, disabled }),
   });
+
+// ── Real-world-outcome review ───────────────────────────────────────────────
+// Machine-researched documented outcomes (scripts/propose_bill_outcomes.py) land here as
+// reviewed=false; the admin approves, edits, or rejects them. They never reach the public Insights
+// page until approved. See app/api/admin.py.
+
+export interface AdminOutcome {
+  id: number;
+  slug: string;
+  bill_id: number | null;
+  state: string | null;
+  bill_number: string | null;
+  law_title: string | null;
+  instrument_type: string | null;
+  material_categories: string[];
+  direction: string;
+  metric_label: string | null;
+  metric_value: number | null;
+  metric_unit: string | null;
+  metric_display: string | null;
+  summary: string;
+  attribution: string | null;
+  as_of_date: string | null;
+  source_name: string | null;
+  source_url: string | null;
+  confidence: number | null;
+  reviewed: boolean;
+  remediation_note: string | null;
+  remediation_bill_number: string | null;
+  remediated_by_bill_id: number | null;
+  remediation_checked_at: string | null;
+  created_at: string | null;
+}
+
+export interface OutcomePage {
+  total: number;
+  unreviewed: number;
+  items: AdminOutcome[];
+}
+
+// Mutable fields the admin may correct before/while approving.
+export type OutcomeEdit = Partial<
+  Pick<
+    AdminOutcome,
+    | 'direction'
+    | 'metric_label'
+    | 'metric_value'
+    | 'metric_unit'
+    | 'metric_display'
+    | 'summary'
+    | 'attribution'
+    | 'as_of_date'
+    | 'source_name'
+    | 'source_url'
+    | 'law_title'
+    | 'instrument_type'
+    | 'material_categories'
+    | 'confidence'
+    | 'reviewed'
+    | 'remediation_note'
+    | 'remediation_bill_number'
+  >
+>;
+
+export function fetchOutcomes(
+  getToken: GetToken,
+  opts: { reviewed?: boolean; direction?: string; limit?: number; offset?: number } = {},
+): Promise<OutcomePage> {
+  const p = new URLSearchParams();
+  if (opts.reviewed !== undefined) p.set('reviewed', String(opts.reviewed));
+  if (opts.direction) p.set('direction', opts.direction);
+  p.set('limit', String(opts.limit ?? 100));
+  p.set('offset', String(opts.offset ?? 0));
+  return authedFetch<OutcomePage>(`/admin/outcomes?${p}`, getToken);
+}
+
+export const updateOutcome = (getToken: GetToken, id: number, patch: OutcomeEdit) =>
+  authedFetch<AdminOutcome>(`/admin/outcomes/${id}`, getToken, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+
+export const approveOutcome = (getToken: GetToken, id: number) =>
+  updateOutcome(getToken, id, { reviewed: true });
+
+export const deleteOutcome = (getToken: GetToken, id: number) =>
+  authedFetch<{ deleted: boolean; id: number; slug: string }>(`/admin/outcomes/${id}`, getToken, {
+    method: 'DELETE',
+  });

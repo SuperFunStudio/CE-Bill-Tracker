@@ -101,7 +101,7 @@ export function StateCyclesView() {
       </div>
 
       {error ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-sm text-error">{error}</p>
       ) : !rows ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (

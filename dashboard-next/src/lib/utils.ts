@@ -224,9 +224,11 @@ export const FIPS_TO_ABBR: Record<string, string> = {
  */
 export function legiscanUrl(state?: string | null, billNumber?: string | null): string | null {
   if (!state || !billNumber) return null;
-  const num = billNumber.replace(/\s+/g, '');
+  // LegiScan's URL scheme uses no separator (HB2156, not "HB-2156"/"HB 2156"), and our bill_numbers
+  // are almost all hyphenated — so strip everything but letters/digits or the link 404s.
+  const num = billNumber.replace(/[^a-zA-Z0-9]/g, '');
   if (!num) return null;
-  return `https://legiscan.com/${state.toUpperCase()}/bill/${encodeURIComponent(num)}`;
+  return `https://legiscan.com/${state.toUpperCase()}/bill/${num}`;
 }
 
 export interface SourceLink {

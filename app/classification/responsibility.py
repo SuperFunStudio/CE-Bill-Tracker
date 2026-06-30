@@ -156,7 +156,9 @@ _LEAD_NOISE = {"the", "a", "an", "to", "by", "with", "from", "for", "of", "and",
                "convened", "appointed", "such", "said", "this", "any", "new", "shall",
                "members", "membership", "after", "consultation", "recommendation",
                "recommendations", "including", "establishing", "establish", "create",
-               "creates", "creating", "advice", "advise", "review", "reviewed"}
+               "creates", "creating", "advice", "advise", "review", "reviewed",
+               "in", "chair", "chairperson", "chairman", "vice", "co", "as", "on",
+               "consult", "consulting", "consults", "appointment"}
 
 
 def _title(name: str) -> str:

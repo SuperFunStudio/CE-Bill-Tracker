@@ -82,6 +82,15 @@ function OutcomeCard({ outcome }: { outcome: BillOutcome }) {
 
       <p className="text-text-secondary text-body leading-relaxed">{outcome.summary}</p>
 
+      {outcome.direction !== 'positive' && outcome.remediation_note && (
+        <div className="rounded-md border border-[rgb(var(--green-accent))]/40 bg-[rgb(var(--green-accent))]/5 px-3 py-2 text-sm">
+          <span className="font-semibold text-[rgb(var(--green-accent))]">
+            → Fixed by {outcome.remediation_bill_number || 'a later law'}:
+          </span>{' '}
+          <span className="text-text-secondary">{outcome.remediation_note}</span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
         {outcome.attribution && ATTRIBUTION_NOTE[outcome.attribution] && (
           <span title="How tightly the figure ties to the statute">
@@ -112,7 +121,9 @@ export function RealWorldImpact() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchBillOutcomes()
+    // reviewed_only: only human-vetted figures on the public page. Unvetted candidates
+    // (reviewed=false, from scripts/propose_bill_outcomes.py) live only in the /admin console.
+    fetchBillOutcomes({ reviewed_only: true })
       .then((d) => {
         if (!cancelled) setOutcomes(d);
       })
@@ -124,7 +135,7 @@ export function RealWorldImpact() {
     };
   }, []);
 
-  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (error) return <p className="text-sm text-error">{error}</p>;
   if (!outcomes) {
     return <div className="h-32 w-full animate-pulse rounded-lg bg-bg-tertiary" />;
   }

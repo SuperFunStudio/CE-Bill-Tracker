@@ -170,7 +170,7 @@ export default function InsightsPage() {
         )}
 
         {error ? (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p className="text-sm text-error">{error}</p>
         ) : !points ? (
           <div className="h-[360px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
         ) : (

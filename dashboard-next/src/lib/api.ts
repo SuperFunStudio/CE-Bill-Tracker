@@ -1,5 +1,7 @@
 import type {
   BillSummary,
+  BillSearchHit,
+  TextCoverageStats,
   BillDetail,
   BillParams,
   StateMapSummary,
@@ -50,8 +52,10 @@ export interface SubscribePayload {
   email: string;
   /** Optional — the subscriber's organization. */
   organization?: string;
-  /** Two-letter state codes, or ["ALL"] for every jurisdiction. */
-  states: string[];
+  /** LEGACY flat jurisdiction list (US-only). Prefer region_scope; back-compat maps it to US. */
+  states?: string[];
+  /** Region-keyed jurisdiction scope: { US: ["CA","OR"], EU: ["*"] }. "*" = whole region. Empty = all. */
+  region_scope?: Record<string, string[]>;
   /** Policy instrument slugs (epr, right_to_repair, …), or ["ALL"] for every topic. */
   instrument_types: string[];
   /** Optional material_category slugs to narrow alerts; omit/["ALL"] for every material. */
@@ -103,6 +107,17 @@ export async function fetchBills(params?: BillParams): Promise<BillSummary[]> {
 
 export async function fetchBill(id: number): Promise<BillDetail> {
   return apiFetch<BillDetail>(buildUrl(`/bills/${id}`));
+}
+
+/** Full-text search over persisted bill text — returns bills whose statute text matches `q`
+ *  (even when the title/summary don't), each with highlighted ts_headline snippets. */
+export async function fetchBillSearch(q: string, limit = 50): Promise<BillSearchHit[]> {
+  return apiFetch<BillSearchHit[]>(buildUrl('/bills/search', { q, limit }));
+}
+
+/** How many bills the full-text search actually covers — for the deep-search coverage note. */
+export async function fetchBillTextCoverage(): Promise<TextCoverageStats> {
+  return apiFetch<TextCoverageStats>(buildUrl('/bills/text-coverage'));
 }
 
 export async function fetchMapSummary(): Promise<StateMapSummary[]> {
@@ -234,7 +249,10 @@ export async function fetchCompanyObligations(companyId: string): Promise<Compan
   return apiFetch<CompanyObligationsResponse>(buildUrl(`/companies/${companyId}/obligations`));
 }
 
-/** Per-state compliance pathways — one "how do I comply" record per enacted EPR law. */
-export async function fetchCompliancePathways(state: string): Promise<CompliancePathway[]> {
-  return apiFetch<CompliancePathway[]>(buildUrl('/compliance/pathways', { state }));
+/** Compliance pathways — one "how do I comply" record per enacted law. Scope by `state` (a US state
+ *  profile) and/or `region` (US default, EU, or "all" for the self-serve checker across a region). */
+export async function fetchCompliancePathways(
+  params: { state?: string; region?: string },
+): Promise<CompliancePathway[]> {
+  return apiFetch<CompliancePathway[]>(buildUrl('/compliance/pathways', params));
 }

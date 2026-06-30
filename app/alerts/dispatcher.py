@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.detector import ChangeDetector
 from app.alerts.digest import load_watchlists, subscription_matches_bill
+from app.alerts.retention import filter_retained_subscriptions
 from app.alerts.sendgrid_sender import SendGridSender
 from app.alerts.slack_sender import SlackSender
 from app.config import settings
@@ -112,7 +113,9 @@ class AlertDispatcher:
         result = await db.execute(
             select(AlertSubscription).where(AlertSubscription.active == True)
         )
-        all_subs = result.scalars().all()
+        # Honour the retention promise: a lapsed-trial account's alerts stop after a year, while a
+        # live Pro seat (and every anonymous newsletter sub) keeps flowing. See alerts/retention.py.
+        all_subs = await filter_retained_subscriptions(db, list(result.scalars().all()))
 
         # Resolve watch-list membership for the owners of any watchlist subscriptions, so a starred
         # bill reaches its follower regardless of the filter columns. Loaded once per bill.

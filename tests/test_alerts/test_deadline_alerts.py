@@ -14,6 +14,11 @@ from app.models import AlertSubscription, Bill, ComplianceDeadline, FederalActio
 def _sub(**kw) -> AlertSubscription:
     s = MagicMock(spec=AlertSubscription)
     s.email = kw.get("email", "a@example.com")
+    # Anonymous public filter subscription (no firebase_uid) — always retained, so these scoping
+    # tests exercise topic/material matching without the Pro/entitlement retention path. Without
+    # this, the spec mock returns a truthy MagicMock for firebase_uid and alerts_retained() would
+    # call is_pro() on it. See app/alerts/retention.py.
+    s.firebase_uid = kw.get("firebase_uid")
     s.organization = kw.get("organization")
     s.states = kw.get("states", ["ALL"])
     s.material_categories = kw.get("material_categories", [])

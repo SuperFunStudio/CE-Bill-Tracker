@@ -11,7 +11,7 @@ import {
   signOut as fbSignOut,
   type User,
 } from 'firebase/auth';
-import { auth, googleProvider } from '@/lib/firebase';
+import { auth, googleProvider, microsoftProvider } from '@/lib/firebase';
 import { track } from '@/lib/analytics';
 import { startProCheckout, startSignupTrial } from '@/lib/billing';
 import { attributeReferral, PENDING_REF_KEY } from '@/lib/referrals';
@@ -39,6 +39,7 @@ interface AuthState {
   signInEmail: (email: string, password: string) => Promise<void>;
   signUpEmail: (email: string, password: string) => Promise<void>;
   signInGoogle: () => Promise<void>;
+  signInMicrosoft: () => Promise<void>;
   signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
   refreshEntitlement: () => Promise<void>;
@@ -49,6 +50,12 @@ interface AuthState {
   resendVerification: () => Promise<void>;
   /** Send a Firebase password-reset email to the given address (no-op feedback handled by caller). */
   resetPassword: (email: string) => Promise<void>;
+  /** Ephemeral page-level confirmation message (e.g. just-signed-up), or null. Auto-dismisses. */
+  toast: string | null;
+  /** Show a toast for a few seconds. */
+  showToast: (message: string) => void;
+  /** Dismiss the current toast immediately. */
+  dismissToast: () => void;
 }
 
 const AuthCtx = createContext<AuthState | null>(null);
@@ -59,6 +66,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dismissToast = useCallback(() => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(null);
+  }, []);
+  const showToast = useCallback((message: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(message);
+    toastTimer.current = setTimeout(() => setToast(null), 8000);
+  }, []);
 
   const fetchEntitlement = useCallback(async (u: User | null) => {
     if (!u) {
@@ -111,9 +130,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // a verified email server-side, so this no-ops cleanly for an unverified account.
   const provisionNewAccount = useCallback(async () => {
     await attributePendingReferral();
-    await startSignupTrial(getToken);
+    const { granted } = await startSignupTrial(getToken);
     await fetchEntitlement(auth.currentUser);
-  }, [attributePendingReferral, getToken, fetchEntitlement]);
+    // granted is true only on the genuine first grant for this account — so this fires once, right
+    // when a brand-new signup completes, not on every later sign-in. Nudges them to the email (which
+    // can land in spam) so the welcome isn't missed.
+    if (granted) {
+      showToast("🎉 You're all signed up! Look out for a welcome email from us — check your spam folder just in case.");
+    }
+  }, [attributePendingReferral, getToken, fetchEntitlement, showToast]);
 
   // Provision a given uid at most once per session (the verified-poll below can fire repeatedly).
   const provisionedUids = useRef<Set<string>>(new Set());
@@ -207,6 +232,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Provisioning runs via onIdTokenChanged (Google emails are verified).
   }, []);
 
+  const signInMicrosoft = useCallback(async () => {
+    const result = await signInWithPopup(auth, microsoftProvider);
+    const isNew = getAdditionalUserInfo(result)?.isNewUser;
+    track(isNew ? 'sign_up' : 'login', { method: 'microsoft' });
+    // Provisioning runs via onIdTokenChanged (Microsoft emails are verified).
+  }, []);
+
   const signOut = useCallback(async () => {
     await fbSignOut(auth);
   }, []);
@@ -223,12 +255,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signInEmail,
     signUpEmail,
     signInGoogle,
+    signInMicrosoft,
     signOut,
     getToken,
     refreshEntitlement: () => fetchEntitlement(auth.currentUser),
     emailVerified: !!user?.emailVerified,
     resendVerification,
     resetPassword,
+    toast,
+    showToast,
+    dismissToast,
   };
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

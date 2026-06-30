@@ -14,11 +14,17 @@ import {
   fetchAccount,
   deleteAccountByEmail,
   setAccountDisabled,
+  fetchOutcomes,
+  updateOutcome,
+  approveOutcome,
+  deleteOutcome,
   type AdminStats,
   type Subscriber,
   type AccessRequestRow,
   type EntitlementRow,
   type AccountDetail,
+  type AdminOutcome,
+  type OutcomeEdit,
 } from '@/lib/admin';
 
 type GetToken = () => Promise<string | null>;
@@ -101,6 +107,7 @@ function Console({ getToken, adminEmail }: { getToken: GetToken; adminEmail: str
   return (
     <Shell>
       <StatsPanel stats={stats} error={statsErr} />
+      <OutcomesPanel getToken={getToken} reloadKey={reloadKey} />
       <GrantPanel getToken={getToken} onChange={bump} />
       <AccountPanel getToken={getToken} adminEmail={adminEmail} onChange={bump} />
       <EntitlementsPanel getToken={getToken} reloadKey={reloadKey} onChange={bump} />
@@ -649,5 +656,421 @@ function AccessRequestsPanel({ getToken, reloadKey }: { getToken: GetToken; relo
         </table>
       </div>
     </Section>
+  );
+}
+
+// ── Real-world-outcome review ──────────────────────────────────────────────────
+// The review queue for machine-researched documented outcomes (scripts/propose_bill_outcomes.py).
+// Each lands as reviewed=false and is invisible on the public Insights page until approved here.
+
+const DIRECTION_TONE: Record<string, 'green' | 'red' | 'amber'> = {
+  positive: 'green',
+  negative: 'red',
+  mixed: 'amber',
+};
+
+function figureText(o: AdminOutcome | OutcomeEdit): string {
+  if (o.metric_display) return o.metric_display;
+  if (o.metric_value !== null && o.metric_value !== undefined) {
+    return `${o.metric_value}${o.metric_unit ? ` ${o.metric_unit}` : ''}`;
+  }
+  return '—';
+}
+
+function OutcomesPanel({ getToken, reloadKey }: { getToken: GetToken; reloadKey: number }) {
+  const [items, setItems] = useState<AdminOutcome[]>([]);
+  const [unreviewed, setUnreviewed] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [pendingOnly, setPendingOnly] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const res = await fetchOutcomes(getToken, pendingOnly ? { reviewed: false } : {});
+      setItems(res.items);
+      setUnreviewed(res.unreviewed);
+      setTotal(res.total);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load outcomes.');
+    }
+  }, [getToken, pendingOnly]);
+
+  useEffect(() => { load(); }, [load, reloadKey]);
+
+  async function approve(id: number) {
+    if (busyId) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      await approveOutcome(getToken, id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not approve.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function unapprove(id: number) {
+    if (busyId) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      await updateOutcome(getToken, id, { reviewed: false });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not unpublish.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function reject(id: number) {
+    if (busyId) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      await deleteOutcome(getToken, id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not reject.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function save(id: number, draft: OutcomeEdit) {
+    if (busyId) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      await updateOutcome(getToken, id, draft);
+      setEditId(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const action = (
+    <button
+      onClick={() => setPendingOnly(p => !p)}
+      className="rounded-lg border border-border-default bg-bg-primary px-3 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
+    >
+      {pendingOnly ? 'Show all' : 'Pending only'}
+    </button>
+  );
+
+  return (
+    <Section title={`Real-world outcomes — ${unreviewed} pending review`} action={action}>
+      <p className="text-text-secondary text-sm leading-relaxed">
+        Machine-researched documented outcomes from <span className="text-text-primary">propose_bill_outcomes.py</span>,
+        awaiting a human. Each is invisible on the public Insights page until you{' '}
+        <span className="text-green-accent">approve</span> it. Verify the figure against its source, fix anything
+        wrong, or reject it. {pendingOnly ? `${unreviewed} pending` : `${total} total`}.
+      </p>
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+      <div className="space-y-3">
+        {items.map(o =>
+          editId === o.id ? (
+            <OutcomeEditor
+              key={o.id}
+              outcome={o}
+              busy={busyId === o.id}
+              onCancel={() => setEditId(null)}
+              onSave={draft => save(o.id, draft)}
+            />
+          ) : (
+            <OutcomeCard
+              key={o.id}
+              outcome={o}
+              busy={busyId === o.id}
+              onApprove={() => approve(o.id)}
+              onUnapprove={() => unapprove(o.id)}
+              onEdit={() => setEditId(o.id)}
+              onReject={() => reject(o.id)}
+            />
+          ),
+        )}
+        {items.length === 0 && !error && (
+          <p className="text-text-muted text-sm">
+            {pendingOnly ? 'Nothing pending — the queue is clear.' : 'No outcomes yet.'}
+          </p>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function OutcomeCard({
+  outcome: o, busy, onApprove, onUnapprove, onEdit, onReject,
+}: {
+  outcome: AdminOutcome;
+  busy: boolean;
+  onApprove: () => void;
+  onUnapprove: () => void;
+  onEdit: () => void;
+  onReject: () => void;
+}) {
+  const [confirmReject, setConfirmReject] = useState(false);
+  return (
+    <div className="rounded-lg border border-border-default bg-bg-primary p-4 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill tone={DIRECTION_TONE[o.direction] ?? 'muted'}>{o.direction}</Pill>
+        {o.reviewed ? <Pill tone="green">Live</Pill> : <Pill tone="amber">Pending</Pill>}
+        {o.attribution && <Pill>{o.attribution}</Pill>}
+        <span className="text-text-muted text-meta">
+          {o.state} {o.bill_number} · conf {o.confidence ?? '—'}
+        </span>
+      </div>
+      <p className="text-text-primary text-sm font-medium">{o.law_title || `${o.state} ${o.bill_number}`}</p>
+      <p className="text-text-primary text-sm">
+        <span className="font-serif text-lg">{figureText(o)}</span>
+        {o.metric_label && <span className="text-text-secondary"> {o.metric_label}</span>}
+      </p>
+      <p className="text-text-secondary text-sm leading-relaxed">{o.summary}</p>
+      <p className="text-text-muted text-xs">
+        {o.source_name || 'source'}
+        {o.source_url && (
+          <>
+            {' · '}
+            <a href={o.source_url} target="_blank" rel="noopener noreferrer" className="text-green-accent hover:underline break-all">
+              {o.source_url}
+            </a>
+          </>
+        )}
+        {o.as_of_date && <span> · as of {fmtDate(o.as_of_date)}</span>}
+      </p>
+      {o.direction !== 'positive' && o.remediation_note && (
+        <p className="text-xs text-green-accent">
+          → Fixed by {o.remediation_bill_number || 'a later law'}
+          {o.remediated_by_bill_id && <Pill tone="green">linked</Pill>}{' '}
+          <span className="text-text-secondary">{o.remediation_note}</span>
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        {o.reviewed ? (
+          <button onClick={onUnapprove} disabled={busy} className="text-xs text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-50">
+            {busy ? '…' : 'Unpublish'}
+          </button>
+        ) : (
+          <button onClick={onApprove} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-green-accent text-bg-primary px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+            {busy ? 'Approving…' : 'Approve → publish'}
+          </button>
+        )}
+        <button onClick={onEdit} disabled={busy} className="text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50">
+          Edit
+        </button>
+        {confirmReject ? (
+          <span className="inline-flex items-center gap-2">
+            <span className="text-text-muted text-xs">Delete?</span>
+            <button onClick={onReject} disabled={busy} className="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-50">
+              {busy ? '…' : 'Yes, reject'}
+            </button>
+            <button onClick={() => setConfirmReject(false)} className="text-xs text-text-muted hover:text-text-secondary transition-colors">
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button onClick={() => setConfirmReject(true)} disabled={busy} className="text-xs text-red-400/80 hover:text-red-300 transition-colors disabled:opacity-50">
+            Reject
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// All-string draft so numeric inputs edit cleanly; coerced to OutcomeEdit on save.
+interface OutcomeDraft {
+  direction: string;
+  attribution: string;
+  metric_label: string;
+  metric_value: string;
+  metric_unit: string;
+  metric_display: string;
+  summary: string;
+  as_of_date: string;
+  source_name: string;
+  source_url: string;
+  law_title: string;
+  confidence: string;
+  remediation_note: string;
+  remediation_bill_number: string;
+}
+
+function OutcomeEditor({
+  outcome: o, busy, onCancel, onSave,
+}: {
+  outcome: AdminOutcome;
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (draft: OutcomeEdit) => void;
+}) {
+  const [d, setD] = useState<OutcomeDraft>({
+    direction: o.direction,
+    attribution: o.attribution ?? '',
+    metric_label: o.metric_label ?? '',
+    metric_value: o.metric_value?.toString() ?? '',
+    metric_unit: o.metric_unit ?? '',
+    metric_display: o.metric_display ?? '',
+    summary: o.summary,
+    as_of_date: o.as_of_date ?? '',
+    source_name: o.source_name ?? '',
+    source_url: o.source_url ?? '',
+    law_title: o.law_title ?? '',
+    confidence: o.confidence?.toString() ?? '',
+    remediation_note: o.remediation_note ?? '',
+    remediation_bill_number: o.remediation_bill_number ?? '',
+  });
+  const set = (patch: Partial<OutcomeDraft>) => setD(prev => ({ ...prev, ...patch }));
+
+  function submit() {
+    // Normalise blanks → null; numbers parsed; build a clean OutcomeEdit.
+    const num = (v: string) => {
+      if (v.trim() === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const str = (v: string) => v.trim() || null;
+    onSave({
+      direction: d.direction,
+      attribution: str(d.attribution) ?? undefined,
+      summary: d.summary,
+      metric_value: num(d.metric_value),
+      confidence: num(d.confidence),
+      metric_label: str(d.metric_label),
+      metric_unit: str(d.metric_unit),
+      metric_display: str(d.metric_display),
+      as_of_date: str(d.as_of_date),
+      source_name: str(d.source_name),
+      source_url: str(d.source_url),
+      law_title: str(d.law_title),
+      remediation_note: str(d.remediation_note),
+      remediation_bill_number: str(d.remediation_bill_number),
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-green-accent/40 bg-green-dark/10 p-4 space-y-3">
+      <p className="text-text-muted text-meta uppercase tracking-wider">
+        Editing · {o.state} {o.bill_number}
+      </p>
+      <EditField label="Law title">
+        <TextInput value={d.law_title ?? ''} onChange={v => set({ law_title: v })} />
+      </EditField>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <EditField label="Direction">
+          <Select value={d.direction ?? ''} onChange={v => set({ direction: v })} options={['positive', 'negative', 'mixed']} />
+        </EditField>
+        <EditField label="Attribution">
+          <Select value={d.attribution ?? ''} onChange={v => set({ attribution: v })} options={['direct', 'program', 'associated']} />
+        </EditField>
+        <EditField label="Metric value">
+          <TextInput value={d.metric_value ?? ''} onChange={v => set({ metric_value: v })} placeholder="e.g. 45" />
+        </EditField>
+        <EditField label="Metric unit">
+          <TextInput value={d.metric_unit ?? ''} onChange={v => set({ metric_unit: v })} placeholder="acres" />
+        </EditField>
+        <EditField label="Metric label">
+          <TextInput value={d.metric_label ?? ''} onChange={v => set({ metric_label: v })} placeholder="of oyster reef restored" />
+        </EditField>
+        <EditField label="Metric display (override)">
+          <TextInput value={d.metric_display ?? ''} onChange={v => set({ metric_display: v })} placeholder="157k → 231k tons (+47%)" />
+        </EditField>
+        <EditField label="As-of date (YYYY-MM-DD)">
+          <TextInput value={d.as_of_date ?? ''} onChange={v => set({ as_of_date: v })} placeholder="2025-10-01" />
+        </EditField>
+        <EditField label="Confidence (0–1)">
+          <TextInput value={d.confidence ?? ''} onChange={v => set({ confidence: v })} placeholder="0.7" />
+        </EditField>
+        <EditField label="Source name">
+          <TextInput value={d.source_name ?? ''} onChange={v => set({ source_name: v })} />
+        </EditField>
+        <EditField label="Source URL">
+          <TextInput value={d.source_url ?? ''} onChange={v => set({ source_url: v })} />
+        </EditField>
+      </div>
+      <EditField label="Summary">
+        <textarea
+          value={d.summary ?? ''}
+          onChange={e => set({ summary: e.target.value })}
+          rows={4}
+          className="w-full rounded-lg border border-border-default bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-green-accent focus:outline-none"
+        />
+      </EditField>
+      {d.direction !== 'positive' && (
+        <div className="grid sm:grid-cols-[2fr_1fr] gap-3">
+          <EditField label="Remediation — how a later law fixed it">
+            <TextInput value={d.remediation_note ?? ''} onChange={v => set({ remediation_note: v })}
+              placeholder="Closed the loophole via SB 1053 (2024)…" />
+          </EditField>
+          <EditField label="Fixing bill # (links if tracked)">
+            <TextInput value={d.remediation_bill_number ?? ''} onChange={v => set({ remediation_bill_number: v })}
+              placeholder="SB1053" />
+          </EditField>
+        </div>
+      )}
+      <div className="flex items-center gap-3">
+        <button onClick={submit} disabled={busy} className="rounded-lg bg-green-accent text-bg-primary px-4 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button onClick={onCancel} disabled={busy} className="text-xs text-text-muted hover:text-text-secondary transition-colors disabled:opacity-50">
+          Cancel
+        </button>
+        <span className="text-text-muted text-meta">Saving does not publish — approve separately.</span>
+      </div>
+    </div>
+  );
+}
+
+function EditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1">
+      <span className="text-text-muted text-meta uppercase tracking-wider">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function TextInput({
+  value, onChange, placeholder,
+}: {
+  value: string | number;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full rounded-lg border border-border-default bg-bg-primary px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:border-green-accent focus:outline-none"
+    />
+  );
+}
+
+function Select({
+  value, onChange, options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="w-full rounded-lg border border-border-default bg-bg-primary px-3 py-1.5 text-sm text-text-primary focus:border-green-accent focus:outline-none"
+    >
+      {options.map(opt => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </select>
   );
 }

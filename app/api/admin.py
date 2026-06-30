@@ -11,7 +11,7 @@ columns on Entitlement (migration 018) and is_pro() in app/api/auth.py for how e
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import stripe
 import structlog
@@ -28,6 +28,7 @@ from app.models import (
     AccessRequest,
     AlertSubscription,
     Bill,
+    BillOutcome,
     Entitlement,
     FederalAction,
     UserSettings,
@@ -598,3 +599,197 @@ async def admin_set_account_disabled(
         raise HTTPException(status_code=502, detail="could not update the Firebase user")
     log.info("admin_set_disabled", target=email, by=admin.email, disabled=payload.disabled)
     return {"email": email, "disabled": payload.disabled}
+
+
+# ── Real-world-outcome review ──────────────────────────────────────────────────
+# scripts/propose_bill_outcomes.py writes machine-researched outcomes as reviewed=FALSE. They are
+# invisible on the public Insights page (GET /bills/outcomes defaults reviewed_only=True); this is the
+# only surface where they appear, so the admin can approve (reviewed=true → goes live), correct a
+# figure/source, or reject (delete) a bad candidate. The honesty discipline of bill_outcome — a
+# measured number with a live citation — is enforced HERE, by a human, not by the script.
+
+VALID_DIRECTIONS = {"positive", "negative", "mixed"}
+VALID_ATTRIBUTION = {"direct", "program", "associated"}
+
+
+def _outcome_payload(o: BillOutcome) -> dict:
+    return {
+        "id": o.id,
+        "slug": o.slug,
+        "bill_id": o.bill_id,
+        "state": o.state,
+        "bill_number": o.bill_number,
+        "law_title": o.law_title,
+        "instrument_type": o.instrument_type,
+        "material_categories": o.material_categories or [],
+        "direction": o.direction,
+        "metric_label": o.metric_label,
+        "metric_value": o.metric_value,
+        "metric_unit": o.metric_unit,
+        "metric_display": o.metric_display,
+        "summary": o.summary,
+        "attribution": o.attribution,
+        "as_of_date": o.as_of_date.isoformat() if o.as_of_date else None,
+        "source_name": o.source_name,
+        "source_url": o.source_url,
+        "confidence": o.confidence,
+        "reviewed": o.reviewed,
+        "remediation_note": o.remediation_note,
+        "remediation_bill_number": o.remediation_bill_number,
+        "remediated_by_bill_id": o.remediated_by_bill_id,
+        "remediation_checked_at": (
+            o.remediation_checked_at.isoformat() if o.remediation_checked_at else None
+        ),
+        "created_at": o.created_at.isoformat() if o.created_at else None,
+    }
+
+
+@router.get("/outcomes")
+async def list_outcomes(
+    reviewed: bool | None = None,
+    direction: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    _: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """All bill_outcome rows for review — UNREVIEWED first (the work queue), then lowest-confidence
+    first within each group so the shakiest candidates surface. Optional reviewed/direction filters.
+    Unlike the public feed, this returns reviewed=false candidates too."""
+    limit = _clamp_limit(limit)
+    q = select(BillOutcome)
+    if reviewed is not None:
+        q = q.where(BillOutcome.reviewed.is_(reviewed))
+    if direction:
+        q = q.where(BillOutcome.direction == direction)
+    total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar() or 0
+    unreviewed = (
+        await db.execute(
+            select(func.count()).select_from(BillOutcome).where(BillOutcome.reviewed.is_(False))
+        )
+    ).scalar() or 0
+    rows = (
+        await db.execute(
+            q.order_by(
+                BillOutcome.reviewed.asc(),
+                BillOutcome.confidence.asc().nullsfirst(),
+                BillOutcome.id.desc(),
+            )
+            .limit(limit)
+            .offset(max(0, offset))
+        )
+    ).scalars().all()
+    return {
+        "total": total,
+        "unreviewed": unreviewed,
+        "items": [_outcome_payload(o) for o in rows],
+    }
+
+
+class OutcomePatch(BaseModel):
+    # Every field optional — only the keys actually sent are applied (model_dump(exclude_unset)).
+    direction: str | None = None
+    metric_label: str | None = None
+    metric_value: float | None = None
+    metric_unit: str | None = None
+    metric_display: str | None = None
+    summary: str | None = None
+    attribution: str | None = None
+    as_of_date: str | None = None  # ISO date string; "" / null clears it
+    source_name: str | None = None
+    source_url: str | None = None
+    law_title: str | None = None
+    instrument_type: str | None = None
+    material_categories: list | None = None
+    confidence: float | None = None
+    reviewed: bool | None = None
+    remediation_note: str | None = None
+    remediation_bill_number: str | None = None
+
+
+@router.patch("/outcomes/{outcome_id}")
+async def update_outcome(
+    outcome_id: int,
+    patch: OutcomePatch,
+    admin: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Correct a candidate's fields and/or approve it (reviewed=true → live on the public page).
+    Only the keys present in the request body are touched, so a one-field approve doesn't blank the
+    rest. Approving with no citation is refused — an outcome must keep its chain of custody."""
+    o = (
+        await db.execute(select(BillOutcome).where(BillOutcome.id == outcome_id))
+    ).scalar_one_or_none()
+    if not o:
+        raise HTTPException(status_code=404, detail="outcome not found")
+
+    fields = patch.model_dump(exclude_unset=True)
+    if "direction" in fields and fields["direction"] not in VALID_DIRECTIONS:
+        raise HTTPException(status_code=422, detail=f"direction must be one of {sorted(VALID_DIRECTIONS)}")
+    if (
+        "attribution" in fields
+        and fields["attribution"] is not None
+        and fields["attribution"] not in VALID_ATTRIBUTION
+    ):
+        raise HTTPException(status_code=422, detail=f"attribution must be one of {sorted(VALID_ATTRIBUTION)}")
+    if "as_of_date" in fields:
+        raw = fields.pop("as_of_date")
+        if raw:
+            try:
+                o.as_of_date = date.fromisoformat(raw)
+            except ValueError:
+                raise HTTPException(status_code=422, detail="as_of_date must be YYYY-MM-DD")
+        else:
+            o.as_of_date = None
+
+    for key, val in fields.items():
+        setattr(o, key, val)
+
+    # If the admin named/cleared the fixing law, (re)resolve the clickable link by (same state,
+    # bill_number) — remediation is a later law in the same jurisdiction.
+    if "remediation_bill_number" in fields:
+        bn = (o.remediation_bill_number or "").strip()
+        if bn and o.state:
+            match = (
+                await db.execute(
+                    select(Bill.id).where(Bill.state == o.state, Bill.bill_number == bn).limit(1)
+                )
+            ).scalar()
+            o.remediated_by_bill_id = match
+        else:
+            o.remediated_by_bill_id = None
+
+    # Guard the table's core promise: a published (reviewed) outcome must have a live citation and a
+    # figure. Validate against the POST-patch state so a same-request approve-and-edit is checked too.
+    if o.reviewed:
+        if not (o.source_url or "").strip():
+            raise HTTPException(status_code=422, detail="cannot approve an outcome with no source_url")
+        if o.metric_value is None and not (o.metric_display or "").strip():
+            raise HTTPException(
+                status_code=422, detail="cannot approve an outcome with no figure (metric_value or metric_display)"
+            )
+
+    await db.commit()
+    await db.refresh(o)
+    log.info("admin_outcome_patch", outcome_id=o.id, by=admin.email, fields=sorted(fields), reviewed=o.reviewed)
+    return _outcome_payload(o)
+
+
+@router.delete("/outcomes/{outcome_id}")
+async def delete_outcome(
+    outcome_id: int,
+    admin: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reject a candidate outright (e.g. hallucinated or unverifiable figure). Hard delete — these are
+    machine-proposed rows, and a rejected one shouldn't linger in the queue."""
+    o = (
+        await db.execute(select(BillOutcome).where(BillOutcome.id == outcome_id))
+    ).scalar_one_or_none()
+    if not o:
+        raise HTTPException(status_code=404, detail="outcome not found")
+    slug = o.slug
+    await db.delete(o)
+    await db.commit()
+    log.info("admin_outcome_delete", outcome_id=outcome_id, slug=slug, by=admin.email)
+    return {"deleted": True, "id": outcome_id, "slug": slug}

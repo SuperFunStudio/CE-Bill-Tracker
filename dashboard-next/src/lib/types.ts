@@ -29,6 +29,8 @@ export interface ComplianceDetails {
 
 export interface BillSummary {
   id: number;
+  /** "US" (default) or "EU". `state` is the sub-jurisdiction within the region. */
+  region: string;
   state: string;
   bill_number: string | null;
   title: string | null;
@@ -37,7 +39,11 @@ export interface BillSummary {
   ce_relevant: boolean;
   confidence_score: number | null;
   material_categories: string[] | null;
+  /** Resin codes detected in the full bill text (HDPE, EVA, EPS…); null until the polymer scan runs. */
+  polymers?: string[] | null;
   instrument_type: string | null;
+  /** Full instrument set (a law is often several at once); instrument_type is the primary. */
+  instrument_types?: string[] | null;
   urgency: string | null;
   ai_summary: string | null;
   /** "advances" | "weakens" | "neutral" — direction relative to the instrument. */
@@ -53,6 +59,20 @@ export interface BillSummary {
   source_url_final?: string | null;
   litigation_case_count: number;
   max_preemption_risk: number | null;
+}
+
+/** A full-text search result from GET /bills/search — a bill plus the highlighted snippet(s)
+ *  where the query matched in the bill text. `snippets` carry <mark>…</mark> around the match. */
+export interface BillSearchHit extends BillSummary {
+  snippets: string[];
+  text_indexed: boolean;
+}
+
+/** Full-text index coverage — how many bills the deep search actually covers. indexed_bills === 0
+ *  means the index isn't populated on this environment yet (deep-search UI stays hidden). */
+export interface TextCoverageStats {
+  indexed_bills: number;
+  total_bills: number;
 }
 
 export interface BillDetail extends BillSummary {
@@ -216,6 +236,10 @@ export interface BillOutcome {
   source_url: string | null;
   confidence: number | null;
   reviewed: boolean;
+  /** Remediation arc (negative/mixed only): the later law that fixed the problem. */
+  remediation_note: string | null;
+  remediation_bill_number: string | null;
+  remediated_by_bill_id: number | null;
 }
 
 export interface FederalActionSummary {
@@ -406,6 +430,8 @@ export interface BillParams {
   limit?: number;
   offset?: number;
   state?: string;
+  /** Jurisdiction family: omitted = US only; "EU"; or "all" for every region. See migration 031. */
+  region?: string;
   status?: string;
   ce_relevant?: boolean;
   urgency?: string;

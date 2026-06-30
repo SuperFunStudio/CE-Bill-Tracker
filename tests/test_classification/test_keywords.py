@@ -86,3 +86,37 @@ def test_score_is_positive_for_epr_bill(kf):
 def test_exclusion_overrides_match(kf):
     score = kf.score("Nuclear Waste Recycling Program", "nuclear waste stewardship producer responsibility")
     assert not score.passes, "Exclusion keyword should block even with EPR match"
+
+
+# Rescue net (strong_signal): titles a starved LLM dropped that we must keep in scope + flag.
+# These are the real bills the reclassify post-mortem found excluded for lack of bill text.
+RESCUE_TITLES = [
+    "Packaging Waste and Cost Reduction Act",
+    "An Act to reduce packaging waste",
+    "Relates to producer responsibility",
+    "Relating to circular economy; declaring an emergency",
+    "Plastics and Packaging Reduction Act",
+    "Consumer Wheelchair Repair Bill of Rights Act",
+    "RELATING TO ORGANIC WASTE.",
+]
+
+# Out-of-scope titles the rescue must NOT fire on (false rescue = scope pollution).
+NO_RESCUE_TITLES = [
+    "Concerning clemency and pardons.",
+    "Ground Leases - Application for Redemption - Procedures",
+    "Promoting a safe learning environment for students with seizures",
+    "HWY CD-GREENHOUSE EMISSIONS",
+    "Major coastal resorts: coastal development permits: audit",
+    "An act concerning vehicle repair shop licensing fees",
+    "Nuclear Waste Recycling Program",  # exclusion keyword must veto
+]
+
+
+def test_rescue_fires_on_clearly_in_scope_titles(kf):
+    missed = [t for t in RESCUE_TITLES if not kf.strong_signal(t)]
+    assert not missed, "Rescue net failed to fire on in-scope titles:\n" + "\n".join(missed)
+
+
+def test_rescue_does_not_fire_on_out_of_scope_titles(kf):
+    fired = [t for t in NO_RESCUE_TITLES if kf.strong_signal(t)]
+    assert not fired, "Rescue net wrongly fired on out-of-scope titles:\n" + "\n".join(fired)

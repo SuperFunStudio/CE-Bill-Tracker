@@ -160,6 +160,31 @@ def setup_scheduler() -> AsyncIOScheduler:
             replace_existing=True,
         )
 
+    # Watch-list onboarding — every 20 min. Sends the one-time "here's how your alerts work" email
+    # ~1h after a user's first star (debounced so a burst of stars batches into one email). Gated on
+    # the shared welcome-email flag. Idempotent via onboarding_email_sent_at, so frequent ticks are
+    # cheap — most find nothing to do.
+    if settings.enable_welcome_email:
+        scheduler.add_job(
+            run_watchlist_onboarding_cycle,
+            "interval",
+            minutes=20,
+            id="watchlist_onboarding",
+            replace_existing=True,
+        )
+
+    # Watch-list recap — every 20 min. When an already-onboarded user adds more bills, a 30-min
+    # debounce batches the burst into one "you added N bills" recap pointing to My Portfolio.
+    # Idempotent via watchlist_recap_sent_at, so frequent ticks are cheap. Dormant unless enabled.
+    if settings.enable_watchlist_recap:
+        scheduler.add_job(
+            run_watchlist_recap_cycle,
+            "interval",
+            minutes=20,
+            id="watchlist_recap",
+            replace_existing=True,
+        )
+
     # Source-link health audit — weekly Saturday 5am UTC (a quiet slot). Re-checks the most-stale
     # batch of bill "View Source" links so the UI's fallback (redirect fix / LegiScan backup) stays
     # current. Dormant unless enabled; preview via scripts/audit_bill_source_links.py --dry-run.
@@ -171,6 +196,35 @@ def setup_scheduler() -> AsyncIOScheduler:
             hour=5,
             minute=0,
             id="source_link_audit",
+            replace_existing=True,
+        )
+
+    # Full-text index refresh — daily 6:30am UTC (a quiet slot, after the 2am ingestion settles).
+    # Re-fetches text for bills that changed (change_hash moved) or were never indexed, bounded per
+    # run so it sweeps the corpus over several days rather than flooding LegiScan in one pass.
+    # Dormant unless enabled; the one-time corpus load is scripts/backfill_bill_text.py.
+    if settings.enable_bill_text_refresh:
+        scheduler.add_job(
+            run_bill_text_refresh_cycle,
+            "cron",
+            hour=6,
+            minute=30,
+            id="bill_text_refresh",
+            replace_existing=True,
+        )
+
+    # EU-central law refresh — weekly Tuesday 5:30am UTC. Re-runs the EUR-Lex/CELLAR SPARQL sweep and
+    # ingests newly-published in-force acts (only_new), classifying them region-aware. EU law changes
+    # slowly so weekly is ample. Dormant unless enabled; the one-time bulk load is
+    # scripts/ingest_eurlex.py --bulk.
+    if settings.enable_eurlex_ingestion:
+        scheduler.add_job(
+            run_eurlex_cycle,
+            "cron",
+            day_of_week="tue",
+            hour=5,
+            minute=30,
+            id="eurlex_refresh",
             replace_existing=True,
         )
 
@@ -807,6 +861,93 @@ async def run_trial_reminder_cycle() -> None:
     log.info("trial_reminder_cycle_complete", candidates=len(items), sent=sent)
 
 
+async def run_watchlist_onboarding_cycle() -> None:
+    """Every 20 min: send the one-time watch-list onboarding email to accounts whose first star is
+    past the debounce window (so a burst of stars batches into one email) but still recent. Stamps
+    onboarding_email_sent_at on each account's watchlist subscription so it sends exactly once.
+    Gated by settings.enable_welcome_email. See app/alerts/watchlist_onboarding.py."""
+    from datetime import datetime, timezone
+
+    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.unsubscribe import unsubscribe_url
+    from app.alerts.watchlist_onboarding import (
+        build_watchlist_onboarding,
+        render_onboarding_html,
+        render_onboarding_subject,
+        render_onboarding_text,
+    )
+    from app.database import AsyncSessionLocal
+
+    if not settings.sendgrid_api_key:
+        log.warning("watchlist_onboarding_skipped_no_sendgrid_key")
+        return
+
+    sender = SendGridSender()
+    async with AsyncSessionLocal() as db:
+        now = datetime.now(timezone.utc)
+        items = await build_watchlist_onboarding(db, now)
+        sent = 0
+        for content in items:
+            ok = await sender.send_html(
+                content.sub.email,
+                render_onboarding_subject(content),
+                render_onboarding_html(content),
+                list_unsubscribe_url=unsubscribe_url(content.sub.id),
+                text=render_onboarding_text(content),
+            )
+            if ok:
+                sent += 1
+                content.sub.onboarding_email_sent_at = now
+        if sent:
+            await db.commit()
+    log.info("watchlist_onboarding_cycle_complete", candidates=len(items), sent=sent)
+
+
+async def run_watchlist_recap_cycle() -> None:
+    """Every 20 min: email already-onboarded users a recap when they add more bills. A 30-min debounce
+    batches a burst of stars into one "you added N bills" email pointing to My Portfolio, and stamps
+    watchlist_recap_sent_at so the same adds aren't re-sent. Gated by settings.enable_watchlist_recap.
+    See app/alerts/watchlist_recap.py."""
+    from datetime import datetime, timezone
+
+    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.unsubscribe import unsubscribe_url
+    from app.alerts.watchlist_recap import (
+        build_watchlist_recap,
+        render_recap_html,
+        render_recap_subject,
+        render_recap_text,
+    )
+    from app.database import AsyncSessionLocal
+
+    if not settings.enable_watchlist_recap:
+        log.info("watchlist_recap_skipped", reason="enable_watchlist_recap=false")
+        return
+    if not settings.sendgrid_api_key:
+        log.warning("watchlist_recap_skipped_no_sendgrid_key")
+        return
+
+    sender = SendGridSender()
+    async with AsyncSessionLocal() as db:
+        now = datetime.now(timezone.utc)
+        items = await build_watchlist_recap(db, now)
+        sent = 0
+        for content in items:
+            ok = await sender.send_html(
+                content.sub.email,
+                render_recap_subject(content),
+                render_recap_html(content),
+                list_unsubscribe_url=unsubscribe_url(content.sub.id),
+                text=render_recap_text(content),
+            )
+            if ok:
+                sent += 1
+                content.sub.watchlist_recap_sent_at = now
+        if sent:
+            await db.commit()
+    log.info("watchlist_recap_cycle_complete", candidates=len(items), sent=sent)
+
+
 async def run_new_bill_alert_cycle() -> None:
     """Daily: email subscribers when a newly-tracked relevant bill matches their topics + states.
 
@@ -1290,3 +1431,107 @@ async def run_source_link_audit_cycle() -> None:
         await db.commit()
 
     log.info("source_link_audit_complete", urls=len(urls), bills=len(bill_rows), **counts)
+
+
+async def run_bill_text_refresh_cycle() -> None:
+    """Daily: keep the full-text search index (bill_texts) current — Layer B Step 6.
+
+    Selects the next bounded batch of bills that have no bill_texts row yet, or whose change_hash has
+    moved since they were last indexed (so an amended bill gets re-fetched), fetches the cleaned text
+    via the shared ladder (app/ingestion/bill_text.fetch_clean_text) and upserts it. The generated
+    text_tsv column + GIN index (migration 028) are maintained by Postgres, so a refreshed row is
+    immediately searchable. Bounded to settings.bill_text_refresh_batch_size per run, oldest-fetched
+    first, so the corpus is swept over several days rather than hammering LegiScan in one pass — the
+    one-time bulk load is scripts/backfill_bill_text.py.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import text
+
+    from app.database import AsyncSessionLocal
+    from app.ingestion.bill_text import SOURCE_NONE, fetch_clean_text
+    from app.ingestion.legiscan import LegiScanClient
+    from app.ingestion.openstates import OpenStatesClient
+
+    if not settings.enable_bill_text_refresh:
+        log.info("bill_text_refresh_skipped", reason="enable_bill_text_refresh=false")
+        return
+
+    batch = settings.bill_text_refresh_batch_size
+    # Normally only in-scope bills are indexed; the all-bills sweep (a one-time corpus backfill)
+    # drops that filter so out-of-scope bills get text too — see bill_text_refresh_all_bills.
+    relevance_filter = "" if settings.bill_text_refresh_all_bills else "b.ce_relevant = true and "
+    async with AsyncSessionLocal() as db:
+        # Fetchable bills missing/stale text, never-indexed first, then oldest fetch. NULL-safe via
+        # IS DISTINCT FROM so a NULL change_hash with an existing row is correctly treated as current.
+        rows = (await db.execute(text(
+            "select b.id, b.state, b.bill_number, b.openstates_id, b.legiscan_bill_id, "
+            "b.source_url, b.change_hash "
+            "from bills b left join bill_texts t on t.bill_id = b.id "
+            f"where {relevance_filter}"
+            "(b.legiscan_bill_id is not null or (b.openstates_id is not null "
+            "and b.openstates_id not like 'hist:%') or b.source_url is not null) "
+            "and (t.bill_id is null or t.indexed_change_hash is distinct from b.change_hash) "
+            "order by t.fetched_at asc nulls first limit :batch"
+        ), {"batch": batch})).all()
+
+    if not rows:
+        log.info("bill_text_refresh_skipped", reason="nothing stale")
+        return
+
+    log.info("bill_text_refresh_start", candidates=len(rows))
+    upsert = text(
+        "insert into bill_texts (bill_id, text, char_len, source, indexed_change_hash, fetched_at) "
+        "values (:id, :text, :clen, :src, :hash, now()) "
+        "on conflict (bill_id) do update set text = excluded.text, char_len = excluded.char_len, "
+        "source = excluded.source, indexed_change_hash = excluded.indexed_change_hash, "
+        "fetched_at = excluded.fetched_at"
+    )
+
+    wrote = no_text = 0
+    by_source: dict[str, int] = {}
+    async with LegiScanClient() as ls_client, OpenStatesClient() as os_client:
+        async with AsyncSessionLocal() as db:
+            for b in rows:
+                try:
+                    full_text, src = await fetch_clean_text(
+                        ls_client, os_client, b, settings.openstates_request_delay_seconds
+                    )
+                except Exception as e:  # noqa: BLE001
+                    log.warning("bill_text_refresh_fetch_failed", bill_id=b.id, error=str(e))
+                    continue
+                if not full_text or src == SOURCE_NONE:
+                    no_text += 1
+                    continue
+                try:
+                    await db.execute(upsert, {"id": b.id, "text": full_text, "clen": len(full_text),
+                                              "src": src, "hash": b.change_hash})
+                    await db.commit()
+                    by_source[src] = by_source.get(src, 0) + 1
+                    wrote += 1
+                except Exception as e:  # noqa: BLE001 — one unstorable row must not abort the sweep
+                    await db.rollback()
+                    log.warning("bill_text_refresh_write_failed", bill_id=b.id, error=str(e))
+
+    log.info("bill_text_refresh_complete", wrote=wrote, no_text=no_text, **by_source)
+
+
+async def run_eurlex_cycle() -> None:
+    """Weekly: keep EU-central law current. Re-runs the EUR-Lex/CELLAR SPARQL discovery and ingests
+    only newly-published in-force acts (only_new), classifying them with the region-aware pipeline.
+    Idempotent (upsert by celex_id) and bounded by settings.max_eurlex_acts_per_run. Dormant unless
+    enable_eurlex_ingestion; the one-time bulk backfill is scripts/ingest_eurlex.py --bulk.
+    """
+    from app.ingestion.eurlex import sync_eurlex
+
+    if not settings.enable_eurlex_ingestion:
+        log.info("eurlex_cycle_skipped", reason="enable_eurlex_ingestion=false")
+        return
+
+    summary = await sync_eurlex(
+        in_force_only=settings.eurlex_in_force_only,
+        classify=True,
+        only_new=True,
+        max_acts=settings.max_eurlex_acts_per_run,
+    )
+    log.info("eurlex_cycle_complete", **summary)

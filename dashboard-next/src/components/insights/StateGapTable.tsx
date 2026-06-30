@@ -59,7 +59,7 @@ export function StateGapTable() {
     track('insights_gap_drilldown', { state: r.state });
   }
 
-  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (error) return <p className="text-sm text-error">{error}</p>;
   if (!rows) {
     return (
       <div className="grid gap-2 sm:grid-cols-2">

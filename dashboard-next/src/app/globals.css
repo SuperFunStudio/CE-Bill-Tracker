@@ -117,6 +117,36 @@ body {
     border-radius: var(--radius-panel);
     box-shadow: var(--shadow-panel);
   }
+
+  /* Semantic error text — one token (auto dark-mode), replacing ad-hoc text-red-600/dark:text-red-400. */
+  .text-error {
+    color: var(--status-weakens);
+  }
+  /* Material-category badge — the one place a second (blue) hue is sanctioned, now tokenized instead
+     of raw bg-blue-100/dark:bg-[#1e3a5f]. Pair with layout utils (text-xs px-2 py-0.5 rounded). */
+  .badge-material {
+    background: var(--material-bg);
+    color: var(--material-text);
+  }
+
+  /* Canonical interactive list primitives — ONE visual language for a clickable row/card, shared by
+     the bill lists (BillTable) and the other object lists (federal/compliance/company). Pair with
+     content utilities (padding, spacing); page-specific accents (urgency border) layer on top. */
+  .list-row {              /* a clickable row inside a <table> */
+    border-bottom: 1px solid var(--border-default);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .list-row:hover { background: var(--bg-secondary); }
+
+  .list-card {             /* a clickable standalone card (mobile bill rows + card lists) */
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-card);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .list-card:hover { border-color: rgb(var(--green-accent) / 0.4); }
 }
 
 /* ── Auto-scrolling "ticker" marquee (Top States line) ──

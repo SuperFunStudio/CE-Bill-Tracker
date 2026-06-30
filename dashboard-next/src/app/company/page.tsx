@@ -10,6 +10,7 @@ import { ScoreBadge } from '@/components/ui/ScoreBadge';
 import { DemoBanner } from '@/components/ui/DemoBanner';
 import { LockIcon, StarIcon } from '@/components/ui/icons';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
+import { WatchListSection } from '@/components/watchlist/WatchListSection';
 import { useAuth } from '@/components/auth/AuthContext';
 import { formatCost, fixEncoding, formatDate, daysUntil, STATE_NAMES } from '@/lib/utils';
 import type { CompanyObligation, CompanyObligationsResponse, FinancialStakes } from '@/lib/types';
@@ -45,7 +46,7 @@ function DeadlineCountdown({ date }: { date: string }) {
 function ObligationCard({ o }: { o: CompanyObligation }) {
   const dl = o.next_deadline;
   return (
-    <div className="bg-bg-primary border border-border-default rounded-lg p-4 hover:border-green-accent/30 transition-colors">
+    <div className="surface-card p-4">
       <div className="flex items-start justify-between gap-4">
         {/* Left: what law, why it applies to you */}
         <div className="flex-1 min-w-0">
@@ -56,7 +57,7 @@ function ObligationCard({ o }: { o: CompanyObligation }) {
           <div className="text-text-primary text-sm leading-snug mb-2">{fixEncoding(o.bill_title) || 'Untitled'}</div>
           <div className="flex flex-wrap gap-1.5 items-center">
             {o.matched_materials.map(m => (
-              <span key={m} className="bg-blue-100 dark:bg-[#1e3a5f] text-blue-700 dark:text-[#93c5fd] text-xs px-2 py-0.5 rounded">
+              <span key={m} className="badge-material text-xs px-2 py-0.5 rounded">
                 {prettyMaterial(m)}
               </span>
             ))}
@@ -329,7 +330,10 @@ function ObligationsView() {
 }
 
 // ─── Bill View ──────────────────────────────────────────────────────────────
-
+// Cost Estimate (beta) — DISABLED until PROs publish real per-tonne fee schedules (most enacted
+// bills set fees via post-enactment rulemaking, not statute, so it rendered "$0 / N/A"). Kept
+// intact (with its endpoints) for re-enable as a sub-tab in ObligationsTool.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function BillView() {
   const { data: bills = [] } = useBills({ ce_relevant: true, limit: 5000 });
   const [selectedBillId, setSelectedBillId] = useState<number | undefined>(undefined);
@@ -578,7 +582,7 @@ function CompanyView() {
             {company.materials && company.materials.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {company.materials.map(m => (
-                  <span key={m.id} className="bg-blue-100 dark:bg-[#1e3a5f] text-blue-700 dark:text-[#93c5fd] text-xs px-2 py-0.5 rounded">
+                  <span key={m.id} className="badge-material text-xs px-2 py-0.5 rounded">
                     {m.material_category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                     {m.annual_volume_tonnes != null && ` \u00b7 ${m.annual_volume_tonnes.toLocaleString()}t`}
                   </span>
@@ -616,7 +620,7 @@ function CompanyView() {
                   <div
                     key={b.id}
                     onClick={() => setSelectedBillId(prev => prev === b.id ? null : b.id)}
-                    className={`bg-bg-primary border rounded-lg px-4 py-3 flex items-center justify-between cursor-pointer transition-colors ${selectedBillId === b.id ? 'border-green-accent/50' : 'border-border-default hover:border-green-accent/30'}`}
+                    className={`list-card px-4 py-3 flex items-center justify-between ${selectedBillId === b.id ? '!border-green-accent/60' : ''}`}
                   >
                     <div className="flex-1 min-w-0">
                       <span className="text-green-accent font-mono text-xs mr-2">{b.state}</span>
@@ -646,84 +650,61 @@ function CompanyView() {
 
 // ─── Access Gate ─────────────────────────────────────────────────────────────
 
-function AccessGate() {
+/** Inline bespoke-inquiry card shown to non-admins in place of the live obligations tool. (Was a
+ *  full-page gate; now it sits as a section below the watch list, since the page is no longer
+ *  hard-gated — the watch list above is the self-serve Pro content.) */
+function ObligationsBetaInquiry() {
   const [showModal, setShowModal] = useState(false);
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center p-6">
-      <div className="max-w-md w-full">
-        <div className="bg-bg-secondary border border-border-default rounded-2xl p-8 text-center space-y-5">
-          <LockIcon className="text-4xl mx-auto text-text-muted" />
-          <div>
-            <span className="inline-block mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
-              Bespoke · Kenny Arnold Design
-            </span>
-            <h1 className="text-2xl font-bold text-text-primary mb-2">Portfolio Exposure</h1>
-            <p className="text-text-secondary text-body leading-relaxed">
-              A custom exposure map for your portfolio — which enacted laws hit you, what each requires,
-              and the material- and design-level moves that reduce it. Built from your own volume and
-              material data, as a scoped engagement with Kenny Arnold Design.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <button
-              onClick={() => setShowModal(true)}
-              className="w-full bg-green-accent text-bg-primary font-semibold py-3 rounded-lg text-sm hover:opacity-90 transition-opacity"
-            >
-              Start a conversation →
-            </button>
-            <p className="text-text-muted text-xs">
-              Tracking deadlines yourself?{' '}
-              <Link href="/pricing" className="text-green-accent hover:underline">See Pro</Link>
-            </p>
-          </div>
-
-          {showModal && (
-            <RequestAccessModal
-              plan="bespoke"
-              planLabel="Bespoke — Portfolio Exposure"
-              source="company_gate"
-              onClose={() => setShowModal(false)}
-            />
-          )}
-        </div>
+    <div className="bg-bg-secondary border border-border-default rounded-panel p-8 text-center space-y-5 max-w-md mx-auto">
+      <LockIcon className="text-4xl mx-auto text-text-muted" />
+      <div>
+        <span className="inline-block mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+          Bespoke · Kenny Arnold Design
+        </span>
+        <h3 className="text-xl font-bold text-text-primary mb-2">A custom exposure map for your portfolio</h3>
+        <p className="text-text-secondary text-body leading-relaxed">
+          Which enacted laws hit you, what each requires, and the material- and design-level moves that
+          reduce it — built from your own volume and material data, as a scoped engagement with Kenny
+          Arnold Design.
+        </p>
       </div>
+
+      <div className="space-y-3">
+        <button
+          onClick={() => setShowModal(true)}
+          className="w-full bg-green-accent text-bg-primary font-semibold py-3 rounded-lg text-sm hover:opacity-90 transition-opacity"
+        >
+          Start a conversation →
+        </button>
+      </div>
+
+      {showModal && (
+        <RequestAccessModal
+          plan="bespoke"
+          planLabel="Bespoke — Portfolio Exposure"
+          source="company_gate"
+          onClose={() => setShowModal(false)}
+        />
+      )}
     </div>
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
-
-export default function CompanyImpactPage() {
-  const { isAdmin, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState<'obligations' | 'bill' | 'company'>('obligations');
-
-  if (loading) {
-    return <div className="p-6 max-w-5xl mx-auto"><div className="h-64 bg-bg-secondary rounded-xl animate-pulse" /></div>;
-  }
-
-  // Portfolio Exposure is now a Bespoke (Kenny Arnold Design) engagement, not a self-serve tier —
-  // everyone sees the inquiry gate. Allowlisted admins get into the live tool for demos.
-  if (!isAdmin) {
-    return <AccessGate />;
-  }
+/** The live obligations tool (admins / demos): company-exposure obligations + the Company Profile,
+ *  folded together as sub-tabs of the Beta section. */
+function ObligationsTool() {
+  const [activeTab, setActiveTab] = useState<'obligations' | 'company'>('obligations');
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-5">
       <DemoBanner />
-
-      <GazetteHeader title="Portfolio Exposure" subtitle="Which enacted laws affect you, and when your next deadline falls" />
-
-      {/* Tab switcher */}
+      {/* Sub-tabs — Company Profile folded in here per the My Portfolio IA. Cost Estimate (BillView)
+          stays disabled; the component + endpoints are intact for re-enable. */}
       <div className="flex gap-1 bg-bg-secondary border border-border-default rounded-lg p-1 w-fit">
         {[
           { id: 'obligations' as const, label: 'Obligations & Deadlines' },
-          // Cost Estimate (beta) — DISABLED until PROs publish real per-tonne fee schedules.
-          // The estimate depends on fee data that isn't reliably available yet (most enacted bills
-          // set fees via post-enactment rulemaking, not the statute), so it rendered "$0 / N/A".
-          // BillView + the backend cost endpoints are left intact; re-add this entry to restore.
-          // { id: 'bill' as const, label: 'Cost Estimate (beta)' },
           { id: 'company' as const, label: 'Company Profile' },
         ].map(({ id, label }) => (
           <button
@@ -740,7 +721,42 @@ export default function CompanyImpactPage() {
         ))}
       </div>
 
-      {activeTab === 'obligations' ? <ObligationsView /> : activeTab === 'bill' ? <BillView /> : <CompanyView />}
+      {activeTab === 'obligations' ? <ObligationsView /> : <CompanyView />}
+    </div>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+export default function MyPortfolioPage() {
+  const { isAdmin, loading } = useAuth();
+
+  if (loading) {
+    return <div className="p-6 max-w-6xl mx-auto"><div className="h-64 bg-bg-secondary rounded-xl animate-pulse" /></div>;
+  }
+
+  return (
+    <div className="p-6 space-y-8 max-w-6xl mx-auto">
+      <GazetteHeader title="My Portfolio" subtitle="Your tracked bills and compliance exposure, in one place." />
+
+      {/* ── Watch list — the self-serve Pro content; gates itself for anon/non-Pro ── */}
+      <section>
+        <WatchListSection />
+      </section>
+
+      {/* ── Obligations & Deadlines (Beta) — live tool for admins/demos, bespoke inquiry otherwise ── */}
+      <section className="space-y-4 border-t border-border-default pt-8">
+        <div className="flex items-center gap-2">
+          <h2 className="font-serif text-2xl text-text-primary">Obligations &amp; Deadlines</h2>
+          <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+            Beta
+          </span>
+        </div>
+        <p className="text-text-secondary text-body max-w-3xl">
+          Which enacted laws affect a company, what each requires, and when its next deadline falls.
+        </p>
+        {isAdmin ? <ObligationsTool /> : <ObligationsBetaInquiry />}
+      </section>
     </div>
   );
 }

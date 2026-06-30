@@ -1,15 +1,23 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Integer, func, select, true
+from sqlalchemy import Integer, func, literal_column, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_optional_pro
 from app.database import get_db
-from app.models import Bill, BillOutcome, ComplianceDeadline, LitigationCase, LitigationEvent
+from app.models import (
+    Bill,
+    BillOutcome,
+    BillText,
+    ComplianceDeadline,
+    LitigationCase,
+    LitigationEvent,
+)
 from app.schemas import (
     BillDetail,
     BillOutcomeSummary,
+    BillSearchHit,
     BillStancePoint,
     BillSummary,
     BillTimelinePoint,
@@ -18,6 +26,7 @@ from app.schemas import (
     InstrumentMaterialCell,
     LitigationCaseSummary,
     StateMapSummary,
+    TextCoverageStats,
 )
 
 router = APIRouter(prefix="/bills", tags=["bills"])
@@ -45,6 +54,9 @@ def _lit_subquery():
 @router.get("", response_model=list[BillSummary])
 async def list_bills(
     state: str | None = None,
+    # Jurisdiction family filter. Omitted = US only (preserves the existing US-only dashboard
+    # behavior); "EU" returns EU rows; "all" returns every region. See migration 031.
+    region: str | None = None,
     status: str | None = None,
     material_category: str | None = None,
     ce_relevant: bool | None = None,
@@ -70,6 +82,12 @@ async def list_bills(
         select(Bill, func.coalesce(lit_sub.c.case_count, 0).label("case_count"), lit_sub.c.max_risk)
         .outerjoin(lit_sub, Bill.id == lit_sub.c.related_law_id)
     )
+    # Default to US so existing callers (the US dashboard) are unaffected by EU rows landing in the
+    # same table. region="all" opts into every region; an explicit code (e.g. "EU") filters to it.
+    if region is None:
+        q = q.where(Bill.region == "US")
+    elif region.lower() != "all":
+        q = q.where(Bill.region == region.upper())
     if state:
         q = q.where(Bill.state == state.upper())
     if status:
@@ -83,7 +101,13 @@ async def list_bills(
     if urgency:
         q = q.where(Bill.urgency == urgency)
     if instrument_type:
-        q = q.where(Bill.instrument_type == instrument_type)
+        # Match the instrument anywhere in the law's set (not just its primary), so filtering e.g.
+        # "recycled_content" also surfaces EPR laws that carry a recycled-content mandate. Falls back
+        # to the primary for any row whose instrument_types wasn't backfilled.
+        q = q.where(
+            Bill.instrument_types.contains([instrument_type])
+            | (Bill.instrument_types.is_(None) & (Bill.instrument_type == instrument_type))
+        )
     if policy_stance:
         q = q.where(Bill.policy_stance == policy_stance)
     if year is not None:
@@ -103,8 +127,83 @@ async def list_bills(
     return results
 
 
+# Full-text search highlighting. <mark> wraps the matched term; ts_headline joins fragments on this
+# sentinel (the default ' ... ' is ambiguous with real ellipses in bill text) and we split on it.
+# 'english' is passed as a SQL literal, not a bind param, so Postgres resolves it as a regconfig
+# rather than mistaking it for the document/query argument.
+_ENGLISH = literal_column("'english'")
+_MARK_START = "<mark>"
+_MARK_END = "</mark>"
+_FRAG_SEP = "[[[FRAG]]]"
+_HEADLINE_OPTS = (
+    f"StartSel={_MARK_START},StopSel={_MARK_END},"
+    f"MaxFragments=3,MinWords=5,MaxWords=18,FragmentDelimiter={_FRAG_SEP}"
+)
+
+
+@router.get("/search", response_model=list[BillSearchHit])
+async def search_bills(
+    q: str = Query(..., min_length=2, description="Full-text query; supports quoted phrases and OR."),
+    limit: int = Query(default=50, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """Full-text search over the persisted bill text (`bill_texts`), returning each matching bill with
+    `ts_headline` snippets where the term appears. Distinct from `GET /bills`, which is the
+    snapshot-baked metadata list and never carries full text. Ranked by `ts_rank`; only ce_relevant,
+    text-indexed bills can match, so a term absent from a bill's summary is still found in its text."""
+    tsq = func.websearch_to_tsquery(_ENGLISH, q)
+    lit_sub = _lit_subquery()
+    headline = func.ts_headline(_ENGLISH, BillText.text, tsq, _HEADLINE_OPTS)
+    rank = func.ts_rank(BillText.text_tsv, tsq)
+    stmt = (
+        select(
+            Bill,
+            func.coalesce(lit_sub.c.case_count, 0).label("case_count"),
+            lit_sub.c.max_risk,
+            headline.label("headline"),
+        )
+        .join(BillText, BillText.bill_id == Bill.id)
+        .outerjoin(lit_sub, Bill.id == lit_sub.c.related_law_id)
+        .where(Bill.ce_relevant.is_(True))
+        .where(BillText.text_tsv.op("@@")(tsq))
+        .order_by(rank.desc())
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).all()
+    hits: list[BillSearchHit] = []
+    for row in rows:
+        hit = BillSearchHit.model_validate(row.Bill)
+        hit.litigation_case_count = row.case_count
+        hit.max_preemption_risk = row.max_risk
+        hit.snippets = [s.strip() for s in (row.headline or "").split(_FRAG_SEP) if s.strip()]
+        hit.text_indexed = True
+        hits.append(hit)
+    return hits
+
+
+@router.get("/text-coverage", response_model=TextCoverageStats)
+async def bill_text_coverage(db: AsyncSession = Depends(get_db)):
+    """Counts of ce_relevant bills with vs. without indexed full text, so the deep-search UI can say
+    'covers N of M bills' — keeping an empty full-text result honest (not in our index ≠ nonexistent)."""
+    total = await db.scalar(
+        select(func.count()).select_from(Bill).where(Bill.ce_relevant.is_(True))
+    )
+    indexed = await db.scalar(
+        select(func.count())
+        .select_from(BillText)
+        .join(Bill, Bill.id == BillText.bill_id)
+        .where(Bill.ce_relevant.is_(True), BillText.text.isnot(None))
+    )
+    return TextCoverageStats(indexed_bills=indexed or 0, total_bills=total or 0)
+
+
 @router.get("/map-summary", response_model=list[StateMapSummary])
-async def get_map_summary(db: AsyncSession = Depends(get_db)):
+async def get_map_summary(
+    region: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    # The map is per-jurisdiction within one region; default US (the US states choropleth). EU uses a
+    # member-states view, not this endpoint, until Phase B. region="all" returns every region's codes.
     q = (
         select(
             Bill.state,
@@ -117,6 +216,10 @@ async def get_map_summary(db: AsyncSession = Depends(get_db)):
         .where(Bill.ce_relevant == True)
         .group_by(Bill.state)
     )
+    if region is None:
+        q = q.where(Bill.region == "US")
+    elif region.lower() != "all":
+        q = q.where(Bill.region == region.upper())
     rows = (await db.execute(q)).all()
     return [
         StateMapSummary(
@@ -230,18 +333,25 @@ async def get_instrument_material_matrix(
 async def list_bill_outcomes(
     direction: str | None = None,
     state: str | None = None,
-    reviewed_only: bool = False,
+    region: str | None = None,  # US (default), EU, or "all"
+    reviewed_only: bool = True,
     db: AsyncSession = Depends(get_db),
 ):
     """Documented real-world outcomes of enacted laws — the Insights "Real-World Impact" feed.
 
     Each row is a curated, source-backed effect (positive | negative | mixed). Ordered most-recent
-    first by as_of_date so the freshest documented impacts lead. `reviewed_only` gates to
-    human-vetted figures; default returns all (the page is internal/URL-only).
+    first by as_of_date so the freshest documented impacts lead. `reviewed_only` defaults TRUE so this
+    PUBLIC feed only ever exposes human-vetted figures — unvetted candidates from
+    scripts/propose_bill_outcomes.py (reviewed=false) are invisible here and live only in the
+    admin review console (GET /admin/outcomes). Do not flip the default without an admin gate.
     """
     q = select(BillOutcome)
     if direction:
         q = q.where(BillOutcome.direction == direction)
+    if region is None:
+        q = q.where(BillOutcome.region == "US")
+    elif region.lower() != "all":
+        q = q.where(BillOutcome.region == region.upper())
     if state:
         q = q.where(BillOutcome.state == state.upper())
     if reviewed_only:
@@ -298,7 +408,8 @@ def _parse_iso_date(val) -> date | None:
 
 
 async def _merge_deadlines(
-    db: AsyncSession, *, days_ahead: int, state: str | None, include_past: bool
+    db: AsyncSession, *, days_ahead: int, state: str | None, include_past: bool,
+    region: str | None = None,
 ) -> list[DeadlineSummary]:
     """The full deadline set the Upcoming Deadlines page needs, merged server-side: explicit
     ComplianceDeadline rows plus the implementation/enforcement dates the classifier pulled into each
@@ -309,24 +420,27 @@ async def _merge_deadlines(
     horizon = today + timedelta(days=days_ahead)
     floor = today - timedelta(days=DEADLINE_PAST_CAP_DAYS) if include_past else today
     state_u = state.upper() if state else None
+    # Default to US so the existing (US) deadline calendar isn't polluted by EU rows; region="all"
+    # spans every region, an explicit code filters to it.
+    region_u = None if (region and region.lower() == "all") else (region or "US").upper()
 
     seen: set[tuple] = set()
     out: list[DeadlineSummary] = []
 
-    def push(*, id_, st, dtype, ddate, desc, who, bill_id, bill_number, bill_title, materials):
+    def push(*, id_, rg, st, dtype, ddate, desc, who, bill_id, bill_number, bill_title, materials):
         if ddate is None or ddate < floor or ddate > horizon:
             return
         if state_u and (st or "").upper() != state_u:
             return
-        key = (st, ddate.isoformat(), dtype)
+        key = (rg, st, ddate.isoformat(), dtype)
         if key in seen:
             return
         seen.add(key)
         out.append(
             DeadlineSummary(
-                id=id_, state=st, deadline_type=dtype, deadline_date=ddate, description=desc,
-                who_affected=who, bill_id=bill_id, bill_number=bill_number, bill_title=bill_title,
-                material_categories=materials,
+                id=id_, region=rg or "US", state=st, deadline_type=dtype, deadline_date=ddate,
+                description=desc, who_affected=who, bill_id=bill_id, bill_number=bill_number,
+                bill_title=bill_title, material_categories=materials,
             )
         )
 
@@ -334,34 +448,38 @@ async def _merge_deadlines(
     q = select(ComplianceDeadline, Bill.bill_number, Bill.title, Bill.material_categories).outerjoin(
         Bill, ComplianceDeadline.bill_id == Bill.id
     )
+    if region_u:
+        q = q.where(ComplianceDeadline.region == region_u)
     for row in (await db.execute(q)).all():
         cd = row.ComplianceDeadline
         push(
-            id_=cd.id, st=cd.state, dtype=cd.deadline_type, ddate=cd.deadline_date,
+            id_=cd.id, rg=cd.region, st=cd.state, dtype=cd.deadline_type, ddate=cd.deadline_date,
             desc=cd.description, who=cd.who_affected, bill_id=cd.bill_id,
             bill_number=row.bill_number, bill_title=row.title, materials=row.material_categories,
         )
 
     # 2. Dates embedded in each EPR bill's compliance_details.
     bq = select(Bill).where(Bill.ce_relevant == True).where(Bill.compliance_details.isnot(None))  # noqa: E712
+    if region_u:
+        bq = bq.where(Bill.region == region_u)
     for bill in (await db.execute(bq)).scalars().all():
         details = bill.compliance_details or {}
         for cd in details.get("deadlines") or []:
             if not isinstance(cd, dict):
                 continue
             push(
-                id_=-1, st=bill.state, dtype=cd.get("type") or "compliance",
+                id_=-1, rg=bill.region, st=bill.state, dtype=cd.get("type") or "compliance",
                 ddate=_parse_iso_date(cd.get("date")), desc=cd.get("description"), who=None,
                 bill_id=bill.id, bill_number=bill.bill_number, bill_title=bill.title,
                 materials=bill.material_categories,
             )
         push(
-            id_=-1, st=bill.state, dtype="effective", ddate=_parse_iso_date(details.get("effective_date")),
+            id_=-1, rg=bill.region, st=bill.state, dtype="effective", ddate=_parse_iso_date(details.get("effective_date")),
             desc=f"{bill.bill_number or 'Bill'} takes effect", who=None, bill_id=bill.id,
             bill_number=bill.bill_number, bill_title=bill.title, materials=bill.material_categories,
         )
         push(
-            id_=-1, st=bill.state, dtype="compliance", ddate=_parse_iso_date(details.get("compliance_date")),
+            id_=-1, rg=bill.region, st=bill.state, dtype="compliance", ddate=_parse_iso_date(details.get("compliance_date")),
             desc=f"{bill.bill_number or 'Bill'} compliance date", who=None, bill_id=bill.id,
             bill_number=bill.bill_number, bill_title=bill.title, materials=bill.material_categories,
         )
@@ -396,6 +514,7 @@ def _csv(val: str | None) -> list[str]:
 async def list_upcoming_deadlines(
     days_ahead: int = 90,
     state: str | None = None,
+    region: str | None = None,  # US (default), EU, or "all"
     materials: str | None = None,  # csv; scopes the FREE teaser so the taste is relevant (Pro ignores)
     states: str | None = None,  # csv; ditto
     is_pro: bool = Depends(get_optional_pro),
@@ -405,7 +524,7 @@ async def list_upcoming_deadlines(
     "include past" toggle works client-side). Everyone else gets the soonest few upcoming rows as a
     teaser — the full calendar is the paid product. Counts for the metric cards come from
     /deadlines/summary, which stays public."""
-    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=is_pro)
+    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=is_pro, region=region)
     if is_pro:
         return merged
     today = date.today()
@@ -418,6 +537,7 @@ async def list_upcoming_deadlines(
 async def deadlines_summary(
     days_ahead: int = 1095,
     state: str | None = None,
+    region: str | None = None,  # US (default), EU, or "all"
     materials: str | None = None,
     states: str | None = None,
     db: AsyncSession = Depends(get_db),
@@ -425,7 +545,7 @@ async def deadlines_summary(
     """Ungated aggregate counts (total/within-30/within-90/nearest + which states), optionally scoped
     to the reader's materials/states. Powers the metric cards and the scoped deadline banner for free
     visitors without handing over the deadline rows themselves."""
-    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=False)
+    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=False, region=region)
     scoped = _scope_filter(merged, materials=_csv(materials), states=_csv(states))  # already upcoming-only
     today = date.today()
     within_30 = sum(1 for d in scoped if (d.deadline_date - today).days <= 30)

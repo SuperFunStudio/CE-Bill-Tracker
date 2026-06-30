@@ -25,7 +25,7 @@ def _unsubscribe_page(message: str) -> str:
     <div style="font:11px Georgia;letter-spacing:0.18em;text-transform:uppercase;color:#6b6b6b;">
       SignalScout · Battle of the Bills</div>
     <p style="font-size:17px;line-height:1.6;margin:22px 0 0;">{message}</p>
-    <a href="https://ce-bill-tracker.web.app" style="display:inline-block;margin-top:24px;color:#1a4d2e;
+    <a href="https://battleofbills.com" style="display:inline-block;margin-top:24px;color:#1a4d2e;
        text-decoration:none;font-weight:bold;">Back to the dashboard →</a>
   </div>
 </body></html>"""
@@ -69,7 +69,12 @@ async def create_subscription(
 ):
     if not payload.email and not payload.slack_webhook:
         raise HTTPException(status_code=422, detail="email or slack_webhook required")
-    sub = AlertSubscription(**payload.model_dump())
+    data = payload.model_dump()
+    # Back-compat: a caller that still sends the flat `states` list (and no region_scope) is treated
+    # as US-scoped, so legacy signup forms keep working. New clients send region_scope directly.
+    if not data.get("region_scope") and data.get("states"):
+        data["region_scope"] = {"US": data["states"]}
+    sub = AlertSubscription(**data)
     db.add(sub)
     await db.commit()
     await db.refresh(sub)

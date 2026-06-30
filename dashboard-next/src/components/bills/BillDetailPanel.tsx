@@ -6,6 +6,7 @@ import { useBill, useBillLitigationCases } from '@/hooks/useBills';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { RiskScore } from '@/components/ui/RiskScore';
+import { WatchStar } from '@/components/watchlist/WatchStar';
 import { CloseIcon } from '@/components/ui/icons';
 
 interface BillDetailPanelProps {
@@ -46,20 +47,30 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
             {fixEncoding(bill.title) || 'Untitled'}
           </h3>
         </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="text-text-muted hover:text-text-primary text-lg shrink-0 mt-0.5"
-          >
-            <CloseIcon />
-          </button>
-        )}
+        {/* Follow + close — the star matches every table row, so the deepest bill view can be tracked
+            from here too (the affordance was previously missing in the modal). */}
+        <div className="flex items-center gap-1 shrink-0">
+          <WatchStar billId={bill.id} className="text-lg" />
+          {onClose && (
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="text-text-muted hover:text-text-primary text-lg mt-0.5"
+            >
+              <CloseIcon />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Metadata row — type + last action only */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
-        <span>Type: <span className="text-text-secondary">{formatInstrumentType(bill.instrument_type)}</span></span>
+        <span>Type: <span className="text-text-secondary">{
+          ((bill.instrument_types && bill.instrument_types.length
+            ? bill.instrument_types
+            : (bill.instrument_type ? [bill.instrument_type] : [])
+          ).map(formatInstrumentType).join(' · ')) || '—'
+        }</span></span>
         <span>Last Action: <span className="text-text-secondary">{formatDate(bill.last_action_date)}</span></span>
       </div>
 

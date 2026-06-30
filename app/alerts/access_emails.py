@@ -61,7 +61,7 @@ def render_confirmation_html(name: str | None, plan: str | None) -> str:
       and finalizing pricing right now.</p>
     <p style="margin:0 0 14px;color:{_INK_SOFT};">
       In the meantime, the full bill explorer, map, deadline dashboard, and free email alerts are
-      open to you at <a href="https://ce-bill-tracker.web.app" style="color:{_ACCENT};">the dashboard</a>.</p>
+      open to you at <a href="https://battleofbills.com" style="color:{_ACCENT};">the dashboard</a>.</p>
     <p style="margin:0;color:{_MUTED};">— The Battle of the Bills team</p>"""
     return _shell("Request received", body)
 

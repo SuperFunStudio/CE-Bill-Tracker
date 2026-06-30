@@ -30,7 +30,7 @@ from app.alerts.digest import (
     _RULE,
     _SERIF,
     _jurisdictions_summary,
-    _matches_list,
+    _matches_scope,
     _materials_summary,
     _merge_subs_by_email,
     _section,
@@ -41,6 +41,8 @@ from app.alerts.digest import (
     subscription_matches_federal,
     topic_label,
 )
+from app.alerts.applinks import bill_url, state_url
+from app.alerts.retention import filter_retained_subscriptions
 from app.alerts.unsubscribe import unsubscribe_url
 from app.models import AlertSubscription, ComplianceDeadline, FederalAction
 
@@ -104,7 +106,7 @@ def _deadline_matches(
         action = federal_by_id.get(d.federal_action_id)
         if action is not None:
             return subscription_matches_federal(sub, action)
-    return _matches_list(sub.states, d.state)
+    return _matches_scope(sub.region_scope, d.region, d.state)
 
 
 async def build_deadline_alerts(
@@ -127,10 +129,13 @@ async def build_deadline_alerts(
         ).scalars().all()
         federal_by_id = {a.id: a for a in rows}
 
-    subs = list(
-        (
-            await db.execute(select(AlertSubscription).where(AlertSubscription.active.is_(True)))
-        ).scalars().all()
+    subs = await filter_retained_subscriptions(
+        db,
+        list(
+            (
+                await db.execute(select(AlertSubscription).where(AlertSubscription.active.is_(True)))
+            ).scalars().all()
+        ),
     )
 
     merged_subs = _merge_subs_by_email(subs)
@@ -200,10 +205,11 @@ def _deadline_headline_html(item: DeadlineItem) -> str:
     """'CA SB 54 · Extended Producer Responsibility' link, or state + type for a bare deadline."""
     d = item.deadline
     if d.bill is not None:
-        url = d.bill.source_url or d.source_url or "#"
+        # Link the bill into the app's detail panel; fall back to the deadline's own source.
+        url = bill_url(d.bill.id) if d.bill.id else (d.source_url or "#")
         label = f"{d.bill.state} {d.bill.bill_number or 'Bill'} · {topic_label(d.bill.instrument_type)}"
     else:
-        url = d.source_url or "#"
+        url = state_url(d.state) or d.source_url or f"{_DASHBOARD_URL}/compliance"
         label = f"{d.state} · {_status_label(d.deadline_type)}"
     return f'<a href="{url}" style="color:{_ACCENT};text-decoration:none;font-weight:bold;">{label}</a>'
 
@@ -251,7 +257,11 @@ def _render_single(item: DeadlineItem) -> str:
     d = item.deadline
     status = f" ({_status_label(d.bill.status)})" if d.bill and d.bill.status else ""
     what = (d.who_affected or d.description or (d.bill.title if d.bill else "") or "").strip()
-    open_url = d.source_url or (d.bill.source_url if d.bill else None) or f"{_DASHBOARD_URL}/compliance"
+    open_url = (
+        (bill_url(d.bill.id) if d.bill and d.bill.id else None)
+        or d.source_url
+        or f"{_DASHBOARD_URL}/compliance"
+    )
     return f"""
     <p style="font:16px {_SERIF};color:{_INK};margin:0 0 14px;">
       A compliance deadline you're tracking is <strong>{_lead(item.days_until)}</strong> out.</p>

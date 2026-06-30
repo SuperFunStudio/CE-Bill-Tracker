@@ -191,14 +191,14 @@ function DataCard() {
   return (
     <Section title="Your data">
       <p className="text-text-secondary text-sm leading-relaxed">
-        Manage the bills you follow and which updates we email you about from your watchlist.
+        Manage the bills you follow and which updates we email you about from My Portfolio.
       </p>
       <Link
-        href="/watchlist"
+        href="/company"
         className="inline-flex items-center gap-2 rounded-lg border border-border-default bg-bg-primary px-4 py-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
       >
         <StarIcon className="text-green-accent" />
-        My watchlist & alert preferences
+        My watch list &amp; alert preferences
       </Link>
     </Section>
   );

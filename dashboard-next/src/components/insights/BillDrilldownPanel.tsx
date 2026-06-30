@@ -120,7 +120,7 @@ export function BillDrilldownPanel({ open, onClose, title, subtitle, params, sou
 
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {error ? (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <p className="text-sm text-error">{error}</p>
           ) : !bills ? (
             <div className="space-y-2">
               {Array.from({ length: 6 }).map((_, i) => (

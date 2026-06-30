@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:www.ecolex.org)",
+      "WebFetch(domain:data.europa.eu)",
+      "WebFetch(domain:publications.europa.eu)",
+      "WebFetch(domain:n-lex.europa.eu)",
+      "WebFetch(domain:op.europa.eu)",
+      "WebFetch(domain:eur-lex.europa.eu)",
+      "Bash(curl -s -o /tmp/x -w 'HTTP %{http_code} ctype=%{content_type} bytes=%{size_download}\\\\n' https://www.riigiteataja.ee/public-api/api/v1/akt/749804/xml)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /tmp/e -w 'en/akt/512012016003 blob-html: HTTP %{http_code} bytes=%{size_download}\\\\n' https://www.riigiteataja.ee/public-api/api/v1/en/akt/512012016003/blob-html)",
+      "Bash(python3 -c \"import re;h=open\\('/tmp/e',encoding='utf-8',errors='replace'\\).read\\(\\);t=re.sub\\(r'<[^>]+>',' ',h\\);t=re.sub\\(r'\\\\s+',' ',t\\);print\\('  ',t[:200]\\)\")"
     ]
   }
 }

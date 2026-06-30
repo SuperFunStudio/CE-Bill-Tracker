@@ -34,6 +34,8 @@ from app.alerts.digest import (
     subscription_matches_bill,
     topic_label,
 )
+from app.alerts.applinks import bill_url
+from app.alerts.retention import filter_retained_subscriptions
 from app.alerts.unsubscribe import unsubscribe_url
 from app.models import AlertSubscription, Bill
 
@@ -86,10 +88,13 @@ async def build_new_bill_alerts(
     """
     bills = await _load_new_bills(db, today, window_days)
 
-    subs = list(
-        (
-            await db.execute(select(AlertSubscription).where(AlertSubscription.active.is_(True)))
-        ).scalars().all()
+    subs = await filter_retained_subscriptions(
+        db,
+        list(
+            (
+                await db.execute(select(AlertSubscription).where(AlertSubscription.active.is_(True)))
+            ).scalars().all()
+        ),
     )
 
     results: list[tuple[AlertSubscription, NewBillAlertContent]] = []
@@ -114,7 +119,7 @@ def render_new_bill_alert_subject(content: NewBillAlertContent) -> str:
 
 
 def _new_bill_block(b: Bill) -> str:
-    url = b.source_url or "#"
+    url = bill_url(b.id)  # land readers in the app's detail panel, not the external legislature page
     action = b.last_action_date or b.status_date
     action_str = f" · first action {action.isoformat()}" if action else ""
     return f"""

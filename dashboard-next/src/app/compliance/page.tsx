@@ -12,11 +12,14 @@ import { deadlineAccentText } from '@/lib/deadlineStyle';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { UpcomingDeadlinesLock } from '@/components/compliance/UpcomingDeadlinesLock';
+import { ComplianceChecker } from '@/components/compliance/ComplianceChecker';
 import { LockIcon } from '@/components/ui/icons';
 import { deadlineInScope } from '@/lib/scope';
 import { formatMaterial } from '@/components/scope/ScopeOnboarding';
 import { formatDate, daysUntil, downloadCsv, STATE_NAMES } from '@/lib/utils';
 import type { DeadlineSummary } from '@/lib/types';
+import { SkeletonList } from '@/components/ui/SkeletonList';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 /** Single-accent type chip (hue is the brand accent; see deadlineStyle). */
 function DeadlineTypeBadge({ type }: { type: string }) {
@@ -143,7 +146,10 @@ export default function CompliancePage() {
   return (
     <>
       <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <GazetteHeader title="Upcoming Deadlines" subtitle="EPR compliance deadlines across all states" />
+      <GazetteHeader title="Compliance" subtitle="Which laws apply to you, and your upcoming deadlines" />
+
+      {/* Self-serve: pick your products → see applicable laws + next steps (region-aware, free). */}
+      <ComplianceChecker />
 
       {scopeActive && (
         <p className="text-xs text-text-muted -mt-2">
@@ -247,9 +253,9 @@ export default function CompliancePage() {
           }
         />
         {(isLoading || loading) ? (
-          <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
+          <SkeletonList rows={5} />
         ) : allDeadlines.length === 0 ? (
-          <div className="text-center text-text-secondary py-12">No deadlines found for the selected filters.</div>
+          <EmptyState title="No deadlines found for the selected filters." />
         ) : (
           <div className="space-y-2">
             {allDeadlines.map((d, i) => <DeadlineRow key={`${d.id}-${i}`} deadline={d} onSelect={setSelected} />)}

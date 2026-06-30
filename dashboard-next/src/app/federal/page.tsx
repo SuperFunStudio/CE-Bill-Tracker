@@ -10,6 +10,8 @@ import { AlertIcon } from '@/components/ui/icons';
 import { formatDate, daysUntil, fixEncoding, formatInstrumentType } from '@/lib/utils';
 import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
 import type { FederalActionSummary, LitigationCaseSummary } from '@/lib/types';
+import { SkeletonList } from '@/components/ui/SkeletonList';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 const titleCase = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
@@ -39,7 +41,7 @@ function FrictionBadge({ friction }: { friction: string | null | undefined }) {
 function FederalActionCard({ action }: { action: FederalActionSummary }) {
   const commentDays = daysUntil(action.comment_deadline);
   return (
-    <div className="bg-bg-secondary border border-border-default rounded-lg p-4 space-y-3">
+    <div className="surface-card p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -102,7 +104,7 @@ function LitigationCaseRow({ caseData, onSelect, isSelected }: {
 
   return (
     <div
-      className={`bg-bg-secondary border rounded-lg p-4 cursor-pointer transition-colors ${isSelected ? 'border-green-accent/50' : 'border-border-default hover:border-green-accent/30'}`}
+      className={`list-card p-4 ${isSelected ? '!border-green-accent/60' : ''}`}
       onClick={onSelect}
     >
       <div className="flex items-start justify-between gap-3">
@@ -273,9 +275,9 @@ export default function FederalPage() {
       <div>
         <SectionHeader title={`Federal Register Actions (${filteredActions.length})`} />
         {actionsLoading ? (
-          <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-28 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
+          <SkeletonList rows={4} height="h-28" />
         ) : filteredActions.length === 0 ? (
-          <div className="text-center text-text-secondary py-8">No federal actions found.</div>
+          <EmptyState title="No federal actions found." />
         ) : (
           <div className="space-y-3">
             {filteredActions.map(a => <FederalActionCard key={a.id} action={a} />)}
@@ -290,9 +292,9 @@ export default function FederalPage() {
           subtitle="Judicial challenges to state EPR laws, tracked via CourtListener"
         />
         {casesLoading ? (
-          <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-20 bg-bg-secondary rounded-lg animate-pulse" />)}</div>
+          <SkeletonList rows={3} height="h-20" />
         ) : cases.length === 0 ? (
-          <div className="text-center text-text-secondary py-8">No litigation cases tracked.</div>
+          <EmptyState title="No litigation cases tracked." />
         ) : (
           <div className="space-y-2">
             {cases.map(c => (

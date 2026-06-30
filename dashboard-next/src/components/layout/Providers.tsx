@@ -2,9 +2,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from './ThemeContext';
+import { RegionProvider } from './RegionContext';
 import { ScopeProvider } from '@/components/scope/ScopeContext';
 import { AuthProvider } from '@/components/auth/AuthContext';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { Toast } from '@/components/ui/Toast';
 import { WatchlistProvider } from '@/components/watchlist/WatchlistContext';
 import { hydrateSnapshots } from '@/lib/snapshot';
 
@@ -29,11 +31,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <AuthProvider>
           <WatchlistProvider>
-            <ScopeProvider>
-              {children}
-            </ScopeProvider>
+            <RegionProvider>
+              <ScopeProvider>
+                {children}
+              </ScopeProvider>
+            </RegionProvider>
           </WatchlistProvider>
           <AuthModal />
+          <Toast />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

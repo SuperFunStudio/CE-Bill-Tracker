@@ -2,10 +2,11 @@
 import { useEffect, useState } from 'react';
 import { subscribe } from '@/lib/api';
 import { track } from '@/lib/analytics';
-import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
+import { formatInstrumentType } from '@/lib/utils';
 import { CheckIcon } from '@/components/ui/icons';
 import { useScope } from '@/components/scope/ScopeContext';
 import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
+import { REGION_LABELS, jurisdictionsFor } from '@/lib/jurisdictions';
 
 // Policy "topics" a reader can follow — the tracked circular-economy instruments
 // (see app/classification instrument_type enum). Order mirrors the About copy.
@@ -15,43 +16,73 @@ const TOPICS = ['epr', 'right_to_repair', 'deposit_return', 'recycled_content', 
 const formatMaterial = (slug: string) =>
   slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-const STATE_ENTRIES = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
+// Regions a subscriber can follow. `hasSub` = the region has selectable sub-jurisdictions today
+// (US states). EU member-state selection arrives with Phase B national law, so EU is whole-region
+// for now; new regions (UK, …) flip hasSub on once their jurisdiction data lands.
+const SUB_REGIONS: { code: string; hasSub: boolean }[] = [
+  { code: 'US', hasSub: true },
+  { code: 'EU', hasSub: false },
+];
+
+type RegionSel = { included: boolean; all: boolean; codes: string[] };
+
+// Sub-jurisdiction entries (code, name) for a region, excluding the whole-region sentinel (US/EU).
+function subJurisdictions(region: string): [string, string][] {
+  return Object.entries(jurisdictionsFor(region))
+    .filter(([code]) => code !== region)
+    .sort((a, b) => a[1].localeCompare(b[1]));
+}
 
 export function SubscribeForm() {
   const [email, setEmail] = useState('');
   const [organization, setOrganization] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
-  const [allStates, setAllStates] = useState(true);
-  const [states, setStates] = useState<string[]>([]);
+  const [regionSel, setRegionSel] = useState<Record<string, RegionSel>>({
+    US: { included: true, all: true, codes: [] },
+    EU: { included: false, all: true, codes: [] },
+  });
   const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [error, setError] = useState('');
 
-  // Prefill jurisdictions + materials from the reader's saved personalization scope, so "make this
-  // mine" → "alert me about exactly this" is one step. Both remain editable in the form below.
+  // Prefill jurisdictions + materials from the reader's saved personalization scope (US states), so
+  // "make this mine" → "alert me about exactly this" is one step. Both remain editable below.
   const { ready, scope } = useScope();
   const [prefilled, setPrefilled] = useState(false);
   useEffect(() => {
     if (ready && !prefilled && (scope.states.length > 0 || scope.materials.length > 0)) {
       if (scope.states.length > 0) {
-        setAllStates(false);
-        setStates(scope.states);
+        setRegionSel(prev => ({ ...prev, US: { included: true, all: false, codes: scope.states } }));
       }
       if (scope.materials.length > 0) setMaterials(scope.materials);
       setPrefilled(true);
     }
   }, [ready, prefilled, scope]);
 
-  function toggleTopic(t: string) {
+  const toggleTopic = (t: string) =>
     setTopics(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
-  }
-
-  function toggleMaterial(m: string) {
+  const toggleMaterial = (m: string) =>
     setMaterials(prev => (prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]));
-  }
 
-  function toggleState(abbr: string) {
-    setStates(prev => (prev.includes(abbr) ? prev.filter(x => x !== abbr) : [...prev, abbr]));
+  const patchRegion = (r: string, patch: Partial<RegionSel>) =>
+    setRegionSel(prev => ({ ...prev, [r]: { ...prev[r], ...patch } }));
+  const toggleCode = (r: string, code: string) =>
+    setRegionSel(prev => {
+      const codes = prev[r].codes;
+      return {
+        ...prev,
+        [r]: { ...prev[r], codes: codes.includes(code) ? codes.filter(c => c !== code) : [...codes, code] },
+      };
+    });
+
+  function buildRegionScope(): Record<string, string[]> {
+    const scopeOut: Record<string, string[]> = {};
+    for (const { code } of SUB_REGIONS) {
+      const s = regionSel[code];
+      if (!s?.included) continue;
+      scopeOut[code] = s.all || s.codes.length === 0 ? ['*'] : s.codes;
+    }
+    return scopeOut;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -59,20 +90,19 @@ export function SubscribeForm() {
     setStatus('submitting');
     setError('');
     try {
+      const region_scope = buildRegionScope();
       await subscribe({
         email: email.trim(),
         organization: organization.trim() || undefined,
-        // Empty selection means "everything" — friendliest default for a free digest.
-        states: allStates || states.length === 0 ? ['ALL'] : states,
+        // Empty region_scope means "every region" — friendliest default for a free digest.
+        region_scope,
         instrument_types: topics.length === 0 ? ['ALL'] : topics,
         material_categories: materials.length === 0 ? ['ALL'] : materials,
       });
-      // Conversion event. No PII — counts/flags only (see lib/analytics PII rule). Mark as a Key Event
-      // in GA Admin to track it as a conversion.
       track('subscribe', {
         topics_count: topics.length,
         materials_count: materials.length,
-        all_states: allStates || states.length === 0,
+        regions_count: Object.keys(region_scope).length,
         has_organization: organization.trim().length > 0,
       });
       setStatus('done');
@@ -155,40 +185,71 @@ export function SubscribeForm() {
         <p className="text-text-muted text-xs mt-2">Leave all unselected to follow every material.</p>
       </fieldset>
 
-      {/* Jurisdictions */}
+      {/* Regions & jurisdictions */}
       <fieldset>
         <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
-          Jurisdictions
+          Regions &amp; jurisdictions
         </legend>
-        <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
-          <input
-            type="checkbox"
-            checked={allStates}
-            onChange={e => setAllStates(e.target.checked)}
-            className="accent-green-accent"
-          />
-          All U.S. states &amp; D.C.
-        </label>
-        {!allStates && (
-          <div className="mt-2">
-            <div className="max-h-48 overflow-y-auto rounded-md border border-border-default bg-bg-secondary p-2 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1">
-              {STATE_ENTRIES.map(([abbr, name]) => (
-                <label key={abbr} className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer py-0.5">
+        <div className="space-y-3">
+          {SUB_REGIONS.map(({ code, hasSub }) => {
+            const sel = regionSel[code];
+            const label = REGION_LABELS[code] ?? code;
+            return (
+              <div key={code} className="rounded-md border border-border-default p-3">
+                <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={states.includes(abbr)}
-                    onChange={() => toggleState(abbr)}
-                    className="accent-green-accent shrink-0"
+                    checked={sel.included}
+                    onChange={e => patchRegion(code, { included: e.target.checked })}
+                    className="accent-green-accent"
                   />
-                  <span className="truncate" title={name}>{name}</span>
+                  <span className="font-serif">{label}</span>
                 </label>
-              ))}
-            </div>
-            <p className="text-text-muted text-xs mt-1">
-              {states.length > 0 ? `${states.length} selected` : 'Select one or more jurisdictions.'}
-            </p>
-          </div>
-        )}
+
+                {sel.included && hasSub && (
+                  <div className="mt-2 pl-6">
+                    <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sel.all}
+                        onChange={e => patchRegion(code, { all: e.target.checked })}
+                        className="accent-green-accent"
+                      />
+                      All {label} jurisdictions
+                    </label>
+                    {!sel.all && (
+                      <div className="mt-2">
+                        <div className="max-h-48 overflow-y-auto rounded-md border border-border-default bg-bg-secondary p-2 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1">
+                          {subJurisdictions(code).map(([jc, name]) => (
+                            <label key={jc} className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer py-0.5">
+                              <input
+                                type="checkbox"
+                                checked={sel.codes.includes(jc)}
+                                onChange={() => toggleCode(code, jc)}
+                                className="accent-green-accent shrink-0"
+                              />
+                              <span className="truncate" title={name}>{name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <p className="text-text-muted text-xs mt-1">
+                          {sel.codes.length > 0 ? `${sel.codes.length} selected` : 'Select one or more jurisdictions.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {sel.included && !hasSub && (
+                  <p className="mt-1 pl-6 text-text-muted text-xs">
+                    EU-wide measures now; member-state coverage is coming.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-text-muted text-xs mt-2">Uncheck all regions to follow everything.</p>
       </fieldset>
 
       {/* Email */}

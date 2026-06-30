@@ -19,6 +19,10 @@ Usage:
 """
 import argparse
 import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import create_engine, text
 
@@ -133,6 +137,63 @@ for _st, _slug, _name, _url in _AGENCIES:
                          registration_url=None, jurisdiction_scope="single_state",
                          home_state=_st, materials=None,
                          description=f"{_st} environmental agency; administers the state's EPR/producer-plan filings."))
+
+# --- EU starter directory (region="EU"). EU-central Regulations apply EU-wide; there is no single
+# EU PRO — producers register in each member state's national register. These entities point at the
+# authoritative EU guidance / national-register hubs. Per-member-state national PROs are Phase B. ---
+EU_ENTITIES = [
+    dict(slug="eu-packaging-registers", region="EU",
+         name="National Packaging Producer Registers (EU PPWR)", entity_type="agency",
+         url="https://environment.ec.europa.eu/topics/waste-and-recycling/packaging-waste_en",
+         registration_url="https://environment.ec.europa.eu/topics/waste-and-recycling/packaging-waste_en",
+         jurisdiction_scope="multistate",
+         materials=["plastic_packaging", "paper_packaging", "packaging", "glass", "metals"],
+         description="Under the EU Packaging & Packaging Waste Regulation, producers register and "
+                     "report in each member state's national packaging register and meet recycled-content, "
+                     "reuse and labelling obligations."),
+    dict(slug="eu-weee-registers", region="EU",
+         name="National WEEE Registers (EU)", entity_type="agency",
+         url="https://environment.ec.europa.eu/topics/waste-and-recycling/waste-electrical-and-electronic-equipment-weee_en",
+         registration_url="https://environment.ec.europa.eu/topics/waste-and-recycling/waste-electrical-and-electronic-equipment-weee_en",
+         jurisdiction_scope="multistate", materials=["electronics"],
+         description="Under the WEEE Directive, EEE producers register in each member state's national "
+                     "WEEE register, finance collection/recycling and report quantities placed on market."),
+    dict(slug="eu-batteries", region="EU",
+         name="EU Batteries Regulation — National Producer Registers", entity_type="agency",
+         url="https://environment.ec.europa.eu/topics/waste-and-recycling/batteries_en",
+         registration_url="https://environment.ec.europa.eu/topics/waste-and-recycling/batteries_en",
+         jurisdiction_scope="multistate", materials=["batteries"],
+         description="Under the EU Batteries Regulation, battery producers register in each member "
+                     "state and meet due-diligence, carbon-footprint, recycled-content and collection duties."),
+    dict(slug="eu-sup", region="EU",
+         name="EU Single-Use Plastics — National Measures", entity_type="agency",
+         url="https://environment.ec.europa.eu/topics/plastics/single-use-plastics_en",
+         registration_url="https://environment.ec.europa.eu/topics/plastics/single-use-plastics_en",
+         jurisdiction_scope="multistate", materials=["plastic_packaging", "plastics"],
+         description="The Single-Use Plastics Directive is transposed nationally: market restrictions, "
+                     "EPR for certain items, labelling and recycled-content rules for bottles."),
+    dict(slug="eu-espr", region="EU",
+         name="EU Ecodesign for Sustainable Products (ESPR)", entity_type="agency",
+         url="https://commission.europa.eu/energy-climate-change-environment/standards-tools-and-labels/products-labelling-rules-and-requirements/ecodesign-sustainable-products-regulation_en",
+         registration_url=None, jurisdiction_scope="multistate", materials=None,
+         description="ESPR sets product-specific ecodesign and Digital Product Passport requirements "
+                     "via delegated acts; track the delegated acts covering your product groups."),
+    dict(slug="eu-commission-env", region="EU",
+         name="European Commission — Environment (Circular Economy)", entity_type="agency",
+         url="https://environment.ec.europa.eu/topics/circular-economy_en",
+         registration_url=None, jurisdiction_scope="multistate", materials=None,
+         description="EU circular-economy policy hub; the generic starting point when a measure has no "
+                     "dedicated producer register yet."),
+]
+ENTITIES += EU_ENTITIES
+
+# EU material -> entity slug (the EU analog of MATERIAL_TO_SLUG), for acts without a curated override.
+EU_MATERIAL_TO_SLUG = {
+    "plastic_packaging": "eu-packaging-registers", "paper_packaging": "eu-packaging-registers",
+    "packaging": "eu-packaging-registers", "glass": "eu-packaging-registers",
+    "metals": "eu-packaging-registers", "electronics": "eu-weee-registers",
+    "batteries": "eu-batteries", "plastics": "eu-sup",
+}
 
 # source_url domain -> entity slug (highest-precision link signal)
 DOMAIN_TO_SLUG = {
@@ -493,7 +554,86 @@ def pick_entity_slug(model, mats, source_url):
     return None, None
 
 
-def build_pathway(law, entities_by_slug):
+# --- EU pathways. EU acts have no management_model (that extraction is US-only), so they route via a
+# curated CELEX override map (the EU analog of BILL_OVERRIDES), falling back to a material-based
+# national-register pointer. Keyed by the CELEX number, which is the EU bill_number. ---
+EU_OVERRIDES = {
+    _norm_bn("32025R0040"): dict(  # PPWR
+        entity_slug="eu-packaging-registers", action_type="register_with_state",
+        action_summary="Register as a packaging producer in each EU member state where you place "
+                       "packaging on the market (appoint an authorised representative where required), "
+                       "and meet the PPWR's recycled-content, recyclability, reuse and labelling duties."),
+    _norm_bn("32023R1542"): dict(  # Batteries Regulation
+        entity_slug="eu-batteries", action_type="register_with_state",
+        action_summary="Register as a battery producer in each member state and meet the EU Batteries "
+                       "Regulation's due-diligence, carbon-footprint, recycled-content, labelling and "
+                       "collection obligations (including the battery passport for LMT/EV batteries)."),
+    _norm_bn("32012L0019"): dict(  # WEEE
+        entity_slug="eu-weee-registers", action_type="register_with_state",
+        action_summary="Register in each member state's national WEEE register, finance the collection "
+                       "and recycling of your electrical & electronic equipment, and report quantities "
+                       "placed on the market."),
+    _norm_bn("32019L0904"): dict(  # SUP
+        entity_slug="eu-sup", action_type="monitor",
+        action_summary="Comply with national transpositions of the Single-Use Plastics Directive: "
+                       "market restrictions on listed items, EPR for certain products, marking "
+                       "requirements, and recycled-content targets for PET/plastic bottles."),
+    _norm_bn("32024R1781"): dict(  # ESPR
+        entity_slug="eu-espr", action_type="monitor",
+        action_summary="Track the ESPR delegated acts setting ecodesign and Digital Product Passport "
+                       "requirements for your product groups, and prepare to meet them as they enter force."),
+    _norm_bn("31994L0062"): dict(  # Packaging Directive (superseded by PPWR)
+        entity_slug="eu-packaging-registers", action_type="register_with_state",
+        action_summary="Packaging EPR obligations under the Packaging & Packaging Waste Directive are "
+                       "administered through national packaging registers (now superseded/strengthened "
+                       "by the PPWR — see Regulation (EU) 2025/40)."),
+    _norm_bn("32008L0098"): dict(  # Waste Framework Directive
+        entity_slug="eu-commission-env", action_type="monitor",
+        action_summary="The Waste Framework Directive sets the EPR minimum requirements transposed into "
+                       "national law; monitor your member-state EPR schemes for the streams you place "
+                       "on the market."),
+    _norm_bn("32000L0053"): dict(  # ELV
+        entity_slug="eu-commission-env", action_type="register_with_state",
+        action_summary="Vehicle producers must meet the End-of-Life Vehicles rules transposed in each "
+                       "member state (free take-back, treatment standards, recovery/recycling targets)."),
+}
+
+
+def _eu_material_slug(mats):
+    for m in (mats or []):
+        if m in EU_MATERIAL_TO_SLUG:
+            return EU_MATERIAL_TO_SLUG[m]
+    return "eu-commission-env"
+
+
+def build_pathway_eu(law, entities_by_slug):
+    """EU pathway: curated CELEX override first, else a material-based national-register pointer."""
+    state, bn, model, scope, conf, mats, surl, next_dl, has_fee = law
+    mat = material_label(mats)
+    ov = EU_OVERRIDES.get(_norm_bn(bn))
+    if ov:
+        slug = ov.get("entity_slug")
+        entity = entities_by_slug.get(slug) if slug else None
+        reg = ov.get("url") or (entity.get("registration_url") or entity.get("url") if entity else surl)
+        return dict(entity_slug=(entity["slug"] if entity else None),
+                    action_type=ov.get("action_type", "register_with_state"),
+                    action_summary=ov["action_summary"], registration_url=reg,
+                    management_model=None, next_deadline_date=next_dl, has_fee=has_fee,
+                    confidence=conf, basis="manual")
+    slug = _eu_material_slug(mats)
+    entity = entities_by_slug.get(slug)
+    reg = (entity.get("registration_url") or entity.get("url")) if entity else surl
+    return dict(entity_slug=(entity["slug"] if entity else None), action_type="monitor",
+                action_summary=f"EU-wide measure affecting {mat}. Register via the relevant national "
+                               f"register in each member state where you place products on the market, "
+                               f"and monitor national transposition.",
+                registration_url=reg, management_model=None, next_deadline_date=next_dl,
+                has_fee=has_fee, confidence=conf, basis="region_default")
+
+
+def build_pathway(law, entities_by_slug, region="US"):
+    if region == "EU":
+        return build_pathway_eu(law, entities_by_slug)
     state, bn, model, scope, conf, mats, surl, next_dl, has_fee = law
     mat = material_label(mats)
     slug, basis = pick_entity_slug(model, mats, surl)
@@ -547,23 +687,27 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--test", action="store_true")
     ap.add_argument("--prod-dsn", default=None)
+    ap.add_argument("--region", default="US",
+                    help="US (default), EU, or all — which region's enacted laws to build pathways for.")
     args = ap.parse_args()
     engine = create_engine(args.prod_dsn or settings.database_url)
+    region = args.region.upper()
 
-    # 1) Upsert entities
+    # 1) Upsert entities (always the full directory — US + EU — so links resolve regardless of region).
     if not args.test:
         with engine.begin() as c:
             for e in ENTITIES:
                 c.execute(text("""
                     insert into compliance_entity
-                      (slug,name,entity_type,url,registration_url,jurisdiction_scope,home_state,materials,description)
-                    values (:slug,:name,:entity_type,:url,:registration_url,:jurisdiction_scope,:home_state,
+                      (slug,name,entity_type,region,url,registration_url,jurisdiction_scope,home_state,materials,description)
+                    values (:slug,:name,:entity_type,:region,:url,:registration_url,:jurisdiction_scope,:home_state,
                             cast(:materials as jsonb),:description)
                     on conflict (slug) do update set
-                      name=excluded.name, entity_type=excluded.entity_type, url=excluded.url,
+                      name=excluded.name, entity_type=excluded.entity_type, region=excluded.region, url=excluded.url,
                       registration_url=excluded.registration_url, jurisdiction_scope=excluded.jurisdiction_scope,
                       home_state=excluded.home_state, materials=excluded.materials, description=excluded.description
-                """), {**e, "materials": json.dumps(e.get("materials")),
+                """), {**e, "region": e.get("region", "US"),
+                       "materials": json.dumps(e.get("materials")),
                        "home_state": e.get("home_state")})
     print(f"Entities upserted: {len(ENTITIES)}")
 
@@ -573,9 +717,17 @@ def main():
                 for r in c.execute(text(
                     "select slug,id,name,url,registration_url from compliance_entity"))}
 
-    # 2) Build pathways for every enacted law
-    sql = text("""
-        select b.id, b.state, b.bill_number,
+    # 2) Build pathways for every enacted law. Region filter: US excludes federal (state='US');
+    # EU takes all EU rows; "all" does both. `b.region` drives per-row routing (US model-based vs EU
+    # CELEX-based) so an EU act is never run through US management-model logic.
+    if region == "US":
+        region_clause = "and b.region='US' and b.state!='US'"
+    elif region == "ALL":
+        region_clause = "and ((b.region='US' and b.state!='US') or b.region!='US')"
+    else:
+        region_clause = "and b.region=:region"
+    sql = text(f"""
+        select b.id, b.region, b.state, b.bill_number,
                b.compliance_details->'management'->>'management_model',
                b.compliance_details->'management'->>'coordination_scope',
                (b.compliance_details->'management'->>'confidence')::float,
@@ -584,38 +736,40 @@ def main():
                   where d.bill_id=b.id and d.deadline_date>=current_date),
                exists(select 1 from bill_fee_citation f where f.bill_id=b.id)
         from bills b
-        where b.ce_relevant and b.state!='US' and b.status='enacted'
+        where b.ce_relevant and b.status='enacted' {region_clause}
     """)
+    params = {} if region in ("US", "ALL") else {"region": region}
     with engine.connect() as c:
-        rows = list(c.execute(sql))
+        rows = list(c.execute(sql, params))
 
     tally = {}
     samples = []
     for r in rows:
-        bid = r[0]
-        p = build_pathway(r[1:], ents)
+        bid, bregion = r[0], r[1]
+        p = build_pathway(r[2:], ents, region=bregion)
         tally[p["action_type"]] = tally.get(p["action_type"], 0) + 1
         if len(samples) < 12:
-            samples.append((r[1], r[2], p))
+            samples.append((r[2], r[3], p))
         if not args.test:
             ent_id = ents[p["entity_slug"]]["id"] if p["entity_slug"] else None
             with engine.begin() as c:
                 c.execute(text("""
                     insert into compliance_pathway
-                      (bill_id,entity_id,management_model,action_type,action_summary,
+                      (bill_id,entity_id,region,management_model,action_type,action_summary,
                        registration_url,next_deadline_date,has_fee,confidence,basis)
-                    values (:bid,:eid,:mm,:at,:sm,:reg,:dl,:fee,:conf,:basis)
+                    values (:bid,:eid,:region,:mm,:at,:sm,:reg,:dl,:fee,:conf,:basis)
                     on conflict (bill_id) do update set
-                      entity_id=excluded.entity_id, management_model=excluded.management_model,
+                      entity_id=excluded.entity_id, region=excluded.region,
+                      management_model=excluded.management_model,
                       action_type=excluded.action_type, action_summary=excluded.action_summary,
                       registration_url=excluded.registration_url, next_deadline_date=excluded.next_deadline_date,
                       has_fee=excluded.has_fee, confidence=excluded.confidence, basis=excluded.basis
-                """), {"bid": bid, "eid": ent_id, "mm": p["management_model"], "at": p["action_type"],
-                       "sm": p["action_summary"], "reg": p["registration_url"],
+                """), {"bid": bid, "eid": ent_id, "region": bregion, "mm": p["management_model"],
+                       "at": p["action_type"], "sm": p["action_summary"], "reg": p["registration_url"],
                        "dl": p["next_deadline_date"], "fee": p["has_fee"], "conf": p["confidence"],
                        "basis": p["basis"]})
 
-    print(f"Pathways built: {len(rows)}  (test={args.test})\n")
+    print(f"Pathways built: {len(rows)}  region={region}  (test={args.test})\n")
     print("ACTION TYPE tally:")
     for k, v in sorted(tally.items(), key=lambda x: -x[1]):
         print(f"  {v:3d}  {k}")

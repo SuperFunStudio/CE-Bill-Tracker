@@ -111,7 +111,7 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
 
   return (
     <div
-      className={`mx-auto w-full max-w-md rounded-2xl border border-green-accent bg-bg-secondary p-7 text-center space-y-5 shadow-xl transition-opacity duration-700 ${
+      className={`mx-auto w-full max-w-md rounded-panel border border-green-accent bg-bg-secondary p-7 text-center space-y-5 shadow-xl transition-opacity duration-700 ${
         mounted ? 'opacity-100' : 'opacity-0'
       }`}
     >
@@ -137,7 +137,7 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
           >
             {trialBusy ? 'Starting…' : user ? upgradeLabel() : 'Sign in to continue'}
           </button>
-          {trialError && <p className="text-meta text-red-500 dark:text-red-400">{trialError}</p>}
+          {trialError && <p className="text-meta text-error">{trialError}</p>}
           <p className="text-meta text-green-accent leading-relaxed">{PRO.foundingNote}</p>
         </div>
 

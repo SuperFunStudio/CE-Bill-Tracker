@@ -112,6 +112,32 @@ class KeywordFilter:
         # Exclusions — hard disqualifiers
         self._exclusions = self._compile(kw["exclusion_keywords"])
 
+        # Rescue set — high-precision, definitionally in-scope phrases used by strong_signal() to
+        # keep a bill the LLM would have dropped (see ClassificationPipeline). Tier-1 (EPR program
+        # terms) plus the definitional instrument tiers (right-to-repair / deposit-return / recycled-
+        # content / organics, which map to circular-economy policy by definition) plus a curated set
+        # of unambiguous circular-economy phrases that aren't already covered. Multi-word and
+        # specific on purpose so the rescue stays high precision — it must NOT fire on out-of-scope
+        # titles (clemency, ground leases, highway emissions).
+        rescue_keys = [
+            "primary_keywords",
+            "right_to_repair_keywords",
+            "deposit_return_keywords",
+            "recycled_content_keywords",
+            "organics_and_food_waste_keywords",
+        ]
+        rescue_terms = [term for k in rescue_keys for term in kw[k]]
+        rescue_terms += [
+            "circular economy",
+            "single-use plastic",
+            "single use plastic",
+            "packaging reduction",
+            "packaging waste",
+            "plastic packaging",
+            "organic waste",
+        ]
+        self._rescue = self._compile(rescue_terms)
+
         self._hint_patterns = [
             (re.compile(r"\b" + re.escape(k) + r"\b", re.IGNORECASE), v)
             for k, v in MATERIAL_HINT_MAP.items()
@@ -146,3 +172,20 @@ class KeywordFilter:
         self, title: str, description: str = "", text_excerpt: str = ""
     ) -> bool:
         return self.score(title, description, text_excerpt).passes
+
+    def strong_signal(
+        self, title: str, description: str = "", text_excerpt: str = ""
+    ) -> bool:
+        """Near-certain in-scope signal: a high-precision rescue-set phrase and no exclusion.
+
+        Used as a rescue net in the classification pipeline — if the LLM would drop a bill (often
+        because it was starved of bill text and bailed to is_ce_relevant=false), but the title/
+        description carries an unambiguous definitional term (e.g. "extended producer responsibility",
+        "bottle bill", "right to repair", "circular economy", "packaging waste"), we keep it in scope
+        and flag it for review rather than silently shedding it. Uses the curated `_rescue` set (not
+        the looser `passes` threshold) so the rescue stays high-precision.
+        """
+        corpus = " ".join([title, description, text_excerpt[:2000]])
+        if self._search_text(corpus, self._exclusions):
+            return False
+        return bool(self._search_text(corpus, self._rescue))

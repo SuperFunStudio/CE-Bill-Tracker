@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext';
 
 /** Global sign-in / create-account modal, opened via useAuth().openAuth(). Email + Google. */
 export function AuthModal() {
-  const { authModalOpen, closeAuth, signInEmail, signUpEmail, signInGoogle, resendVerification, resetPassword } = useAuth();
+  const { authModalOpen, closeAuth, signInEmail, signUpEmail, signInGoogle, signInMicrosoft, resendVerification, resetPassword } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -81,6 +81,19 @@ export function AuthModal() {
     }
   }
 
+  async function microsoft() {
+    setBusy(true);
+    setError('');
+    try {
+      await signInMicrosoft();
+      closeAuth();
+    } catch (err) {
+      setError(friendlyError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -133,6 +146,15 @@ export function AuthModal() {
         >
           <GoogleGlyph />
           Continue with Google
+        </button>
+
+        <button
+          onClick={microsoft}
+          disabled={busy}
+          className="w-full flex items-center justify-center gap-2 rounded-lg border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary hover:border-green-accent transition-colors disabled:opacity-60"
+        >
+          <MicrosoftGlyph />
+          Continue with Microsoft
         </button>
 
         <div className="flex items-center gap-3 text-text-muted text-xs">
@@ -213,6 +235,17 @@ function GoogleGlyph() {
       <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.5 3-2.2 5.5-4.7 7.2l7.3 5.7C43.7 37.7 46.5 31.7 46.5 24.5Z" />
       <path fill="#FBBC05" d="M10.5 28.3a14.5 14.5 0 0 1 0-8.6l-7.9-6.1a24 24 0 0 0 0 20.8l7.9-6.1Z" />
       <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.3-5.7c-2 1.4-4.7 2.3-8.6 2.3-6.3 0-11.7-3.7-13.5-9.1l-7.9 6.1C6.4 42.6 14.6 48 24 48Z" />
+    </svg>
+  );
+}
+
+function MicrosoftGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 23 23" aria-hidden>
+      <path fill="#F25022" d="M0 0h11v11H0z" />
+      <path fill="#7FBA00" d="M12 0h11v11H12z" />
+      <path fill="#00A4EF" d="M0 12h11v11H0z" />
+      <path fill="#FFB900" d="M12 12h11v11H12z" />
     </svg>
   );
 }

@@ -24,6 +24,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.alerts.applinks import bill_url
+from app.alerts.retention import filter_retained_subscriptions
 from app.alerts.unsubscribe import unsubscribe_url
 from app.models import AlertSubscription, Bill, BillChange, FederalAction
 
@@ -62,6 +64,44 @@ def _matches_list(values: list | None, candidate: str | None) -> bool:
     return candidate in values
 
 
+def _matches_scope(
+    region_scope: dict | None, region: str | None, jurisdiction: str | None
+) -> bool:
+    """Region-keyed jurisdiction match (the multi-region successor to _matches_list on states).
+
+    region_scope = {"US": ["CA","OR"], "EU": ["*"]}. Empty/None scope = match all regions +
+    jurisdictions. A region key whose list is empty or contains "*"/"ALL" matches any jurisdiction
+    in that region; otherwise the jurisdiction code must be listed. A bill whose region isn't a key
+    at all does NOT match (so a US-only subscriber never gets EU alerts). See migration 032.
+    """
+    if not region_scope:
+        return True
+    region = region or "US"
+    if region not in region_scope:
+        return False
+    codes = region_scope[region]
+    if not codes or "*" in codes or "ALL" in codes:
+        return True
+    return jurisdiction in codes
+
+
+def _union_scope(scopes: list[dict]) -> dict:
+    """Union region-keyed scopes when merging a subscriber's rows. Any empty scope means match-all
+    (everything), so the union is {}. Otherwise per region: a whole-region ("*") wins, else union codes."""
+    if any(not s for s in scopes):
+        return {}
+    out: dict[str, list] = {}
+    for s in scopes:
+        for region, codes in s.items():
+            if out.get(region) == ["*"]:
+                continue
+            if not codes or "*" in codes or "ALL" in codes:
+                out[region] = ["*"]
+            else:
+                out[region] = sorted(set(out.get(region, [])) | set(codes))
+    return out
+
+
 def subscription_matches_bill(
     sub: AlertSubscription, bill: Bill, watchlist_ids: set[int] | None = None
 ) -> bool:
@@ -84,7 +124,7 @@ def subscription_matches_bill(
     if in_watchlist:
         return True
 
-    if not _matches_list(sub.states, bill.state):
+    if not _matches_scope(sub.region_scope, bill.region, bill.state):
         return False
     if not _matches_list(sub.instrument_types, bill.instrument_type):
         return False
@@ -106,6 +146,9 @@ def subscription_matches_federal(sub: AlertSubscription, action: FederalAction) 
     Watch lists track individual bills, not federal actions, so a watchlist subscription never
     matches a federal action."""
     if getattr(sub, "scope", "filter") == "watchlist":
+        return False
+    # Federal actions are US national — only for subscribers whose scope includes the US.
+    if not _matches_scope(sub.region_scope, "US", "US"):
         return False
     topics = sub.instrument_types or []
     if topics and "ALL" not in topics and "epr" not in topics:
@@ -301,6 +344,7 @@ def _merge_subs_by_email(subs: list[AlertSubscription]) -> list[AlertSubscriptio
             email=newest.email,
             organization=newest.organization,
             states=_union_list([s.states or [] for s in filters]),
+            region_scope=_union_scope([s.region_scope or {} for s in filters]),
             material_categories=_union_list([s.material_categories or [] for s in filters]),
             instrument_types=_union_list([s.instrument_types or [] for s in filters]),
             min_confidence=min((s.min_confidence or 0) for s in filters),
@@ -322,14 +366,17 @@ async def build_digests(
     """
     status_changes, new_bills, federal_actions = await _load_candidates(db, since)
 
-    subs = list(
-        (
-            await db.execute(
-                select(AlertSubscription).where(AlertSubscription.active.is_(True))
+    subs = await filter_retained_subscriptions(
+        db,
+        list(
+            (
+                await db.execute(
+                    select(AlertSubscription).where(AlertSubscription.active.is_(True))
+                )
             )
-        )
-        .scalars()
-        .all()
+            .scalars()
+            .all()
+        ),
     )
 
     new_bills = sorted(new_bills, key=_bill_sort_key)
@@ -427,7 +474,7 @@ _MUTED = "#6b7280"      # --text-muted
 _PAPER = "#f8f9fa"      # --bg-primary
 _RULE = "#dee2e6"       # --border-default
 _ACCENT = "#1e6ae9"     # --green-accent (blue in light mode)
-_DASHBOARD_URL = "https://ce-bill-tracker.web.app"
+_DASHBOARD_URL = "https://battleofbills.com"
 
 
 def render_digest_subject(content: DigestContent, period_label: str) -> str:
@@ -435,10 +482,10 @@ def render_digest_subject(content: DigestContent, period_label: str) -> str:
 
 
 def _byline(b: Bill, extra: str = "") -> str:
-    """A serif headline line: 'CA SB 54 · Extended Producer Responsibility'."""
-    url = b.source_url or "#"
+    """A serif headline line: 'CA SB 54 · Extended Producer Responsibility'. The bill number links
+    into the app (the detail panel), not the external legislature page — see applinks.bill_url."""
     return (
-        f'<a href="{url}" style="color:{_ACCENT};text-decoration:none;font-weight:bold;">'
+        f'<a href="{bill_url(b.id)}" style="color:{_ACCENT};text-decoration:none;font-weight:bold;">'
         f"{b.state} {b.bill_number or 'Bill'}</a>"
         f'<span style="color:{_MUTED};"> · {topic_label(b.instrument_type)}</span>{extra}'
     )

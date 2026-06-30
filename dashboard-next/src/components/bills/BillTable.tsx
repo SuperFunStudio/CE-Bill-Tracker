@@ -92,7 +92,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
                 tabIndex={0}
                 role="button"
                 aria-label={`Open ${bill.state} ${bill.bill_number ?? 'bill'} details`}
-                className="border-b border-border-default cursor-pointer transition-colors hover:bg-bg-secondary"
+                className="list-row"
               >
                 <td className="px-3 py-2">
                   <span className="text-green-accent font-mono font-bold">{bill.state}</span>
@@ -157,7 +157,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
             tabIndex={0}
             role="button"
             aria-label={`Open ${bill.state} ${bill.bill_number ?? 'bill'} details`}
-            className="rounded-lg border border-border-default bg-bg-secondary cursor-pointer transition-colors p-3 space-y-1.5 active:bg-green-dark/20"
+            className="list-card p-3 space-y-1.5 active:bg-green-dark/20"
           >
             {/* Row 1: state / bill# / litigation */}
             <div className="flex items-center gap-2 flex-wrap">

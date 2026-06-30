@@ -48,6 +48,12 @@
   --status-enacted:    #16a34a;  /* green  */
   --status-weakens:    #dc2626;  /* red    */
   --status-dormant:    #9ca3af;  /* gray   */
+
+  /* Material-category badge hue — the one sanctioned second color (distinguishes "what material"
+     from the brand accent + status palette). Tokenized so the .badge-material utility is the single
+     source instead of raw blue scattered across the company page. */
+  --material-bg:   #dbeafe;  /* blue-100 */
+  --material-text: #1d4ed8;  /* blue-700 */
 }
 
 .dark {
@@ -58,6 +64,9 @@
   --status-enacted:    #4ade80;
   --status-weakens:    #f87171;
   --status-dormant:    #6b7280;
+
+  --material-bg:   #1e3a5f;  /* deep blue surface on dark */
+  --material-text: #93c5fd;  /* blue-300 */
 
   --shadow-card:  0 1px 2px rgba(0, 0, 0, 0.40), 0 1px 3px rgba(0, 0, 0, 0.30);
   --shadow-panel: 0 4px 12px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.30);

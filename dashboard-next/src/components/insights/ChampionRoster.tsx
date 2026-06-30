@@ -146,7 +146,7 @@ export function ChampionRoster() {
       </div>
 
       {error ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-sm text-error">{error}</p>
       ) : !champs ? (
         <div className="grid gap-2 sm:grid-cols-2">
           {Array.from({ length: 6 }).map((_, i) => (

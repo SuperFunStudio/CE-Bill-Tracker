@@ -64,7 +64,7 @@ export function InstrumentMaterialMatrix() {
     return { instruments, materials, lookup, max };
   }, [cells]);
 
-  if (error) return <p className="text-sm text-red-600 dark:text-red-400">{error}</p>;
+  if (error) return <p className="text-sm text-error">{error}</p>;
   if (!cells) return <div className="h-64 w-full animate-pulse rounded-lg bg-bg-tertiary" />;
   if (materials.length === 0) {
     return <p className="text-text-muted text-sm">No classified coverage to chart yet.</p>;

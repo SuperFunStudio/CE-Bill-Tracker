@@ -10,8 +10,20 @@ import { fetchCompliancePathways } from '@/lib/api';
 export function useCompliancePathways(state: string | undefined) {
   return useQuery({
     queryKey: ['compliance-pathways', state],
-    queryFn: () => fetchCompliancePathways(state as string),
+    queryFn: () => fetchCompliancePathways({ state: state as string }),
     enabled: !!state,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Region-scoped compliance pathways for the self-serve "which laws apply to me" checker — every
+ * enacted law in a region (US default, EU, or "all"), each with its next-step action + deadline.
+ */
+export function useRegionPathways(region: string) {
+  return useQuery({
+    queryKey: ['region-pathways', region],
+    queryFn: () => fetchCompliancePathways({ region }),
     staleTime: 5 * 60 * 1000,
   });
 }

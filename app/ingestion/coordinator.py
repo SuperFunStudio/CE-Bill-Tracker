@@ -12,7 +12,7 @@ from app.config import settings
 from app.ingestion.federal_register import FederalRegisterClient
 from app.ingestion.legiscan import ALL_STATES, LegiScanClient, compute_bill_hash
 from app.ingestion.openstates import OpenStatesClient
-from app.models import Bill, FederalAction
+from app.models import Bill, BillChange, FederalAction
 
 log = structlog.get_logger()
 
@@ -412,12 +412,13 @@ class IngestionCoordinator:
             # rows ingested before the source link was captured.
             new_hash = _compute_openstates_change_hash(bill_data)
             hash_result = await db.execute(
-                select(Bill.change_hash, Bill.source_url).where(
-                    Bill.openstates_id == openstates_id
-                )
+                select(
+                    Bill.id, Bill.status, Bill.ce_relevant,
+                    Bill.change_hash, Bill.source_url,
+                ).where(Bill.openstates_id == openstates_id)
             )
             stored_row = hash_result.one_or_none()
-            if stored_row and stored_row[0] == new_hash and stored_row[1]:
+            if stored_row and stored_row.change_hash == new_hash and stored_row.source_url:
                 return "skipped"
 
             # Extract fields
@@ -453,6 +454,31 @@ class IngestionCoordinator:
                 },
             )
             await db.execute(stmt)
+
+            # Emit a status-change event for an already-tracked, relevant bill that just advanced, so
+            # run_alert_dispatch can notify matching subscribers (subscription_matches_bill: states +
+            # topics + materials + confidence floor, or a starred bill). Gated to:
+            #   - existing rows only — a brand-new bill is the new-bill alert's job, not a status change;
+            #   - ce_relevant only — don't alert on bills the classifier ruled out (NULL/False skips);
+            #   - an actual status move — stored status differs from the freshly inferred one.
+            # Every _infer_openstates_status value is in detector.SIGNIFICANT_STATUSES, so is_alert_worthy
+            # accepts these. We deliberately do NOT emit a text_update here: the OpenStates change_hash is
+            # an action-metadata hash (updated_at + latest action), not a bill-text hash, so it moves on
+            # every action and would double each status alert with a misleading "text changed".
+            if (
+                stored_row is not None
+                and stored_row.ce_relevant
+                and stored_row.status != status
+            ):
+                db.add(
+                    BillChange(
+                        bill_id=stored_row.id,
+                        change_type="status_change",
+                        old_value={"status": stored_row.status},
+                        new_value={"status": status},
+                    )
+                )
+
             return "upserted"
 
         except Exception as e:

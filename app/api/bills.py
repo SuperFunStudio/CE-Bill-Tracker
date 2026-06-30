@@ -233,32 +233,55 @@ async def get_map_summary(
     ]
 
 
+def _parse_regions(regions: str | None) -> list[str] | None:
+    """Parse the Insights `regions` CSV query param into upper-cased jurisdiction codes.
+
+    Returns None for "all regions" (empty, missing, or containing "all") — i.e. no region filter.
+    The Insights views below always GROUP BY region so the frontend can render one series per region
+    in compare mode; the param only narrows WHICH regions are returned.
+    """
+    if not regions:
+        return None
+    codes = [r.strip().upper() for r in regions.split(",") if r.strip()]
+    if not codes or "ALL" in codes:
+        return None
+    return codes
+
+
 @router.get("/timeline", response_model=list[BillTimelinePoint])
 async def get_bill_timeline(
     instrument_type: str | None = None,
     material_category: str | None = None,
+    regions: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Per-year, per-status counts of EPR-relevant bills, bucketed by year of status_date.
+    """Per-year, per-status, per-region counts of EPR-relevant bills, bucketed by year of status_date.
 
     Powers the Insights timeline: cumulate the `enacted` series for "laws on the books over
     time", and toggle the other statuses to see the "shots on goal" (introductions) behind them.
+    Grouped by region so the chart can compare jurisdictions; `regions` (CSV) narrows the set.
     """
     year = func.extract("year", Bill.status_date)
     q = (
-        select(year.cast(Integer).label("year"), Bill.status, func.count().label("count"))
+        select(year.cast(Integer).label("year"), Bill.status, Bill.region, func.count().label("count"))
         .where(Bill.ce_relevant == True)
         .where(Bill.status_date.isnot(None))
         .where(Bill.status.isnot(None))
-        .group_by("year", Bill.status)
+        .group_by("year", Bill.status, Bill.region)
         .order_by("year")
     )
     if instrument_type:
         q = q.where(Bill.instrument_type == instrument_type)
     if material_category:
         q = q.where(Bill.material_categories.contains([material_category]))
+    region_codes = _parse_regions(regions)
+    if region_codes:
+        q = q.where(Bill.region.in_(region_codes))
     rows = (await db.execute(q)).all()
-    return [BillTimelinePoint(year=row.year, status=row.status, count=row.count) for row in rows]
+    return [
+        BillTimelinePoint(year=row.year, status=row.status, count=row.count, region=row.region)
+        for row in rows
+    ]
 
 
 @router.get("/stance-momentum", response_model=list[BillStancePoint])
@@ -266,41 +289,56 @@ async def get_stance_momentum(
     instrument_type: str | None = None,
     material_category: str | None = None,
     min_confidence: float = 0.7,
+    regions: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Per-year counts of EPR-relevant bills by policy_stance — the Insights "policy momentum" view.
+    """Per-year, per-region counts of EPR-relevant bills by policy_stance — the Insights "momentum" view.
 
     Answers "is the field advancing or being rolled back?" by bucketing each bill under the year of
     its most recent status change and its stance (advances / weakens / neutral). A confidence floor
     (default 0.7) keeps low-confidence classifications out of the aggregate, since stance is the
     noisiest classifier axis. neutral is included in the response; the chart leaves it off the axis.
+    Grouped by region so the chart can compare jurisdictions; `regions` (CSV) narrows the set.
     """
     year = func.extract("year", Bill.status_date)
     q = (
-        select(year.cast(Integer).label("year"), Bill.policy_stance, func.count().label("count"))
+        select(
+            year.cast(Integer).label("year"),
+            Bill.policy_stance,
+            Bill.region,
+            func.count().label("count"),
+        )
         .where(Bill.ce_relevant == True)
         .where(Bill.status_date.isnot(None))
         .where(Bill.policy_stance.isnot(None))
         .where(Bill.confidence_score >= min_confidence)
-        .group_by("year", Bill.policy_stance)
+        .group_by("year", Bill.policy_stance, Bill.region)
         .order_by("year")
     )
     if instrument_type:
         q = q.where(Bill.instrument_type == instrument_type)
     if material_category:
         q = q.where(Bill.material_categories.contains([material_category]))
+    region_codes = _parse_regions(regions)
+    if region_codes:
+        q = q.where(Bill.region.in_(region_codes))
     rows = (await db.execute(q)).all()
-    return [BillStancePoint(year=row.year, stance=row.policy_stance, count=row.count) for row in rows]
+    return [
+        BillStancePoint(year=row.year, stance=row.policy_stance, count=row.count, region=row.region)
+        for row in rows
+    ]
 
 
 @router.get("/instrument-material-matrix", response_model=list[InstrumentMaterialCell])
 async def get_instrument_material_matrix(
     min_confidence: float = 0.7,
+    regions: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """Counts of EPR-relevant bills per (instrument_type × material_category) — the Insights coverage
-    heatmap. material_categories is a JSONB array, so it's unnested: a bill tagging three materials
-    lands in three cells. Cells with no bills simply have no row (the white space the chart surfaces).
+    """Counts of EPR-relevant bills per (instrument_type × material_category × region) — the Insights
+    coverage heatmap. material_categories is a JSONB array, so it's unnested: a bill tagging three
+    materials lands in three cells. Cells with no bills simply have no row (the white space). Grouped
+    by region so the chart can compare jurisdictions; `regions` (CSV) narrows the set.
     """
     # Unnest the JSONB material array as a LATERAL set-returning function joined per bill row.
     material = func.jsonb_array_elements_text(Bill.material_categories).table_valued("value").lateral()
@@ -308,6 +346,7 @@ async def get_instrument_material_matrix(
         select(
             Bill.instrument_type.label("instrument_type"),
             material.c.value.label("material_category"),
+            Bill.region,
             func.count().label("count"),
         )
         .select_from(Bill)
@@ -316,14 +355,18 @@ async def get_instrument_material_matrix(
         .where(Bill.instrument_type.isnot(None))
         .where(Bill.material_categories.isnot(None))
         .where(Bill.confidence_score >= min_confidence)
-        .group_by(Bill.instrument_type, material.c.value)
+        .group_by(Bill.instrument_type, material.c.value, Bill.region)
     )
+    region_codes = _parse_regions(regions)
+    if region_codes:
+        q = q.where(Bill.region.in_(region_codes))
     rows = (await db.execute(q)).all()
     return [
         InstrumentMaterialCell(
             instrument_type=row.instrument_type,
             material_category=row.material_category,
             count=row.count,
+            region=row.region,
         )
         for row in rows
     ]

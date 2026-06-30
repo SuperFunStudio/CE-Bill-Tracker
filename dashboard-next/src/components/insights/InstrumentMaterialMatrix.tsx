@@ -26,13 +26,13 @@ function cellStyle(count: number, max: number): React.CSSProperties {
   return { background: `rgb(var(--green-accent) / ${alpha.toFixed(3)})` };
 }
 
-export function InstrumentMaterialMatrix() {
+export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {}) {
   const [cells, setCells] = useState<InstrumentMaterialCell[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetchInstrumentMaterialMatrix()
+    fetchInstrumentMaterialMatrix({ regions })
       .then((d) => {
         if (!cancelled) setCells(d);
       })
@@ -42,7 +42,7 @@ export function InstrumentMaterialMatrix() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [regions]);
 
   const { instruments, materials, lookup, max } = useMemo(() => {
     if (!cells || cells.length === 0) {
@@ -51,13 +51,15 @@ export function InstrumentMaterialMatrix() {
     const lookup = new Map<string, number>();
     const matTotals = new Map<string, number>();
     const presentInstruments = new Set<string>();
-    let max = 0;
+    // Sum (not overwrite): the endpoint groups by region too, so one (instrument, material) cell can
+    // arrive as several region rows — aggregate them into a single cell.
     for (const c of cells) {
-      lookup.set(`${c.instrument_type}|${c.material_category}`, c.count);
+      const key = `${c.instrument_type}|${c.material_category}`;
+      lookup.set(key, (lookup.get(key) ?? 0) + c.count);
       matTotals.set(c.material_category, (matTotals.get(c.material_category) ?? 0) + c.count);
       presentInstruments.add(c.instrument_type);
-      if (c.count > max) max = c.count;
     }
+    const max = lookup.size ? Math.max(...lookup.values()) : 0;
     // Columns: canonical order, only those present. Rows: materials sorted most-regulated first.
     const instruments = INSTRUMENT_ORDER.filter((i) => presentInstruments.has(i));
     const materials = [...matTotals.keys()].sort((a, b) => (matTotals.get(b) ?? 0) - (matTotals.get(a) ?? 0));

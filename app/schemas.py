@@ -87,6 +87,10 @@ class BillTimelinePoint(BaseModel):
     year: int
     status: str
     count: int
+    # Jurisdiction family (US, EU, FR, …). Set when the Insights region filter groups by region so
+    # the chart can render one series per region (compare mode); the frontend sums across regions for
+    # the aggregate "All" view. Omitted/None on legacy unscoped calls.
+    region: str | None = None
 
 
 class BillStancePoint(BaseModel):
@@ -100,6 +104,7 @@ class BillStancePoint(BaseModel):
     year: int
     stance: str
     count: int
+    region: str | None = None  # see BillTimelinePoint.region
 
 
 class InstrumentMaterialCell(BaseModel):
@@ -110,6 +115,7 @@ class InstrumentMaterialCell(BaseModel):
     instrument_type: str
     material_category: str
     count: int
+    region: str | None = None  # see BillTimelinePoint.region
 
 
 class StateGapRow(BaseModel):

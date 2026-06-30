@@ -96,6 +96,8 @@ export interface BillTimelinePoint {
   year: number;
   status: string;
   count: number;
+  /** Jurisdiction family (US, EU, FR, …). Present when the Insights region filter groups by region. */
+  region?: string;
 }
 
 /** One (year, stance) bucket from /bills/stance-momentum — advances | weakens | neutral. */
@@ -103,6 +105,7 @@ export interface BillStancePoint {
   year: number;
   stance: string;
   count: number;
+  region?: string;
 }
 
 /** One (instrument × material) cell from /bills/instrument-material-matrix. */
@@ -110,6 +113,7 @@ export interface InstrumentMaterialCell {
   instrument_type: string;
   material_category: string;
   count: number;
+  region?: string;
 }
 
 /** One state's CE-vs-baseline passage gap from /insights/state-gap. */

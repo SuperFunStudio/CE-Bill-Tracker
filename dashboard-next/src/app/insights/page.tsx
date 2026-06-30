@@ -10,6 +10,7 @@ import { StateCyclesView } from '@/components/insights/StateCyclesView';
 import { ChampionRoster } from '@/components/insights/ChampionRoster';
 import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
+import { RegionFilter, regionsParam } from '@/components/insights/RegionFilter';
 import { fetchBillTimeline } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
@@ -24,11 +25,22 @@ const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = 
   ),
 ];
 
+// Tabs group the visualizations so the page isn't one long scroll. The region filter applies to the
+// region-generalizable tabs (Momentum, Coverage); Geography is US-only by construction — see below.
+const TABS = [
+  { id: 'momentum', label: 'Momentum' },
+  { id: 'coverage', label: 'Coverage' },
+  { id: 'geography', label: 'Geography · US' },
+  { id: 'impact', label: 'Impact' },
+] as const;
+type TabId = (typeof TABS)[number]['id'];
+const REGION_TABS: TabId[] = ['momentum', 'coverage'];
+
 /**
  * Insights — a curated, link-shareable briefing room for legislative staffers. Hidden from the
- * main nav (reachable by URL only, like /admin) so we can hand it out deliberately. Structured as
- * stacked sections so we can keep adding visualizations, flagship-bill spotlights, and field notes
- * as patterns emerge. The first section is the EPR "shots on goal" timeline.
+ * main nav (reachable by URL only, like /admin) so we can hand it out deliberately. Organized into
+ * tabs (Momentum / Coverage / Geography / Impact) with a region filter on the cross-jurisdiction
+ * views.
  */
 
 function Section({
@@ -65,6 +77,11 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default function InsightsPage() {
+  const [tab, setTab] = useState<TabId>('momentum');
+  // Selected region codes; [] = all regions (aggregate). Scopes the timeline + momentum + coverage.
+  const [regions, setRegions] = useState<string[]>([]);
+  const regionsCsv = regionsParam(regions);
+
   const [points, setPoints] = useState<BillTimelinePoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [instrument, setInstrument] = useState<string | undefined>(undefined);
@@ -72,7 +89,8 @@ export default function InsightsPage() {
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    fetchBillTimeline({ instrument_type: instrument })
+    setPoints(null);
+    fetchBillTimeline({ instrument_type: instrument, regions: regionsCsv })
       .then((d) => {
         if (!cancelled) setPoints(d);
       })
@@ -82,20 +100,24 @@ export default function InsightsPage() {
     return () => {
       cancelled = true;
     };
-  }, [instrument]);
+  }, [instrument, regionsCsv]);
 
   // Headline figures: total laws on the books, and the most recent full year's introductions.
+  // points are region-grouped now, so sum across regions for the aggregate stat.
   const stats = useMemo(() => {
     if (!points) return null;
     const enacted = points.filter((p) => p.status === 'enacted').reduce((s, p) => s + p.count, 0);
-    const introYears = points.filter((p) => p.status === 'introduced');
-    const peak = introYears.reduce(
-      (best, p) => (p.count > best.count ? p : best),
-      { year: 0, count: 0 } as BillTimelinePoint,
-    );
+    const introByYear = new Map<number, number>();
+    for (const p of points) {
+      if (p.status === 'introduced') introByYear.set(p.year, (introByYear.get(p.year) ?? 0) + p.count);
+    }
+    let peak = { year: 0, count: 0 };
+    for (const [year, count] of introByYear) if (count > peak.count) peak = { year, count };
     const firstYear = points.reduce((m, p) => Math.min(m, p.year), Infinity);
     return { enacted, peak, firstYear: Number.isFinite(firstYear) ? firstYear : null };
   }, [points]);
+
+  const showRegionFilter = REGION_TABS.includes(tab);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10 space-y-8">
@@ -104,161 +126,209 @@ export default function InsightsPage() {
         subtitle="Field notes on the circular-economy policy landscape — for the people writing it."
       />
 
-      <Section
-        kicker="Timeline"
-        title={
-          instrument
-            ? `Shots on goal: ${formatInstrumentType(instrument)} bills, introduced through enacted`
-            : 'Shots on goal: circularity bills, introduced through enacted'
-        }
-      >
-        <p className="text-text-secondary text-body leading-relaxed">
-          The headline line is the running count of circular-economy laws on the books — across every
-          instrument we track (EPR, deposit-return, right-to-repair, recycled-content, and more), not
-          EPR alone. Toggle the upstream statuses to see the full pipeline — how many bills get
-          introduced, advance through committee, and pass a chamber for each one that finally becomes
-          law. Pick a policy instrument to slice the same total.
-        </p>
-
-        {/* Instrument selector — another view on the same running total. */}
-        <div className="flex flex-wrap gap-2">
-          {INSTRUMENT_OPTIONS.map((opt) => {
-            const active = opt.value === instrument;
+      {/* Tab bar + (on cross-region tabs) the region filter. */}
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border-default">
+        <div className="flex flex-wrap gap-1 -mb-px" role="tablist">
+          {TABS.map((t) => {
+            const active = t.id === tab;
             return (
               <button
-                key={opt.label}
+                key={t.id}
+                role="tab"
+                aria-selected={active}
                 onClick={() => {
-                  setInstrument(opt.value);
-                  track('insights_timeline_instrument', { instrument: opt.value ?? 'all' });
+                  setTab(t.id);
+                  track('insights_tab', { tab: t.id });
                 }}
-                aria-pressed={active}
-                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                className={`border-b-2 px-4 py-2 text-sm transition-colors ${
                   active
-                    ? 'border-[rgb(var(--green-accent))] bg-[rgb(var(--green-accent))] text-white'
-                    : 'border-border-default bg-bg-primary text-text-secondary hover:bg-bg-tertiary'
+                    ? 'border-[rgb(var(--green-accent))] text-text-primary font-semibold'
+                    : 'border-transparent text-text-muted hover:text-text-secondary'
                 }`}
               >
-                {opt.label}
+                {t.label}
               </button>
             );
           })}
         </div>
-
-        <p className="text-text-muted text-xs">
-          <span className="font-semibold text-text-secondary">Other</span> — in-scope circular-economy
-          bills that don&apos;t map to one of the named instruments above (e.g. disposal/landfill
-          bans, product or packaging standards, reuse/refill mandates, and organics-diversion or
-          composting requirements).
-        </p>
-
-        <OutliersPlaylist />
-
-        {stats && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <Stat
-              value={stats.enacted.toLocaleString()}
-              label={instrument ? `${formatInstrumentType(instrument)} laws enacted to date` : 'Circular-economy laws enacted to date'}
+        {showRegionFilter && (
+          <div className="pb-2">
+            <RegionFilter
+              selected={regions}
+              onChange={(r) => {
+                setRegions(r);
+                track('insights_region_filter', { count: r.length });
+              }}
             />
-            {stats.peak.year > 0 && (
-              <Stat
-                value={stats.peak.count.toLocaleString()}
-                label={`Bills introduced in ${stats.peak.year} (peak year)`}
-              />
-            )}
-            {stats.firstYear && <Stat value={`${stats.firstYear}`} label="Earliest law tracked" />}
           </div>
         )}
+      </div>
 
-        {error ? (
-          <p className="text-sm text-error">{error}</p>
-        ) : !points ? (
-          <div className="h-[360px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
-        ) : (
-          <BillTimelineChart points={points} instrument={instrument} />
-        )}
-      </Section>
+      {tab === 'momentum' && (
+        <>
+          <Section
+            kicker="Timeline"
+            title={
+              instrument
+                ? `Shots on goal: ${formatInstrumentType(instrument)} bills, introduced through enacted`
+                : 'Shots on goal: circularity bills, introduced through enacted'
+            }
+          >
+            <p className="text-text-secondary text-body leading-relaxed">
+              The headline line is the running count of circular-economy laws on the books — across every
+              instrument we track (EPR, deposit-return, right-to-repair, recycled-content, and more), not
+              EPR alone. Toggle the upstream statuses to see the full pipeline — how many bills get
+              introduced, advance through committee, and pass a chamber for each one that finally becomes
+              law. Pick a policy instrument to slice the same total.
+            </p>
 
-      <Section
-        kicker="Momentum"
-        title="Policy momentum: advancing vs. being rolled back"
-      >
-        <p className="text-text-secondary text-body leading-relaxed">
-          Counting bills misses the most important question: which direction are they pushing? Above
-          the line are bills that <em>establish or strengthen</em> a circular-economy obligation; below
-          it, bills that <em>exempt, narrow, repeal, or preempt</em> one. Slice by instrument to see
-          where the field is gaining ground and where the backlash is concentrated.
-        </p>
-        <StanceMomentumChart />
-      </Section>
+            {/* Instrument selector — another view on the same running total. */}
+            <div className="flex flex-wrap gap-2">
+              {INSTRUMENT_OPTIONS.map((opt) => {
+                const active = opt.value === instrument;
+                return (
+                  <button
+                    key={opt.label}
+                    onClick={() => {
+                      setInstrument(opt.value);
+                      track('insights_timeline_instrument', { instrument: opt.value ?? 'all' });
+                    }}
+                    aria-pressed={active}
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                      active
+                        ? 'border-[rgb(var(--green-accent))] bg-[rgb(var(--green-accent))] text-white'
+                        : 'border-border-default bg-bg-primary text-text-secondary hover:bg-bg-tertiary'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
 
-      <Section
-        kicker="Coverage"
-        title="Where instruments meet materials"
-      >
-        <p className="text-text-secondary text-body leading-relaxed">
-          Which policy tools have been aimed at which materials. The dense cells are well-trodden
-          ground; the empty ones are the white space — a material with deposit-return or labeling
-          precedent but no EPR yet is often where the next wave of bills lands.
-        </p>
-        <InstrumentMaterialMatrix />
-      </Section>
+            <p className="text-text-muted text-xs">
+              <span className="font-semibold text-text-secondary">Other</span> — in-scope circular-economy
+              bills that don&apos;t map to one of the named instruments above (e.g. disposal/landfill
+              bans, product or packaging standards, reuse/refill mandates, and organics-diversion or
+              composting requirements).
+            </p>
 
-      <Section
-        kicker="Battle of the bills"
-        title="Does each state pass circular-economy bills above or below its own average?"
-      >
-        <p className="text-text-secondary text-body leading-relaxed">
-          A state&apos;s circular-economy passage rate means little in isolation — Minnesota passes ~1% of{' '}
-          <em>everything</em>. So we compare each state&apos;s advancing-CE rate against its <em>all-bills</em>{' '}
-          baseline (computed from the full legislative record). The gap is the real signal: where CE bills
-          clear the bar more readily than the average bill, and where they hit contested-policy drag.
-        </p>
-        <StateGapTable />
-      </Section>
+            {stats && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <Stat
+                  value={stats.enacted.toLocaleString()}
+                  label={instrument ? `${formatInstrumentType(instrument)} laws enacted to date` : 'Circular-economy laws enacted to date'}
+                />
+                {stats.peak.year > 0 && (
+                  <Stat
+                    value={stats.peak.count.toLocaleString()}
+                    label={`Bills introduced in ${stats.peak.year} (peak year)`}
+                  />
+                )}
+                {stats.firstYear && <Stat value={`${stats.firstYear}`} label="Earliest law tracked" />}
+              </div>
+            )}
 
-      <Section
-        kicker="By legislative cycle"
-        title="Is a state's circular-economy gap widening or closing?"
-      >
-        <p className="text-text-secondary text-body leading-relaxed">
-          The same gap, broken out by two-year legislative cycle, so you can see the trend — where
-          circular-economy bills are gaining ground session over session, and where momentum has stalled.
-          Pick a state to trace its cycles.
-        </p>
-        <StateCyclesView />
-      </Section>
+            {error ? (
+              <p className="text-sm text-error">{error}</p>
+            ) : !points ? (
+              <div className="h-[360px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
+            ) : (
+              <BillTimelineChart points={points} instrument={instrument} />
+            )}
+          </Section>
 
-      <Section
-        kicker="Champions"
-        title="Who's carrying these bills"
-      >
-        <p className="text-text-secondary text-body leading-relaxed">
-          The legislators currently in office moving circular-economy bills, ranked by how many they
-          lead-sponsor. Pick a state to see its delegation; expand anyone to see their bills and sources.
-        </p>
-        <div className="rounded-lg border border-border-default bg-bg-primary p-3 text-body text-text-secondary">
-          <span className="font-semibold text-text-primary">One non-obvious pattern:</span> bipartisan bills
-          (a sponsor from each party) become law at roughly <span className="text-text-primary font-semibold">
-          twice the rate</span> of single-party bills (~17% vs ~9%) — the rare Republican co-sponsor is the
-          strongest signal a CE bill will pass.
-        </div>
-        <ChampionRoster />
-      </Section>
+          <Section kicker="Momentum" title="Policy momentum: advancing vs. being rolled back">
+            <p className="text-text-secondary text-body leading-relaxed">
+              Counting bills misses the most important question: which direction are they pushing? Above
+              the line are bills that <em>establish or strengthen</em> a circular-economy obligation; below
+              it, bills that <em>exempt, narrow, repeal, or preempt</em> one. Slice by instrument to see
+              where the field is gaining ground and where the backlash is concentrated.
+            </p>
+            <StanceMomentumChart regions={regionsCsv} />
+          </Section>
+        </>
+      )}
 
-      <Section
-        kicker="Field notes"
-        title="Real-world impact: what enacted laws actually did"
-      >
-        <p className="text-text-secondary text-body leading-relaxed">
-          Everywhere else we track what a law <em>requires</em>. This is what enacted laws have been
-          documented to <em>produce</em> — measured outcomes, positive and negative, each anchored to
-          a citation. Measured impacts are rare and uneven, so the list grows as evidence surfaces.
-        </p>
-        <RealWorldImpact />
-      </Section>
+      {tab === 'coverage' && (
+        <>
+          <Section kicker="Coverage" title="Where instruments meet materials">
+            <p className="text-text-secondary text-body leading-relaxed">
+              Which policy tools have been aimed at which materials. The dense cells are well-trodden
+              ground; the empty ones are the white space — a material with deposit-return or labeling
+              precedent but no EPR yet is often where the next wave of bills lands.
+            </p>
+            <InstrumentMaterialMatrix regions={regionsCsv} />
+          </Section>
 
-      {/* Future sections (more flagship-bill spotlights, best practices) slot in here as
-          additional <Section> blocks — the page is built to grow. */}
+          <Section kicker="Outliers" title="The 'Other' bucket: emergent instruments to watch">
+            <p className="text-text-secondary text-body leading-relaxed">
+              In-scope bills that don&apos;t map to a named instrument yet — disposal bans, reuse/refill
+              mandates, product standards. Mining this bucket is how new instrument categories surface
+              before they&apos;re formalized.
+            </p>
+            <OutliersPlaylist />
+          </Section>
+        </>
+      )}
+
+      {tab === 'geography' && (
+        <>
+          <div className="rounded-lg border border-border-default bg-bg-primary px-4 py-3 text-sm text-text-secondary">
+            <span className="font-semibold text-text-primary">United States only.</span> These views rank
+            jurisdictions against a passage-rate baseline and sponsor record that we only have for US
+            states — so they don&apos;t honor the region filter. An equivalent for EU member states is a
+            future addition.
+          </div>
+
+          <Section
+            kicker="Battle of the bills"
+            title="Does each state pass circular-economy bills above or below its own average?"
+          >
+            <p className="text-text-secondary text-body leading-relaxed">
+              A state&apos;s circular-economy passage rate means little in isolation — Minnesota passes ~1% of{' '}
+              <em>everything</em>. So we compare each state&apos;s advancing-CE rate against its <em>all-bills</em>{' '}
+              baseline (computed from the full legislative record). The gap is the real signal: where CE bills
+              clear the bar more readily than the average bill, and where they hit contested-policy drag.
+            </p>
+            <StateGapTable />
+          </Section>
+
+          <Section kicker="By legislative cycle" title="Is a state's circular-economy gap widening or closing?">
+            <p className="text-text-secondary text-body leading-relaxed">
+              The same gap, broken out by two-year legislative cycle, so you can see the trend — where
+              circular-economy bills are gaining ground session over session, and where momentum has stalled.
+              Pick a state to trace its cycles.
+            </p>
+            <StateCyclesView />
+          </Section>
+
+          <Section kicker="Champions" title="Who's carrying these bills">
+            <p className="text-text-secondary text-body leading-relaxed">
+              The legislators currently in office moving circular-economy bills, ranked by how many they
+              lead-sponsor. Pick a state to see its delegation; expand anyone to see their bills and sources.
+            </p>
+            <div className="rounded-lg border border-border-default bg-bg-primary p-3 text-body text-text-secondary">
+              <span className="font-semibold text-text-primary">One non-obvious pattern:</span> bipartisan bills
+              (a sponsor from each party) become law at roughly <span className="text-text-primary font-semibold">
+              twice the rate</span> of single-party bills (~17% vs ~9%) — the rare Republican co-sponsor is the
+              strongest signal a CE bill will pass.
+            </div>
+            <ChampionRoster />
+          </Section>
+        </>
+      )}
+
+      {tab === 'impact' && (
+        <Section kicker="Field notes" title="Real-world impact: what enacted laws actually did">
+          <p className="text-text-secondary text-body leading-relaxed">
+            Everywhere else we track what a law <em>requires</em>. This is what enacted laws have been
+            documented to <em>produce</em> — measured outcomes, positive and negative, each anchored to
+            a citation. Measured impacts are rare and uneven, so the list grows as evidence surfaces.
+          </p>
+          <RealWorldImpact />
+        </Section>
+      )}
     </div>
   );
 }

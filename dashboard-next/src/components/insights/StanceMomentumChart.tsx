@@ -62,7 +62,7 @@ interface Row {
   neutral: number;
 }
 
-export function StanceMomentumChart() {
+export function StanceMomentumChart({ regions }: { regions?: string } = {}) {
   const [points, setPoints] = useState<BillStancePoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [instrument, setInstrument] = useState<string | undefined>(undefined);
@@ -84,7 +84,7 @@ export function StanceMomentumChart() {
     let cancelled = false;
     setError(null);
     setPoints(null);
-    fetchStanceMomentum({ instrument_type: instrument })
+    fetchStanceMomentum({ instrument_type: instrument, regions })
       .then((d) => {
         if (!cancelled) setPoints(d);
       })
@@ -94,7 +94,7 @@ export function StanceMomentumChart() {
     return () => {
       cancelled = true;
     };
-  }, [instrument]);
+  }, [instrument, regions]);
 
   // One gap-filled row per year; weakens stored negative so the bar diverges below zero.
   const { rows, totals } = useMemo(() => {

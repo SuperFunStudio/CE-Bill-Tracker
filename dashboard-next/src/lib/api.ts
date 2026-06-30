@@ -127,6 +127,8 @@ export async function fetchMapSummary(): Promise<StateMapSummary[]> {
 export async function fetchBillTimeline(params?: {
   instrument_type?: string;
   material_category?: string;
+  /** CSV of region codes (US,EU,FR…) to scope the timeline; omit / "all" for every region. */
+  regions?: string;
 }): Promise<BillTimelinePoint[]> {
   return apiFetch<BillTimelinePoint[]>(
     buildUrl('/bills/timeline', params as Record<string, string | number | boolean | undefined>),
@@ -138,6 +140,7 @@ export async function fetchStanceMomentum(params?: {
   instrument_type?: string;
   material_category?: string;
   min_confidence?: number;
+  regions?: string;
 }): Promise<BillStancePoint[]> {
   return apiFetch<BillStancePoint[]>(
     buildUrl('/bills/stance-momentum', params as Record<string, string | number | boolean | undefined>),
@@ -147,6 +150,7 @@ export async function fetchStanceMomentum(params?: {
 /** Bill counts per (instrument × material) — the Insights coverage heatmap. */
 export async function fetchInstrumentMaterialMatrix(params?: {
   min_confidence?: number;
+  regions?: string;
 }): Promise<InstrumentMaterialCell[]> {
   return apiFetch<InstrumentMaterialCell[]>(
     buildUrl('/bills/instrument-material-matrix', params as Record<string, string | number | boolean | undefined>),

@@ -57,6 +57,9 @@ async def list_bills(
     # Jurisdiction family filter. Omitted = US only (preserves the existing US-only dashboard
     # behavior); "EU" returns EU rows; "all" returns every region. See migration 031.
     region: str | None = None,
+    # Multi-region filter (CSV of codes, e.g. "US,EU,FR"; "all"/empty = every region) — the global
+    # region filter passes this. Takes precedence over `region` when present. See _parse_regions.
+    regions: str | None = None,
     status: str | None = None,
     material_category: str | None = None,
     ce_relevant: bool | None = None,
@@ -84,7 +87,13 @@ async def list_bills(
     )
     # Default to US so existing callers (the US dashboard) are unaffected by EU rows landing in the
     # same table. region="all" opts into every region; an explicit code (e.g. "EU") filters to it.
-    if region is None:
+    # The multi-region `regions` CSV (global filter) wins when present: a code list narrows to those,
+    # "all"/empty drops the filter entirely.
+    if regions is not None:
+        codes = _parse_regions(regions)
+        if codes:
+            q = q.where(Bill.region.in_(codes))
+    elif region is None:
         q = q.where(Bill.region == "US")
     elif region.lower() != "all":
         q = q.where(Bill.region == region.upper())

@@ -1,56 +1,79 @@
 'use client';
 import { createContext, useContext, useEffect, useState } from 'react';
+import { EU_MEMBERS } from '@/lib/jurisdictions';
 
-// Global jurisdiction-family selector. Drives which region's law the whole app shows (server query +
-// map + nav + filters). Mirrors the backend `region` seam (US default, EU now; more later).
+// Global jurisdiction filter. Multi-select now (US, EU, and any ingested country) — drives the bill
+// list + insights for all pages. The map and compliance still operate on a single US/EU "primary",
+// derived from the selection, since those views are inherently US-states / EU-members shaped.
 export type RegionCode = 'US' | 'EU';
 
 export interface RegionDef {
   code: RegionCode;
   label: string;
-  /** Masthead subtitle fragment, e.g. "across the USA". */
-  blurb: string;
   /** Sub-jurisdiction noun, used in copy ("state" vs "member state"). */
   unit: string;
 }
 
 export const REGIONS: RegionDef[] = [
-  { code: 'US', label: 'United States', blurb: 'across the USA', unit: 'state' },
-  { code: 'EU', label: 'European Union', blurb: 'across the EU', unit: 'member state' },
+  { code: 'US', label: 'United States', unit: 'state' },
+  { code: 'EU', label: 'European Union', unit: 'member state' },
 ];
 
 export function regionDef(code: RegionCode): RegionDef {
   return REGIONS.find(r => r.code === code) ?? REGIONS[0];
 }
 
-const RegionContext = createContext<{
-  region: RegionCode;
-  setRegion: (r: RegionCode) => void;
-  def: RegionDef;
-}>({ region: 'US', setRegion: () => {}, def: REGIONS[0] });
-
-function isRegion(v: string | null): v is RegionCode {
-  return v === 'US' || v === 'EU';
+// Derive the US/EU primary (for the map + compliance) from the multi-select: US wins; otherwise any
+// EU-or-member selection maps to EU; anything else (or "all") defaults to US.
+function primaryOf(regions: string[]): RegionCode {
+  if (!regions.length || regions.includes('US')) return 'US';
+  if (regions.includes('EU') || regions.some(r => r in EU_MEMBERS)) return 'EU';
+  return 'US';
 }
 
-export function RegionProvider({ children }: { children: React.ReactNode }) {
-  const [region, setRegionState] = useState<RegionCode>('US');
+interface RegionCtx {
+  regions: string[];                // selected codes; [] = all regions
+  setRegions: (r: string[]) => void;
+  regionsParam: string | undefined; // CSV for the API; undefined = all
+  region: RegionCode;               // derived primary (US/EU) for single-region views
+  def: RegionDef;
+}
 
-  // Resolve initial region: ?region= query param wins (shareable links), else localStorage, else US.
+const RegionContext = createContext<RegionCtx>({
+  regions: [],
+  setRegions: () => {},
+  regionsParam: undefined,
+  region: 'US',
+  def: REGIONS[0],
+});
+
+export function RegionProvider({ children }: { children: React.ReactNode }) {
+  const [regions, setRegionsState] = useState<string[]>([]);
+
+  // Resolve initial selection: ?regions=US,EU query param wins (shareable links), else localStorage,
+  // else [] (all). Back-compat: an old ?region=US / stored 'region' seeds a single-region selection.
   useEffect(() => {
-    const fromUrl = new URLSearchParams(window.location.search).get('region')?.toUpperCase() ?? null;
-    const stored = localStorage.getItem('region');
-    const resolved = isRegion(fromUrl) ? fromUrl : isRegion(stored) ? stored : 'US';
-    setRegionState(resolved);
+    const url = new URLSearchParams(window.location.search);
+    const raw =
+      url.get('regions') ??
+      url.get('region') ??
+      localStorage.getItem('regions') ??
+      localStorage.getItem('region') ??
+      '';
+    const parsed = raw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (parsed.length) setRegionsState(parsed);
   }, []);
 
-  const setRegion = (r: RegionCode) => {
-    setRegionState(r);
-    localStorage.setItem('region', r);
+  const setRegions = (r: string[]) => {
+    setRegionsState(r);
+    localStorage.setItem('regions', r.join(','));
   };
 
+  const regionsParam = regions.length ? regions.join(',') : undefined;
+  const region = primaryOf(regions);
+
   return (
-    <RegionContext.Provider value={{ region, setRegion, def: regionDef(region) }}>
+    <RegionContext.Provider value={{ regions, setRegions, regionsParam, region, def: regionDef(region) }}>
       {children}
     </RegionContext.Provider>
   );

@@ -436,6 +436,8 @@ export interface BillParams {
   state?: string;
   /** Jurisdiction family: omitted = US only; "EU"; or "all" for every region. See migration 031. */
   region?: string;
+  /** Multi-region CSV (US,EU,FR…); from the global region filter. Takes precedence over `region`. */
+  regions?: string;
   status?: string;
   ce_relevant?: boolean;
   urgency?: string;

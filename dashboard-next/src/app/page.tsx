@@ -14,6 +14,7 @@ import { BillFilters, DEFAULT_FILTERS, applyBillFilters, resinOptionsFromBills, 
 import { FullTextMatches } from '@/components/bills/FullTextMatches';
 import { SkeletonList } from '@/components/ui/SkeletonList';
 import { ScopedDeadlineBanner } from '@/components/scope/ScopedDeadlineBanner';
+import { ScopeBar } from '@/components/scope/ScopeBar';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useRegion } from '@/components/layout/RegionContext';
 import { inScope } from '@/lib/scope';
@@ -34,10 +35,11 @@ const EuMemberMap = dynamic(
 
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
-  const { region } = useRegion();
+  const { region, regionsParam } = useRegion();
 
-  // The global region selector (top nav) drives which jurisdiction family the server returns.
-  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, region });
+  // The global region filter (under the nav) drives which jurisdictions the server returns. undefined
+  // = "All regions" -> send "all" so the explorer shows every region (not the US-only default).
+  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, regions: regionsParam ?? 'all' });
   const { data: federal = [] } = useFederalActions({ limit: 50 });
 
   // Deep link from emails: /?bill=123 opens that bill's detail panel. Resolved against the FULL bill
@@ -215,8 +217,10 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Bill results table — below the map */}
+      {/* Bill results table — below the map. The personalize-scope bar (state/material/product) sits
+          here, just above the table, instead of globally under the nav. */}
       <section>
+        <div className="mb-3"><ScopeBar /></div>
         {/* Only fires when live AND snapshot/localStorage all came up empty — otherwise
             last-known data shows with a quiet FreshnessNote instead of a scary banner. */}
         {billsError && <AlertBanner variant="red" message="We're having trouble loading bill data right now — please refresh in a moment." className="mb-3" />}

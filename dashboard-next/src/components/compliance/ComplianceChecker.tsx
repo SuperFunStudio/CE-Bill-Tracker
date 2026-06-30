@@ -46,7 +46,7 @@ export function ComplianceChecker() {
       <h2 className="font-serif text-2xl text-text-primary">Does this apply to my products?</h2>
       <p className="text-text-secondary text-sm mt-1">
         Pick what you make to see the enacted <span className="text-text-primary">{def.label}</span> laws
-        that cover it and your next step. Switch region in the top nav.
+        that cover it and your next step. Switch region in the filter bar above.
       </p>
 
       {/* Material picker */}

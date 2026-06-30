@@ -10,7 +10,7 @@ import { StateCyclesView } from '@/components/insights/StateCyclesView';
 import { ChampionRoster } from '@/components/insights/ChampionRoster';
 import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
-import { RegionFilter, regionsParam } from '@/components/insights/RegionFilter';
+import { useRegion } from '@/components/layout/RegionContext';
 import { fetchBillTimeline } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
@@ -34,7 +34,6 @@ const TABS = [
   { id: 'impact', label: 'Impact' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
-const REGION_TABS: TabId[] = ['momentum', 'coverage'];
 
 /**
  * Insights — a curated, link-shareable briefing room for legislative staffers. Hidden from the
@@ -78,9 +77,8 @@ function Stat({ value, label }: { value: string; label: string }) {
 
 export default function InsightsPage() {
   const [tab, setTab] = useState<TabId>('momentum');
-  // Selected region codes; [] = all regions (aggregate). Scopes the timeline + momentum + coverage.
-  const [regions, setRegions] = useState<string[]>([]);
-  const regionsCsv = regionsParam(regions);
+  // The global region filter (the bar under the nav) scopes the timeline + momentum + coverage.
+  const { regionsParam: regionsCsv } = useRegion();
 
   const [points, setPoints] = useState<BillTimelinePoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -117,8 +115,6 @@ export default function InsightsPage() {
     return { enacted, peak, firstYear: Number.isFinite(firstYear) ? firstYear : null };
   }, [points]);
 
-  const showRegionFilter = REGION_TABS.includes(tab);
-
   return (
     <div className="mx-auto max-w-5xl px-6 py-10 space-y-8">
       <GazetteHeader
@@ -126,7 +122,7 @@ export default function InsightsPage() {
         subtitle="Field notes on the circular-economy policy landscape — for the people writing it."
       />
 
-      {/* Tab bar + (on cross-region tabs) the region filter. */}
+      {/* Tab bar. The region filter is the global one (the bar under the nav). */}
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border-default">
         <div className="flex flex-wrap gap-1 -mb-px" role="tablist">
           {TABS.map((t) => {
@@ -151,17 +147,6 @@ export default function InsightsPage() {
             );
           })}
         </div>
-        {showRegionFilter && (
-          <div className="pb-2">
-            <RegionFilter
-              selected={regions}
-              onChange={(r) => {
-                setRegions(r);
-                track('insights_region_filter', { count: r.length });
-              }}
-            />
-          </div>
-        )}
       </div>
 
       {tab === 'momentum' && (

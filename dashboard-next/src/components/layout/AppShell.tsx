@@ -1,7 +1,7 @@
 'use client';
 import { usePathname } from 'next/navigation';
 import { TopNav } from './TopNav';
-import { ScopeBar } from '@/components/scope/ScopeBar';
+import { GlobalRegionBar } from './GlobalRegionBar';
 import { ScopeOnboarding } from '@/components/scope/ScopeOnboarding';
 
 /**
@@ -19,7 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       <TopNav />
-      <ScopeBar />
+      <GlobalRegionBar />
       <main className="flex-1 overflow-auto">{children}</main>
       <ScopeOnboarding />
     </div>

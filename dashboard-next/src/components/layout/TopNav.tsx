@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeContext';
 import { useRegion } from './RegionContext';
-import { RegionSwitcher } from './RegionSwitcher';
 import { useScrolled } from '@/hooks/useScrolled';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
@@ -131,9 +130,6 @@ export function TopNav() {
 
       {/* Desktop section bar — visible at sm+ */}
       <nav className="relative hidden sm:flex items-center justify-center flex-wrap gap-x-5 gap-y-1 border-t border-border-default px-4 py-2">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2">
-          <RegionSwitcher />
-        </div>
         {renderLinks('bar')}
         <div className="absolute right-4 top-1/2 -translate-y-1/2">
           <AuthButton />
@@ -144,9 +140,6 @@ export function TopNav() {
       {menuOpen && (
         <nav className="sm:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
           <div className="max-w-6xl mx-auto p-3 space-y-1">
-            <div className="pb-2 mb-1 border-b border-border-default">
-              <RegionSwitcher />
-            </div>
             {renderLinks('menu')}
             <div className="pt-2 border-t border-border-default mt-2">
               <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />

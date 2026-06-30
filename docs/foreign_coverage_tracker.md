@@ -9,11 +9,17 @@ CE frameworks + 14 map-only/pipeline). The stocktake measures *policy intent*; w
 Status legend: **BUILT** (adapter live, in corpus) · **ASSESSED** (portal researched, not built) ·
 **TODO** (not yet assessed).
 
-## Summary
-- Adopted-framework countries: **64** → BUILT **16 entries / 13 adapters**, ASSESSED **16**, TODO **32**.
-- Pipeline countries: **14** → ASSESSED **2** (Philippines, South Africa), TODO **12**.
-- Biggest untapped seam: **~12 EU member states never individually assessed**, almost all likely
-  Archetype A/B via ELI portals (same pattern as ES/PL/IE/LU) — probable easy wins.
+## Summary (updated after the EU fan-out)
+- BUILT jurisdictions: **23** — JP, FR, UK(+devolved), DE, NL, ES, CL, SE, IE, AT, BR, CH, PL,
+  **DK, FI, LU, EE, LV, SK, LT, SI, CZ** (the 9 EU members added in the fan-out). EU directive layer
+  via the separate EUR-Lex pipeline.
+- STAGED-DORMANT (need account/licensing): **KR** (law.go.kr OC), **ZA + KE** via laws.africa
+  (Bearer token + CC-BY-NC-SA commercial-licensing decision).
+- DEFERRED (no clean full-text path): Italy (SPA/async export), Malta (PDF text-layer), Greece (OCR
+  snippets), Romania (geo-firewall), Portugal (SPA), + the C/D/E tail (AU, CA, BE, CN, TR, AR, CO,
+  IN, ID, VN, MX, …).
+- The EU fan-out closed the "12 unassessed EU members" seam: **9 built, 3 deferred** (Malta/Greece/
+  Romania). Remaining adopted-country TODO is now the non-EU tail (Balkans, LatAm, Africa, Gulf).
 
 ## BUILT (13 adapters → 16 stocktake entries)
 | Country (stocktake entries) | Adapter | Archetype | Corpus (local CE-relevant) |

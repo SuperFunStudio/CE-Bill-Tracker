@@ -34,6 +34,10 @@ ALLOWED_ORIGINS = [
     "https://ce-bill-tracker.firebaseapp.com",
     "https://battleofbills.com",
     "https://www.battleofbills.com",
+    # Dev lane frontend (Firebase hosting site ce-bill-tracker-dev) — the dev API shares this image,
+    # so the dev origin must be allow-listed or every cross-origin call from the dev site is blocked.
+    "https://ce-bill-tracker-dev.web.app",
+    "https://ce-bill-tracker-dev.firebaseapp.com",
     "http://localhost:3000",
 ]
 

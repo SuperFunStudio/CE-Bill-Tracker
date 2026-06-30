@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    Computed,
     Date,
     DateTime,
     Float,
@@ -14,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -26,8 +27,22 @@ class Bill(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     legiscan_bill_id: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)
     openstates_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
+    # EU document identifier (CELEX number, e.g. "32023R1542"). Set only for region="EU" rows
+    # ingested from EUR-Lex/CELLAR; mirrors the per-source unique ids above. See app/ingestion/eurlex.py.
+    celex_id: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True)
+    # Generic foreign-source identifier for non-US/EU national law, namespaced by region+source to stay
+    # collision-free across countries (e.g. "JP:egov:424AC0000000057"). One column serves every new
+    # country adapter (JP/GB/KR/…) so adding a jurisdiction needs no per-source migration.
+    # See app/ingestion/foreign.py.
+    foreign_id: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
 
-    state: Mapped[str] = mapped_column(String(2), nullable=False)  # "CA", "OR", "US" for federal
+    # Top-level jurisdiction family. "US" (default) or "EU" today; the `state` column below carries the
+    # sub-jurisdiction code within the region. This is the lean multi-region seam — the full
+    # region+jurisdiction normalization is deferred (see plan serene-munching-brook).
+    region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
+    # Within-region jurisdiction code. US: "CA"/"OR" for states, "US" for federal. EU: "EU" for
+    # EU-wide acts (and "DE"/"FR"/… for member states once those are added).
+    state: Mapped[str] = mapped_column(String(2), nullable=False)  # "CA", "OR", "US" federal; "EU" EU-wide
     bill_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -52,7 +67,10 @@ class Bill(Base):
     ce_relevant: Mapped[bool] = mapped_column(Boolean, default=False)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     material_categories: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Representative ("primary") instrument — kept for single-value views (insights group-by, the
+    # instrument dropdown). instrument_types carries the full set (a law is often several at once).
     instrument_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    instrument_types: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     urgency: Mapped[str | None] = mapped_column(String(10), nullable=True)
     ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Direction of the bill relative to its instrument: "advances" (establishes/strengthens),
@@ -64,6 +82,14 @@ class Bill(Base):
     # flips true once a human has spot-checked it. Surfaced as the "auto-classified · reviewed"
     # marker on each bill (see /methodology).
     reviewed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Auto-rescue flag: set True when the classifier itself would have dropped the bill
+    # (is_ce_relevant=false / low confidence — usually because it was starved of bill text) but a
+    # near-certain keyword signal in the title/description kept it in scope. Distinct from `reviewed`
+    # (a human spot-check): needs_review marks rows the rescue layer wants a human to confirm. Cleared
+    # whenever a later classification clears the rescue. See app/classification/pipeline.py.
+    needs_review: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     # Event-triggered "new bill" alert idempotency — set once a newly-tracked relevant bill has been
     # emailed to matching subscribers (see app/alerts/new_bill_alerts.py).
@@ -71,6 +97,16 @@ class Bill(Base):
 
     # Full compliance extraction (Sonnet output)
     compliance_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    @property
+    def polymers(self) -> list[str] | None:
+        """Resin codes (HDPE, EVA, EPS…) detected in the full bill text by
+        scripts/scan_bill_polymers.py and stored under compliance_details['polymers'].
+        Surfaced as a lightweight list on BillSummary so the Bill Explorer can filter by
+        resin — the rest of compliance_details (the paid Sonnet extraction) stays detail-only.
+        Reads the already-loaded JSONB, so it adds no query to the list endpoint."""
+        codes = (self.compliance_details or {}).get("polymers")
+        return codes or None
 
     # Judicial monitoring
     litigation_risk: Mapped[str | None] = mapped_column(Text, nullable=True, default="unknown")
@@ -87,10 +123,12 @@ class Bill(Base):
 
     __table_args__ = (
         Index("idx_bills_state_status", "state", "status"),
+        Index("idx_bills_region", "region"),
         Index("idx_bills_last_action", "last_action_date"),
         Index("idx_bills_relevant", "ce_relevant"),
         Index("idx_bills_policy_stance", "policy_stance"),
         Index("idx_bills_material_categories", "material_categories", postgresql_using="gin"),
+        Index("idx_bills_instrument_types", "instrument_types", postgresql_using="gin"),
     )
 
 
@@ -110,6 +148,74 @@ class BillChange(Base):
     bill: Mapped["Bill"] = relationship("Bill", back_populates="changes")
 
     __table_args__ = (Index("idx_bill_changes_bill_id", "bill_id"),)
+
+
+class ClassificationChange(Base):
+    """Audit log of classification deltas — one row per bill whose relevance/instrument changed on a
+    (re)classification run. Mirrors BillChange, but for the classifier rather than bill status, and
+    captures the FULL classification snapshot (old/new) so a reclassify run is diffable and a bad run
+    is recoverable. Crucial because reclassify (app/reclassify.py) overwrites ce_relevant/confidence
+    in place and only re-examines currently-in-scope bills — without this log a starved run silently
+    sheds bills with no way to see or undo what dropped.
+
+    old_value / new_value each hold: ce_relevant, confidence_score, instrument_type, instrument_types,
+    needs_review. run_id tags the run (the Cloud Run execution name when available, else a source tag)
+    so all of a run's drops can be queried together.
+    """
+
+    __tablename__ = "classification_changes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bill_id: Mapped[int] = mapped_column(Integer, ForeignKey("bills.id"), nullable=False)
+    # Run/source tag: Cloud Run execution name (e.g. "signalscout-reclassify-dev-xx4vb") or a caller
+    # source like "classify"/"reclassify" when not running as a job.
+    run_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    old_value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    new_value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("idx_classification_changes_bill_id", "bill_id"),
+        Index("idx_classification_changes_run_id", "run_id"),
+    )
+
+
+class BillText(Base):
+    """Persisted full bill text + an FTS index — Layer B of the full-text search plan
+    (docs/V2_FULLTEXT_SEARCH_PLAN.md).
+
+    The extracted bill text was never stored; every text-based extraction re-fetched it per bill.
+    This side table holds the cleaned full text ONCE, deliberately kept OUT of the wide `bills` row
+    and the snapshot-baked list query (which must stay cheap and text-free). One row per bill,
+    CASCADE-deleted with it. `text_tsv` is a generated `english` tsvector with a GIN index, so the
+    search endpoint can run `text_tsv @@ websearch_to_tsquery('english', :q)` and return
+    `ts_headline` snippets. `indexed_change_hash` mirrors the bill's `change_hash` at fetch time so
+    the refresh job can skip bills whose text hasn't changed. No relationship is exposed on `Bill`
+    on purpose — nothing should be able to eager-load text onto a list query; read it by bill_id.
+    """
+    __tablename__ = "bill_texts"
+
+    bill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bills.id", ondelete="CASCADE"), primary_key=True
+    )
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Read-only generated column (Postgres maintains it); never written via the ORM.
+    text_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', coalesce(text, ''))", persisted=True),
+        nullable=True,
+    )
+    char_len: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Which rung of the fetch ladder produced the text: source_url | openstates | legiscan.
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    indexed_change_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("idx_bill_texts_tsv", "text_tsv", postgresql_using="gin"),
+    )
 
 
 class BillDesignSignal(Base):
@@ -279,7 +385,11 @@ class AlertSubscription(Base):
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     organization: Mapped[str | None] = mapped_column(String(255), nullable=True)
     slack_webhook: Mapped[str | None] = mapped_column(Text, nullable=True)
-    states: Mapped[list] = mapped_column(JSONB, default=list)  # ["CA", "OR"] or ["ALL"]
+    states: Mapped[list] = mapped_column(JSONB, default=list)  # LEGACY (pre-region) — kept for back-compat
+    # Region-keyed jurisdiction scope, the source of truth since migration 032:
+    #   {"US": ["CA","OR"], "EU": ["*"]}  ("*"/"ALL" or empty list = every jurisdiction in that region)
+    # Empty {} = match all regions + jurisdictions. See _matches_scope in app/alerts/digest.py.
+    region_scope: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     material_categories: Mapped[list] = mapped_column(JSONB, default=list)  # or ["ALL"]
     instrument_types: Mapped[list] = mapped_column(
         JSONB, default=lambda: ["ALL"]
@@ -290,6 +400,19 @@ class AlertSubscription(Base):
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Idempotency stamp for the one-time watch-list onboarding email (run_watchlist_onboarding_cycle):
+    # NULL until sent, then the send time. Only meaningful on the "watchlist"-scope row. See
+    # app/alerts/watchlist_onboarding.py.
+    onboarding_email_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # High-water mark for the recurring "you added bills" recap (run_watchlist_recap_cycle): the send
+    # time of the last recap. New adds (WatchlistItem.created_at) past COALESCE(this, onboarding stamp)
+    # are recapped once a 30-min burst settles. Only meaningful on the "watchlist"-scope row. See
+    # app/alerts/watchlist_recap.py.
+    watchlist_recap_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (Index("idx_alert_sub_uid_scope", "firebase_uid", "scope"),)
 
@@ -356,6 +479,8 @@ class ComplianceDeadline(Base):
     federal_action_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("federal_actions.id"), nullable=True
     )
+    # Jurisdiction family ("US"/"EU"/…); `state` is the sub-jurisdiction code within it. See migration 032.
+    region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
     state: Mapped[str] = mapped_column(String(2), nullable=False)
     deadline_type: Mapped[str] = mapped_column(String(50), nullable=False)
     deadline_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -369,6 +494,7 @@ class ComplianceDeadline(Base):
     __table_args__ = (
         Index("idx_deadlines_date", "deadline_date"),
         Index("idx_deadlines_state", "state"),
+        Index("idx_compliance_deadlines_region", "region"),
     )
 
 
@@ -387,6 +513,8 @@ class Company(Base):
     duns_number: Mapped[str | None] = mapped_column(String(9), unique=True, nullable=True)
     cik: Mapped[str | None] = mapped_column(String(10), unique=True, nullable=True)
     epa_registry_id: Mapped[str | None] = mapped_column(String(50), unique=True, nullable=True)
+    # Jurisdiction family of the company's HQ/operations ("US"/"EU"/…). See migration 032.
+    region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
     hq_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
     naics_codes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     operating_states: Mapped[list | None] = mapped_column(JSONB, nullable=True)
@@ -473,13 +601,18 @@ class CompanyStatePresence(Base):
     company_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("company.id"), nullable=False
     )
+    # Jurisdiction family of this operational presence ("US"/"EU"/…); `state` is the code within it.
+    region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
     state: Mapped[str] = mapped_column(String(2), nullable=False)
     presence_type: Mapped[str] = mapped_column(String(50), nullable=False)
     is_primary: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
     company: Mapped["Company"] = relationship("Company", back_populates="state_presences")
 
-    __table_args__ = (Index("idx_presence_company_state", "company_id", "state"),)
+    __table_args__ = (
+        Index("idx_presence_company_state", "company_id", "state"),
+        Index("idx_company_state_presence_region", "region"),
+    )
 
 
 class ImpactScore(Base):
@@ -580,6 +713,7 @@ class LitigationCase(Base):
     related_law_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("bills.id", ondelete="SET NULL"), nullable=True
     )
+    region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
     related_state: Mapped[str | None] = mapped_column(String(2), nullable=True)
     related_statute: Mapped[str | None] = mapped_column(Text, nullable=True)
     preemption_risk: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
@@ -599,6 +733,7 @@ class LitigationCase(Base):
         Index("idx_litigation_cases_status", "case_status"),
         Index("idx_litigation_cases_state", "related_state"),
         Index("idx_litigation_cases_law_id", "related_law_id"),
+        Index("idx_litigation_cases_region", "region"),
     )
 
 
@@ -793,6 +928,8 @@ class ComplianceEntity(Base):
     name: Mapped[str] = mapped_column(String(300), nullable=False)
     # "pro" (producer responsibility / stewardship org) | "agency" (government administrator).
     entity_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Jurisdiction family this body operates in ("US"/"EU"/…). See migration 032.
+    region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
     url: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Where a producer actually registers / joins / files — the actionable link.
     registration_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -809,6 +946,7 @@ class ComplianceEntity(Base):
     __table_args__ = (
         Index("idx_compliance_entity_type", "entity_type"),
         Index("idx_compliance_entity_materials", "materials", postgresql_using="gin"),
+        Index("idx_compliance_entity_region", "region"),
     )
 
 
@@ -831,6 +969,8 @@ class CompliancePathway(Base):
     entity_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("compliance_entity.id", ondelete="SET NULL"), nullable=True
     )
+    # Jurisdiction family of the law this pathway is for ("US"/"EU"/…). See migration 032.
+    region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
     management_model: Mapped[str | None] = mapped_column(String(30), nullable=True)
     # join_pro | file_individual_plan | register_with_state | pay_into_program | monitor | none
     action_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -888,6 +1028,7 @@ class BillOutcome(Base):
         Integer, ForeignKey("bills.id", ondelete="SET NULL"), nullable=True
     )
     # Denormalized law identity — present even when bill_id is null.
+    region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
     state: Mapped[str | None] = mapped_column(String(2), nullable=True)
     bill_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     law_title: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -913,6 +1054,18 @@ class BillOutcome(Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Mirrors Bill.reviewed: auto/curated-but-unvetted until a human spot-checks the figure.
     reviewed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    # Remediation arc — only meaningful for negative/mixed outcomes (the bad-outcome flag is the
+    # trigger to research a fix). remediated_by_bill_id is a soft link (clickable when tracked);
+    # remediation_note/bill_number describe the fixing law even when we don't track it as a row.
+    # remediation_checked_at = when this was last researched (NULL = never; drives the re-check job).
+    remediation_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remediated_by_bill_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("bills.id", ondelete="SET NULL"), nullable=True
+    )
+    remediation_bill_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    remediation_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

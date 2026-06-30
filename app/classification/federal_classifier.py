@@ -64,7 +64,7 @@ Return this exact JSON structure:
   "preemption_risk": <one of: "none","low","medium","high">,
   "friction_type": <one of: "preemption","federal_mandate","compliance_burden","comment_opportunity","funding","study","none">,
   "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","labeling","chemical_restriction","preemption","budget","other">,
-  "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","other"]>,
+  "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","vehicles","construction","furniture","used_oil","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","hazardous_materials","other"]>,
   "summary": "<1-2 sentence plain-English summary for a compliance professional: what the action is and why it matters>"
 }}
 

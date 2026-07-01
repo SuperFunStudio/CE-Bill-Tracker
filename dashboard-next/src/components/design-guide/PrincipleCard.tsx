@@ -36,18 +36,54 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
             <p className="text-text-secondary text-body leading-relaxed mb-4">{lever.direction}</p>
           )}
 
-          {/* Applies to — the products / materials a designer should map this onto */}
-          <div className="mt-auto">
-            <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">Applies to</p>
-            <div className="flex flex-wrap gap-1.5">
-              {lever.focus.map(f => (
-                <span
-                  key={f}
-                  className="text-xs rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-text-secondary"
-                >
-                  {f}
-                </span>
-              ))}
+          <div className="mt-auto space-y-3">
+            {/* Fee impact (eco-modulation): does this design dimension raise or lower a producer's
+                EPR fee, where is it a set rate (EU/foreign), and where is it still directional (US). */}
+            {lever.feeImpact && (
+              <div>
+                <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">
+                  Fee impact <span className="normal-case tracking-normal text-text-muted/70">· eco-modulation</span>
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {lever.feeImpact.malus && (
+                    <span className="text-xs rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-text-secondary">
+                      ↑ Malus · poor design costs more
+                    </span>
+                  )}
+                  {lever.feeImpact.bonus && (
+                    <span className="text-xs rounded-full border border-green-accent/40 bg-green-dark/20 px-2 py-0.5 text-green-accent">
+                      ↓ Bonus · good design pays less
+                    </span>
+                  )}
+                </div>
+                {lever.feeImpact.examples.length > 0 && (
+                  <p className="text-xs text-text-secondary mt-1.5">
+                    {lever.feeImpact.examples.map(e => `${e.jurisdiction} ${e.amount}`).join(' · ')}
+                  </p>
+                )}
+                <p className="text-meta text-text-muted mt-1">
+                  {lever.feeImpact.setJurisdictions.length > 0 && (
+                    <>Set in {lever.feeImpact.setJurisdictions.slice(0, 5).join(', ')}
+                      {lever.feeImpact.setJurisdictions.length > 5 ? ` +${lever.feeImpact.setJurisdictions.length - 5}` : ''}</>
+                  )}
+                  {lever.feeImpact.usPending && <> · US: rate TBD (CAA)</>}
+                </p>
+              </div>
+            )}
+
+            {/* Applies to — the products / materials a designer should map this onto */}
+            <div>
+              <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">Applies to</p>
+              <div className="flex flex-wrap gap-1.5">
+                {lever.focus.map(f => (
+                  <span
+                    key={f}
+                    className="text-xs rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-text-secondary"
+                  >
+                    {f}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 

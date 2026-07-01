@@ -1,4 +1,4 @@
-// AUTO-GENERATED from tmp/design_principles.json. Do not edit by hand.
+// AUTO-GENERATED from tmp/design_principles.json by scripts/generate_design_teaser.py. Do not edit by hand.
 // The Free teaser: per-lever headline + direction + material/product focus (front face),
 // plus the grounded source bills behind the principle (back face -- each opens the bill modal).
 
@@ -6,6 +6,14 @@ export interface TeaserBill {
   state: string;
   billNumber: string;
   billId: number;
+}
+
+export interface FeeImpact {
+  malus: boolean;
+  bonus: boolean;
+  setJurisdictions: string[];
+  usPending: boolean;
+  examples: { jurisdiction: string; amount: string }[];
 }
 
 export interface TeaserLever {
@@ -17,6 +25,7 @@ export interface TeaserLever {
   billCount: number;
   states: string[];
   evidence: { state: string; bill: string; quote: string } | null;
+  feeImpact: FeeImpact | null;
   bills: TeaserBill[];
 }
 
@@ -73,6 +82,28 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "state": "PL",
       "bill": "DU/2019/542",
       "quote": "Design and manufacture packaging to enable reuse and subsequent recycling, or at minimum recycling, or other recovery if recycling is not possible"
+    },
+    "feeImpact": {
+      "malus": true,
+      "bonus": true,
+      "setJurisdictions": [
+        "CL",
+        "EE",
+        "ES",
+        "EU",
+        "FR",
+        "JP",
+        "NL",
+        "PL",
+        "SE"
+      ],
+      "usPending": true,
+      "examples": [
+        {
+          "jurisdiction": "FR",
+          "amount": "80.0 euros/tonne"
+        }
+      ]
     },
     "bills": [
       {
@@ -1594,6 +1625,19 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "bill": "20008902",
       "quote": "From 2025: ensure PET beverage bottles (Annex 6 Point 3) contain on average at least 25% recycled plastic content (calculated per calendar year)"
     },
+    "feeImpact": {
+      "malus": true,
+      "bonus": true,
+      "setJurisdictions": [
+        "ES",
+        "EU",
+        "FR",
+        "JP",
+        "LV"
+      ],
+      "usPending": true,
+      "examples": []
+    },
     "bills": [
       {
         "state": "AT",
@@ -1996,6 +2040,33 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "state": "EE",
       "bill": "113032019103",
       "quote": "Packaging must be designed and manufactured to minimise volume and weight while meeting safety and hygiene requirements, and to enable reuse or recovery including recycling"
+    },
+    "feeImpact": {
+      "malus": true,
+      "bonus": true,
+      "setJurisdictions": [
+        "CH",
+        "CL",
+        "EE",
+        "ES",
+        "EU",
+        "FR",
+        "JP",
+        "PL",
+        "SE",
+        "UK"
+      ],
+      "usPending": true,
+      "examples": [
+        {
+          "jurisdiction": "ES",
+          "amount": "0.45 eur/kg non recycled"
+        },
+        {
+          "jurisdiction": "FR",
+          "amount": "0.15 euros/kilogram"
+        }
+      ]
     },
     "bills": [
       {
@@ -2732,6 +2803,22 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "bill": "32026D0429",
       "quote": "Economic operators using pallet wrappings and straps are subject to the overall 40% re-use target under Article 29(1) of Regulation (EU) 2025/40 for transport packaging formats in a calendar year (not exempted by this Decision)"
     },
+    "feeImpact": {
+      "malus": true,
+      "bonus": true,
+      "setJurisdictions": [
+        "ES",
+        "EU",
+        "FI",
+        "FR",
+        "NL",
+        "PL",
+        "SE",
+        "UK"
+      ],
+      "usPending": true,
+      "examples": []
+    },
     "bills": [
       {
         "state": "EU",
@@ -3212,6 +3299,18 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "state": "AT",
       "bill": "20005815",
       "quote": "do not place on market batteries containing more than 0.0005 wt% mercury (regardless of whether built into devices)"
+    },
+    "feeImpact": {
+      "malus": true,
+      "bonus": true,
+      "setJurisdictions": [
+        "ES",
+        "EU",
+        "FR",
+        "NL"
+      ],
+      "usPending": true,
+      "examples": []
     },
     "bills": [
       {
@@ -4262,6 +4361,31 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "bill": "ssi/2021/410",
       "quote": "Do not manufacture single-use expanded polystyrene beverage containers, beverage cups, or food containers using expanded polystyrene."
     },
+    "feeImpact": {
+      "malus": true,
+      "bonus": false,
+      "setJurisdictions": [
+        "CH",
+        "EE",
+        "EU",
+        "FR",
+        "LV",
+        "PL",
+        "SI",
+        "UK"
+      ],
+      "usPending": true,
+      "examples": [
+        {
+          "jurisdiction": "CH",
+          "amount": "0.3 CHF deposit minimum"
+        },
+        {
+          "jurisdiction": "EE",
+          "amount": "40.0 EEK/kg"
+        }
+      ]
+    },
     "bills": [
       {
         "state": "UK",
@@ -4797,6 +4921,15 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "state": "NL",
       "bill": "BWBR0024492",
       "quote": "Batteries/accumulators containing >0.0005 wt% mercury, >0.002 wt% cadmium, or >0.004 wt% lead must bear the relevant chemical symbol (Hg, Cd, or Pb) below the crossed-out bin symbol, occupying at least one quarter of the symbol's dimensions (Articles 9(4)-(6))."
+    },
+    "feeImpact": {
+      "malus": true,
+      "bonus": true,
+      "setJurisdictions": [
+        "FR"
+      ],
+      "usPending": true,
+      "examples": []
     },
     "bills": [
       {
@@ -5939,6 +6072,20 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "bill": "JORFTEXT000041553759",
       "quote": "Prohibition: plastic products and packaging whose compostability can only be achieved in industrial composting units may NOT bear the label 'compostable' (Art. 13)"
     },
+    "feeImpact": {
+      "malus": false,
+      "bonus": true,
+      "setJurisdictions": [
+        "FR"
+      ],
+      "usPending": true,
+      "examples": [
+        {
+          "jurisdiction": "FR",
+          "amount": "25.0 euros/tonne"
+        }
+      ]
+    },
     "bills": [
       {
         "state": "FR",
@@ -6072,6 +6219,20 @@ export const TEASER_LEVERS: TeaserLever[] = [
       "state": "EU",
       "bill": "32011L0065",
       "quote": "Ensure spare parts are available for product reuse, refurbishment, and lifetime extension"
+    },
+    "feeImpact": {
+      "malus": true,
+      "bonus": true,
+      "setJurisdictions": [
+        "CL",
+        "ES",
+        "EU",
+        "FR",
+        "NL",
+        "PL"
+      ],
+      "usPending": true,
+      "examples": []
     },
     "bills": [
       {

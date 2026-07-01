@@ -46,8 +46,28 @@ LEVER_NAMES = {
 LEVER_ORDER = [*PACKAGING_LEVERS, *PRODUCT_LEVERS]
 
 
+US_STATES = set(
+    "AL AK AZ AR CA CO CT DC DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV "
+    "NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split()
+)
+# Threshold units that denote a currency amount — the concrete "this costs €X" figures for the fee
+# overlay (eco-modulation). Percentages / microns / years are quantitative but not monetary.
+_MONETARY = ("eur", "euro", "chf", "gbp", "pln", "zl", "usd", "kr", "eek", "deposit")
+
+
 def fmt_material(code: str) -> str:
     return code.replace("_", " ").strip().capitalize()
+
+
+def _money_example(ev: dict) -> str | None:
+    """A concise 'amount + unit' string when the signal carries a currency threshold, else None."""
+    val, unit = ev.get("threshold_value"), (ev.get("threshold_unit") or "")
+    u = unit.lower()
+    if val in (None, "", "None") or "percent" in u or "%" in u:
+        return None
+    if not any(t in u for t in _MONETARY):
+        return None
+    return f"{val} {unit.replace('_per_', '/').replace('_', ' ')}".strip()
 
 
 def _confidence(e: dict) -> float:
@@ -119,6 +139,30 @@ def main() -> None:
                     counts[m] = counts.get(m, 0) + 1
         focus = [fmt_material(m) for m, _ in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:4]]
 
+        # Fee-impact overlay (eco-modulation): this lever modulates a producer's EPR fee up (malus,
+        # from `penalized` signals) or down (bonus, from `rewarded`). Set-fee jurisdictions (mostly
+        # EU/foreign, further along) show concrete amounts; the US is directional — fees are still
+        # being determined (Circular Action Alliance schedule), so it reads "rate TBD (CAA)".
+        mod_ev = [e for p in ps if p.get("obligation_type") in ("penalized", "rewarded") for e in p["evidence"]]
+        set_juris = sorted({e["state"] for e in mod_ev} - US_STATES)
+        us_in_lever = bool({e["state"] for p in ps for e in p["evidence"]} & US_STATES)
+        examples, seen_amt = [], set()
+        for e in mod_ev:
+            amt = _money_example(e)
+            key = (e["state"], amt)
+            if amt and key not in seen_amt:
+                seen_amt.add(key)
+                examples.append({"jurisdiction": e["state"], "amount": amt})
+        fee_impact = None
+        if set_juris or any(p.get("obligation_type") in ("penalized", "rewarded") for p in ps):
+            fee_impact = {
+                "malus": any(p.get("obligation_type") == "penalized" for p in ps),
+                "bonus": any(p.get("obligation_type") == "rewarded" for p in ps),
+                "setJurisdictions": set_juris,
+                "usPending": us_in_lever,
+                "examples": examples[:3],
+            }
+
         levers_out.append({
             "lever": lever,
             "name": LEVER_NAMES.get(lever, lever.replace("_", " ").title()),
@@ -128,6 +172,7 @@ def main() -> None:
             "billCount": len(bills),
             "states": sorted(states),
             "evidence": evidence,
+            "feeImpact": fee_impact,
             "bills": bills,
         })
 
@@ -138,9 +183,13 @@ def main() -> None:
         "// The Free teaser: per-lever headline + direction + material/product focus (front face),\n"
         "// plus the grounded source bills behind the principle (back face -- each opens the bill modal).\n\n"
         "export interface TeaserBill {\n  state: string;\n  billNumber: string;\n  billId: number;\n}\n\n"
+        "export interface FeeImpact {\n  malus: boolean;\n  bonus: boolean;\n"
+        "  setJurisdictions: string[];\n  usPending: boolean;\n"
+        "  examples: { jurisdiction: string; amount: string }[];\n}\n\n"
         "export interface TeaserLever {\n  lever: string;\n  name: string;\n  headline: string;\n  direction: string;\n"
         "  focus: string[];\n  billCount: number;\n  states: string[];\n"
-        "  evidence: { state: string; bill: string; quote: string } | null;\n  bills: TeaserBill[];\n}\n\n"
+        "  evidence: { state: string; bill: string; quote: string } | null;\n"
+        "  feeImpact: FeeImpact | null;\n  bills: TeaserBill[];\n}\n\n"
         f"export const GUIDE_COVERAGE = {json.dumps(coverage)};\n\n"
         "export const TEASER_LEVERS: TeaserLever[] = "
     )

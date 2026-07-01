@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Integer, func, literal_column, select, true
+from sqlalchemy import Integer, case, func, literal_column, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_optional_pro
@@ -24,6 +24,7 @@ from app.schemas import (
     DeadlineStats,
     DeadlineSummary,
     InstrumentMaterialCell,
+    LawsInForcePoint,
     LitigationCaseSummary,
     StateMapSummary,
     TextCoverageStats,
@@ -379,6 +380,42 @@ async def get_instrument_material_matrix(
         )
         for row in rows
     ]
+
+
+@router.get("/laws-in-force", response_model=list[LawsInForcePoint])
+async def get_laws_in_force(
+    regions: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-year, per-region counts of enacted CE laws that came INTO FORCE that year.
+
+    The year is the extracted `effective_date` (the only date foreign regulations carry — they have no
+    introduced→enacted pipeline, so the timeline/momentum charts are empty for them), falling back to
+    `status_date` for US enacted laws that weren't Sonnet-extracted. The frontend cumulates these into
+    a "laws on the books over time" line per region — the momentum view that works cross-jurisdiction.
+    """
+    # In-force year = effective_date's year when it's a well-formed date, else the status_date year.
+    # A JSONB text cast to date can throw on malformed values, so guard with a regex and take the
+    # leading YYYY directly rather than ::date.
+    eff_year = case(
+        (Bill.compliance_details["effective_date"].astext.op("~")(r"^\d{4}-\d{2}-\d{2}"),
+         func.substring(Bill.compliance_details["effective_date"].astext, 1, 4).cast(Integer)),
+        else_=None,
+    )
+    yr = func.coalesce(eff_year, func.extract("year", Bill.status_date).cast(Integer)).label("year")
+    q = (
+        select(yr, Bill.region, func.count().label("count"))
+        .where(Bill.ce_relevant == True)
+        .where(Bill.status == "enacted")
+        .group_by("year", Bill.region)
+        .having(yr.isnot(None))
+        .order_by("year")
+    )
+    region_codes = _parse_regions(regions)
+    if region_codes:
+        q = q.where(Bill.region.in_(region_codes))
+    rows = (await db.execute(q)).all()
+    return [LawsInForcePoint(year=row.year, region=row.region, count=row.count) for row in rows]
 
 
 @router.get("/outcomes", response_model=list[BillOutcomeSummary])

@@ -108,6 +108,13 @@ export interface BillStancePoint {
   region?: string;
 }
 
+/** One (year, region) bucket from /bills/laws-in-force — CE laws that came into force that year. */
+export interface LawsInForcePoint {
+  year: number;
+  region: string;
+  count: number;
+}
+
 /** One (instrument × material) cell from /bills/instrument-material-matrix. */
 export interface InstrumentMaterialCell {
   instrument_type: string;

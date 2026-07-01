@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTimelineChart } from '@/components/insights/BillTimelineChart';
+import { LawsInForceChart } from '@/components/insights/LawsInForceChart';
 import { StanceMomentumChart } from '@/components/insights/StanceMomentumChart';
 import { InstrumentMaterialMatrix } from '@/components/insights/InstrumentMaterialMatrix';
 import { StateGapTable } from '@/components/insights/StateGapTable';
@@ -151,6 +152,17 @@ export default function InsightsPage() {
 
       {tab === 'momentum' && (
         <>
+          <Section kicker="Laws on the books" title="Circular-economy laws in force over time">
+            <p className="text-text-secondary text-body leading-relaxed">
+              The running count of enacted laws on the books, by the year each came into force. Unlike
+              the pipeline view below (a US introduced-through-enacted funnel), this works for every
+              jurisdiction — including the EU and national regulations that have no legislative pipeline —
+              so it&apos;s the one momentum view you can compare across regions. Pick regions in the filter
+              above to trace their trajectories side by side.
+            </p>
+            <LawsInForceChart regions={regionsCsv} />
+          </Section>
+
           <Section
             kicker="Timeline"
             title={

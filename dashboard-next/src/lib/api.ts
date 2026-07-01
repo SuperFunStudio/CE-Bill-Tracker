@@ -8,6 +8,7 @@ import type {
   BillTimelinePoint,
   BillStancePoint,
   InstrumentMaterialCell,
+  LawsInForcePoint,
   StateGapRow,
   StateCycleRow,
   ChampionSummary,
@@ -154,6 +155,14 @@ export async function fetchInstrumentMaterialMatrix(params?: {
 }): Promise<InstrumentMaterialCell[]> {
   return apiFetch<InstrumentMaterialCell[]>(
     buildUrl('/bills/instrument-material-matrix', params as Record<string, string | number | boolean | undefined>),
+  );
+}
+
+/** Per-year, per-region CE laws that came into force — cumulated client-side into the "laws on the
+ * books over time" momentum line (works for foreign regs, which have no introduced→enacted pipeline). */
+export async function fetchLawsInForce(params?: { regions?: string }): Promise<LawsInForcePoint[]> {
+  return apiFetch<LawsInForcePoint[]>(
+    buildUrl('/bills/laws-in-force', params as Record<string, string | number | boolean | undefined>),
   );
 }
 

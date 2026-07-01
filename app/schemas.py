@@ -118,6 +118,20 @@ class InstrumentMaterialCell(BaseModel):
     region: str | None = None  # see BillTimelinePoint.region
 
 
+class LawsInForcePoint(BaseModel):
+    """One (year, region) bucket: how many CE laws came INTO FORCE that year in that region.
+
+    Uses the extracted effective_date (foreign regulations have no introduced→enacted pipeline, so
+    the timeline/momentum charts are empty for them), falling back to status_date for US enacted laws.
+    The frontend cumulates these into a "laws on the books over time" line per region — the momentum
+    view that works cross-jurisdiction. See /bills/laws-in-force.
+    """
+
+    year: int
+    region: str
+    count: int
+
+
 class StateGapRow(BaseModel):
     """One state's "Battle of the Bills" gap: its advancing-CE passage rate vs. its all-bills
     baseline. The gap (ce_rate - baseline_rate) is the signal — positive = CE bills pass MORE

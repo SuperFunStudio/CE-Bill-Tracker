@@ -38,10 +38,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Design packaging to be recyclable in available systems",
     "direction": "Design packaging for reuse, recycling, or recovery if recycling impossible.",
     "focus": [
-      "Plastic packaging",
-      "Metals",
-      "Paper packaging",
-      "Glass"
+      "Packaging",
+      "Electronics",
+      "Batteries",
+      "Hazardous materials",
+      "Organics",
+      "Vehicles",
+      "Textiles"
     ],
     "billCount": 296,
     "states": [
@@ -1594,10 +1597,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Incorporate post-consumer recycled content",
     "direction": "Incorporate minimum 25% recycled plastic content in PET beverage bottles.",
     "focus": [
-      "Plastic packaging",
-      "Metals",
-      "Paper packaging",
-      "Glass"
+      "Packaging",
+      "Electronics",
+      "Textiles",
+      "Organics",
+      "Batteries",
+      "Hazardous materials",
+      "Furniture"
     ],
     "billCount": 71,
     "states": [
@@ -2002,10 +2008,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Reduce packaging material per unit (lightweight, right-size)",
     "direction": "Minimize packaging volume and weight while maintaining safety and hygiene.",
     "focus": [
-      "Plastic packaging",
-      "Paper packaging",
-      "Metals",
-      "Glass"
+      "Packaging",
+      "Electronics",
+      "Organics",
+      "Batteries",
+      "Hazardous materials",
+      "Textiles",
+      "Biobased"
     ],
     "billCount": 138,
     "states": [
@@ -2767,10 +2776,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Shift to reusable / refillable formats",
     "direction": "Design pallet wrappings and straps for reuse; achieve 40% reuse target annually.",
     "focus": [
-      "Plastic packaging",
-      "Metals",
-      "Paper packaging",
-      "Glass"
+      "Packaging",
+      "Textiles",
+      "Electronics",
+      "Batteries",
+      "Organics",
+      "Hazardous materials",
+      "Furniture"
     ],
     "billCount": 86,
     "states": [
@@ -3258,10 +3270,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Eliminate restricted substances (PFAS, heavy metals, etc.)",
     "direction": "Ensure batteries contain ≤0.0005 wt% mercury regardless of form.",
     "focus": [
-      "Plastic packaging",
+      "Packaging",
       "Electronics",
       "Hazardous materials",
-      "Metals"
+      "Batteries",
+      "Vehicles",
+      "Organics",
+      "Textiles"
     ],
     "billCount": 201,
     "states": [
@@ -4326,10 +4341,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Avoid banned / restricted materials and formats",
     "direction": "Do not manufacture beverage containers or cups from expanded polystyrene.",
     "focus": [
-      "Plastic packaging",
-      "Paper packaging",
-      "Metals",
-      "Glass"
+      "Packaging",
+      "Organics",
+      "Electronics",
+      "Textiles",
+      "Hazardous materials",
+      "Batteries",
+      "Biobased"
     ],
     "billCount": 98,
     "states": [
@@ -4885,10 +4903,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Apply required recyclability / disposal labeling",
     "direction": "Add chemical symbols (Hg, Cd, Pb) below bin symbol if hazardous thresholds exceeded.",
     "focus": [
-      "Plastic packaging",
+      "Packaging",
       "Electronics",
-      "Metals",
-      "Batteries"
+      "Batteries",
+      "Hazardous materials",
+      "Organics",
+      "Vehicles",
+      "Textiles"
     ],
     "billCount": 222,
     "states": [
@@ -6050,10 +6071,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Use certified-compostable materials where specified",
     "direction": "Do not label industrial-only compostable packaging as 'compostable'.",
     "focus": [
+      "Packaging",
       "Organics",
-      "Paper packaging",
-      "Plastic packaging",
-      "Glass"
+      "Biobased",
+      "Textiles",
+      "Electronics",
+      "Batteries",
+      "Construction"
     ],
     "billCount": 18,
     "states": [
@@ -6185,10 +6209,13 @@ export const TEASER_LEVERS: TeaserLever[] = [
     "headline": "Design for repairability, spare-parts access, and longevity",
     "direction": "Ensure spare parts availability for product reuse, refurbishment, lifetime extension.",
     "focus": [
+      "Packaging",
       "Electronics",
-      "Plastic packaging",
       "Batteries",
-      "Metals"
+      "Hazardous materials",
+      "Vehicles",
+      "Textiles",
+      "Organics"
     ],
     "billCount": 115,
     "states": [

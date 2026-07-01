@@ -53,6 +53,9 @@ US_STATES = set(
 # Threshold units that denote a currency amount — the concrete "this costs €X" figures for the fee
 # overlay (eco-modulation). Percentages / microns / years are quantitative but not monetary.
 _MONETARY = ("eur", "euro", "chf", "gbp", "pln", "zl", "usd", "kr", "eek", "deposit")
+# Packaging-material codes collapsed into a single "Packaging" focus chip (EPR treats glass/metal as
+# packaging), so product categories (textiles, electronics, batteries…) aren't crowded out.
+_PACKAGING_MATERIALS = frozenset({"plastic_packaging", "paper_packaging", "glass", "metals"})
 
 
 def fmt_material(code: str) -> str:
@@ -132,12 +135,23 @@ def main() -> None:
             evidence = {"state": top["state"], "bill": top.get("bill_number") or "",
                         "quote": (top.get("source_excerpt") or "").strip()}
 
+        # "Applies to" chips. The packaging materials (plastic/paper/glass/metal) collapse into one
+        # "Packaging" chip so they don't crowd out the product categories — otherwise textiles,
+        # electronics, batteries, vehicles all get buried under packaging variants. Then the top
+        # non-packaging categories show individually.
         counts: dict[str, int] = {}
+        has_packaging = False
         for b in bills:
             for m in mat_by_bill.get(b["billId"], []):
-                if m and m != "other":
+                if not m or m == "other":
+                    continue
+                if m in _PACKAGING_MATERIALS:
+                    has_packaging = True
+                else:
                     counts[m] = counts.get(m, 0) + 1
-        focus = [fmt_material(m) for m, _ in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:4]]
+        focus = (["Packaging"] if has_packaging else []) + [
+            fmt_material(m) for m, _ in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)[:6]
+        ]
 
         # Fee-impact overlay (eco-modulation): this lever modulates a producer's EPR fee up (malus,
         # from `penalized` signals) or down (bonus, from `rewarded`). Set-fee jurisdictions (mostly

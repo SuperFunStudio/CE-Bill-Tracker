@@ -20,7 +20,9 @@ text in bill_texts. Driver: scripts/ingest_foreign.py. Not wired into the US Ing
 from __future__ import annotations
 
 import html
+import io
 import re
+import zipfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -75,6 +77,27 @@ def cap_for_tsvector(text: str) -> str:
     while len(text[:cut].encode("utf-8")) > _TSVECTOR_BYTE_LIMIT:
         cut = int(cut * 0.95)
     return text[:cut]
+
+
+# A DOCX is a zip whose word/document.xml holds the body as OOXML. Paragraphs are <w:p>, text runs
+# <w:t>, tabs <w:tab/>, line breaks <w:br/>. Naively stripping every tag glues paragraphs together,
+# so map the structural elements to whitespace FIRST, then reuse _strip_tags. Used by sources that
+# only expose body text as a Word download (China flk, and — later — AU Victoria/ACT).
+_DOCX_PARA_RE = re.compile(r"</w:p>", re.I)
+_DOCX_BREAK_RE = re.compile(r"<w:(?:br|tab)\b[^>]*/?>", re.I)
+
+
+def docx_to_text(data: bytes) -> str:
+    """Extract plain text from DOCX bytes (word/document.xml only; ignores headers/footnotes)."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8", "replace")
+    except (zipfile.BadZipFile, KeyError, OSError) as e:
+        log.warning("docx_parse_failed", error=str(e))
+        return ""
+    xml = _DOCX_BREAK_RE.sub(" ", xml)
+    xml = _DOCX_PARA_RE.sub("\n", xml)
+    return _strip_tags(xml)
 
 
 @dataclass
@@ -2124,6 +2147,615 @@ class CzechiaESbirkaClient(ForeignSourceClient):
         )
 
 
+# ==================================================================================================
+# China (PRC) — 国家法律法规数据库 flk.npc.gov.cn (National Laws & Regulations Database, official).
+# Grade A-: no auth, no captcha on the read path, no US geo-block, no UA requirement (verified live
+# 2026-07-03). The site is a Vue SPA rebuilt ~2025 — all pre-2025 scraping prior art is dead; the
+# endpoints below were reverse-engineered from the current JS bundle + confirmed end-to-end:
+#   discover: POST /law-search/search/list  {searchContent, searchRange:1, searchType:1, pageNum, pageSize}
+#             -> {total, rows:[{bbbs, title(<em>-highlighted), sxx(status), gbrq, sxrq, flxz, ...}]}
+#             (omit orderByParam entirely — an empty string 500s on the server's Jackson coercion)
+#   detail:   GET  /law-search/search/flfgDetails?bbbs=<id>  -> {data:{bbbs, ossFile, lsyg:[{title,...}]}}
+#             (lsyg[0].title = clean current title + amendment lineage; the body text is NOT here)
+#   docx url: GET  /law-search/download/pc?format=docx&bbbs=<id>&fileId=  -> {data:{url:<presigned OBS>}}
+#             (use data.url — the public https://flkoss.obs-bj2.cucloud.cn/... link; data.urlIn is an
+#              internal 172.16.x address. Presigned ~1h expiry: fetch immediately.)
+# Body text is available ONLY as the Word download -> docx_to_text(). PRC Copyright Law art.5(1)
+# excludes laws/regulations from copyright, so commercial reuse is clear; Chinese full text is fine
+# (region-aware classifier, JP precedent). Risk: the site was rebuilt once already, killing all prior
+# scrapers — keep <=1 rps and treat any non-JSON response as a backoff/alarm signal.
+# ==================================================================================================
+
+CN_FLK_BASE = "https://flk.npc.gov.cn/law-search"
+CN_FLK_PAGE = "https://flk.npc.gov.cn/detail2.html?{bbbs}"  # human SPA deep-link (best-effort)
+
+# Curated marquee CE/EPR statutes, keyed by bbbs (verified present 2026-07-03). Guarantees inclusion
+# + carries an English label regardless of search drift; the classifier still assigns instrument/material.
+CN_SEED_LAWS: list[dict] = [
+    {"bbbs": "ff808081729c65d801729d455fad04be",
+     "en": "Law on the Prevention & Control of Environmental Pollution by Solid Waste (2020 rev — EPR mandate)"},
+    {"bbbs": "ff8080816f135f46016f1d06082912c2",
+     "en": "Circular Economy Promotion Law (2018 rev)"},
+    {"bbbs": "2c909fdd678bf17901678bf737800631",
+     "en": "Cleaner Production Promotion Law"},
+    {"bbbs": "ff8080816f3e9784016f424f1b4a04d9",
+     "en": "Regulations on the Recycling & Disposal of Waste Electrical & Electronic Products (WEEE)"},
+]
+
+# Chinese CE/EPR search phrases — the CN analog of the EUR-Lex EuroVoc / FR discovery terms. Precise
+# search (searchType:1) keeps the hit list tight; the Haiku confidence floor judges true relevance.
+CN_DISCOVERY_TERMS = [
+    "循环经济",        # circular economy
+    "生产者责任延伸",   # extended producer responsibility
+    "固体废物",        # solid waste
+    "再生资源",        # recycled/renewable resources
+    "清洁生产",        # cleaner production
+    "包装",           # packaging
+    "电器电子产品",     # electrical & electronic products
+    "塑料污染",        # plastic pollution
+]
+
+# flk `sxx` status codes (inferred from data): 3=in force, 2=superseded by amendment, 4=adopted
+# not-yet-effective, 1=repealed/expired. Ingest 3 + 4 (current + upcoming); skip 1/2 in discovery.
+_CN_STATUS = {3: "enacted", 4: "adopted", 2: "superseded", 1: "repealed"}
+
+
+class ChinaFlkClient(ForeignSourceClient):
+    """flk.npc.gov.cn adapter. PRC national laws + State Council/provincial regs; body via DOCX."""
+
+    region = "CN"
+    source = "flk"
+
+    def __init__(self, timeout: float = 60.0):
+        super().__init__(timeout)
+        # bbbs -> {"title", "status"} captured in discover() so fetch() avoids a re-search.
+        self._meta: dict[str, dict] = {}
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out: dict[str, str] = {seed["bbbs"]: seed["en"] for seed in CN_SEED_LAWS}
+        for term in CN_DISCOVERY_TERMS:
+            body = {"searchContent": term, "searchRange": 1, "searchType": 1,
+                    "pageNum": 1, "pageSize": 20}
+            try:
+                resp = await self.http.post(f"{CN_FLK_BASE}/search/list", json=body)
+                resp.raise_for_status()
+                data = resp.json()
+            except (httpx.HTTPError, ValueError) as e:
+                log.warning("cn_search_failed", term=term, error=str(e))
+                continue
+            for row in data.get("rows", []):
+                bbbs = row.get("bbbs")
+                if not bbbs or row.get("sxx") in (1, 2):  # skip repealed / superseded editions
+                    continue
+                self._meta[bbbs] = {
+                    "title": _strip_tags(row.get("title", "")),  # drop the <em> highlight tags
+                    "status": _CN_STATUS.get(row.get("sxx"), "enacted"),
+                }
+                out.setdefault(bbbs, "")
+        log.info("cn_discovered", total=len(out), seeded=sum(1 for v in out.values() if v))
+        return list(out.items())
+
+    async def _details(self, bbbs: str) -> dict:
+        """flfgDetails -> the `data` object (clean title via lsyg[0], ossFile paths, lineage)."""
+        try:
+            r = await self.http.get(f"{CN_FLK_BASE}/search/flfgDetails", params={"bbbs": bbbs})
+            r.raise_for_status()
+            return r.json().get("data") or {}
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("cn_details_failed", bbbs=bbbs, error=str(e))
+            return {}
+
+    async def _docx_url(self, bbbs: str) -> str | None:
+        """download/pc -> the public presigned OBS url (data.url, NOT the internal data.urlIn)."""
+        try:
+            r = await self.http.get(f"{CN_FLK_BASE}/download/pc",
+                                    params={"format": "docx", "bbbs": bbbs, "fileId": ""})
+            r.raise_for_status()
+            return (r.json().get("data") or {}).get("url")
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("cn_docx_url_failed", bbbs=bbbs, error=str(e))
+            return None
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        meta = self._meta.get(source_id, {})
+        title = meta.get("title", "")
+        status = meta.get("status", "enacted")
+        if not title:  # a seed not seen in a search — resolve the clean title from flfgDetails
+            lsyg = (await self._details(source_id)).get("lsyg") or []
+            if lsyg:
+                title = _strip_tags(lsyg[0].get("title", ""))
+        url = await self._docx_url(source_id)
+        if not url:
+            return None
+        try:
+            r = await self.http.get(url)  # presigned OBS link, fetch immediately (~1h expiry)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("cn_docx_fetch_failed", bbbs=source_id, error=str(e))
+            return None
+        full_text = docx_to_text(r.content)
+        if len(full_text) < 100:
+            log.warning("cn_thin_text", bbbs=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=title or english_label or source_id, full_text=full_text,
+            source_url=CN_FLK_PAGE.format(bbbs=source_id), english_label=english_label, status=status,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# China State Council policy library — www.gov.cn. Server-rendered UTF-8 HTML (body in
+# <div id="UCAP-CONTENT">) + a JSON title-search at sousuo.www.gov.cn. Covers the State Council /
+# ministry INSTRUMENTS that flk omits (国发/国办发 opinions & plans — e.g. the 2016 EPR implementation
+# plan). Verified live 2026-07-03. region="CN", source="govcn".
+# --------------------------------------------------------------------------------------------------
+
+CN_GOV_SEARCH = "https://sousuo.www.gov.cn/search-gov/data"
+CN_GOV_SEED: list[dict] = [
+    {"url": "https://www.gov.cn/zhengce/content/2017-01/03/content_5156043.htm",
+     "en": "Extended Producer Responsibility (EPR) Implementation Plan (国办发〔2016〕99号)"},
+]
+CN_GOV_TERMS = ["生产者责任延伸", "循环经济", "塑料污染治理", "再生资源回收"]
+_CN_GOV_URL_RE = re.compile(r'"url"\s*:\s*"(https?:[^"]*?gov\.cn/[^"]*?content_\d+\.htm)"')
+_CN_GOV_TITLE_RE = re.compile(r"<title>(.*?)</title>", re.S | re.I)
+# Trim the trailing site chrome that follows the article body on gov.cn content pages.
+_CN_GOV_FOOTER_RE = re.compile(r"责任编辑|扫一扫在手机|【我要纠错】|相关稿件|分享到")
+
+
+class ChinaGovCnClient(ForeignSourceClient):
+    """www.gov.cn State Council policy-library adapter (opinions / plans / implementation measures)."""
+
+    region = "CN"
+    source = "govcn"
+
+    @staticmethod
+    def _path(url: str) -> str:
+        return url.split("gov.cn/", 1)[-1]
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out: dict[str, str] = {self._path(s["url"]): s["en"] for s in CN_GOV_SEED}
+        for term in CN_GOV_TERMS:
+            params = {"t": "zhengcelibrary_gw", "q": term, "searchfield": "title",
+                      "type": "gwyzcwjk", "p": 1, "n": 10}
+            try:
+                r = await self.http.get(CN_GOV_SEARCH, params=params,
+                                        headers={"Referer": "https://sousuo.www.gov.cn/"})
+                r.raise_for_status()
+                payload = r.text
+            except httpx.HTTPError as e:
+                log.warning("cn_gov_search_failed", term=term, error=str(e))
+                continue
+            for m in _CN_GOV_URL_RE.finditer(payload):
+                out.setdefault(self._path(m.group(1).replace("\\/", "/")), "")
+        log.info("cn_gov_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        url = source_id if source_id.startswith("http") else f"https://www.gov.cn/{source_id}"
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("cn_gov_fetch_failed", url=url, error=str(e))
+            return None
+        raw = r.text
+        tm = _CN_GOV_TITLE_RE.search(raw)
+        title = _strip_tags(tm.group(1)).split("_")[0].strip() if tm else (english_label or source_id)
+        idx = raw.find('id="UCAP-CONTENT"')
+        body = raw[idx:] if idx != -1 else raw
+        body = _CN_GOV_FOOTER_RE.split(body)[0]
+        full_text = _strip_tags(body)
+        if len(full_text) < 100:
+            log.warning("cn_gov_thin_text", url=url, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=title, full_text=full_text, source_url=url, english_label=english_label,
+        )
+
+
+# ==================================================================================================
+# Canada — federal + provinces (EPR is largely provincial; see docs/FEDERATED_EXPANSION_PLAN.md).
+# All region="CA"; the province is carried in `source` (the UK-devolved precedent), so foreign_id
+# stays unique as CA:<source>:<id> while the row's region/state is "CA".
+# --------------------------------------------------------------------------------------------------
+# Federal: Justice Laws (laws-lois.justice.gc.ca). Grade A — per-doc structured XML + a full catalog.
+#   discover: GET /eng/XML/Legis.xml  -> repeating <UniqueId>/<LinkToXML>/<Title> blocks (EN + FR
+#             interleaved; keep the /eng/ block). fetch: GET /eng/XML/<id>.xml -> <Statute> | <Regulation>
+#             root (regulation XML carries a UTF-8 BOM). Licence: Reproduction of Federal Law Order
+#             SI/97-5 — commercial reuse permitted.
+# ==================================================================================================
+
+CA_JUSTICE_BASE = "https://laws-lois.justice.gc.ca/eng/XML"
+CA_JUSTICE_PAGE = "https://laws-lois.justice.gc.ca/eng/{kind}/{id}/"
+CA_FED_SEED: list[dict] = [
+    {"id": "C-15.31", "en": "Canadian Environmental Protection Act, 1999 (CEPA)"},
+    {"id": "SOR-2022-138", "en": "Single-use Plastics Prohibition Regulations"},
+    {"id": "SOR-2021-25", "en": "Cross-border Movement of Hazardous Waste and Hazardous Recyclable Material Regs"},
+]
+# EPR / circular-economy title keywords for scanning the federal catalog (English titles).
+CA_FED_KEYWORDS = re.compile(
+    r"(recycl|\bwaste\b|plastic|packaging|hazardous|stewardship|environmental protection|"
+    r"deposit|single-use|end-of-life|circular economy)", re.I
+)
+
+
+class CanadaJusticeClient(ForeignSourceClient):
+    """Justice Laws federal adapter. Enacted Canadian federal Acts + Regulations, structured XML."""
+
+    region = "CA"
+    source = "justice"
+
+    def __init__(self, timeout: float = 60.0):
+        super().__init__(timeout)
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out: dict[str, str] = {seed["id"]: seed["en"] for seed in CA_FED_SEED}
+        try:
+            r = await self.http.get(f"{CA_JUSTICE_BASE}/Legis.xml")
+            r.raise_for_status()
+            catalog = r.text
+        except httpx.HTTPError as e:
+            log.warning("ca_fed_catalog_failed", error=str(e))
+            return list(out.items())
+        # Each <UniqueId>…</UniqueId> block holds this entry's own LinkToXML + Title; the EN + FR
+        # mirrors are separate blocks with the same id (the FR LinkToXML points at /fra/XML/).
+        for chunk in catalog.split("<UniqueId>")[1:]:
+            uid = chunk[: chunk.find("</UniqueId>")].strip()
+            if not uid or uid in out:
+                continue
+            link_m = re.search(r"<LinkToXML>([^<]+)</LinkToXML>", chunk)
+            title_m = re.search(r"<Title>([^<]+)</Title>", chunk)
+            if not link_m or not title_m or "/eng/XML/" not in link_m.group(1):
+                continue  # skip the FR mirror block (and malformed rows)
+            if CA_FED_KEYWORDS.search(title_m.group(1)):
+                out.setdefault(uid, "")
+        log.info("ca_fed_discovered", total=len(out), seeded=sum(1 for v in out.values() if v))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{CA_JUSTICE_BASE}/{source_id}.xml")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("ca_fed_fetch_failed", id=source_id, error=str(e))
+            return None
+        raw = r.text.lstrip("﻿")  # regulation XML carries a UTF-8 BOM
+        is_reg = "<Regulation" in raw[:400]
+        title_m = re.search(r"<(LongTitle|ShortTitle)\b[^>]*>(.*?)</\1>", raw, re.S)
+        title = _strip_tags(title_m.group(2)) if title_m else (english_label or source_id)
+        full_text = _strip_tags(raw)
+        if len(full_text) < 100:
+            log.warning("ca_fed_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, english_label=english_label,
+            source_url=CA_JUSTICE_PAGE.format(kind="regulations" if is_reg else "acts", id=source_id),
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# British Columbia: BC Laws CiviX. Grade A — append /xml to a document id for structured XML.
+#   fetch:    GET /civix/document/id/complete/statreg/<id>/xml   (single-file reg/act part)
+#   discover: GET /civix/search/complete/fullsearch?q=<term>&s=0&e=N -> <doc><CIVIX_DOCUMENT_ID>/<..TITLE>
+#             (default search is OR + very broad, so keep only hits whose TITLE looks EPR-relevant).
+# Multi-part acts expose <id>_00 as an HTML TOC with parts at <id>_01.._NN; we seed the single-file
+# regs (BC's core EPR levers) — multi-part act assembly is a later enhancement. Licence: BC Crown
+# (Queen's Printer) licence — commercial use permitted.
+# --------------------------------------------------------------------------------------------------
+
+CA_BC_BASE = "https://www.bclaws.gov.bc.ca/civix"
+CA_BC_DOC = CA_BC_BASE + "/document/id/complete/statreg/{id}"
+CA_BC_SEED: list[dict] = [
+    {"id": "449_2004", "en": "Recycling Regulation (B.C. Reg. 449/2004) — BC's core EPR regulation"},
+]
+CA_BC_TERMS = ["recycling regulation", "extended producer responsibility", "product stewardship"]
+_BC_DOC_ID_RE = re.compile(r"<CIVIX_DOCUMENT_ID>([^<]+)</CIVIX_DOCUMENT_ID>")
+_BC_DOC_TITLE_RE = re.compile(r"<CIVIX_DOCUMENT_TITLE>([^<]+)</CIVIX_DOCUMENT_TITLE>")
+_BC_RELEVANT = re.compile(
+    r"(recycl|stewardship|producer responsibilit|deposit|packaging|beverage container|circular)", re.I
+)
+_BC_TITLE_RE = re.compile(r"<bcl:title\b[^>]*>(.*?)</bcl:title>", re.S | re.I)
+
+
+class CanadaBcLawsClient(ForeignSourceClient):
+    """BC Laws CiviX adapter. British Columbia statutes/regulations, structured XML."""
+
+    region = "CA"
+    source = "bclaws"
+
+    def __init__(self, timeout: float = 45.0):
+        super().__init__(timeout)
+        self._titles: dict[str, str] = {}
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out: dict[str, str] = {seed["id"]: seed["en"] for seed in CA_BC_SEED}
+        for term in CA_BC_TERMS:
+            params = {"q": term, "s": 0, "e": 25, "nFrag": 1, "lFrag": 80}
+            try:
+                r = await self.http.get(f"{CA_BC_BASE}/search/complete/fullsearch", params=params)
+                r.raise_for_status()
+                payload = r.text
+            except httpx.HTTPError as e:
+                log.warning("ca_bc_search_failed", term=term, error=str(e))
+                continue
+            for block in re.split(r"<doc\b", payload)[1:]:
+                idm = _BC_DOC_ID_RE.search(block)
+                tm = _BC_DOC_TITLE_RE.search(block)
+                if not idm or not tm:
+                    continue
+                title = tm.group(1).strip()
+                if not _BC_RELEVANT.search(title):  # tighten the broad OR search to EPR-ish titles
+                    continue
+                doc_id = idm.group(1).strip()
+                self._titles[doc_id] = title
+                out.setdefault(doc_id, "")
+        log.info("ca_bc_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        if source_id.endswith("_00"):  # multi-part act root returns an HTML TOC, not statute XML
+            log.info("ca_bc_skip_toc", id=source_id)
+            return None
+        try:
+            r = await self.http.get(f"{CA_BC_DOC.format(id=source_id)}/xml")
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("ca_bc_fetch_failed", id=source_id, error=str(e))
+            return None
+        raw = r.text
+        tm = _BC_TITLE_RE.search(raw)
+        title = (_strip_tags(tm.group(1)) if tm
+                 else self._titles.get(source_id) or english_label or source_id)
+        full_text = _strip_tags(raw)
+        if len(full_text) < 100:
+            log.warning("ca_bc_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=CA_BC_DOC.format(id=source_id), english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Ontario: e-Laws. The public pages (ontario.ca/laws/…) are a React SPA — DO NOT crawl them. The SPA
+# is backed by an open, no-auth JSON API (reverse-engineered + verified live 2026-07-03):
+#   fetch:    GET /laws/api/v2/legislation/en/doc-search/<type>/<code>
+#             -> {volume, content:<consolidated HTML string, Word-derived markup>}
+# We seed the enacted Ontario EPR statutes/regs (ids confirmed against the API; regulation code =
+# yy + zero-padded reg number). Autocomplete-based discovery (/laws/api/v2/laws/autocomplete) is a
+# later enhancement. source_id = "<type>/<code>". Licence: King's Printer for Ontario permits
+# reproduction of statutes/regulations without permission. Risk: undocumented API — pin a health check.
+# --------------------------------------------------------------------------------------------------
+
+CA_ON_BASE = "https://www.ontario.ca/laws"
+CA_ON_API = CA_ON_BASE + "/api/v2/legislation/en/doc-search/{type}/{code}"
+CA_ON_PAGE = CA_ON_BASE + "/{type}/{code}"
+CA_ON_SEED: list[dict] = [
+    {"type": "statute", "code": "16r12", "en": "Resource Recovery and Circular Economy Act, 2016 (RRCEA)"},
+    {"type": "regulation", "code": "210391", "en": "O. Reg. 391/21 — Blue Box (packaging EPR)"},
+    {"type": "regulation", "code": "200522", "en": "O. Reg. 522/20 — Batteries (EPR)"},
+    {"type": "regulation", "code": "200542", "en": "O. Reg. 542/20 — Electrical & Electronic Equipment (EPR)"},
+    {"type": "regulation", "code": "210449", "en": "O. Reg. 449/21 — Hazardous & Special Products (EPR)"},
+]
+
+
+class CanadaOntarioClient(ForeignSourceClient):
+    """Ontario e-Laws adapter over the SPA's backing JSON API (undocumented, no auth)."""
+
+    region = "CA"
+    source = "elaws"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = {f"{s['type']}/{s['code']}": s["en"] for s in CA_ON_SEED}
+        log.info("ca_on_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            doc_type, code = source_id.split("/", 1)
+        except ValueError:
+            return None
+        try:
+            r = await self.http.get(CA_ON_API.format(type=doc_type, code=code))
+            r.raise_for_status()
+            data = r.json()
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("ca_on_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(data.get("content") or "")
+        if len(full_text) < 100:
+            log.warning("ca_on_thin_text", id=source_id, chars=len(full_text))
+            return None
+        title = english_label or _strip_tags(data.get("volume", "")) or source_id
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, english_label=english_label,
+            source_url=CA_ON_PAGE.format(type=doc_type, code=code),
+        )
+
+
+# ==================================================================================================
+# Australia — federal + states (EPR/container-deposit is largely state-level). region="AU"; the
+# jurisdiction is carried in `source`. See docs/FEDERATED_EXPANSION_PLAN.md.
+# --------------------------------------------------------------------------------------------------
+# Federal: Register of Legislation. Grade A — OData v4 API (no auth); text via the website text view.
+#   discover: GET /v1/titles?$filter=contains(name,'<term>')&$select=id,name,collection,status,isInForce
+#   fetch:    GET https://www.legislation.gov.au/<id>/latest/text  (server HTML; the OData text stream
+#             is broken). Licence: CC BY 4.0.
+# --------------------------------------------------------------------------------------------------
+
+AU_FED_API = "https://api.prod.legislation.gov.au/v1/titles"
+AU_FED_TEXT = "https://www.legislation.gov.au/{id}/latest/text"
+AU_FED_TERMS = ["Recycling and Waste Reduction", "Product Stewardship", "Packaging", "Hazardous Waste"]
+
+
+class AustraliaFederalClient(ForeignSourceClient):
+    """Federal Register of Legislation adapter (OData discovery + website text-view fetch)."""
+
+    region = "AU"
+    source = "legislation"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out: dict[str, str] = {}
+        for term in AU_FED_TERMS:
+            params = {"$filter": f"contains(name,'{term}')",
+                      "$select": "id,name,collection,status,isInForce"}
+            try:
+                r = await self.http.get(AU_FED_API, params=params)
+                r.raise_for_status()
+                data = r.json()
+            except (httpx.HTTPError, ValueError) as e:
+                log.warning("au_fed_search_failed", term=term, error=str(e))
+                continue
+            for row in data.get("value", []):
+                if row.get("collection") not in ("Act", "LegislativeInstrument"):
+                    continue  # skip Gazette notices / other collections
+                if row.get("isInForce") is False:
+                    continue
+                rid = row.get("id")
+                if rid:
+                    out.setdefault(rid, row.get("name", ""))
+        log.info("au_fed_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(AU_FED_TEXT.format(id=source_id))
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("au_fed_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(r.text)
+        if len(full_text) < 100:
+            log.warning("au_fed_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=AU_FED_TEXT.format(id=source_id), english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# NSW / QLD / TAS share one platform + URL grammar ("EnAct"):
+#   https://www.<host>/view/whole/<fmt>/inforce/current/act-YYYY-NNN
+# QLD + TAS serve official consolidated XML (fmt="xml"); NSW is HTML-only (fmt="html") and REQUIRES a
+# browser UA (403 without — the base client already sends one). Seeded with each state's CDS/EPR acts;
+# A-Z browse discovery is a later enhancement. Licence: CC BY 4.0 in all three.
+# --------------------------------------------------------------------------------------------------
+
+# A fuller, realistic browser Accept set + gzip/deflate (NOT br — brotli 520s) for the EnAct hosts;
+# harmless for QLD/TAS which serve XML fine without it.
+_ENACT_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate",
+}
+
+
+async def impersonate_get(url: str, timeout: float = 45.0) -> str | None:
+    """Fetch a URL through a browser-impersonating TLS stack (curl_cffi) to clear Cloudflare bot
+    management that fingerprints the TLS ClientHello — headers/HTTP2/host tricks don't help because the
+    block is at the handshake (system curl passes, plain httpx gets a hard 403). Used by NSW; the same
+    escape hatch fits any future Cloudflare-fronted portal (e.g. SA's flaky WAF). Returns text or None."""
+    try:
+        from curl_cffi.requests import AsyncSession
+    except ImportError:
+        log.warning("curl_cffi_missing", hint="pip install curl_cffi to fetch Cloudflare-fronted hosts")
+        return None
+    # Cloudflare 52x (520/522/524…) are transient origin/edge errors, not blocks — retry a couple times.
+    for attempt in range(3):
+        try:
+            async with AsyncSession() as s:
+                r = await s.get(url, impersonate="chrome", timeout=timeout)
+        except Exception as e:  # curl_cffi raises its own (non-httpx) error hierarchy
+            log.warning("impersonate_get_failed", url=url, error=str(e), attempt=attempt)
+            continue
+        if r.status_code == 200:
+            return r.text
+        if not (520 <= r.status_code <= 529):
+            log.warning("impersonate_get_status", url=url, status=r.status_code)
+            return None
+        log.info("impersonate_get_retry", url=url, status=r.status_code, attempt=attempt)
+    return None
+
+
+class AustraliaEnActClient(ForeignSourceClient):
+    """Shared base for the NSW/QLD/TAS 'view/whole' platform. Subclass sets host, source, fmt, seeds."""
+
+    region = "AU"
+    host: str = ""            # e.g. "legislation.qld.gov.au"
+    fmt: str = "xml"          # "xml" (QLD/TAS) or "html" (NSW)
+    seeds: list[dict] = []    # [{"id": "act-2011-031", "en": "…"}]
+    impersonate: bool = False  # True for Cloudflare-fronted hosts (NSW) — fetch via curl_cffi
+
+    def _doc_url(self, source_id: str) -> str:
+        return f"https://www.{self.host}/view/whole/{self.fmt}/inforce/current/{source_id}"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = {s["id"]: s["en"] for s in self.seeds}
+        log.info("au_enact_discovered", source=self.source, total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        url = self._doc_url(source_id)
+        if self.impersonate:
+            raw = await impersonate_get(url, self._timeout)
+            if raw is None:
+                log.warning("au_enact_fetch_failed", source=self.source, id=source_id, error="impersonate")
+                return None
+        else:
+            try:
+                r = await self.http.get(url, headers=_ENACT_HEADERS)
+                r.raise_for_status()
+                raw = r.text
+            except httpx.HTTPError as e:
+                log.warning("au_enact_fetch_failed", source=self.source, id=source_id, error=str(e))
+                return None
+        full_text = _strip_tags(raw)
+        if len(full_text) < 100:
+            log.warning("au_enact_thin_text", source=self.source, id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=self._doc_url(source_id), english_label=english_label,
+        )
+
+
+class AustraliaNswClient(AustraliaEnActClient):
+    source = "nsw"
+    host = "legislation.nsw.gov.au"
+    fmt = "html"  # NSW XML export is a JS form; whole/html is the fetchable full text
+    impersonate = True  # Cloudflare TLS-fingerprint challenge — fetch via curl_cffi
+    seeds = [
+        {"id": "act-2001-058", "en": "Waste Avoidance and Resource Recovery Act 2001 (NSW — container deposit)"},
+        {"id": "act-2021-031", "en": "Plastic Reduction and Circular Economy Act 2021 (NSW)"},
+    ]
+
+
+class AustraliaQldClient(AustraliaEnActClient):
+    source = "qld"
+    host = "legislation.qld.gov.au"
+    fmt = "xml"
+    seeds = [
+        {"id": "act-2011-031",
+         "en": "Waste Reduction and Recycling Act 2011 (QLD — container refund + plastics bans)"},
+    ]
+
+
+class AustraliaTasClient(AustraliaEnActClient):
+    source = "tas"
+    host = "legislation.tas.gov.au"
+    fmt = "xml"
+    seeds = [
+        {"id": "act-2022-005", "en": "Container Refund Scheme Act 2022 (TAS)"},
+    ]
+
+
 # Registry of available foreign adapters, by region code. New countries: add the subclass + register.
 # Note: a registry key is just a lookup handle (e.g. "FR_CODE"); the client's own `.region` drives the
 # row's region (LegifranceCodeClient writes region="FR"), so JORF + codified FR data co-exist.
@@ -2155,6 +2787,18 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "LT": LithuaniaESeimasClient,
     "SI": SloveniaUradniClient,
     "CZ": CzechiaESbirkaClient,
+    # China (region="CN"): national DB + State Council policy library.
+    "CN": ChinaFlkClient,
+    "CN_GOV": ChinaGovCnClient,
+    # Canada (region="CA"): federal + provinces (province carried in `source`).
+    "CA": CanadaJusticeClient,
+    "CA_BC": CanadaBcLawsClient,
+    "CA_ON": CanadaOntarioClient,
+    # Australia (region="AU"): federal + states (state carried in `source`).
+    "AU": AustraliaFederalClient,
+    "AU_NSW": AustraliaNswClient,
+    "AU_QLD": AustraliaQldClient,
+    "AU_TAS": AustraliaTasClient,
 }
 
 

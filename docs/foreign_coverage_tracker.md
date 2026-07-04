@@ -47,9 +47,9 @@ Status legend: **BUILT** (adapter live, in corpus) · **ASSESSED** (portal resea
 | Norway | A | api.lovdata.no publicData bulk tar.bz2 | MED | heavy full-corpus download |
 | New Zealand | A | data.govt.nz PCO bulk XML | MED | site bot-blocks HTTP; bespoke DTD; English |
 | Belgium | C / E (Flanders A) | codex.opendata.api.vlaanderen.be (VLAREMA) | MED | EPR is regional; Flanders clean JSON |
-| Australia | E (federal A) | api.prod.legislation.gov.au OData | MED | EPR mostly state CDS |
-| Canada | E (BC A) | bclaws CiviX API; federal XML | MED | EPR provincial (ON/BC/QC) |
-| China | B | flk.npc.gov.cn JSON (reverse-engineered) | MED | Chinese only; undocumented |
+| Australia | A (fed/QLD/TAS) – C (VIC) | api.prod.legislation.gov.au OData + per-state portals | **BUILT (P1)** | AU/AU_QLD/AU_TAS live; AU_NSW blocked (Cloudflare TLS). See FEDERATED_EXPANSION_PLAN.md |
+| Canada | A (fed/BC/ON) – D (AB/SK) | Justice XML, CiviX, e-Laws JSON API | **BUILT (P1)** | CA/CA_BC/CA_ON live + validated. See FEDERATED_EXPANSION_PLAN.md |
+| China | A- | flk.npc.gov.cn (verified: no auth/captcha/geo-block) | **BUILT (P1)** | CN (flk DOCX) + CN_GOV live + validated. See FEDERATED_EXPANSION_PLAN.md |
 | Turkiye | C | mevzuat.gov.tr (predictable HTML/PDF) | MED | no catalog API |
 | Portugal | C | DRE (Angular SPA, needs headless) | LOW | strong EPR but SPA |
 | Argentina | C | InfoLEG HTML | LOW | EPR thin/subnational |

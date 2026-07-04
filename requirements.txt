@@ -7,6 +7,7 @@ asyncpg==0.30.0
 pydantic==2.9.2
 pydantic-settings==2.5.2
 httpx>=0.25.0
+curl_cffi>=0.7  # browser-TLS impersonation for Cloudflare-fronted law portals (e.g. AU NSW legislation)
 tenacity==9.0.0
 anthropic==0.88.0
 apscheduler==3.10.4

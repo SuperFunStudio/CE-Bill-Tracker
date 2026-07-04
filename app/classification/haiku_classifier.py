@@ -78,6 +78,9 @@ REGION_LABELS = {
     "LT": "Lithuania",
     "SI": "Slovenia",
     "CZ": "Czechia",
+    "CA": "Canada",
+    "AU": "Australia",
+    "CN": "China",
 }
 
 

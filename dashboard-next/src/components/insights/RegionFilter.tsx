@@ -23,6 +23,9 @@ const NON_EU_LABELS: Record<string, string> = {
   CH: 'Switzerland',
   NO: 'Norway',
   KR: 'South Korea',
+  CN: 'China',
+  CA: 'Canada',
+  AU: 'Australia',
 };
 
 export function regionLabel(code: string): string {
@@ -34,6 +37,7 @@ const ANCHORS = ['US', 'EU'];
 const REST = [
   'UK', 'FR', 'DE', 'JP', 'PL', 'SE', 'NL', 'ES', 'FI', 'IE', 'DK',
   'CL', 'CH', 'SI', 'BR', 'AT', 'LU', 'LV', 'SK', 'LT', 'CZ', 'EE',
+  'CN', 'CA', 'AU',
 ].sort((a, b) => regionLabel(a).localeCompare(regionLabel(b)));
 const REGION_CODES = [...ANCHORS, ...REST];
 

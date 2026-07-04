@@ -1,7 +1,8 @@
 """Ingest foreign national circular-economy / EPR law into the bills table (pluggable per region).
 
 Generalizes scripts/ingest_eurlex.py to non-EU jurisdictions via app.ingestion.foreign. Each region has
-an adapter registered in FOREIGN_CLIENTS (today: JP = e-Gov 法令API). Every law becomes a
+an adapter registered in FOREIGN_CLIENTS (JP/FR/UK/DE/…/CN/CA/AU — see the dict for keys; subnational
+jurisdictions share a country region, e.g. CA_BC/CA_ON write region="CA"). Every law becomes a
 region=<XX>, state=<XX> bill keyed on foreign_id, with full text in bill_texts, then the region-aware
 ClassificationPipeline judges relevance (Haiku) + extracts compliance detail (Sonnet).
 

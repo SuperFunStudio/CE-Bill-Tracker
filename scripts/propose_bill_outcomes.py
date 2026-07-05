@@ -304,6 +304,25 @@ def resolve_bill_id(engine, state, bill_number):
         ).scalar()
 
 
+# Bounded VARCHAR columns on bill_outcome (see models.BillOutcome). The model occasionally returns a
+# label/unit/bill-number longer than the column, which errored the whole per-row insert (hit on an AU
+# used-oil row whose remediation_bill_number was 62 chars vs the 50-char column). Clamp defensively.
+_MAXLEN = {
+    "slug": 100, "bill_number": 50, "instrument_type": 50, "direction": 10,
+    "metric_unit": 40, "metric_display": 120, "attribution": 20, "source_name": 200,
+    "remediation_bill_number": 50,
+}
+
+
+def _clip(payload):
+    """Truncate bounded string fields to their column limits; leave Text/None fields untouched."""
+    for k, n in _MAXLEN.items():
+        v = payload.get(k)
+        if isinstance(v, str) and len(v) > n:
+            payload[k] = v[:n]
+    return payload
+
+
 def upsert_outcome(engine, t, cand, slug):
     """Insert as reviewed=FALSE. On slug conflict, refresh ONLY if the existing row is still unreviewed
     (never clobber a human-approved figure)."""
@@ -362,7 +381,7 @@ def upsert_outcome(engine, t, cand, slug):
               remediated_by_bill_id=excluded.remediated_by_bill_id,
               remediation_checked_at=now()
             where bill_outcome.reviewed = false
-        """), payload)
+        """), _clip(payload))
 
 
 def main():

@@ -36,6 +36,11 @@ interface RegionCtx {
   setRegions: (r: string[]) => void;
   regionsParam: string | undefined; // CSV for the API; undefined = all
   region: RegionCode;               // derived primary (US/EU) for single-region views
+  /** Whether US-shaped UI should show (US-only nav items, the State filter, the states leaderboard).
+   *  True on "All regions" (US is the flagship) and whenever US is in the selection — but NOT for a
+   *  pure foreign selection (e.g. Japan alone), which previously fell through to the US primary and
+   *  wrongly rendered the US nav + State dropdown + states ticker. */
+  isUsView: boolean;
   def: RegionDef;
 }
 
@@ -44,6 +49,7 @@ const RegionContext = createContext<RegionCtx>({
   setRegions: () => {},
   regionsParam: undefined,
   region: 'US',
+  isUsView: true,
   def: REGIONS[0],
 });
 
@@ -71,9 +77,10 @@ export function RegionProvider({ children }: { children: React.ReactNode }) {
 
   const regionsParam = regions.length ? regions.join(',') : undefined;
   const region = primaryOf(regions);
+  const isUsView = regions.length === 0 || regions.includes('US');
 
   return (
-    <RegionContext.Provider value={{ regions, setRegions, regionsParam, region, def: regionDef(region) }}>
+    <RegionContext.Provider value={{ regions, setRegions, regionsParam, region, isUsView, def: regionDef(region) }}>
       {children}
     </RegionContext.Provider>
   );

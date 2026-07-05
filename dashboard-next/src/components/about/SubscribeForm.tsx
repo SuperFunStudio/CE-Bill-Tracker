@@ -33,7 +33,14 @@ function subJurisdictions(region: string): [string, string][] {
     .sort((a, b) => a[1].localeCompare(b[1]));
 }
 
-export function SubscribeForm() {
+export interface SubscribeFormPrefill {
+  /** US state codes to preselect (e.g. the Packaging Studio's chosen markets). */
+  usStates?: string[];
+  /** material_category slugs to preselect (e.g. the materials in a studio spec). */
+  materials?: string[];
+}
+
+export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = {}) {
   const [email, setEmail] = useState('');
   const [organization, setOrganization] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
@@ -50,14 +57,24 @@ export function SubscribeForm() {
   const { ready, scope } = useScope();
   const [prefilled, setPrefilled] = useState(false);
   useEffect(() => {
-    if (ready && !prefilled && (scope.states.length > 0 || scope.materials.length > 0)) {
+    if (prefilled) return;
+    // Explicit prefill from the host page (e.g. the Packaging Studio spec) wins over the saved scope.
+    if (prefill && ((prefill.usStates?.length ?? 0) > 0 || (prefill.materials?.length ?? 0) > 0)) {
+      if (prefill.usStates?.length) {
+        setRegionSel(prev => ({ ...prev, US: { included: true, all: false, codes: prefill.usStates! } }));
+      }
+      if (prefill.materials?.length) setMaterials(prefill.materials);
+      setPrefilled(true);
+      return;
+    }
+    if (ready && (scope.states.length > 0 || scope.materials.length > 0)) {
       if (scope.states.length > 0) {
         setRegionSel(prev => ({ ...prev, US: { included: true, all: false, codes: scope.states } }));
       }
       if (scope.materials.length > 0) setMaterials(scope.materials);
       setPrefilled(true);
     }
-  }, [ready, prefilled, scope]);
+  }, [ready, prefilled, scope, prefill]);
 
   const toggleTopic = (t: string) =>
     setTopics(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));

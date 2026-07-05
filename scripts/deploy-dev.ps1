@@ -12,5 +12,5 @@
 $ErrorActionPreference = "Stop"
 $PROJECT = "ce-bill-tracker"
 
-Write-Host "Submitting DEV build (cloudbuild.dev.yaml) — shipping the working tree..." -ForegroundColor Cyan
+Write-Host "Submitting DEV build (cloudbuild.dev.yaml) - shipping the working tree..." -ForegroundColor Cyan
 gcloud builds submit --config=cloudbuild.dev.yaml --project=$PROJECT

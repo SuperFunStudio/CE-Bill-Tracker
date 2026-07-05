@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, microsoftProvider } from '@/lib/firebase';
 import { track } from '@/lib/analytics';
-import { startProCheckout, startSignupTrial } from '@/lib/billing';
+import { startProCheckout, startSignupTrial, billingErrorMessage } from '@/lib/billing';
 import { attributeReferral, PENDING_REF_KEY } from '@/lib/referrals';
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -50,10 +50,15 @@ interface AuthState {
   resendVerification: () => Promise<void>;
   /** Send a Firebase password-reset email to the given address (no-op feedback handled by caller). */
   resetPassword: (email: string) => Promise<void>;
-  /** Ephemeral page-level confirmation message (e.g. just-signed-up), or null. Auto-dismisses. */
-  toast: string | null;
+  /** Shown after sign-out (and account deletion, which signs out too): a parting "impact fact"
+   *  so leaving the product ends on a positive, shareable note rather than a blank screen. */
+  farewellOpen: boolean;
+  closeFarewell: () => void;
+  /** Ephemeral page-level confirmation message (e.g. just-signed-up), or null. Auto-dismisses.
+   *  ReactNode so a toast can carry a link (e.g. "Saved to your portfolio"). */
+  toast: React.ReactNode | null;
   /** Show a toast for a few seconds. */
-  showToast: (message: string) => void;
+  showToast: (message: React.ReactNode) => void;
   /** Dismiss the current toast immediately. */
   dismissToast: () => void;
 }
@@ -66,14 +71,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [farewellOpen, setFarewellOpen] = useState(false);
+  const [toast, setToast] = useState<React.ReactNode | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dismissToast = useCallback(() => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(null);
   }, []);
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((message: React.ReactNode) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(message);
     toastTimer.current = setTimeout(() => setToast(null), 8000);
@@ -136,7 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // when a brand-new signup completes, not on every later sign-in. Nudges them to the email (which
     // can land in spam) so the welcome isn't missed.
     if (granted) {
-      showToast("🎉 You're all signed up! Look out for a welcome email from us — check your spam folder just in case.");
+      showToast("🎉 You're all signed up! Check your inbox for a welcome email — and your spam folder just in case.");
     }
   }, [attributePendingReferral, getToken, fetchEntitlement, showToast]);
 
@@ -241,6 +247,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     await fbSignOut(auth);
+    // Leave on a positive note — surface a parting impact fact.
+    setFarewellOpen(true);
   }, []);
 
   const value: AuthState = {
@@ -262,6 +270,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     emailVerified: !!user?.emailVerified,
     resendVerification,
     resetPassword,
+    farewellOpen,
+    closeFarewell: () => setFarewellOpen(false),
     toast,
     showToast,
     dismissToast,
@@ -282,7 +292,7 @@ export function useAuth(): AuthState {
  * subscriber runs the action. Returns true only when the action actually ran.
  */
 export function useProGate(): (action: () => void, feature?: string) => boolean {
-  const { user, isPro, openAuth, getToken } = useAuth();
+  const { user, isPro, openAuth, getToken, showToast } = useAuth();
   return useCallback(
     (action: () => void, feature?: string) => {
       // gate_hit captures the conversion decision at every gated feature: did it wall the visitor at
@@ -294,13 +304,15 @@ export function useProGate(): (action: () => void, feature?: string) => boolean 
       }
       if (!isPro) {
         track('gate_hit', { gate: 'pro', outcome: 'checkout', feature });
-        startProCheckout(getToken);
+        // startProCheckout redirects to Stripe on success; on failure it rejects. Catch it so a
+        // failed checkout gives the user feedback instead of a dead click + unhandled rejection.
+        startProCheckout(getToken).catch(e => showToast(billingErrorMessage(e)));
         return false;
       }
       track('gate_hit', { gate: 'pro', outcome: 'allowed', feature });
       action();
       return true;
     },
-    [user, isPro, openAuth, getToken],
+    [user, isPro, openAuth, getToken, showToast],
   );
 }

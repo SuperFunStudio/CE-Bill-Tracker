@@ -6,6 +6,7 @@ import { RegionProvider } from './RegionContext';
 import { ScopeProvider } from '@/components/scope/ScopeContext';
 import { AuthProvider } from '@/components/auth/AuthContext';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { FarewellModal } from '@/components/auth/FarewellModal';
 import { Toast } from '@/components/ui/Toast';
 import { WatchlistProvider } from '@/components/watchlist/WatchlistContext';
 import { hydrateSnapshots } from '@/lib/snapshot';
@@ -38,6 +39,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             </RegionProvider>
           </WatchlistProvider>
           <AuthModal />
+          <FarewellModal />
           <Toast />
         </AuthProvider>
       </ThemeProvider>

@@ -538,6 +538,53 @@ class CompliancePathwaySummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FeeScheduleRate(BaseModel):
+    """One published per-format rate from the CA SB 54 (2027 draft) fee schedule.
+
+    `tier` is best | representative | worst within the material category — the published
+    low/high formats that bound the eco-modulation spread. The plastic adder (Reuse +
+    PPMF, plastic CMCs only) is exposed as its own field rather than baked into the base:
+    total_cents_per_lb = base_cents_per_lb + plastic_adder_cents_per_lb, and
+    usd_per_tonne is computed from the total. `format_name` is null for the
+    representative tier (a category blend, not a single published format).
+    """
+    tier: str  # "best" | "representative" | "worst"
+    format_name: str | None = None
+    base_cents_per_lb: float
+    plastic_adder_cents_per_lb: float
+    total_cents_per_lb: float
+    usd_per_tonne: int
+    # Program's own published high scenario (≈2.5x low); populated on the representative tier.
+    usd_per_tonne_high: int | None = None
+
+
+class FeeScheduleCategory(BaseModel):
+    material_category: str  # canonical form (app/scoring/materials.py vocabulary)
+    aliases: list[str] = []  # raw tokens that canonicalize to this category
+    includes_plastic_adder: bool
+    note: str | None = None
+    rates: list[FeeScheduleRate]
+
+
+class FeeSchedulePlasticAdder(BaseModel):
+    """The Reuse Investment + Plastic Pollution Mitigation Fund adders (plastic CMCs only)."""
+    reuse_cents_per_lb: float
+    ppmf_cents_per_lb: float
+    total_cents_per_lb: float
+    applies_to: str = "plastic material categories only"
+
+
+class FeeScheduleResponse(BaseModel):
+    program: str
+    basis: str  # exact citation from the source-of-truth module
+    source_url: str
+    rates_final_expected: str
+    lb_per_tonne: float
+    high_scenario_multiplier: float
+    plastic_adder: FeeSchedulePlasticAdder
+    categories: list[FeeScheduleCategory]
+
+
 # --- Real-world outcomes (bill_outcome) ---
 
 

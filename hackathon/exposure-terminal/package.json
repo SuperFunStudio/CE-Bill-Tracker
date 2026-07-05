@@ -1,0 +1,13 @@
+{
+  "name": "exposure-terminal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The EPR short book — rank producers by unpriced Extended Producer Responsibility liability. Hackathon entry, persona: Jordan Wu, 'The Short Book'.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

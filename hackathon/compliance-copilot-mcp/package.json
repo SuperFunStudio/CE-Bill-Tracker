@@ -1,0 +1,34 @@
+{
+  "name": "compliance-copilot-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that turns the SignalScout EPR/circular-economy API into tools any LLM can call to answer \"am I compliant?\"",
+  "type": "module",
+  "bin": {
+    "compliance-copilot-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "epr",
+    "compliance",
+    "circular-economy",
+    "signalscout"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0"
+  }
+}

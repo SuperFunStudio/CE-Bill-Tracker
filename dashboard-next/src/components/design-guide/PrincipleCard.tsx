@@ -20,14 +20,18 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
   const title = displayName ?? lever.name;
 
   return (
-    <div className="[perspective:1400px] min-h-[320px]">
+    <div className="[perspective:1400px]">
+      {/* Both faces share one grid cell ([grid-area:1/1]) so the card auto-sizes to the TALLER face
+          rather than a fixed height. Absolute-positioned faces don't contribute height, which clipped
+          the flip button once the fee-impact + covered-products blocks made the front face taller than
+          the old 320px floor. Grid stacking also keeps the height stable across the flip (no jump). */}
       <div
-        className="relative h-full min-h-[320px] transition-transform duration-500 [transform-style:preserve-3d]"
+        className="grid min-h-[320px] transition-transform duration-500 [transform-style:preserve-3d]"
         style={{ transform: flipped ? 'rotateY(180deg)' : undefined }}
       >
         {/* ---- FRONT ---- */}
         <div
-          className="absolute inset-0 flex flex-col overflow-hidden rounded-xl border border-border-default bg-bg-secondary p-5 [backface-visibility:hidden]"
+          className="[grid-area:1/1] flex flex-col overflow-hidden rounded-xl border border-border-default bg-bg-secondary p-5 [backface-visibility:hidden]"
           aria-hidden={flipped}
         >
           <h3 className="font-serif text-lg text-text-primary leading-tight mb-2">{title}</h3>
@@ -47,12 +51,12 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
                 <div className="flex flex-wrap items-center gap-1.5">
                   {lever.feeImpact.malus && (
                     <span className="text-xs rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-text-secondary">
-                      ↑ Malus · poor design costs more
+                      ↑ Raises your fees
                     </span>
                   )}
                   {lever.feeImpact.bonus && (
                     <span className="text-xs rounded-full border border-green-accent/40 bg-green-dark/20 px-2 py-0.5 text-green-accent">
-                      ↓ Bonus · good design pays less
+                      ↓ Lowers your fees
                     </span>
                   )}
                 </div>
@@ -103,7 +107,7 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
 
         {/* ---- BACK ---- */}
         <div
-          className="absolute inset-0 flex flex-col overflow-hidden rounded-xl border border-green-accent/50 bg-bg-secondary p-5 [transform:rotateY(180deg)] [backface-visibility:hidden]"
+          className="[grid-area:1/1] flex flex-col overflow-hidden rounded-xl border border-green-accent/50 bg-bg-secondary p-5 [transform:rotateY(180deg)] [backface-visibility:hidden]"
           aria-hidden={!flipped}
         >
           <div className="flex items-center justify-between gap-2 mb-2">
@@ -127,7 +131,7 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
           <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">
             {billCount} bill{billCount === 1 ? '' : 's'} · tap to read
           </p>
-          <div className="flex flex-wrap content-start gap-1.5 flex-1 min-h-0 overflow-y-auto -mr-1 pr-1">
+          <div className="flex flex-wrap content-start gap-1.5 flex-1 min-h-0 max-h-[280px] overflow-y-auto -mr-1 pr-1">
             {lever.bills.map(b => (
               <button
                 key={b.billId}

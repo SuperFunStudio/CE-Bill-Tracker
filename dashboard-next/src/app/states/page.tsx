@@ -2,8 +2,10 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useBills } from '@/hooks/useBills';
+import { useRegion } from '@/components/layout/RegionContext';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { STATE_NAMES } from '@/lib/utils';
+import { EU_MEMBERS, jurisdictionDisplayName } from '@/lib/jurisdictions';
 
 /**
  * Pipeline stages, ordered from earliest to latest. A bill's momentum is how far
@@ -23,9 +25,29 @@ const STAGE_OF: Record<string, StageKey> = Object.fromEntries(
   STAGES.flatMap(s => s.statuses.map(st => [st, s.key])),
 );
 
+const ENACTED = new Set(['enacted', 'signed']);
+
 type SortMode = 'active' | 'enacted';
 
+// Which sub-jurisdiction board to show, derived from the global region selection (mirrors the
+// home-page leaderboard modes). "us" = US-state momentum board (the flagship default); "eu" = EU-wide
+// + member countries; "world" = every country we track (a lone foreign selection has no sub-board of
+// its own, so we surface the whole directory).
+type BoardMode = 'us' | 'eu' | 'world';
+
 export default function StatesPage() {
+  const { regions, isUsView } = useRegion();
+  const mode: BoardMode = isUsView
+    ? 'us'
+    : regions.includes('EU') || regions.some(r => r in EU_MEMBERS)
+      ? 'eu'
+      : 'world';
+
+  return mode === 'us' ? <UsStandings /> : <RegionStandings mode={mode} />;
+}
+
+/** US-state momentum leaderboard — the original "State Standings" board. */
+function UsStandings() {
   const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000 });
   const [sortBy, setSortBy] = useState<SortMode>('active');
 
@@ -34,6 +56,7 @@ export default function StatesPage() {
     const stages: Record<string, Record<StageKey, number>> = {};
     const counts: Record<string, number> = {};
     bills.forEach(b => {
+      if (b.region !== 'US') return;
       counts[b.state] = (counts[b.state] ?? 0) + 1;
       const stage = STAGE_OF[(b.status ?? '').toLowerCase()];
       if (stage) (stages[b.state] ??= blank())[stage] += 1;
@@ -119,7 +142,7 @@ export default function StatesPage() {
           {active.map((r, i) => (
             <li key={r.abbr} className="border-t border-border-default">
               <Link
-                href={`/states/${r.abbr.toLowerCase()}/`}
+                href={`/jurisdictions/us/${r.abbr.toLowerCase()}/`}
                 className="flex items-center gap-3 px-4 py-2 hover:bg-bg-secondary/60"
               >
                 <span className="font-serif text-text-muted w-6 text-right tabular-nums">{i + 1}</span>
@@ -157,7 +180,7 @@ export default function StatesPage() {
             {dormant.map(r => (
               <Link
                 key={r.abbr}
-                href={`/states/${r.abbr.toLowerCase()}/`}
+                href={`/jurisdictions/us/${r.abbr.toLowerCase()}/`}
                 title={r.name}
                 className="font-mono text-xs border border-border-default rounded px-2 py-1 text-text-muted hover:text-text-primary hover:border-text-muted"
               >
@@ -166,6 +189,97 @@ export default function StatesPage() {
             ))}
           </div>
         </section>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Non-US board — EU (EU-wide act + member countries) or the world country directory. These corpora
+ * are enacted-heavy national laws with no introduced→enacted funnel, so we rank by bill count and
+ * show an enacted-share bar instead of the US momentum stages.
+ */
+function RegionStandings({ mode }: { mode: 'eu' | 'world' }) {
+  const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000 });
+
+  const rows = useMemo(() => {
+    const groups: Record<string, { region: string; code: string; count: number; enacted: number }> = {};
+    for (const b of bills) {
+      if (b.region === 'US') continue;
+      const isEuWide = b.region === 'EU';
+      const isMember = b.region in EU_MEMBERS;
+      if (mode === 'eu' && !(isEuWide || isMember)) continue;
+      const key = isEuWide ? 'EU' : b.region;
+      const g = (groups[key] ??= { region: key, code: key, count: 0, enacted: 0 });
+      g.count += 1;
+      if (ENACTED.has((b.status ?? '').toLowerCase())) g.enacted += 1;
+    }
+    return Object.values(groups)
+      .map(g => ({ ...g, name: jurisdictionDisplayName(g.region, g.code) }))
+      .sort((a, b) => b.count - a.count || b.enacted - a.enacted || a.name.localeCompare(b.name));
+  }, [bills, mode]);
+
+  const title = mode === 'eu' ? 'Member State Standings' : 'World Standings';
+  const subtitle = mode === 'eu'
+    ? 'Circular-economy law across the European Union'
+    : 'Circular-economy law by country';
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto space-y-6">
+      <GazetteHeader title={title} subtitle={subtitle} />
+
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
+      </div>
+
+      <p className="text-text-secondary text-body -mt-2">
+        Ranked by tracked laws. The bar shows the share already enacted — national circular-economy law
+        is mostly in force rather than moving through a US-style pipeline.
+      </p>
+
+      {isError ? (
+        <div className="surface-inset px-4 py-8 text-center space-y-2">
+          <p className="text-body text-text-primary">Couldn&rsquo;t load standings.</p>
+          <button onClick={() => refetch()} className="text-sm text-green-accent hover:underline">Try again</button>
+        </div>
+      ) : isLoading ? (
+        <div className="space-y-2">{[...Array(6)].map((_, i) => <div key={i} className="h-9 bg-bg-secondary rounded animate-pulse" />)}</div>
+      ) : rows.length === 0 ? (
+        <p className="rounded-lg border border-border-default bg-bg-secondary px-4 py-6 text-body text-text-secondary text-center">
+          No tracked laws in this region yet.
+        </p>
+      ) : (
+        <ol className="rounded-lg border border-border-default overflow-hidden">
+          <li className="flex items-center gap-3 bg-bg-secondary px-4 py-2 text-xs uppercase tracking-wide text-text-muted">
+            <span className="w-6 text-right">#</span>
+            <span className="w-8">Jx</span>
+            <span className="flex-1">Jurisdiction</span>
+            <span className="w-16 text-right">Enacted</span>
+            <span className="w-12 text-right">Laws</span>
+          </li>
+          {rows.map((r, i) => (
+            <li key={`${r.region}/${r.code}`} className="border-t border-border-default">
+              <Link
+                href={`/jurisdictions/${r.region.toLowerCase()}/${r.code.toLowerCase()}/`}
+                className="flex items-center gap-3 px-4 py-2 hover:bg-bg-secondary/60"
+              >
+                <span className="font-serif text-text-muted w-6 text-right tabular-nums">{i + 1}</span>
+                <span className="font-mono font-bold text-green-accent w-8" title={r.name}>{r.code}</span>
+                <span className="flex-1 min-w-0 flex items-center gap-2">
+                  <span className="truncate text-sm text-text-primary">{r.name}</span>
+                  <span className="flex-1 h-2 rounded-sm overflow-hidden bg-bg-tertiary min-w-8" title={`${r.enacted} of ${r.count} enacted`}>
+                    <span
+                      className="block h-full"
+                      style={{ width: `${r.count ? (r.enacted / r.count) * 100 : 0}%`, backgroundColor: 'rgb(var(--green-accent))' }}
+                    />
+                  </span>
+                </span>
+                <span className="text-text-muted text-sm tabular-nums w-16 text-right">{r.enacted || '—'}</span>
+                <span className="font-serif text-text-primary tabular-nums w-12 text-right">{r.count}</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
       )}
     </div>
   );

@@ -1,0 +1,23 @@
+# Sample workflow: run Spec-Sheet Guard on every change to the packaging spec.
+# Copy this into the consuming repo's .github/workflows/.
+name: EPR Compliance Guard
+
+on:
+  pull_request:
+    paths:
+      - "packaging.yaml"
+      - "packaging.yml"
+  workflow_dispatch:
+
+jobs:
+  epr-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Install from the published package, or `npm i` + `npm run build` if vendored.
+      - run: npx spec-sheet-guard --spec packaging.yaml --github
+        # Fails the check when an unmet EPR obligation applies. Findings appear as
+        # inline PR annotations via ::error::/::warning:: workflow commands.

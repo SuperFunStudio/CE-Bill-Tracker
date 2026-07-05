@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Swap Studio — the material cost curve</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2a3441;
+    --ink:#e8edf3; --dim:#93a1b0; --faint:#5c6b7a;
+    --good:#3fb950; --mid:#d29922; --bad:#f85149; --accent:#58a6ff;
+    --mono:'SFMono-Regular',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  header{padding:22px 28px 16px;border-bottom:1px solid var(--line)}
+  header h1{margin:0;font-size:20px;letter-spacing:.3px}
+  header .sub{color:var(--dim);margin-top:4px;max-width:760px}
+  header .who{color:var(--faint);font-size:12px;margin-top:8px}
+  .wrap{display:grid;grid-template-columns:380px 1fr;gap:0;min-height:calc(100vh - 96px)}
+  .bench{border-right:1px solid var(--line);padding:20px;background:var(--panel);overflow:auto}
+  .stage{padding:20px 24px;overflow:auto}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--faint);margin:0 0 12px}
+  .comp{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+  .comp .row1{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .comp input.name{flex:1;background:transparent;border:none;color:var(--ink);font-weight:600;font-size:14px;padding:2px}
+  .comp input.name:focus{outline:none}
+  .comp .del{color:var(--faint);cursor:pointer;font-size:16px;border:none;background:none}
+  .comp .del:hover{color:var(--bad)}
+  select,input[type=number]{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:13px;font-family:var(--sans)}
+  select{width:100%}
+  .comp .row2{display:flex;gap:8px;align-items:center;margin-top:8px}
+  .comp .row2 label{color:var(--dim);font-size:12px}
+  .comp input.g{width:64px}
+  .addbtn{width:100%;background:transparent;border:1px dashed var(--line);color:var(--dim);border-radius:9px;padding:9px;cursor:pointer;font-size:13px}
+  .addbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .markets{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+  .chip{border:1px solid var(--line);background:var(--panel2);color:var(--dim);border-radius:20px;padding:5px 12px;cursor:pointer;font-size:12.5px;user-select:none}
+  .chip.on{border-color:var(--accent);color:#fff;background:#14304f}
+  .units{display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--dim);font-size:12.5px}
+  .units input{width:110px}
+  /* stage */
+  .headline{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px}
+  .metric .n{font-size:30px;font-weight:700;font-family:var(--mono);letter-spacing:-.5px}
+  .metric .l{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+  .metric .n.good{color:var(--good)} .metric .n.bad{color:var(--bad)} .metric .n.mid{color:var(--mid)}
+  .savebar{margin:14px 0 22px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--dim);font-size:13px}
+  .savebar b{color:var(--good)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+  .card .ch{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .card .ch .title{font-weight:700;font-size:15px}
+  .card .ch .now{font-family:var(--mono);color:var(--dim);font-size:12.5px}
+  .card .meta{color:var(--faint);font-size:12px;margin-bottom:12px}
+  .curve{display:flex;flex-direction:column;gap:3px}
+  .bar{display:grid;grid-template-columns:190px 1fr 96px;gap:10px;align-items:center;padding:3px 0;cursor:pointer;border-radius:6px}
+  .bar:hover{background:var(--panel2)}
+  .bar .lab{font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar .lab .fam{color:var(--faint);font-size:10.5px}
+  .bar .track{height:16px;background:var(--bg);border-radius:4px;position:relative;overflow:hidden}
+  .bar .fill{height:100%;border-radius:4px}
+  .bar .val{font-family:var(--mono);font-size:12px;text-align:right;color:var(--dim)}
+  .bar.cur{background:#12233a}
+  .bar.cur .lab{color:#fff;font-weight:600}
+  .bar.cur .val{color:#fff}
+  .bar .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .tagline{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;color:var(--dim)}
+  .tagline b{color:var(--good)}
+  .oblig{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .ob{font-size:12.5px;color:var(--dim);display:flex;gap:8px;align-items:baseline}
+  .ob .mk{font-family:var(--mono);color:var(--accent);font-size:11px;min-width:26px}
+  .ob .dl{font-family:var(--mono);color:var(--mid);font-size:11px;margin-left:auto;white-space:nowrap}
+  .ob.overdue .dl{color:var(--bad)}
+  .none{color:var(--faint);font-style:italic;font-size:12.5px}
+  .oblpanel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+  .oblpanel .row{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px}
+  .oblpanel .row .n{font-family:var(--mono);font-size:20px;font-weight:700}
+  .oblpanel .row .l{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+  .foot{color:var(--faint);font-size:11.5px;padding:8px 28px 30px;border-top:1px solid var(--line);max-width:900px}
+  .foot code{background:var(--panel2);padding:1px 5px;border-radius:4px;color:var(--dim)}
+  .spin{color:var(--faint)}
+  .badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--faint);margin-left:8px;vertical-align:middle}
+</style>
+</head>
+<body>
+<header>
+  <h1>◇ Swap Studio <span class="badge">the material cost curve</span></h1>
+  <div class="sub">Build a package, pick your markets, then swap a material and watch the Extended Producer
+    Responsibility bill move. Compliance as a design input — not an audit you fail at the end.</div>
+  <div class="who">Theo Marchetti persona · design × business × dev · fees priced in CA&nbsp;SB&nbsp;54 (2027) terms, obligations live across every market · <span id="apibase"></span></div>
+</header>
+
+<div class="wrap">
+  <!-- LEFT: the bench -->
+  <div class="bench">
+    <h2>The package</h2>
+    <div id="components"></div>
+    <button class="addbtn" id="addComp">+ add a component</button>
+
+    <h2 style="margin-top:22px">Markets</h2>
+    <div class="markets" id="markets"></div>
+
+    <div class="units">
+      <label>Annual units (optional)</label>
+      <input type="number" id="units" placeholder="e.g. 5,000,000" min="0" step="100000" />
+    </div>
+  </div>
+
+  <!-- RIGHT: the stage -->
+  <div class="stage" id="stage">
+    <div class="spin">Loading the studio…</div>
+  </div>
+</div>
+
+<div class="foot">
+  Fee rates: <span id="cite"></span> Live obligations, PROs and deadlines from
+  <code>GET /compliance/pathways</code> (public / free tier). Fees are priced in California terms because
+  CA is the only US program with per-material rates published in enough detail to price a redesign; the
+  obligations shown are real across every market you select. Draft schedule — final rates land October 2026.
+</div>
+
+<script>
+const $ = (s,r=document)=>r.querySelector(s);
+const money = (c)=> c>=100 ? '$'+(c/100).toFixed(2) : c.toFixed(2)+'¢';
+const perT = (v)=> '$'+v.toLocaleString()+'/t';
+const usd = (n)=> '$'+Math.round(n).toLocaleString();
+
+let PALETTE=[], MARKETS=[], STATE={components:[], markets:new Set(['CA','OR']), units:''};
+let uid=0;
+
+function rateColor(pct){ // 0 = cheapest, 1 = dearest
+  if(pct<0.2) return 'var(--good)';
+  if(pct<0.55) return 'var(--mid)';
+  return 'var(--bad)';
+}
+function daysTo(d){ if(!d) return null; return Math.round((new Date(d)-new Date())/864e5); }
+
+async function boot(){
+  const r = await fetch('/api/palette'); const d = await r.json();
+  PALETTE=d.palette; MARKETS=d.markets;
+  $('#cite').textContent = d.citation+' ';
+  $('#apibase').innerHTML = '<a href="'+location.origin+'" >demo</a>';
+  // seed a believable starting spec: Theo's origin story — a bottle that "quietly" grows a metal cap
+  addComponent('Bottle','pet_clear');
+  addComponent('Cap','pp_ps');
+  addComponent('Sleeve','paperboard');
+  renderBench(); renderMarkets(); refresh();
+}
+
+function addComponent(name, matId){
+  const mat = PALETTE.find(m=>m.id===matId) || PALETTE[0];
+  STATE.components.push({key:'c'+(uid++), name, material:mat.id, grams:mat.default_g});
+}
+
+function renderMarkets(){
+  const el=$('#markets'); el.innerHTML='';
+  for(const m of MARKETS){
+    const c=document.createElement('div');
+    c.className='chip'+(STATE.markets.has(m.code)?' on':'');
+    c.textContent=m.code;
+    c.title=m.label;
+    c.onclick=()=>{ STATE.markets.has(m.code)?STATE.markets.delete(m.code):STATE.markets.add(m.code); renderMarkets(); refresh(); };
+    el.appendChild(c);
+  }
+}
+
+function renderBench(){
+  const box=$('#components'); box.innerHTML='';
+  for(const c of STATE.components){
+    const mat=PALETTE.find(m=>m.id===c.material);
+    const div=document.createElement('div'); div.className='comp';
+    div.innerHTML=`
+      <div class="row1">
+        <input class="name" value="${c.name.replace(/"/g,'&quot;')}" />
+        <button class="del" title="remove">×</button>
+      </div>
+      <select class="mat"></select>
+      <div class="row2">
+        <label>weight</label>
+        <input class="g" type="number" min="0" step="1" value="${c.grams}" /> <label>g / unit</label>
+      </div>`;
+    const sel=div.querySelector('.mat');
+    let lastCat='';
+    for(const m of PALETTE){
+      if(m.category_label!==lastCat){ lastCat=m.category_label;
+        const og=document.createElement('optgroup'); og.label=m.category_label; sel.appendChild(og);
+      }
+      const o=document.createElement('option'); o.value=m.id; o.textContent=m.label;
+      if(m.id===c.material) o.selected=true;
+      sel.lastChild.appendChild(o);
+    }
+    sel.onchange=()=>{ c.material=sel.value; const nm=PALETTE.find(m=>m.id===sel.value);
+      div.querySelector('.g').value=nm.default_g; c.grams=nm.default_g; refresh(); };
+    div.querySelector('.name').oninput=(e)=>{ c.name=e.target.value; };
+    div.querySelector('.g').oninput=(e)=>{ c.grams=Number(e.target.value)||0; refreshDebounced(); };
+    div.querySelector('.del').onclick=()=>{ STATE.components=STATE.components.filter(x=>x!==c); renderBench(); refresh(); };
+    box.appendChild(div);
+  }
+}
+
+$('#addComp').onclick=()=>{ addComponent('New component','glass'); renderBench(); refresh(); };
+$('#units').oninput=(e)=>{ STATE.units=e.target.value; refreshDebounced(); };
+
+let t=null;
+function refreshDebounced(){ clearTimeout(t); t=setTimeout(refresh, 350); }
+
+async function refresh(){
+  const spec={ components:STATE.components, markets:[...STATE.markets], unitsPerYear:Number(STATE.units)||null };
+  const r=await fetch('/api/quote',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(spec)});
+  const d=await r.json();
+  renderStage(d);
+}
+
+function renderStage(d){
+  const stage=$('#stage');
+  if(!d.components.length){ stage.innerHTML='<div class="none">Add a component to price its EPR exposure.</div>'; return; }
+  const t=d.totals;
+  const saveClass = t.redesign_headroom_cents>0.05?'good':'';
+  let html='';
+
+  // headline metrics
+  html+=`<div class="headline">
+    <div class="metric"><div class="n bad">${money(t.cents_per_package)}</div><div class="l">EPR fee / package</div></div>
+    <div class="metric"><div class="n good">${money(t.best_case_cents_per_package)}</div><div class="l">best-format floor</div></div>
+    <div class="metric"><div class="n mid">${d.obligations.action_law_count}</div><div class="l">obligations triggered</div></div>
+    ${t.annual_fee_usd!=null?`<div class="metric"><div class="n">${usd(t.annual_fee_usd)}</div><div class="l">/ yr at ${Number(t.units_per_year).toLocaleString()} units</div></div>`:''}
+  </div>`;
+
+  // savings bar (the business hook)
+  if(t.redesign_headroom_cents>0.05){
+    const pct=Math.round(100*t.redesign_headroom_cents/t.cents_per_package);
+    html+=`<div class="savebar">↓ Redesigning each component to its best published format cuts the fee by
+      <b>${money(t.redesign_headroom_cents)}/package (${pct}%)</b>${t.annual_fee_usd!=null?` — <b>${usd(t.annual_fee_usd-t.annual_best_case_usd)}/yr</b>`:''}.
+      The cost curve below shows every swap.</div>`;
+  }
+
+  // obligation panel (live)
+  const ob=d.obligations;
+  html+=`<div class="oblpanel">
+    <div class="row">
+      <div><div class="n">${ob.action_law_count}</div><div class="l">action-required laws</div></div>
+      <div><div class="n">${ob.pros.length}</div><div class="l">PRO${ob.pros.length===1?'':'s'} to join</div></div>
+      <div><div class="n" style="color:var(--faint)">${ob.monitor_count}</div><div class="l">monitor-only</div></div>
+      <div><div class="n">${ob.nearest_deadline?ob.nearest_deadline:'—'}</div><div class="l">nearest deadline</div></div>
+    </div>
+    ${ob.pros.length?`<div class="meta" style="color:var(--dim);font-size:12.5px">Register with: ${ob.pros.join(' · ')}</div>`:''}
+  </div>`;
+
+  // per-component cost curves
+  for(const c of d.components){
+    const rates=c.cost_curve.map(x=>x.rate_per_tonne);
+    const max=Math.max(...rates,1);
+    html+=`<div class="card">
+      <div class="ch"><div class="title">${esc(c.name)} <span class="badge">${c.category_label}</span></div>
+        <div class="now">${c.grams} g · ${perT(c.rate_per_tonne)} · ${money(c.cents_per_package)}/pkg</div></div>
+      <div class="meta">Currently: ${esc(c.material_label)} ${c.recyclable?'':'· ⚠ hard to recycle'}${c.obligation_count?` · triggers ${c.obligation_count} obligation${c.obligation_count===1?'':'s'}`:''}${c.monitor_count?` · ${c.monitor_count} to monitor`:''}</div>
+      <div class="curve">`;
+    for(const alt of c.cost_curve){
+      const pct=alt.rate_per_tonne/max;
+      const rank=(alt.rate_per_tonne-rates[0])/(rates[rates.length-1]-rates[0]||1);
+      const w=Math.max(3, pct*100);
+      const dl=alt.delta_per_tonne;
+      const dtxt = alt.is_current?'current':(dl===0?'=':(dl<0?'−'+perT(-dl).slice(1):'+'+perT(dl).slice(1)));
+      html+=`<div class="bar ${alt.is_current?'cur':''}" data-cid="${c.key}" data-mid="${alt.material_id}">
+        <div class="lab"><span class="dot" style="background:${alt.recyclable?'var(--good)':'var(--bad)'}"></span>${esc(alt.label)}<br><span class="fam">${alt.category_label} · ${alt.tag}</span></div>
+        <div class="track"><div class="fill" style="width:${w}%;background:${rateColor(rank)}"></div></div>
+        <div class="val">${perT(alt.rate_per_tonne)}<br><span style="color:${dl<0?'var(--good)':dl>0?'var(--bad)':'var(--faint)'};font-size:10.5px">${dtxt}</span></div>
+      </div>`;
+    }
+    html+=`</div>`;
+    // swap suggestion — same material family (functionally plausible like-for-like redesign)
+    if(c.cheapest_same_family){
+      const alt=c.cheapest_same_family;
+      const save=(c.cents_per_package-alt.cents_per_package);
+      html+=`<div class="tagline">↳ Same-family redesign: <b>${esc(alt.label)}</b> —
+        ${perT(alt.rate_per_tonne)} vs ${perT(c.rate_per_tonne)}${save>0.01?`, saving <b>${money(save)}/package</b>`:''}. Or click any bar to switch material entirely.</div>`;
+    }
+    // action-required obligations this component triggers (capped; nearest deadline first)
+    if(c.obligations.length){
+      html+=`<div class="oblig">`;
+      const show=c.obligations.slice(0,5);
+      for(const o of show){
+        const dd=daysTo(o.next_deadline_date);
+        const over = dd!==null && dd<0;
+        const dtxt = o.next_deadline_date?(over?`overdue ${-dd}d`:dd+'d'):'no fixed date';
+        html+=`<div class="ob ${over?'overdue':''}"><span class="mk">${o.market}</span>
+          <span><b>${esc(o.bill_number)}</b> — ${o.action_summary?esc(o.action_summary):esc(o.bill_title)}${o.entity?` <span style="color:var(--faint)">· ${esc(o.entity)}</span>`:''}</span>
+          <span class="dl">${dtxt}</span></div>`;
+      }
+      if(c.obligations.length>show.length)
+        html+=`<div class="none">+ ${c.obligations.length-show.length} more action-required law${c.obligations.length-show.length===1?'':'s'}</div>`;
+      html+=`</div>`;
+    } else {
+      html+=`<div class="oblig"><div class="none">No action-required obligation for ${c.category_label.toLowerCase()} in the selected markets.</div></div>`;
+    }
+    html+=`</div>`;
+  }
+
+  stage.innerHTML=html;
+  // click a bar to swap
+  stage.querySelectorAll('.bar').forEach(b=>b.onclick=()=>{
+    const c=STATE.components.find(x=>x.key===b.dataset.cid); if(!c)return;
+    const nm=PALETTE.find(m=>m.id===b.dataset.mid); c.material=nm.id; c.grams=nm.default_g;
+    renderBench(); refresh();
+  });
+}
+
+function esc(s){ return String(s??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+
+boot();
+</script>
+</body>
+</html>

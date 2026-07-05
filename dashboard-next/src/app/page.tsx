@@ -16,6 +16,9 @@ import { ScopedDeadlineBanner } from '@/components/scope/ScopedDeadlineBanner';
 import { ScopeBar } from '@/components/scope/ScopeBar';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useRegion } from '@/components/layout/RegionContext';
+import { regionLabel } from '@/components/insights/RegionFilter';
+import { highlightIdsFor } from '@/components/map/RegionInsetMap';
+import { EU_MEMBERS } from '@/lib/jurisdictions';
 import { inScope } from '@/lib/scope';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
@@ -27,14 +30,19 @@ const StateMap = dynamic(
   { ssr: false, loading: () => <div className="h-80 bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
-const EuMemberMap = dynamic(
-  () => import('@/components/map/EuMemberMap').then(m => ({ default: m.EuMemberMap })),
+const RegionInsetMap = dynamic(
+  () => import('@/components/map/RegionInsetMap').then(m => ({ default: m.RegionInsetMap })),
   { ssr: false, loading: () => <div className="h-80 bg-bg-secondary rounded-lg animate-pulse" /> }
+);
+
+const CoverageStrip = dynamic(
+  () => import('@/components/map/CoverageStrip').then(m => ({ default: m.CoverageStrip })),
+  { ssr: false, loading: () => <div className="h-24 bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
-  const { region, regionsParam } = useRegion();
+  const { region, regionsParam, regions: selectedRegions, setRegions } = useRegion();
 
   // The global region filter (under the nav) drives which jurisdictions the server returns. undefined
   // = "All regions" -> send "all" so the explorer shows every region (not the US-only default).
@@ -91,6 +99,51 @@ export default function HomePage() {
     return counts;
   }, [mapSource, billFilters]);
 
+  // Region-aware, ENACTED-ONLY leaderboard under the masthead. Enacted is the fair common
+  // denominator across jurisdictions (the US introduced→enacted funnel has no EU analog). Mode
+  // follows the region selection: no filter → umbrella regions (EU members collapse into EU);
+  // US in scope → US states; an EU / EU-member selection → EU member states (so France defers to
+  // the EU nation-state board); a lone non-EU country → no sub-jurisdiction board (hidden).
+  const leaderboard = useMemo(() => {
+    const enacted = applyBillFilters(mapSource, { ...billFilters, state: '', enactedOnly: true });
+    const tally = (keyOf: (b: (typeof enacted)[number]) => string | null) => {
+      const c: Record<string, number> = {};
+      for (const b of enacted) { const k = keyOf(b); if (k) c[k] = (c[k] ?? 0) + 1; }
+      return c;
+    };
+    if (selectedRegions.length === 0) {
+      return { mode: 'regions' as const, label: 'Top Regions',
+        data: tally(b => (b.region && b.region in EU_MEMBERS ? 'EU' : b.region || 'US')) };
+    }
+    if (selectedRegions.includes('US')) {
+      return { mode: 'us-states' as const, label: 'Top States',
+        data: tally(b => (b.region === 'US' && b.state ? b.state : null)) };
+    }
+    if (selectedRegions.includes('EU') || selectedRegions.some(r => r in EU_MEMBERS)) {
+      return { mode: 'eu-members' as const, label: 'Top Member States',
+        data: tally(b => (b.region && b.region in EU_MEMBERS ? b.region : null)) };
+    }
+    return { mode: 'none' as const, label: '', data: {} as Record<string, number> };
+  }, [mapSource, billFilters, selectedRegions]);
+
+  // Region-level counts for the world switcher bubbles. Reflects the currently-loaded set, so it's
+  // complete on the default "all regions" landing (the moment the overview matters most); a single
+  // active region filter narrows the fetch, which is fine since that region is the one in focus.
+  const regionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    mapSource.forEach(b => { if (b.region) counts[b.region] = (counts[b.region] ?? 0) + 1; });
+    return counts;
+  }, [mapSource]);
+
+  // The map now *shows the selected region* rather than being a control. Exactly one region selected
+  // → its cropped map (US states, the EU bloc, or a single-country locator). "All regions" (=[]) or a
+  // multi-select → the coverage readout instead. highlightIds is empty for a code we have no geometry
+  // for, in which case we fall back to a text focus panel.
+  const soleRegion = selectedRegions.length === 1 ? selectedRegions[0] : null;
+  const insetHighlightIds = soleRegion && soleRegion !== 'US' ? highlightIdsFor(soleRegion) : [];
+  // A drilled-in EU member (e.g. clicked France on the bloc map) gets a "back to the EU bloc" crumb.
+  const drilledEuMember = !!soleRegion && soleRegion !== 'EU' && soleRegion in EU_MEMBERS;
+
   // Full-text search: bills whose statute text matches the term (their title/summary may not). These
   // are merged into the one table below so search is just another filter — no separate results list.
   const { data: textHits = [] } = useBillTextSearch(billFilters.search);
@@ -134,10 +187,10 @@ export default function HomePage() {
         <section className="rounded-xl border border-green-accent/30 bg-green-hero p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="max-w-2xl">
             <h1 className="font-serif text-2xl sm:text-3xl text-text-primary leading-tight text-balance">
-              Track every circular-economy bill and EPR deadline — across all 50 states.
+              A compliance deadline never slips past you when someone's already read every bill.
             </h1>
             <p className="mt-2 text-text-secondary text-body leading-relaxed">
-              We read every bill and pull out the obligations and dates, so a deadline never slips past you.
+              We track every circular-economy bill and EPR obligation across all 50 states — and pull out the dates and requirements so you don't have to.
               Start free — no card required.
             </p>
           </div>
@@ -158,12 +211,19 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Top-states leaderboard line, right under the nav. US-only — the EU member-state leaderboard
-          arrives with national-law ingestion (Phase B); EU-central law is EU-wide, no per-state split. */}
-      {region === 'US' && (
+      {/* Ranked leaderboard line, right under the nav. Region-aware + enacted-only: umbrella regions
+          on "All regions", US states under a US selection, EU member states under an EU/member one
+          (France defers here); hidden for a lone non-EU country with no sub-jurisdictions. */}
+      {leaderboard.mode !== 'none' && (
         <StatesTicker
-          data={mapData}
-          onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
+          label={leaderboard.label}
+          data={leaderboard.data}
+          restHref="/states"
+          onSelect={code =>
+            leaderboard.mode === 'us-states'
+              ? setBillFilters(prev => ({ ...prev, state: prev.state === code ? '' : code }))
+              : setRegions([code])
+          }
         />
       )}
 
@@ -197,7 +257,7 @@ export default function HomePage() {
           <div className="mt-2 text-sm text-text-muted">
             Showing <span className="text-green-accent font-medium">{STATE_NAMES[billFilters.state] ?? billFilters.state}</span>
             {' — '}
-            <Link href={`/states/${billFilters.state.toLowerCase()}/`} className="underline hover:text-text-secondary">view {STATE_NAMES[billFilters.state] ?? billFilters.state} profile</Link>
+            <Link href={`/jurisdictions/us/${billFilters.state.toLowerCase()}/`} className="underline hover:text-text-secondary">view {STATE_NAMES[billFilters.state] ?? billFilters.state} profile</Link>
             {' · '}
             <button onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className="underline hover:text-text-secondary">clear</button>
           </div>
@@ -205,18 +265,48 @@ export default function HomePage() {
 
       </section>
 
-      {/* Map — US states choropleth, or the EU member-states shell (Phase B: national-law coverage) */}
+      {/* Map — the Regions dropdown is the primary selector; this shows a *view of that selection*.
+          All regions → a ranked coverage readout. US → the states choropleth. EU → the bloc, cropped
+          to Europe. A single country → a cropped locator. A code with no geometry → a text panel. */}
       <section>
-        {region === 'US' ? (
+        {drilledEuMember && (
+          <div className="mb-2 text-sm text-text-muted">
+            <button onClick={() => setRegions(['EU'])} className="text-green-accent hover:underline">← European Union</button>
+            <span className="mx-1.5">/</span>
+            <span className="text-text-secondary">{regionLabel(soleRegion!)}</span>
+          </div>
+        )}
+        {/* Keyed by selection so the zoom-settle animation replays on every drill in/out. */}
+        <div key={soleRegion ?? 'all'} className="region-map-in">
+        {!soleRegion ? (
+          <CoverageStrip data={regionCounts} onSelect={code => setRegions([code])} />
+        ) : soleRegion === 'US' ? (
           <StateMap
             data={mapData}
             selectedState={billFilters.state || null}
             onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
             height={380}
           />
+        ) : insetHighlightIds.length ? (
+          <RegionInsetMap
+            highlightIds={insetHighlightIds}
+            caption={soleRegion === 'EU' ? 'European Union · 27 member states — click a country to drill in' : `${regionLabel(soleRegion)} · national law`}
+            count={regionCounts[soleRegion]}
+            // Click-to-drill only on the multi-country bloc; a single-country inset has nowhere to go.
+            onCountrySelect={insetHighlightIds.length > 1 ? code => setRegions([code]) : undefined}
+            height={380}
+          />
         ) : (
-          <EuMemberMap height={380} />
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default bg-bg-secondary/40 text-center px-6 py-10">
+            <div className="text-meta uppercase tracking-wider text-text-muted">
+              {regionLabel(soleRegion)} · national law
+            </div>
+            <p className="mt-2 max-w-md text-sm text-text-secondary">
+              The laws below are the view. A map lights up once we ingest this jurisdiction&apos;s geography.
+            </p>
+          </div>
         )}
+        </div>
       </section>
 
       {/* Bill results table — below the map. The personalize-scope bar (state/material/product) sits
@@ -265,7 +355,7 @@ export default function HomePage() {
           plaintiffs could set precedent for challenges to packaging laws in every state, which is why it&rsquo;s
           the single most important thing to watch this year.
           {highPreemption > 0 && (
-            <> Right now <span className="text-text-primary font-medium">{highPreemption}</span> high-risk federal action(s) are tracked.</>
+            <> We're tracking <span className="text-text-primary font-medium">{highPreemption}</span> high-risk federal {highPreemption === 1 ? 'action' : 'actions'} right now.</>
           )}
         </p>
         <Link href="/federal" className="inline-block mt-3 text-sm text-green-accent hover:underline">

@@ -1451,6 +1451,7 @@ async def run_bill_text_refresh_cycle() -> None:
     from app.database import AsyncSessionLocal
     from app.ingestion.bill_text import SOURCE_NONE, fetch_clean_text
     from app.ingestion.legiscan import LegiScanClient
+    from app.ingestion.nysenate import NYSenateClient
     from app.ingestion.openstates import OpenStatesClient
 
     if not settings.enable_bill_text_refresh:
@@ -1466,7 +1467,7 @@ async def run_bill_text_refresh_cycle() -> None:
         # IS DISTINCT FROM so a NULL change_hash with an existing row is correctly treated as current.
         rows = (await db.execute(text(
             "select b.id, b.state, b.bill_number, b.openstates_id, b.legiscan_bill_id, "
-            "b.source_url, b.change_hash "
+            "b.source_url, b.change_hash, b.status_date, b.last_action_date "
             "from bills b left join bill_texts t on t.bill_id = b.id "
             f"where {relevance_filter}"
             "(b.legiscan_bill_id is not null or (b.openstates_id is not null "
@@ -1490,12 +1491,17 @@ async def run_bill_text_refresh_cycle() -> None:
 
     wrote = no_text = 0
     by_source: dict[str, int] = {}
-    async with LegiScanClient() as ls_client, OpenStatesClient() as os_client:
+    async with (
+        LegiScanClient() as ls_client,
+        OpenStatesClient() as os_client,
+        NYSenateClient() as ny_client,
+    ):
         async with AsyncSessionLocal() as db:
             for b in rows:
                 try:
                     full_text, src = await fetch_clean_text(
-                        ls_client, os_client, b, settings.openstates_request_delay_seconds
+                        ls_client, os_client, b, settings.openstates_request_delay_seconds,
+                        ny_client=ny_client,
                     )
                 except Exception as e:  # noqa: BLE001
                     log.warning("bill_text_refresh_fetch_failed", bill_id=b.id, error=str(e))

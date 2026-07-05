@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EPR Nutrition Label — Regulation Facts for your product</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root {
+    --ink: #0a0a0a;
+    --paper: #fffef9;
+    --accent: #1a7f5a;
+    --danger: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: #ece9e2;
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  header.site {
+    padding: 28px 32px 6px;
+  }
+  header.site h1 { margin: 0; font-size: 26px; letter-spacing: -0.5px; }
+  header.site p { margin: 6px 0 0; color: #555; max-width: 62ch; }
+  .layout {
+    display: flex;
+    gap: 36px;
+    padding: 24px 32px 64px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  /* ---------------- form panel ---------------- */
+  .panel {
+    flex: 1 1 340px;
+    max-width: 460px;
+    background: #fff;
+    border-radius: 10px;
+    padding: 22px 24px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; color: #777; margin: 18px 0 8px; }
+  .panel h2:first-child { margin-top: 0; }
+  input[type="text"] {
+    width: 100%; padding: 10px 12px; font-size: 15px;
+    border: 1px solid #ccc; border-radius: 6px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    border: 1px solid #bbb; background: #fafafa; border-radius: 999px;
+    padding: 5px 13px; font-size: 13px; cursor: pointer; user-select: none;
+  }
+  .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .chip.region.on { background: var(--accent); border-color: var(--accent); }
+  select { padding: 6px 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 13px; }
+  .actions { margin-top: 22px; display: flex; gap: 10px; }
+  button {
+    font-size: 15px; padding: 11px 18px; border-radius: 7px; border: none; cursor: pointer;
+  }
+  #generate { background: var(--ink); color: #fff; flex: 1; font-weight: 600; }
+  #generate:disabled { opacity: .5; cursor: wait; }
+  #download { background: #fff; border: 1.5px solid var(--ink); }
+  .error { color: var(--danger); margin-top: 12px; font-size: 14px; }
+
+  /* ---------------- the label ---------------- */
+  .label-wrap { flex: 0 1 460px; }
+  #label {
+    background: var(--paper);
+    border: 2.5px solid var(--ink);
+    padding: 10px 14px 12px;
+    width: 440px;
+    box-shadow: 4px 6px 0 rgba(0,0,0,.18);
+  }
+  #label .brand-title {
+    font-size: 40px; font-weight: 900; letter-spacing: -1.6px; line-height: 1;
+    margin: 0 0 2px;
+  }
+  #label .serving { font-size: 13px; border-bottom: 1px solid var(--ink); padding: 3px 0; }
+  #label .serving b { float: right; }
+  .bar-thick { height: 11px; background: var(--ink); margin: 4px -2px; }
+  .bar-med { height: 4.5px; background: var(--ink); margin: 3px 0; }
+  .amount-per { font-size: 11.5px; font-weight: 700; padding-top: 2px; }
+  .headline { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 4px solid var(--ink); padding-bottom: 2px; }
+  .headline .word { font-size: 26px; font-weight: 900; letter-spacing: -0.5px; }
+  .headline .num { font-size: 34px; font-weight: 900; }
+  .pct-head { text-align: right; font-size: 11.5px; font-weight: 700; border-bottom: 1px solid var(--ink); padding: 3px 0; }
+  .jrow { border-bottom: 1px solid var(--ink); padding: 4px 0; font-size: 14.5px; }
+  .jrow .top { display: flex; justify-content: space-between; font-weight: 700; }
+  .jrow.zero .top { font-weight: 400; color: #666; }
+  .jrow .sub {
+    font-size: 12px; color: #333; padding: 2px 0 1px 16px; font-weight: 400;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .jrow .sub .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jrow .sub .due { white-space: nowrap; color: #000; }
+  .due.hot { color: var(--danger); font-weight: 700; }
+  .statline { display: flex; justify-content: space-between; font-size: 13.5px; border-bottom: 1px solid var(--ink); padding: 3.5px 0; }
+  .statline b { font-weight: 700; }
+  .footnote { font-size: 10.5px; padding: 5px 0 2px; line-height: 1.35; }
+  .contains { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 5px 0 1px; line-height: 1.4; }
+  .ingredients { font-size: 11px; text-transform: uppercase; letter-spacing: .3px; color: #222; padding: 2px 0 4px; line-height: 1.4; }
+  .brandline {
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 2.5px solid var(--ink); margin-top: 4px; padding-top: 6px;
+    font-size: 11px; color: #333;
+  }
+  .brandline .logo { font-weight: 900; font-size: 13px; letter-spacing: -0.3px; }
+  .brandline .logo span { color: var(--accent); }
+  .empty-note { font-size: 14px; padding: 14px 2px; font-style: italic; color: #444; }
+
+  @media print {
+    body * { visibility: hidden; }
+    #label, #label * { visibility: visible; }
+    #label { position: absolute; top: 0; left: 0; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<header class="site">
+  <h1>EPR Nutrition Label</h1>
+  <p>Regulation Facts for any product: pick your materials and markets, get the shareable
+     label. Data live from the SignalScout API. <em>Nobody shares an API response —
+     everybody shares a scorecard.</em></p>
+</header>
+
+<div class="layout">
+  <div class="panel">
+    <h2>Product name</h2>
+    <input type="text" id="product" placeholder="e.g. 12oz Cold Brew — glass bottle" value="12oz Cold Brew — glass bottle" />
+
+    <h2>Materials ("ingredients")</h2>
+    <div class="chips" id="materials"></div>
+
+    <h2>Target markets</h2>
+    <div class="chips" id="markets"></div>
+    <p style="font-size:12px;color:#777;margin:8px 0 0">
+      Add another state:
+      <select id="stateAdd"><option value="">— pick —</option></select>
+    </p>
+
+    <div class="actions">
+      <button id="generate">Generate label</button>
+      <button id="download">PNG ↓</button>
+    </div>
+    <div class="error" id="error"></div>
+  </div>
+
+  <div class="label-wrap">
+    <div id="label">
+      <p class="empty-note">Your Regulation Facts will render here. Hit “Generate label”.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const MATERIALS = ["plastic_packaging","paper_packaging","glass","metals","electronics",
+  "batteries","paint","carpet","mattresses","tires","pharmaceuticals","solar_panels",
+  "textiles","organics","biobased","agriculture"];
+const DEFAULT_MATERIALS = new Set(["glass","paper_packaging"]);
+
+// EPR-active states first (the demo sweet spot), then regions with data.
+const FEATURED = [
+  { code: "CA", kind: "state" }, { code: "CO", kind: "state" }, { code: "OR", kind: "state" },
+  { code: "ME", kind: "state" }, { code: "WA", kind: "state" }, { code: "MN", kind: "state" },
+  { code: "MD", kind: "state" }, { code: "TX", kind: "state" },
+  { code: "EU", kind: "region" }, { code: "FR", kind: "region" }, { code: "JP", kind: "region" },
+];
+const DEFAULT_MARKETS = new Set(["CA","CO","OR","ME","TX","EU"]);
+const ALL_STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
+  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC",
+  "ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"];
+
+const pretty = (s) => s.replace(/_/g, " ");
+const $ = (id) => document.getElementById(id);
+
+function chip(text, cls, on, toggle) {
+  const el = document.createElement("div");
+  el.className = "chip " + cls + (on ? " on" : "");
+  el.textContent = text;
+  el.onclick = () => { el.classList.toggle("on"); toggle && toggle(); };
+  return el;
+}
+
+for (const m of MATERIALS) $("materials").appendChild(chip(pretty(m), "mat", DEFAULT_MATERIALS.has(m)));
+for (const j of FEATURED) {
+  const el = chip(j.code, j.kind === "region" ? "region mkt" : "mkt", DEFAULT_MARKETS.has(j.code));
+  el.dataset.code = j.code; el.dataset.kind = j.kind;
+  $("markets").appendChild(el);
+}
+for (const s of ALL_STATES) {
+  if (FEATURED.some((f) => f.code === s)) continue;
+  const o = document.createElement("option"); o.value = s; o.textContent = s;
+  $("stateAdd").appendChild(o);
+}
+$("stateAdd").onchange = () => {
+  const s = $("stateAdd").value; if (!s) return;
+  if (![...$("markets").children].some((c) => c.dataset.code === s)) {
+    const el = chip(s, "mkt", true); el.dataset.code = s; el.dataset.kind = "state";
+    $("markets").appendChild(el);
+  }
+  $("stateAdd").value = "";
+};
+
+function selection() {
+  const mats = [...$("materials").children].filter((c) => c.classList.contains("on")).map((c) => c.textContent.replace(/ /g, "_"));
+  const on = [...$("markets").children].filter((c) => c.classList.contains("on"));
+  return {
+    materials: mats,
+    states: on.filter((c) => c.dataset.kind === "state").map((c) => c.dataset.code),
+    regions: on.filter((c) => c.dataset.kind === "region").map((c) => c.dataset.code),
+  };
+}
+
+const fmtDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const daysUntil = (iso) => Math.ceil((new Date(iso + "T00:00:00Z") - Date.now()) / 86400000);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function render(data, productName) {
+  const t = data.totals;
+  const jRows = data.jurisdictions.map((j) => {
+    if (j.unsupported) {
+      return `<div class="jrow zero"><div class="top">
+        <span>${esc(j.code)}</span><span>coverage pending†</span></div></div>`;
+    }
+    const pct = t.obligations ? Math.round((j.obligations / t.obligations) * 100) : 0;
+    const subs = j.actions.map((a) => {
+      const hot = a.deadline && daysUntil(a.deadline) <= 90;
+      return `<div class="sub">
+        <span class="what">${esc(a.bill)} — ${esc(a.summary)}${a.entity ? " · " + esc(a.entity) : ""}</span>
+        <span class="due${hot ? " hot" : ""}">${a.deadline ? fmtDate(a.deadline) : ""}</span>
+      </div>`;
+    }).join("");
+    return `<div class="jrow${j.obligations ? "" : " zero"}">
+      <div class="top">
+        <span>${esc(j.code)}${j.error ? " ⚠" : ""}</span>
+        <span>${j.obligations} obligation${j.obligations === 1 ? "" : "s"} · ${pct}%</span>
+      </div>${subs}</div>`;
+  }).join("");
+
+  const soon = t.soonestDeadline;
+  $("label").innerHTML = `
+    <p class="brand-title">Regulation Facts</p>
+    <div class="serving">Product <b>${esc(productName || "Unnamed product")}</b></div>
+    <div class="serving">Markets on label <b>${t.jurisdictions}</b></div>
+    <div class="bar-thick"></div>
+    <div class="amount-per">Amount per product</div>
+    <div class="headline"><span class="word">Obligations</span><span class="num">${t.obligations}</span></div>
+    <div class="pct-head">% Compliance Load*</div>
+    ${jRows || '<p class="empty-note">No obligations found — this product is regulation-free in the selected markets. Enjoy it while it lasts.</p>'}
+    <div class="bar-med"></div>
+    <div class="statline"><span><b>Producer fees</b> apply</span><b>${t.fees} law${t.fees === 1 ? "" : "s"}</b></div>
+    <div class="statline"><span><b>Deadlines</b> within 90 days</span><b>${t.deadlinesWithin90}</b></div>
+    ${soon ? `<div class="statline"><span><b>Next hard deadline</b> ${esc(soon.code)} · ${esc(soon.bill)}</span><b>${fmtDate(soon.date)} (${soon.daysAway}d)</b></div>` : ""}
+    <div class="bar-thick"></div>
+    ${data.contains.length ? `<div class="contains">Contains: ${data.contains.map(esc).join(", ")}</div>` : ""}
+    <div class="ingredients">Ingredients: ${data.materials.length ? data.materials.map((m) => esc(pretty(m))).join(", ") : "all materials"}</div>
+    ${data.entities.length ? `<div class="ingredients">Administered by: ${data.entities.map(esc).join("; ")}</div>` : ""}
+    <div class="footnote">*% Compliance Load = this market's share of the product's total obligations.
+      ${data.jurisdictions.some((j) => j.unsupported) ? "†Regional pathway data not yet published on this API. " : ""}Live data, not legal advice. Generated ${new Date(data.generatedAt).toLocaleDateString()}.</div>
+    <div class="brandline">
+      <span class="logo">Signal<span>Scout</span></span>
+      <span>compliancescout.io · full pathways &amp; alerts</span>
+    </div>`;
+}
+
+$("generate").onclick = async () => {
+  const sel = selection();
+  $("error").textContent = "";
+  if (!sel.states.length && !sel.regions.length) { $("error").textContent = "Pick at least one market."; return; }
+  $("generate").disabled = true; $("generate").textContent = "Reading the law…";
+  try {
+    const qs = new URLSearchParams({
+      materials: sel.materials.join(","), states: sel.states.join(","), regions: sel.regions.join(","),
+    });
+    const res = await fetch("/api/label?" + qs);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.status);
+    render(data, $("product").value.trim());
+  } catch (e) {
+    $("error").textContent = "Label failed: " + e.message;
+  } finally {
+    $("generate").disabled = false; $("generate").textContent = "Generate label";
+  }
+};
+
+$("download").onclick = async () => {
+  if (typeof html2canvas !== "function") { window.print(); return; }
+  const canvas = await html2canvas($("label"), { scale: 3, backgroundColor: null });
+  const a = document.createElement("a");
+  a.download = "regulation-facts.png";
+  a.href = canvas.toDataURL("image/png");
+  a.click();
+};
+</script>
+</body>
+</html>

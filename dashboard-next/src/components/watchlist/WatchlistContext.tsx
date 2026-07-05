@@ -1,7 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth/AuthContext';
-import { startProCheckout } from '@/lib/billing';
+import { startProCheckout, billingErrorMessage } from '@/lib/billing';
 import { getWatchlist, addWatch, removeWatch } from '@/lib/userSettings';
 
 interface WatchlistValue {
@@ -17,7 +17,7 @@ interface WatchlistValue {
 const WatchlistCtx = createContext<WatchlistValue | null>(null);
 
 export function WatchlistProvider({ children }: { children: React.ReactNode }) {
-  const { user, isPro, openAuth, getToken } = useAuth();
+  const { user, isPro, openAuth, getToken, showToast } = useAuth();
   const [watched, setWatched] = useState<Set<number>>(new Set());
   const [ready, setReady] = useState(false);
 
@@ -48,8 +48,13 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       if (!isPro) {
-        // Watch lists are a Pro feature — send them to checkout.
-        await startProCheckout(getToken);
+        // Watch lists are a Pro feature — send them to checkout. Toast on failure so the star
+        // click isn't a dead end if checkout can't start.
+        try {
+          await startProCheckout(getToken);
+        } catch (e) {
+          showToast(billingErrorMessage(e));
+        }
         return;
       }
       const has = watched.has(billId);
@@ -73,7 +78,7 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [user, isPro, watched, openAuth, getToken],
+    [user, isPro, watched, openAuth, getToken, showToast],
   );
 
   return (

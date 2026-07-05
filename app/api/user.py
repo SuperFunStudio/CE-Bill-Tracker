@@ -109,6 +109,29 @@ async def put_settings(
     return {"prefs": row.prefs}
 
 
+@router.patch("/settings")
+async def patch_settings(
+    payload: SettingsUpdate,
+    user: AuthedUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Shallow-merge the given keys into the user's prefs, leaving other keys untouched.
+
+    PUT replaces the whole dict, so two features persisting snapshots (scope, saved studio
+    packages, …) would clobber each other's keys; each writer PATCHes only its own keys instead."""
+    res = await db.execute(select(UserSettings).where(UserSettings.firebase_uid == user.uid))
+    row = res.scalar_one_or_none()
+    if row is None:
+        row = UserSettings(firebase_uid=user.uid, email=user.email, prefs=payload.prefs or {})
+        db.add(row)
+    else:
+        row.prefs = {**(row.prefs or {}), **(payload.prefs or {})}
+        if not row.email:
+            row.email = user.email
+    await db.commit()
+    return {"prefs": row.prefs}
+
+
 class WatchAdd(BaseModel):
     bill_id: int
 

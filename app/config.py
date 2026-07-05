@@ -26,12 +26,19 @@ class Settings(BaseSettings):
     # NOTE: commons content is CC-BY-NC-SA — clear commercial licensing before full-text ingest.
     # Empty = Africa ingest disabled.
     lawsafrica_token: str = ""
+    # NYS Open Legislation API (New York state bills — app/ingestion/nysenate.py NYSenateClient).
+    # Free key from https://legislation.nysenate.gov/ (sign up, then confirm via the activation
+    # email — the key is rejected with errorCode 701 until confirmed). NY bills' source_url already
+    # points at this API, so without a key the source_url rung of the bill-text ladder fails for NY.
+    # Empty = NY-direct fetch disabled (ladder falls back to LegiScan/OpenStates as before).
+    nys_api_key: str = ""
 
     @field_validator(
         "anthropic_api_key",
         "legiscan_api_key",
         "sendgrid_api_key",
         "open_states_api_key",
+        "nys_api_key",
         "stripe_secret_key",
         "stripe_pro_monthly_price_id",
         "stripe_pro_annual_price_id",

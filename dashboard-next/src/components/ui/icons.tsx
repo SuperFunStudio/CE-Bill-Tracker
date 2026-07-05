@@ -158,6 +158,27 @@ export function PauseIcon(props: IconProps) {
 }
 
 /** Price tag — stands in for pricing / plans. */
+/** Framed facts panel — stands in for the Regulation Facts label. */
+export function LabelIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="5" y="3" width="14" height="18" rx="1.5" />
+      <path d="M8 7h8M8 10.5h8M8 14h5" />
+      <path d="M8 17.5h8" strokeWidth={2.4} />
+    </Icon>
+  );
+}
+
+/** Package outline with a swap arrow — stands in for the Packaging Studio. */
+export function PackageIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z" />
+      <path d="M4 7l8 4 8-4M12 11v10" />
+    </Icon>
+  );
+}
+
 export function TagIcon(props: IconProps) {
   return (
     <Icon {...props}>

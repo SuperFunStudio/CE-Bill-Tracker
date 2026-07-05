@@ -1,8 +1,8 @@
 'use client';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Scope, EMPTY_SCOPE, isEmptyScope, loadScope, saveScope, clearScope } from '@/lib/scope';
 import { useAuth } from '@/components/auth/AuthContext';
-import { fetchSettings, saveSettings, type Prefs } from '@/lib/userSettings';
+import { fetchSettings, patchSettings } from '@/lib/userSettings';
 
 interface ScopeContextValue {
   /** True once we've read localStorage — guards against SSR/first-paint flash. */
@@ -48,8 +48,6 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
   const [editorOpen, setEditorOpen] = useState(false);
   // Set when a signed-out reader taps "Personalize"; we prompt sign-in and open the editor once they're in.
   const [pendingEditor, setPendingEditor] = useState(false);
-  // Last-known backend prefs, so persisting scope doesn't clobber other keys (e.g. saved views).
-  const prefsRef = useRef<Prefs>({});
 
   // localStorage is the immediate / anonymous / offline source — read it first for instant paint.
   useEffect(() => {
@@ -67,13 +65,12 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     async (next: { scope: Scope; isConfigured: boolean; scoped: boolean }) => {
       if (!user) return;
       try {
-        prefsRef.current = {
-          ...prefsRef.current,
+        // PATCH merges server-side — only scope keys are touched, other features' keys survive.
+        await patchSettings(await getToken(), {
           scope: next.scope,
           scopeConfigured: next.isConfigured,
           scoped: next.scoped,
-        };
-        await saveSettings(await getToken(), prefsRef.current);
+        });
       } catch {
         /* personalization is best-effort */
       }
@@ -89,7 +86,6 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const prefs = await fetchSettings(await getToken());
       if (cancelled) return;
-      prefsRef.current = prefs;
       const backendScope = prefs.scope as Scope | undefined;
       if (
         backendScope &&

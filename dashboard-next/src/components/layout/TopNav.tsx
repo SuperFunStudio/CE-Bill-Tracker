@@ -9,6 +9,7 @@ import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
 import {
   HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
+  LabelIcon, PackageIcon,
 } from '@/components/ui/icons';
 
 // `usOnly` items are hidden outside the US: Federal Actions has no EU analog yet (EU-central law is
@@ -19,6 +20,10 @@ const NAV_ITEMS = [
   { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon, usOnly: true },
   { href: '/company', label: 'My Portfolio', Icon: FactoryIcon, usOnly: true },
   { href: '/design-guide', label: 'Design Guide', Icon: CompassIcon },
+  // Regulation Facts is admin-only for now — still being validated, so it's kept off the public nav
+  // (and its route guarded) until it graduates. See the /label page guard.
+  { href: '/label', label: 'Regulation Facts', Icon: LabelIcon, adminOnly: true },
+  { href: '/studio', label: 'Packaging Studio', Icon: PackageIcon, usOnly: true },
   { href: '/pricing', label: 'Pricing', Icon: TagIcon },
   { href: '/about', label: 'About', Icon: InfoIcon },
 ];
@@ -37,12 +42,14 @@ export function TopNav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const scrolled = useScrolled(80);
   const { theme, toggle } = useTheme();
-  const { isPro } = useAuth();
-  const { region } = useRegion();
+  const { isPro, isAdmin } = useAuth();
+  const { isUsView } = useRegion();
 
-  // Hide US-only destinations outside the US, then swap Pricing→Account for Pro users.
+  // Hide US-only destinations outside the US and admin-only tools from non-admins, then swap
+  // Pricing→Account for Pro users.
   const navItems = NAV_ITEMS
-    .filter(item => region === 'US' || !item.usOnly)
+    .filter(item => isUsView || !item.usOnly)
+    .filter(item => isAdmin || !item.adminOnly)
     .map(item => (isPro && item.href === '/pricing' ? ACCOUNT_ITEM : item));
 
   const isActive = (href: string) =>

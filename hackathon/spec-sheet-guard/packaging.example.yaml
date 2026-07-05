@@ -1,0 +1,27 @@
+# packaging.example.yaml
+# Describe what you ship and where. Spec-Sheet Guard checks it against enacted
+# EPR law in every market, and fails CI when an obligation is unmet.
+
+product: "500ml Sparkling Water — PET bottle, aluminum cap, paperboard multipack"
+
+# Jurisdictions you sell into. US state codes, or region families: EU, FR, JP.
+markets:
+  - CA
+  - OR
+  - CO
+  - ME
+
+# SignalScout material categories your product uses.
+# "packaging" loosely matches plastic_packaging / paper_packaging; "metals" is exact.
+# Run `coverage_matrix` (or GET /bills/instrument-material-matrix) to see the live vocab.
+materials:
+  - plastic_packaging
+  - paper_packaging
+  - metals
+
+# Obligations you've already handled — the guard passes once each is registered for
+# real or listed here. Match by entity name/slug, bill number, or "MARKET:BILL".
+# Matching ignores case, spacing, and punctuation.
+acknowledged:
+  - Circular Action Alliance     # the packaging PRO, once you've joined
+  # - "OR:HB-2626"               # uncomment after registering with Oregon DEQ

@@ -1,0 +1,168 @@
+/* FDA "Regulation Facts" panel — ported from hackathon/epr-nutrition-label/public/index.html.
+   Self-contained (black-on-cream, Helvetica) and deliberately independent of the dashboard's
+   light/dark theme, since the panel is exported as a PNG and must look identical everywhere. */
+
+.label {
+  --ink: #0a0a0a;
+  --paper: #fffef9;
+  --accent: #1a7f5a;
+  --danger: #b3261e;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2.5px solid var(--ink);
+  padding: 10px 14px 12px;
+  width: 440px;
+  max-width: 100%;
+  box-shadow: 4px 6px 0 rgba(0, 0, 0, 0.18);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  line-height: 1.35;
+}
+
+.brandTitle {
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: -1.6px;
+  line-height: 1;
+  margin: 0 0 2px;
+}
+
+.serving {
+  font-size: 13px;
+  border-bottom: 1px solid var(--ink);
+  padding: 3px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.serving b {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barThick { height: 11px; background: var(--ink); margin: 4px -2px; }
+.barMed { height: 4.5px; background: var(--ink); margin: 3px 0; }
+
+.amountPer { font-size: 11.5px; font-weight: 700; padding-top: 2px; }
+
+.headline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 4px solid var(--ink);
+  padding-bottom: 2px;
+}
+.headline .word { font-size: 26px; font-weight: 900; letter-spacing: -0.5px; }
+.headline .num { font-size: 34px; font-weight: 900; }
+
+.pctHead {
+  text-align: right;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--ink);
+  padding: 3px 0;
+}
+
+.jrow { border-bottom: 1px solid var(--ink); padding: 4px 0; font-size: 14.5px; }
+.jrow .top { display: flex; justify-content: space-between; font-weight: 700; gap: 8px; }
+.jrowZero .top { font-weight: 400; color: #666; }
+.sub {
+  font-size: 12px;
+  color: #333;
+  padding: 2px 0 1px 16px;
+  font-weight: 400;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sub .what { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub .due { white-space: nowrap; color: #000; }
+.dueHot { color: var(--danger) !important; font-weight: 700; }
+
+.statline {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--ink);
+  padding: 3.5px 0;
+  gap: 10px;
+}
+.statline b { font-weight: 700; }
+
+/* Cliff Score strip — the compliance-cliff gauge translated into label vernacular. */
+.cliff {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--ink);
+  padding: 7px 0;
+}
+.gauge {
+  width: 74px;
+  height: 74px;
+  flex: none;
+  border-radius: 50%;
+  position: relative;
+}
+.gaugeInner {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.gaugeInner b { font-size: 24px; line-height: 1; font-weight: 900; }
+.gaugeInner small {
+  font-size: 7.5px;
+  color: #555;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.verdictTitle { font-size: 17px; font-weight: 900; letter-spacing: -0.3px; }
+.verdictSub { font-size: 11px; color: #333; margin-top: 2px; line-height: 1.35; }
+
+.contains {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  padding: 5px 0 1px;
+  line-height: 1.4;
+}
+.ingredients {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #222;
+  padding: 2px 0 4px;
+  line-height: 1.4;
+}
+.footnote { font-size: 10.5px; padding: 5px 0 2px; line-height: 1.35; }
+
+.brandline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 2.5px solid var(--ink);
+  margin-top: 4px;
+  padding-top: 6px;
+  font-size: 11px;
+  color: #333;
+  gap: 10px;
+}
+.logo { font-weight: 900; font-size: 13px; letter-spacing: -0.3px; color: var(--ink); }
+.logo span { color: var(--accent); }
+.cta {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.cta:hover { text-decoration: underline; }
+
+.emptyNote { font-size: 14px; padding: 14px 2px; font-style: italic; color: #444; }

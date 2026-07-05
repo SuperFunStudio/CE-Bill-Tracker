@@ -1,0 +1,13 @@
+{
+  "name": "comply-by-friday",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Turns SignalScout compliance data into a dated, do-this-next action plan. Hackathon build by persona 'Priya Okafor'.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

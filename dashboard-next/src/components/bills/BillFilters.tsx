@@ -210,8 +210,8 @@ export function BillFilters({ filters, onChange, hideState, resinOptions }: Bill
 
   // EU-central law is EU-wide (no sub-jurisdiction yet), so the State select is hidden in EU mode —
   // it returns with member-state national law (Phase B). Region itself is the global nav selector.
-  const { region } = useRegion();
-  const showState = !hideState && region === 'US';
+  const { isUsView } = useRegion();
+  const showState = !hideState && isUsView;
 
   // Rotate example terms through the placeholder to hint what's searchable (bill #, material, topic).
   const [exampleIdx, setExampleIdx] = useState(0);

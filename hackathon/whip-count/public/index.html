@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Whip Count — the EPR champion board</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121820; --panel2:#0e141b; --line:#1e2833;
+    --ink:#e7edf3; --dim:#8b9aa9; --faint:#5b6b7a;
+    --d:#4f8cff; --r:#ff5d5d; --o:#a98bff;
+    --closer:#33d69f; --workhorse:#ffb23e; --riser:#6fa8ff;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.45}
+  a{color:inherit}
+  .wrap{max-width:1160px;margin:0 auto;padding:24px 20px 80px}
+  header .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--faint)}
+  header h1{margin:.15em 0 .1em;font-size:30px;letter-spacing:-.02em}
+  header .sub{color:var(--dim);max-width:70ch;font-size:14.5px}
+  header .sub b{color:var(--ink);font-weight:600}
+
+  /* filter bar */
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:22px 0 6px;
+    padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .fld{display:flex;flex-direction:column;gap:5px}
+  .fld label{font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--faint)}
+  select{background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:13px;min-width:130px}
+  select:focus{outline:none;border-color:var(--d)}
+  .spacer{flex:1}
+  #status{font-family:var(--mono);font-size:11px;color:var(--faint);align-self:center}
+
+  /* summary tiles */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:10px;margin:14px 0}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px}
+  .tile .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+  .tile .l{font-family:var(--mono);font-size:10px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--dim);margin-top:2px}
+  .tile.closer .n{color:var(--closer)} .tile.workhorse .n{color:var(--workhorse)}
+  .tile.riser .n{color:var(--riser)}
+
+  /* the whip advice callout */
+  .call{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 20px}
+  @media(max-width:640px){.call{grid-template-columns:1fr}}
+  .call .c{border:1px solid var(--line);border-left-width:3px;border-radius:10px;
+    padding:12px 14px;background:var(--panel2)}
+  .call .c.k{border-left-color:var(--closer)} .call .c.w{border-left-color:var(--workhorse)}
+  .call .c .h{font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--dim)}
+  .call .c .who{font-size:16px;font-weight:700;margin:2px 0}
+  .call .c .why{font-size:13px;color:var(--dim)}
+
+  /* legislator cards */
+  .card{display:grid;grid-template-columns:4px 1fr auto;gap:0;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+  .rail{width:4px}
+  .rail.D{background:var(--d)} .rail.R{background:var(--r)} .rail.O{background:var(--o)}
+  .body{padding:13px 16px;min-width:0}
+  .row1{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .name{font-size:17px;font-weight:700}
+  .meta{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+  .badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.1em;
+    padding:3px 8px;border-radius:999px;border:1px solid}
+  .badge.CLOSER{color:var(--closer);border-color:#1f5a45;background:#0e211b}
+  .badge.WORKHORSE{color:var(--workhorse);border-color:#5a4520;background:#211a0e}
+  .badge.RISER{color:var(--riser);border-color:#22456e;background:#0e1826}
+  .play{font-size:13px;color:var(--dim);margin:7px 0 9px}
+  .play b{color:var(--ink);font-weight:600}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chip{font-family:var(--mono);font-size:10.5px;color:var(--dim);
+    border:1px solid var(--line);border-radius:6px;padding:2px 7px;background:var(--panel2)}
+  .chip.on{color:var(--ink);border-color:var(--d);background:#0e1826}
+
+  .side{padding:13px 16px;text-align:right;border-left:1px solid var(--line);
+    display:flex;flex-direction:column;justify-content:center;min-width:120px}
+  .infl{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+  .infl-l{font-family:var(--mono);font-size:9px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+  .meter{height:6px;border-radius:3px;background:#0a1017;overflow:hidden;margin-top:2px}
+  .meter > i{display:block;height:100%;background:var(--closer)}
+  .meter-l{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px}
+  .rec-btn{margin-top:9px;font-family:var(--mono);font-size:11px;color:var(--riser);
+    background:none;border:1px solid var(--line);border-radius:7px;padding:5px 8px;
+    cursor:pointer}
+  .rec-btn:hover{border-color:var(--riser)}
+  .receipts{grid-column:1/-1;border-top:1px solid var(--line);padding:10px 16px;
+    background:var(--panel2);font-family:var(--mono);font-size:12px}
+  .receipts a{display:flex;justify-content:space-between;gap:10px;padding:5px 0;
+    color:var(--dim);text-decoration:none;border-bottom:1px solid #131b24}
+  .receipts a:hover{color:var(--ink)}
+  .receipts .en{color:var(--closer)} .receipts .no{color:var(--faint)}
+
+  footer{margin-top:34px;color:var(--faint);font-size:12px;
+    border-top:1px solid var(--line);padding-top:16px}
+  footer code{font-family:var(--mono);color:var(--dim)}
+  .empty{padding:40px;text-align:center;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Whip Count · SignalScout hackathon · the "Marcus Reyes" persona</div>
+    <h1>The EPR champion board</h1>
+    <p class="sub">The board's other entries serve the company that must <b>comply</b>, or the
+    market that <b>prices</b> it. This serves the room upstream of both: the advocates deciding
+    whether the law should exist — and <b>who to call about it</b>. Rank the legislators who
+    actually move Extended Producer Responsibility law, grouped into who to
+    <b style="color:var(--closer)">thank</b>, who to <b style="color:var(--workhorse)">back</b>,
+    and who to <b style="color:var(--riser)">watch</b>.</p>
+  </header>
+
+  <div class="bar">
+    <div class="fld"><label>Instrument</label><select id="f-instrument"></select></div>
+    <div class="fld"><label>Material</label><select id="f-material"></select></div>
+    <div class="fld"><label>Party</label>
+      <select id="f-party">
+        <option value="">All</option><option value="D">Democratic</option>
+        <option value="R">Republican</option><option value="O">Other</option>
+      </select></div>
+    <div class="fld"><label>State</label><select id="f-state"></select></div>
+    <div class="fld"><label>Min CE bills</label>
+      <select id="f-min"><option value="2">2+</option><option value="4">4+</option>
+        <option value="6">6+</option><option value="10">10+</option></select></div>
+    <div class="spacer"></div>
+    <div id="status">loading…</div>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+  <div class="call" id="call"></div>
+  <div id="board"></div>
+
+  <footer>
+    <b>How the read works.</b> Every number comes straight from the public
+    <code>GET /insights/champions</code> feed — sponsorship counts, enacted totals, per-legislator
+    instrument &amp; material specialties. The <b>advocacy bucket</b> and <b>influence score</b> are
+    this tool's own layer, computed in a ~150-line zero-dependency proxy:
+    <code>influence = enacted×6 + primary×1 + cosponsor×0.4</code> (landing law counts for far more
+    than filing it). <code>CLOSER</code> = 2+ enacted · <code>WORKHORSE</code> = 6+ bills, &lt;2 landed ·
+    <code>RISER</code> = emerging. Click <b>track record</b> to pull a legislator's bill-by-bill
+    receipts from <code>/insights/champions/{id}/bills</code>. Not vibes — grounded.
+  </footer>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const state = { instrument:'', material:'', party:'', state:'', minBills:'2' };
+let facetsLoaded = false;
+let MAXINF = 1;
+
+function opt(v, label){ const o=document.createElement('option'); o.value=v; o.textContent=label; return o; }
+function fillFacet(sel, values, allLabel){
+  const cur = sel.value;
+  sel.innerHTML=''; sel.appendChild(opt('', allLabel));
+  values.forEach(v => sel.appendChild(opt(v, v.replace(/_/g,' '))));
+  if ([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+}
+
+async function load(){
+  $('#status').textContent='loading…';
+  const q = new URLSearchParams();
+  for (const k of ['instrument','material','party','state']) if (state[k]) q.set(k, state[k]);
+  q.set('minBills', state.minBills);
+  const r = await fetch('/api/board?'+q.toString());
+  const data = await r.json();
+  if (data.error){ $('#status').textContent='error'; $('#board').innerHTML='<div class="empty">'+data.error+'</div>'; return; }
+
+  if (!facetsLoaded){
+    fillFacet($('#f-instrument'), data.facets.instruments, 'All instruments');
+    fillFacet($('#f-material'), data.facets.materials, 'All materials');
+    fillFacet($('#f-state'), data.facets.states, 'All states');
+    facetsLoaded = true;
+  }
+  render(data);
+  $('#status').textContent = data.summary.matched + ' legislators matched';
+}
+
+function tile(n,l,cls){ return `<div class="tile ${cls||''}"><div class="n">${n}</div><div class="l">${l}</div></div>`; }
+
+function render(data){
+  const s = data.summary;
+  $('#tiles').innerHTML =
+    tile(s.matched,'legislators') +
+    tile(s.closers,'closers','closer') +
+    tile(s.workhorses,'workhorses','workhorse') +
+    tile(s.risers,'risers','riser') +
+    tile(s.enacted_total,'CE laws landed') +
+    tile(s.states,'states');
+
+  const callCard = (c, cls, head) => c ? `<div class="c ${cls}">
+      <div class="h">${head}</div>
+      <div class="who">${c.name} <span class="meta">· ${c.states.join(', ')} ${c.party_class}</span></div>
+      <div class="why">${c.play}</div></div>` :
+    `<div class="c ${cls}"><div class="h">${head}</div><div class="why" style="padding-top:6px">— none in this filter —</div></div>`;
+  $('#call').innerHTML = callCard(s.top_closer,'k','▲ Thank first — top closer') +
+                         callCard(s.top_workhorse,'w','◆ Back first — top workhorse');
+
+  MAXINF = Math.max(1, ...data.champions.map(c=>c.influence));
+  $('#board').innerHTML = data.champions.length
+    ? data.champions.map((c,i)=>cardHTML(c,i)).join('')
+    : '<div class="empty">No legislators match this filter. Loosen it.</div>';
+}
+
+function chips(c){
+  const inst = c.instruments.map(x=>`<span class="chip ${x===state.instrument?'on':''}">${x.replace(/_/g,' ')}</span>`).join('');
+  const mat  = c.materials.slice(0,6).map(x=>`<span class="chip ${x===state.material?'on':''}">${x.replace(/_/g,' ')}</span>`).join('');
+  return inst + mat;
+}
+
+function cardHTML(c,i){
+  const w = Math.round(100*c.influence/MAXINF);
+  const dist = c.district ? ` · ${c.chamber} ${c.district}` : (c.chamber?` · ${c.chamber}`:'');
+  return `<div class="card" id="card-${i}">
+    <div class="rail ${c.party_class}"></div>
+    <div class="body">
+      <div class="row1">
+        <span class="name">${c.name}</span>
+        <span class="badge ${c.bucket}">${c.bucket}</span>
+        <span class="meta">${c.party} · ${c.states.join(', ')}${dist}</span>
+      </div>
+      <div class="play">${c.play.replace(/^([^—]+—)/,'<b>$1</b>')}</div>
+      <div class="chips">${chips(c)}</div>
+    </div>
+    <div class="side">
+      <div class="infl-l">influence</div>
+      <div class="infl">${c.influence}</div>
+      <div class="meter"><i style="width:${w}%"></i></div>
+      <div class="meter-l">${c.enacted_count}/${c.total_ce_bills} landed · ${c.conversion_pct}%</div>
+      <button class="rec-btn" onclick="receipts('${c.person_id}',${i})">track record ▾</button>
+    </div>
+  </div>`;
+}
+
+async function receipts(id, i){
+  const card = $('#card-'+i);
+  const existing = card.querySelector('.receipts');
+  if (existing){ existing.remove(); return; }
+  const box = document.createElement('div');
+  box.className='receipts'; box.textContent='loading receipts…';
+  card.appendChild(box);
+  try{
+    const r = await fetch('/api/champion/bills?id='+encodeURIComponent(id));
+    const bills = await r.json();
+    if (!bills.length){ box.textContent='No individual bills returned.'; return; }
+    box.innerHTML = bills.slice(0,25).map(b=>`<a href="${b.source_url||'#'}" target="_blank" rel="noopener">
+        <span>${b.state} ${b.bill_number} · ${(b.instrument||'').replace(/_/g,' ')}</span>
+        <span class="${b.enacted?'en':'no'}">${b.enacted?'ENACTED':'—'}</span></a>`).join('');
+  }catch(e){ box.textContent='could not load receipts'; }
+}
+
+['instrument','material','party','state'].forEach(k=>{
+  $('#f-'+k).addEventListener('change', e=>{ state[k]=e.target.value; load(); });
+});
+$('#f-min').addEventListener('change', e=>{ state.minBills=e.target.value; load(); });
+
+load();
+</script>
+</body>
+</html>

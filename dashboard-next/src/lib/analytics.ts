@@ -42,5 +42,8 @@ export function pageTitleFromPath(pathname: string): string {
   // Dynamic per-state pages (/states/ca) — group them under a readable, state-stamped title.
   const stateMatch = path.match(/^\/states\/([a-z]{2})$/i);
   if (stateMatch) return `State: ${stateMatch[1].toUpperCase()}`;
+  // Unified jurisdiction profiles (/jurisdictions/us/ca, /jurisdictions/jp/jp) — region/code stamped.
+  const jxMatch = path.match(/^\/jurisdictions\/([a-z]{2})\/([a-z]{2})$/i);
+  if (jxMatch) return `Jurisdiction: ${jxMatch[1].toUpperCase()}/${jxMatch[2].toUpperCase()}`;
   return path;
 }

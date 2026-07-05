@@ -1,0 +1,37 @@
+{
+  "name": "spec-sheet-guard",
+  "version": "0.1.0",
+  "description": "CI gate that fails your build when a packaging spec has unmet EPR obligations. Compliance, shifted left — powered by the SignalScout API.",
+  "type": "module",
+  "bin": {
+    "spec-sheet-guard": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "check": "node dist/index.js --spec packaging.example.yaml",
+    "test": "node dist/guard.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "epr",
+    "compliance",
+    "ci",
+    "packaging",
+    "circular-economy",
+    "signalscout",
+    "shift-left"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0"
+  }
+}

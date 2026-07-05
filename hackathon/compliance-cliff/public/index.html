@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Compliance Cliff — is your business on the edge?</title>
+<style>
+  :root{
+    --bg:#070b14; --panel:#0e1524; --ink:#eaf0ff; --muted:#8ea0c4;
+    --line:#1c2740; --accent:#6ea8ff; --warn:#ffb020; --danger:#ff5a5f;
+    --good:#31d0aa; --radius:20px;
+    --card-w:600px;
+    font-synthesis:none;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:radial-gradient(1200px 700px at 50% -10%,#12203d 0%,var(--bg) 60%);color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  a{color:var(--accent)}
+  .wrap{max-width:920px;margin:0 auto;padding:34px 20px 80px}
+  header.top{text-align:center;margin-bottom:26px}
+  .badge{display:inline-flex;gap:7px;align-items:center;font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);border:1px solid var(--line);padding:6px 12px;border-radius:999px;background:rgba(255,255,255,.02)}
+  h1{font-size:34px;line-height:1.05;margin:16px 0 6px;letter-spacing:-.02em}
+  h1 .em{background:linear-gradient(90deg,#ffb020,#ff5a5f);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:15px;margin:0 auto;max-width:560px}
+
+  /* search */
+  .search{position:relative;max-width:560px;margin:24px auto 6px}
+  .search input{width:100%;padding:15px 16px;font-size:16px;color:var(--ink);background:var(--panel);
+    border:1px solid var(--line);border-radius:14px;outline:none}
+  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(110,168,255,.15)}
+  .suggest{position:absolute;left:0;right:0;top:58px;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;overflow:hidden;z-index:20;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  .suggest button{display:flex;justify-content:space-between;gap:12px;width:100%;text-align:left;background:none;border:0;
+    color:var(--ink);padding:12px 16px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--line)}
+  .suggest button:last-child{border-bottom:0}
+  .suggest button:hover,.suggest button.active{background:rgba(110,168,255,.10)}
+  .suggest .st{color:var(--muted);font-size:12px;white-space:nowrap}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:600px;margin:14px auto 0}
+  .chips button{background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--muted);
+    padding:7px 13px;border-radius:999px;font-size:13px;cursor:pointer}
+  .chips button:hover{color:var(--ink);border-color:var(--accent)}
+
+  .stage{margin-top:34px;display:flex;flex-direction:column;align-items:center;gap:18px}
+  .hint{color:var(--muted);font-size:14px;text-align:center;max-width:460px}
+  .spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);
+    animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .error{color:var(--danger);background:rgba(255,90,95,.08);border:1px solid rgba(255,90,95,.3);
+    padding:14px 18px;border-radius:12px;font-size:14px;max-width:560px;text-align:center}
+
+  /* THE CARD */
+  .card{width:var(--card-w);max-width:100%;border-radius:var(--radius);position:relative;overflow:hidden;
+    background:
+      radial-gradient(120% 80% at 80% -20%, rgba(255,90,95,.20), transparent 55%),
+      linear-gradient(180deg,#0f1830 0%,#0a1120 55%,#05080f 100%);
+    border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.55)}
+  .card .ridge{position:absolute;left:0;right:0;bottom:0;height:120px;
+    background:linear-gradient(180deg,transparent, rgba(255,90,95,.06));
+    clip-path:polygon(0 60%,12% 45%,26% 62%,40% 40%,55% 66%,70% 38%,85% 60%,100% 44%,100% 100%,0 100%);
+    opacity:.5}
+  .card .pad{position:relative;padding:26px 28px 24px}
+  .cardhead{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:6px}
+  .cname{font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.15}
+  .cscope{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .grounded{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--good);
+    border:1px solid rgba(49,208,170,.4);background:rgba(49,208,170,.08);padding:5px 9px;border-radius:999px;white-space:nowrap}
+
+  .hero{display:flex;align-items:center;gap:18px;margin:18px 0 6px}
+  .gauge{--v:0;width:104px;height:104px;flex:none;border-radius:50%;position:relative;
+    background:conic-gradient(var(--gcol) calc(var(--v)*1%), #16203a 0);}
+  .gauge::after{content:"";position:absolute;inset:9px;border-radius:50%;background:#0a1120}
+  .gauge .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .gauge .num b{font-size:30px;line-height:1}
+  .gauge .num small{font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:3px}
+  .heroright{min-width:0}
+  .verdict{font-size:22px;font-weight:800;letter-spacing:-.01em}
+  .verdict.sheer{color:var(--danger)} .verdict.steep{color:#ff884d}
+  .verdict.exposed{color:var(--warn)} .verdict.foothills{color:#c9d64b} .verdict.solid{color:var(--good)}
+  .verdictsub{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.4}
+
+  .bignum{margin:16px 0 4px;padding:16px 18px;border-radius:14px;border:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(255,90,95,.08),rgba(255,90,95,.02))}
+  .bignum .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .bignum .val{font-size:34px;font-weight:800;letter-spacing:-.02em;margin-top:4px}
+  .bignum .val span{font-size:16px;color:var(--muted);font-weight:600}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+  .stat{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:12px 10px;text-align:center}
+  .stat b{display:block;font-size:22px;letter-spacing:-.02em}
+  .stat small{color:var(--muted);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;display:block;margin-top:4px}
+
+  .rows{margin-top:16px;display:flex;flex-direction:column;gap:9px}
+  .row{display:flex;gap:10px;font-size:13px;align-items:flex-start}
+  .row .k{color:var(--muted);white-space:nowrap}
+  .row .v{color:var(--ink);text-align:right;margin-left:auto}
+  .row .v .dim{color:var(--muted)}
+  .eco{color:var(--good)}
+
+  .cardfoot{display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}
+  .cardfoot .brand{font-weight:700;font-size:13px;letter-spacing:.02em}
+  .cardfoot .brand .dot{color:var(--warn)}
+  .cardfoot .tag{color:var(--muted);font-size:11.5px}
+
+  .actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .actions button{border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    padding:11px 18px;border-radius:12px;font-size:14px;cursor:pointer;font-weight:600}
+  .actions button.primary{background:linear-gradient(90deg,#ffb020,#ff5a5f);border:0;color:#1a0b0b}
+  .actions button:hover{filter:brightness(1.08)}
+  .foot{margin-top:34px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.6}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);
+    padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <span class="badge">🪨 Compliance Cliff · powered by SignalScout</span>
+    <h1>Is your business on the <span class="em">compliance cliff?</span></h1>
+    <p class="sub">Type a company. In seconds, see its Extended Producer Responsibility exposure —
+      the laws, the deadlines, and the dollar figure written into the statutes.</p>
+  </header>
+
+  <div class="search">
+    <input id="q" type="text" autocomplete="off" placeholder="Search a company…  e.g. Amazon, Apple, PepsiCo" />
+    <div id="suggest" class="suggest" hidden></div>
+  </div>
+  <div class="chips" id="chips"></div>
+
+  <div class="stage" id="stage">
+    <p class="hint">Try one of the shortcuts above, or search 400+ tracked producers.</p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+const $ = (s)=>document.querySelector(s);
+const stage = $("#stage"), qEl = $("#q"), sugEl = $("#suggest");
+const CHIPS = ["Amazon","Apple","PepsiCo","Walmart","Nike","Coca-Cola","Target","Procter & Gamble"];
+
+// ---------- formatting ----------
+const fmtMoney = (n)=>{
+  if(n==null) return null;
+  const a=Math.abs(n);
+  if(a>=1e9) return "$"+(n/1e9).toFixed(a>=1e10?0:1)+"B";
+  if(a>=1e6) return "$"+(n/1e6).toFixed(a>=1e7?0:1)+"M";
+  if(a>=1e3) return "$"+Math.round(n/1e3)+"K";
+  return "$"+Math.round(n);
+};
+const fmtDate = (iso)=>{
+  if(!iso) return null;
+  const d=new Date(iso+"T00:00:00");
+  return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+};
+const daysUntil = (iso)=> iso ? Math.round((new Date(iso+"T00:00:00")-new Date())/864e5) : null;
+const relDeadline = (iso)=>{
+  const d=daysUntil(iso); if(d==null) return "";
+  if(d<0) return "overdue"; if(d<31) return `in ${d} days`;
+  if(d<365) return `in ${Math.round(d/30)} mo`; return `in ${(d/365).toFixed(1)} yr`;
+};
+
+// ---------- cliff score ----------
+// A 0-100 "how close to the edge" score blended from breadth (laws×states),
+// deadline urgency, statutory penalty size, and annual-fee magnitude.
+function cliffScore(o){
+  const laws = Math.min(1,(o.affected_bill_count||0)/12);
+  const states = Math.min(1,(o.affected_states?.length||0)/6);
+  const dd = daysUntil(o.next_deadline_date);
+  const urgency = dd==null?0 : dd<=90?1 : dd<=365?0.7 : dd<=730?0.45 : 0.25;
+  const pen = Math.min(1,(o.max_penalty_per_day_usd||0)/50000);
+  const fee = Math.min(1,(o.portfolio_annual_fee_high_usd||0)/1e8);
+  const score = 100*(0.26*laws+0.16*states+0.24*urgency+0.18*pen+0.16*fee);
+  return Math.max(o.affected_bill_count>0?18:0, Math.round(score));
+}
+function verdict(s){
+  if(s>=80) return {k:"sheer",  t:"Sheer drop",  c:"#ff5a5f", d:"Broad, imminent, and expensive exposure. This is a board-level risk."};
+  if(s>=62) return {k:"steep",  t:"Steep face",  c:"#ff884d", d:"Multiple active obligations with real money and near-term deadlines."};
+  if(s>=42) return {k:"exposed",t:"Exposed edge",c:"#ffb020", d:"On the map in several states — deadlines are coming into view."};
+  if(s>=22) return {k:"foothills",t:"Foothills", c:"#c9d64b", d:"Early exposure. A good time to get ahead of it."};
+  return {k:"solid", t:"Solid ground", c:"#31d0aa", d:"No enacted obligations matched yet — worth monitoring."};
+}
+
+// ---------- API ----------
+async function api(path){
+  const r = await fetch(path);
+  const body = await r.json().catch(()=>({error:"Bad response"}));
+  if(!r.ok) throw new Error(body.detail || body.error || `HTTP ${r.status}`);
+  return body;
+}
+
+// ---------- render ----------
+function loading(name){
+  stage.innerHTML = `<div class="spinner"></div><p class="hint">Reading the statutes for <b>${esc(name)}</b>…</p>`;
+}
+function errorView(msg){
+  stage.innerHTML = `<div class="error">Couldn't build the card: ${esc(msg)}</div>`;
+}
+const esc = (s)=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function render(o){
+  if(!o || o.affected_bill_count===0){
+    const name=o?.company_name||"That company";
+    stage.innerHTML = `<div class="card"><div class="pad">
+      <div class="cardhead"><div><div class="cname">${esc(name)}</div>
+      <div class="cscope">No enacted EPR obligations matched — yet</div></div>
+      <span class="grounded" style="color:var(--good)">Solid ground</span></div>
+      <p class="verdictsub" style="margin-top:16px">This producer isn't matched to any enacted Extended Producer
+      Responsibility law in our dataset. New laws land constantly — the ground can shift.</p>
+      <div class="cardfoot"><span class="brand">Signal<span class="dot">Scout</span></span>
+      <span class="tag">compliance-cliff</span></div></div></div>
+      ${actionsHtml()}`;
+    wireActions(o);
+    return;
+  }
+  const s = cliffScore(o), v = verdict(s);
+  const nextO = o.obligations?.find(x=>x.next_deadline) || o.obligations?.[0];
+  const feeLow = fmtMoney(o.portfolio_annual_fee_low_usd);
+  const feeHigh = fmtMoney(o.portfolio_annual_fee_high_usd);
+  const feeRange = feeHigh ? (feeLow && feeLow!==feeHigh ? `${feeLow}–${feeHigh}` : feeHigh) : null;
+  const pen = o.max_penalty_per_day_usd;
+
+  // The hero "big number": lead with the most visceral figure available.
+  let big;
+  if(pen) big = {lbl:"Maximum statutory penalty", val:`${fmtMoney(pen)}<span> / day</span>`};
+  else if(feeRange) big = {lbl:"Estimated annual program fees", val:feeRange};
+  else big = {lbl:"Enacted laws you must comply with", val:`${o.affected_bill_count}`};
+
+  const rows = [];
+  if(nextO?.next_deadline){
+    const nd=nextO.next_deadline;
+    rows.push(`<div class="row"><span class="k">Next deadline</span><span class="v">${fmtDate(nd.deadline_date)}
+      <span class="dim">· ${relDeadline(nd.deadline_date)}</span></span></div>`);
+    rows.push(`<div class="row"><span class="k">${esc(nextO.state)} ${esc(nextO.bill_number||"")}</span>
+      <span class="v">${esc((nd.deadline_type||"").replace(/_/g," "))}</span></div>`);
+  }
+  if(feeRange && pen) rows.push(`<div class="row"><span class="k">Annual program fees</span><span class="v">${feeRange}<span class="dim"> /yr</span></span></div>`);
+  if(o.portfolio_eco_modulation_swing_usd)
+    rows.push(`<div class="row"><span class="k">Eco-modulation lever</span><span class="v eco">up to ${fmtMoney(o.portfolio_eco_modulation_swing_usd)} swing</span></div>`);
+
+  stage.innerHTML = `
+  <div class="card" id="card">
+    <div class="ridge"></div>
+    <div class="pad">
+      <div class="cardhead">
+        <div>
+          <div class="cname">${esc(o.company_name)}</div>
+          <div class="cscope">${o.affected_bill_count} laws · ${(o.affected_states||[]).join(" · ")}</div>
+        </div>
+        ${o.any_fee_grounded?`<span class="grounded">✓ Grounded in statute</span>`:``}
+      </div>
+
+      <div class="hero">
+        <div class="gauge" style="--v:${s};--gcol:${v.c}">
+          <div class="num"><b style="color:${v.c}">${s}</b><small>cliff score</small></div>
+        </div>
+        <div class="heroright">
+          <div class="verdict ${v.k}">${v.t}</div>
+          <div class="verdictsub">${v.d}</div>
+        </div>
+      </div>
+
+      <div class="bignum">
+        <div class="lbl">${big.lbl}</div>
+        <div class="val">${big.val}</div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><b>${o.affected_bill_count}</b><small>Laws</small></div>
+        <div class="stat"><b>${(o.affected_states||[]).length}</b><small>States</small></div>
+        <div class="stat"><b>${o.upcoming_deadline_count}</b><small>Deadlines</small></div>
+        <div class="stat"><b>${o.next_deadline_date?relDeadline(o.next_deadline_date).replace(/^in /,""):"—"}</b><small>To next</small></div>
+      </div>
+
+      <div class="rows">${rows.join("")}</div>
+
+      <div class="cardfoot">
+        <span class="brand">Signal<span class="dot">Scout</span></span>
+        <span class="tag">Is your business on the compliance cliff?</span>
+      </div>
+    </div>
+  </div>
+  ${actionsHtml()}
+  <p class="hint">Figures are drawn from enacted statutes and published fee schedules via the SignalScout API.
+    Penalties are the statutory maximum; fees are volume-apportioned estimates.</p>`;
+  wireActions(o);
+}
+
+function actionsHtml(){
+  return `<div class="actions">
+    <button class="primary" id="dl">⬇ Download card (PNG)</button>
+    <button id="share">🔗 Copy share link</button>
+    <button id="again">↺ Check another</button>
+  </div>`;
+}
+
+let LAST=null;
+function wireActions(o){
+  LAST=o;
+  const dl=$("#dl"), share=$("#share"), again=$("#again");
+  if(again) again.onclick=()=>{ location.hash=""; qEl.value=""; qEl.focus();
+    stage.innerHTML=`<p class="hint">Try one of the shortcuts above, or search 400+ tracked producers.</p>`; };
+  if(share) share.onclick=async()=>{
+    const url=`${location.origin}${location.pathname}#c=${encodeURIComponent(o.company_id)}`;
+    try{ await navigator.clipboard.writeText(url); toast("Share link copied ✓"); }
+    catch{ toast(url); }
+  };
+  if(dl) dl.onclick=()=>downloadCard(o.company_name);
+}
+
+async function downloadCard(name){
+  const card=$("#card"); if(!card) return;
+  try{
+    const mod=await import("https://esm.sh/html-to-image@1.11.11");
+    const dataUrl=await mod.toPng(card,{pixelRatio:2,backgroundColor:"#05080f"});
+    const a=document.createElement("a");
+    a.download=`compliance-cliff-${(name||"card").toLowerCase().replace(/[^a-z0-9]+/g,"-")}.png`;
+    a.href=dataUrl; a.click();
+    toast("Card downloaded ✓");
+  }catch(e){ toast("PNG export needs internet — try a screenshot"); }
+}
+
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+// ---------- search flow ----------
+async function loadCompany(id,name){
+  loading(name||"company");
+  location.hash=`c=${encodeURIComponent(id)}`;
+  try{ render(await api(`/api/obligations?id=${encodeURIComponent(id)}`)); }
+  catch(e){ errorView(e.message); }
+}
+
+async function searchAndPick(term){
+  loading(term);
+  try{
+    const list=await api(`/api/search?q=${encodeURIComponent(term)}`);
+    if(!list.length){ errorView(`No company found for “${term}”.`); return; }
+    await loadCompany(list[0].id, list[0].name);
+  }catch(e){ errorView(e.message); }
+}
+
+let sugItems=[], sugIdx=-1, tmr=null;
+qEl.addEventListener("input",()=>{
+  const term=qEl.value.trim();
+  clearTimeout(tmr);
+  if(term.length<2){ hideSuggest(); return; }
+  tmr=setTimeout(async()=>{
+    try{
+      const list=await api(`/api/search?q=${encodeURIComponent(term)}`);
+      showSuggest(list);
+    }catch{ hideSuggest(); }
+  },180);
+});
+qEl.addEventListener("keydown",(e)=>{
+  if(sugEl.hidden){ if(e.key==="Enter"&&qEl.value.trim()) searchAndPick(qEl.value.trim()); return; }
+  if(e.key==="ArrowDown"){ sugIdx=Math.min(sugIdx+1,sugItems.length-1); paintActive(); e.preventDefault(); }
+  else if(e.key==="ArrowUp"){ sugIdx=Math.max(sugIdx-1,0); paintActive(); e.preventDefault(); }
+  else if(e.key==="Enter"){ e.preventDefault();
+    if(sugIdx>=0&&sugItems[sugIdx]) pick(sugItems[sugIdx]); else if(qEl.value.trim()) searchAndPick(qEl.value.trim()); }
+  else if(e.key==="Escape") hideSuggest();
+});
+document.addEventListener("click",(e)=>{ if(!e.target.closest(".search")) hideSuggest(); });
+
+function showSuggest(list){
+  sugItems=list; sugIdx=-1;
+  if(!list.length){ hideSuggest(); return; }
+  sugEl.innerHTML=list.map((c,i)=>`<button data-i="${i}">
+    <span>${esc(c.name)}</span>
+    <span class="st">${esc([c.hq_state,(c.operating_states||[]).length+" states"].filter(Boolean).join(" · "))}</span>
+  </button>`).join("");
+  sugEl.querySelectorAll("button").forEach(b=>b.onclick=()=>pick(list[+b.dataset.i]));
+  sugEl.hidden=false;
+}
+function paintActive(){ sugEl.querySelectorAll("button").forEach((b,i)=>b.classList.toggle("active",i===sugIdx)); }
+function hideSuggest(){ sugEl.hidden=true; sugItems=[]; sugIdx=-1; }
+function pick(c){ qEl.value=c.name; hideSuggest(); loadCompany(c.id,c.name); }
+
+// chips
+$("#chips").innerHTML=CHIPS.map(c=>`<button>${esc(c)}</button>`).join("");
+$("#chips").querySelectorAll("button").forEach(b=>b.onclick=()=>{ qEl.value=b.textContent; searchAndPick(b.textContent); });
+
+// deep link ( #c=<uuid> )
+function fromHash(){
+  const m=location.hash.match(/c=([0-9a-f-]{36})/i);
+  if(m) loadCompany(m[1]);
+}
+window.addEventListener("hashchange",fromHash);
+fromHash();
+</script>
+</body>
+</html>

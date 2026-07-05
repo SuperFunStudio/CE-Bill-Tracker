@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.config import settings  # noqa: E402
 from app.ingestion.bill_text import SOURCE_NONE, fetch_clean_text  # noqa: E402
 from app.ingestion.legiscan import LegiScanClient  # noqa: E402
+from app.ingestion.nysenate import NYSenateClient  # noqa: E402
 from app.ingestion.openstates import OpenStatesClient  # noqa: E402
 
 
@@ -64,7 +65,7 @@ async def _candidates(db: AsyncSession, materials: list[str] | None, only_stale:
         # bill with NULL change_hash and an existing row (also NULL) is correctly treated as current.
         clauses.append("(t.bill_id IS NULL OR t.indexed_change_hash IS DISTINCT FROM b.change_hash)")
     sql = ("SELECT b.id, b.state, b.bill_number, b.title, b.openstates_id, b.legiscan_bill_id, "
-           "b.source_url, b.change_hash "
+           "b.source_url, b.change_hash, b.status_date, b.last_action_date "
            "FROM bills b LEFT JOIN bill_texts t ON t.bill_id = b.id "
            f"WHERE {' AND '.join(clauses)} "
            "ORDER BY b.status_date DESC NULLS LAST LIMIT :limit")
@@ -106,11 +107,17 @@ async def main() -> None:
 
         by_source: Counter = Counter()
         no_text = wrote = total_chars = 0
-        async with LegiScanClient() as ls_client, OpenStatesClient() as os_client:
+        async with (
+            LegiScanClient() as ls_client,
+            OpenStatesClient() as os_client,
+            NYSenateClient() as ny_client,
+        ):
             for b in bills:
                 tag = f"{b.state} {b.bill_number or '?'}"
                 try:
-                    full_text, src = await fetch_clean_text(ls_client, os_client, b, args.os_delay)
+                    full_text, src = await fetch_clean_text(
+                        ls_client, os_client, b, args.os_delay, ny_client=ny_client
+                    )
                 except Exception as e:  # noqa: BLE001
                     print(f"  [fail] {tag}: {type(e).__name__}: {e}")
                     continue

@@ -4,9 +4,11 @@ Factored out of scripts/scan_bill_polymers.py for Layer B of the full-text searc
 (docs/V2_FULLTEXT_SEARCH_PLAN.md). Consumers: the polymer/resin scanner, the bill_texts backfill
 (scripts/backfill_bill_text.py), and the bill_texts refresh job — one ladder so they can't drift.
 
-Ladder (per bill): **LegiScan primary** (reliable full text + freshest quota) → **OpenStates
-versions API** (throttled fallback) → **source_url scrape** (last; for many states the stored
-source_url is the bill's overview/landing page, not the document). The returned text is
+Ladder (per bill): **NYS Open Legislation first for NY bills** (authoritative, clean plain text,
+needs settings.nys_api_key — skipped when unset) → **LegiScan primary** (reliable full text +
+freshest quota) → **OpenStates versions API** (throttled fallback) → **source_url scrape** (last;
+for many states the stored source_url is the bill's overview/landing page, not the document —
+and for NY it's the OpenLeg API itself, which 401s without a key). The returned text is
 tag-stripped and whitespace-normalized so it is suitable for BOTH the regex resin detector AND
 Postgres FTS / ts_headline — no HTML tags leak into the tsvector or the highlighted snippets.
 
@@ -21,9 +23,11 @@ import html
 import re
 
 from app.ingestion.legiscan import LegiScanClient
+from app.ingestion.nysenate import NYSenateClient, session_year_for
 from app.ingestion.openstates import OpenStatesClient, _extract_pdf_text
 
 # Source labels stored in bill_texts.source / shown by the scanner.
+SOURCE_NYSENATE = "nysenate"
 SOURCE_LEGISCAN = "legiscan"
 SOURCE_OPENSTATES = "openstates"
 SOURCE_URL = "source_url"
@@ -131,14 +135,30 @@ async def _legiscan_text(client: LegiScanClient, legiscan_bill_id: int) -> str:
 
 
 async def fetch_clean_text(
-    ls_client: LegiScanClient, os_client: OpenStatesClient, b, os_delay: float = 0.0
+    ls_client: LegiScanClient,
+    os_client: OpenStatesClient,
+    b,
+    os_delay: float = 0.0,
+    ny_client: NYSenateClient | None = None,
 ) -> tuple[str, str]:
     """Fetch a bill's full text and return ``(clean_text, source)``.
 
-    `source` is one of SOURCE_LEGISCAN / SOURCE_OPENSTATES / SOURCE_URL / SOURCE_NONE. LegiScan is
-    primary; the OpenStates versions API is the throttled fallback (`os_delay` seconds before each
-    call to respect the free-tier limit); the source_url scrape is last. Empty text → ("", "none").
+    `source` is one of SOURCE_NYSENATE / SOURCE_LEGISCAN / SOURCE_OPENSTATES / SOURCE_URL /
+    SOURCE_NONE. For NY bills the NYS Open Legislation API is tried first when `ny_client` is
+    passed and enabled (authoritative + plain text); LegiScan is primary elsewhere; the OpenStates
+    versions API is the throttled fallback (`os_delay` seconds before each call to respect the
+    free-tier limit); the source_url scrape is last. Empty text → ("", "none").
     """
+    if b.state == "NY" and ny_client is not None and ny_client.is_enabled:
+        session = session_year_for(b)
+        print_no = canon_bill_number(b.bill_number)
+        if session and print_no:
+            try:
+                txt = await ny_client.get_bill_text(session, print_no)
+                if txt:
+                    return clean_text(txt), SOURCE_NYSENATE
+            except Exception:  # noqa: BLE001
+                pass  # fall through to the generic rungs
     try:
         lid = await _resolve_legiscan_id(ls_client, b)
         if lid:

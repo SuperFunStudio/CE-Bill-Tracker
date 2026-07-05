@@ -208,7 +208,7 @@ class BillText(Base):
         nullable=True,
     )
     char_len: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Which rung of the fetch ladder produced the text: source_url | openstates | legiscan.
+    # Which rung of the fetch ladder produced the text: nysenate | legiscan | openstates | source_url.
     source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     indexed_change_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

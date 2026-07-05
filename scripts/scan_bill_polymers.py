@@ -41,6 +41,7 @@ from app.config import settings  # noqa: E402
 # Shared fetch ladder (LegiScan → OpenStates → source_url, returns clean tag-free text).
 from app.ingestion.bill_text import fetch_clean_text  # noqa: E402
 from app.ingestion.legiscan import LegiScanClient  # noqa: E402
+from app.ingestion.nysenate import NYSenateClient  # noqa: E402
 from app.ingestion.openstates import OpenStatesClient  # noqa: E402
 
 DEFAULT_MATERIALS = ["plastic_packaging", "plastic_products"]
@@ -68,7 +69,7 @@ async def _candidates(db: AsyncSession, materials: list[str] | None, only_missin
         # drop every bill with no compliance_details yet — i.e. most of them.
         clauses.append("(compliance_details IS NULL OR NOT (compliance_details ? 'polymers'))")
     sql = ("SELECT id, state, bill_number, title, openstates_id, legiscan_bill_id, "
-           "source_url, compliance_details "
+           "source_url, compliance_details, status_date, last_action_date "
            f"FROM bills WHERE {' AND '.join(clauses)} "
            "ORDER BY status_date DESC NULLS LAST LIMIT :limit")
     return list((await db.execute(text(sql), params)).all())
@@ -102,11 +103,17 @@ async def main() -> None:
 
         tally: Counter = Counter()
         no_text = with_text = wrote = 0
-        async with LegiScanClient() as ls_client, OpenStatesClient() as os_client:
+        async with (
+            LegiScanClient() as ls_client,
+            OpenStatesClient() as os_client,
+            NYSenateClient() as ny_client,
+        ):
             for b in bills:
                 tag = f"{b.state} {b.bill_number or '?'}"
                 try:
-                    full_text, src = await fetch_clean_text(ls_client, os_client, b, args.os_delay)
+                    full_text, src = await fetch_clean_text(
+                        ls_client, os_client, b, args.os_delay, ny_client=ny_client
+                    )
                 except Exception as e:  # noqa: BLE001
                     print(f"  [fail] {tag}: {type(e).__name__}: {e}")
                     continue

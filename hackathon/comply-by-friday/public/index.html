@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Comply by Friday — SignalScout</title>
+<style>
+  :root {
+    --ink: #14181f; --muted: #667085; --line: #e6e8ec; --bg: #f7f8fa;
+    --card: #fff; --brand: #0f5132; --brand-soft: #e7f2ec;
+    --now: #b42318; --now-bg: #fef3f2; --soon: #b54708; --soon-bg: #fffaeb;
+    --later: #475467; --later-bg: #f2f4f7; --watch: #667085;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink); background: var(--bg); }
+  header { background: var(--brand); color: #fff; padding: 28px 24px; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: -0.02em; }
+  .tag { margin: 6px 0 0; opacity: .85; font-size: 14px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; margin: 20px auto; }
+  label { font-weight: 600; font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .field { flex: 1; min-width: 200px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 12px;
+    cursor: pointer; font-size: 13px; user-select: none; }
+  .chip.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); font-weight: 600; }
+  select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; font: inherit; background:#fff; }
+  button.go { background: var(--brand); color: #fff; border: 0; border-radius: 10px; padding: 11px 20px;
+    font-weight: 600; font-size: 15px; cursor: pointer; }
+  button.go:disabled { opacity: .5; cursor: default; }
+  .btn-ghost { background:#fff; border:1px solid var(--line); border-radius:9px; padding:8px 14px; cursor:pointer; font:inherit; }
+
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0 18px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; flex: 1; min-width: 120px; }
+  .stat b { display: block; font-size: 24px; letter-spacing: -.02em; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .stat.alert b { color: var(--now); }
+
+  .group-h { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); margin: 22px 0 10px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--line);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .item.now { border-left-color: var(--now); }
+  .item.soon { border-left-color: var(--soon); }
+  .item.later { border-left-color: var(--later); }
+  .item.watch { border-left-color: var(--watch); border-style: dashed; }
+  .item-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .action { font-weight: 700; font-size: 15px; }
+  .due { font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .due.now { color: var(--now); } .due.soon { color: var(--soon); } .due.later { color: var(--later); }
+  .due.undated { color: var(--muted); font-weight: 500; }
+  .summary { color: var(--ink); margin: 6px 0; }
+  .meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 6px; }
+  .pill { background: var(--later-bg); border-radius: 6px; padding: 2px 8px; font-size: 12px; }
+  .pill.fee { background: var(--soon-bg); color: var(--soon); font-weight: 600; }
+  .pill.st { background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+  a.reg { color: var(--brand); font-weight: 600; text-decoration: none; }
+  a.reg:hover { text-decoration: underline; }
+  .empty, .err { color: var(--muted); padding: 30px; text-align: center; }
+  .err { color: var(--now); }
+  .note { font-size: 12px; color: var(--muted); margin-top: 24px; border-top: 1px solid var(--line); padding-top: 12px; }
+  @media print {
+    header { background: #fff; color: #000; border-bottom: 2px solid #000; }
+    .panel.controls, .btn-ghost, .note { display: none; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Comply by Friday</h1>
+    <p class="tag">Don't show me the bill. Tell me what to do about it — in date order, by when.</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel controls">
+    <div class="row">
+      <div class="field">
+        <label>Where do you operate?</label>
+        <div class="chips" id="states"></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:16px;">
+      <div class="field">
+        <label>Filter by material <span style="font-weight:400;">(optional)</span></label>
+        <div class="chips" id="materials"></div>
+      </div>
+      <div>
+        <button class="go" id="run">Build my plan</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+const STATES = ["CA","OR","CO","ME","WA","NY","MN","IL","NJ","MD","VT","CT"];
+const MATERIALS = ["plastic_packaging","paper","glass","metals","electronics","batteries","textiles"];
+const picked = { states: new Set(["CA","OR"]), materials: new Set() };
+
+const bucketMeta = {
+  overdue: { h: "⚠ Overdue", cls: "now" },
+  now:     { h: "Due within 30 days", cls: "now" },
+  soon:    { h: "Due within 90 days", cls: "soon" },
+  later:   { h: "On the horizon", cls: "later" },
+  undated: { h: "No fixed date yet — monitor", cls: "watch" },
+};
+const order = ["overdue","now","soon","later","undated"];
+
+function renderChips(el, values, set) {
+  el.innerHTML = "";
+  for (const v of values) {
+    const c = document.createElement("span");
+    c.className = "chip" + (set.has(v) ? " on" : "");
+    c.textContent = v.replace(/_/g, " ");
+    c.onclick = () => { set.has(v) ? set.delete(v) : set.add(v); c.classList.toggle("on"); };
+    el.appendChild(c);
+  }
+}
+renderChips(document.getElementById("states"), STATES, picked.states);
+renderChips(document.getElementById("materials"), MATERIALS, picked.materials);
+
+function fmtDate(s) {
+  if (!s) return "";
+  const d = new Date(s + "T00:00:00");
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+function dueLabel(it) {
+  if (!it.deadline_date) return { txt: "no fixed date", cls: "undated" };
+  const cls = it.bucket === "overdue" || it.bucket === "now" ? "now" : it.bucket === "soon" ? "soon" : "later";
+  const rel = it.days_until < 0 ? `${-it.days_until}d overdue`
+    : it.days_until === 0 ? "today" : `in ${it.days_until}d`;
+  return { txt: `${fmtDate(it.deadline_date)} · ${rel}`, cls };
+}
+
+function itemHTML(it) {
+  const due = dueLabel(it);
+  const cls = it.tier === "watch" ? "watch" : (it.bucket === "overdue" ? "now" : it.bucket);
+  const reg = it.registration_url
+    ? `<a class="reg" href="${it.registration_url}" target="_blank" rel="noopener">${it.entity ? it.entity.name : "Registration link"} →</a>` : "";
+  const detail = it.deadline_detail ? `<div class="meta">📌 ${it.deadline_detail}</div>` : "";
+  return `<div class="item ${cls}">
+    <div class="item-top">
+      <span class="action">${it.action_label}</span>
+      <span class="due ${due.cls}">${due.txt}</span>
+    </div>
+    <div class="summary">${it.action_summary || ""}</div>
+    ${detail}
+    <div class="meta">
+      <span class="pill st">${it.state}</span>
+      <span>${it.bill_number} — ${it.bill_title}</span>
+      ${it.has_fee ? '<span class="pill fee">has fee</span>' : ""}
+      ${(it.materials||[]).map(m => `<span class="pill">${String(m).replace(/_/g," ")}</span>`).join("")}
+      ${reg}
+    </div>
+  </div>`;
+}
+
+async function run() {
+  const out = document.getElementById("out");
+  const btn = document.getElementById("run");
+  const states = [...picked.states];
+  if (!states.length) { out.innerHTML = '<div class="err">Pick at least one state.</div>'; return; }
+  btn.disabled = true; btn.textContent = "Building…";
+  out.innerHTML = '<div class="empty">Composing your action plan…</div>';
+  try {
+    const qs = new URLSearchParams({ states: states.join(","), materials: [...picked.materials].join(",") });
+    const plan = await (await fetch("/api/plan?" + qs)).json();
+    if (plan.error) throw new Error(plan.error);
+    render(plan);
+  } catch (e) {
+    out.innerHTML = `<div class="err">Couldn't build the plan: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Build my plan";
+  }
+}
+
+function render(plan) {
+  const s = plan.summary;
+  const groups = {};
+  for (const it of plan.items) (groups[it.bucket] ||= []).push(it);
+
+  let html = `<div class="stats">
+    <div class="stat"><b>${s.act}</b><span>actions required</span></div>
+    <div class="stat ${s.within_30 ? "alert" : ""}"><b>${s.within_30}</b><span>due in 30 days</span></div>
+    <div class="stat"><b>${s.within_90}</b><span>due in 90 days</span></div>
+    <div class="stat"><b>${s.next_deadline ? fmtDate(s.next_deadline) : "—"}</b><span>next deadline</span></div>
+  </div>
+  <div style="text-align:right;margin-bottom:8px;"><button class="btn-ghost" onclick="window.print()">🖨 Print / save PDF</button></div>`;
+
+  if (!plan.items.length) {
+    html += '<div class="empty">No action items for that selection — try more states or clear the material filter.</div>';
+  }
+  for (const b of order) {
+    const g = groups[b];
+    if (!g || !g.length) continue;
+    html += `<div class="group-h">${bucketMeta[b].h} · ${g.length}</div>`;
+    html += g.map(itemHTML).join("");
+  }
+  html += `<div class="note">Composed live from SignalScout: <code>/compliance/pathways</code> +
+    <code>/bills/deadlines/upcoming</code>. Rich deadline descriptions come from the free-tier feed
+    (5 soonest); a Pro key returns every dated milestone. Fees and PRO contacts are pulled per-law.</div>`;
+  document.getElementById("out").innerHTML = html;
+}
+
+document.getElementById("run").onclick = run;
+run(); // build the default CA + OR plan on load
+</script>
+</body>
+</html>

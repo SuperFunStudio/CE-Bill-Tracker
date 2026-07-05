@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Under Appeal — is your compliance spend standing on solid ground?</title>
+<style>
+  :root {
+    --paper: #f5f2ea; --ink: #1c1a17; --muted: #6b6459; --rule: #d8d1c2;
+    --card: #fffdf8; --enjoined: #b3261e; --challenge: #b25f00; --exposed: #5b4b8a;
+    --tighten: #0f6b6b; --settled: #5c6f5c; --accent: #1c1a17;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.5 "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  header .kicker { font-family: var(--mono); text-transform: uppercase; letter-spacing: .18em;
+    font-size: 11px; color: var(--muted); }
+  h1 { font-size: 30px; margin: 6px 0 4px; letter-spacing: -.01em; }
+  .tagline { color: var(--muted); font-style: italic; margin: 0 0 18px; }
+  .persona { border-left: 3px solid var(--ink); padding: 6px 0 6px 14px; margin: 0 0 24px;
+    color: #3b352c; font-size: 13.5px; max-width: 720px; }
+  .persona b { font-style: normal; }
+
+  .picker { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .chip { border: 1px solid var(--rule); background: var(--card); color: var(--ink);
+    padding: 7px 12px; border-radius: 999px; cursor: pointer; font-size: 13px; font-family: inherit; }
+  .chip:hover { border-color: var(--ink); }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  input[list] { padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px;
+    background: var(--card); font: inherit; min-width: 260px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 4px 0 24px; }
+
+  /* verdict banner */
+  .verdict { background: var(--card); border: 1px solid var(--rule); border-radius: 12px;
+    padding: 20px 22px; margin-bottom: 22px; box-shadow: 0 1px 0 rgba(0,0,0,.03); }
+  .verdict .stamp { font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--muted); }
+  .verdict h2 { font-size: 22px; margin: 6px 0 10px; line-height: 1.25; }
+  .verdict h2 .hot { color: var(--enjoined); }
+  .bellwether { background: #efe9f6; border: 1px solid #d9cdf0; color: #3a2f57;
+    border-radius: 8px; padding: 10px 13px; font-size: 13.5px; margin: 12px 0 4px; }
+  .bellwether b { color: var(--exposed); }
+  .facts { display: flex; flex-wrap: wrap; gap: 22px; margin-top: 14px; }
+  .fact .n { font-size: 22px; font-weight: 600; }
+  .fact .l { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted);
+    margin: 0 0 16px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px;
+    vertical-align: middle; }
+
+  /* obligation card */
+  .ob { background: var(--card); border: 1px solid var(--rule); border-left-width: 4px;
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  .ob.ENJOINED { border-left-color: var(--enjoined); }
+  .ob.UNDER_CHALLENGE { border-left-color: var(--challenge); }
+  .ob.EXPOSED { border-left-color: var(--exposed); }
+  .ob.CONTESTED_REGS { border-left-color: var(--tighten); }
+  .ob.SETTLED { border-left-color: var(--settled); }
+  .ob-top { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+  .ob-law { font-size: 16px; font-weight: 600; }
+  .ob-law .st { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .pill { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 4px 9px; border-radius: 6px; white-space: nowrap; color: #fff; }
+  .pill.ENJOINED { background: var(--enjoined); }
+  .pill.UNDER_CHALLENGE { background: var(--challenge); }
+  .pill.EXPOSED { background: var(--exposed); }
+  .pill.CONTESTED_REGS { background: var(--tighten); }
+  .pill.SETTLED { background: var(--settled); }
+  .ob-head { font-size: 13.5px; color: #3b352c; margin: 8px 0 2px; }
+  .ob-meta { font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+  .ob-meta b { color: var(--ink); font-weight: 600; }
+
+  .gauge { height: 7px; background: #e7e0d2; border-radius: 4px; overflow: hidden; margin: 8px 0 2px; }
+  .gauge > span { display: block; height: 100%; }
+  .gauge-l { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  /* case dossier */
+  .case { border-top: 1px dashed var(--rule); margin-top: 12px; padding-top: 12px; }
+  .case-name { font-weight: 600; font-size: 14px; }
+  .case-name a { color: inherit; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  .badge { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+    background: #efeade; border: 1px solid var(--rule); border-radius: 5px; padding: 2px 7px; color: #4a4438; }
+  .badge.tighten { background: #e2f2f0; border-color: #bfe0db; color: #0f6b6b; }
+  .events { list-style: none; padding: 0; margin: 8px 0 0; }
+  .events li { display: flex; gap: 10px; font-size: 12.5px; padding: 3px 0; }
+  .events .when { font-family: var(--mono); font-size: 11px; color: var(--muted); min-width: 112px; flex-shrink: 0; }
+  .events .sig-critical { color: var(--enjoined); font-weight: 600; }
+  .events .sig-high { color: var(--challenge); }
+  .sources { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+  .sources a { color: var(--muted); }
+  .seedtag { font-family: var(--mono); font-size: 10px; color: var(--exposed); border: 1px solid #d9cdf0;
+    background: #efe9f6; border-radius: 4px; padding: 1px 6px; margin-left: 6px; }
+
+  footer { border-top: 1px solid var(--rule); margin-top: 34px; padding-top: 16px;
+    font-size: 12px; color: var(--muted); }
+  footer code { background: #ece6d9; padding: 1px 5px; border-radius: 4px; }
+  .mark { font-weight: 600; color: var(--ink); }
+  .loading, .error { padding: 30px; text-align: center; color: var(--muted); }
+  .error { color: var(--enjoined); }
+  .actions { margin: 4px 0 20px; }
+  .btn { border: 1px solid var(--rule); background: var(--card); border-radius: 8px; padding: 7px 12px;
+    cursor: pointer; font: inherit; font-size: 13px; }
+  .btn:hover { border-color: var(--ink); }
+  @media print {
+    .picker, .hint, .actions, .chip { display: none !important; }
+    body { background: #fff; }
+    .ob, .verdict { break-inside: avoid; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">◨ Under Appeal · the EPR challenge board</div>
+    <h1>Is your compliance spend standing on solid ground?</h1>
+    <p class="tagline">Every other tool tells you what to comply with. This one tells you which of those obligations is one court ruling away from vanishing.</p>
+    <p class="persona"><b>Dana Okonkwo — "The Docket."</b> Ex-EPR-defense litigator. <i>"The most expensive compliance mistake isn't missing a deadline. It's spending $2M to comply with a statute that gets enjoined three months before it takes effect. The board tracks laws being born. I track them being tested."</i></p>
+  </header>
+
+  <div class="picker" id="chips"></div>
+  <input list="companyList" id="search" placeholder="…or search 400+ tracked producers" autocomplete="off" />
+  <datalist id="companyList"></datalist>
+  <div class="hint">Pick a producer. We pull its live obligations from SignalScout, then join each one to the litigation docket.</div>
+
+  <div class="actions" id="actions" style="display:none">
+    <button class="btn" onclick="window.print()">⎙ Print / save as risk memo</button>
+  </div>
+
+  <div id="out"></div>
+
+  <footer>
+    <p><span class="mark">SignalScout · Under Appeal.</span> Obligations, fees &amp; deadlines are live from
+      <code>/companies/{id}/obligations</code>. Litigation is live from <code>/bills/{id}/litigation-cases</code> —
+      and where prod hasn't ingested a docket yet, we overlay <b>real, cited</b> EPR cases
+      (<span class="seedtag">seed</span>) shaped to the same schema. Run
+      <code>scripts/seed_courtlistener.py</code> against prod and the overlay goes dark on its own.</p>
+    <p><b>Under Appeal's own read</b> — the part the raw API can't return: an obligation with no suit of its own is
+      still <b style="color:var(--exposed)">EXPOSED</b> when the same legal theory has already won in another state.</p>
+  </footer>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const out = $('#out');
+const fmtUSD = (n) => n == null ? null : n >= 1e6 ? '$' + (n/1e6).toFixed(1).replace(/\.0$/,'') + 'M'
+  : n >= 1e3 ? '$' + Math.round(n/1e3) + 'k' : '$' + n;
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const LABEL = { ENJOINED:'Enjoined', UNDER_CHALLENGE:'Under challenge', EXPOSED:'Exposed · by precedent',
+  CONTESTED_REGS:'Regs contested', SETTLED:'Settled' };
+const CVAR = { ENJOINED:'var(--enjoined)', UNDER_CHALLENGE:'var(--challenge)', EXPOSED:'var(--exposed)',
+  CONTESTED_REGS:'var(--tighten)', SETTLED:'var(--settled)' };
+
+let COMPANIES = [];
+async function boot() {
+  const data = await fetch('/api/companies').then(r => r.json()).catch(() => ({featured:[],companies:[]}));
+  COMPANIES = data.companies || [];
+  $('#companyList').innerHTML = COMPANIES.map(c => `<option value="${esc(c.name)}" data-id="${c.id}">`).join('');
+  $('#chips').innerHTML = (data.featured || []).map(c =>
+    `<button class="chip" data-id="${c.id}" onclick="pick('${c.id}', this)">${esc(c.name)}</button>`).join('');
+  $('#search').addEventListener('change', (e) => {
+    const m = COMPANIES.find(c => c.name === e.target.value);
+    if (m) pick(m.id);
+  });
+}
+
+async function pick(id, el) {
+  document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c === el ? 'true' : 'false'));
+  $('#actions').style.display = 'none';
+  out.innerHTML = '<div class="loading">Pulling the docket…</div>';
+  try {
+    const r = await fetch('/api/review?company_id=' + encodeURIComponent(id));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'failed');
+    render(d);
+    $('#actions').style.display = 'block';
+  } catch (e) {
+    out.innerHTML = `<div class="error">Couldn't build the review: ${esc(e.message)}</div>`;
+  }
+}
+
+function render(d) {
+  const s = d.summary, p = d.portfolio;
+  const feeBand = (p.fee_low_usd != null && p.fee_high_usd != null)
+    ? `${fmtUSD(p.fee_low_usd)}–${fmtUSD(p.fee_high_usd)}` : '—';
+
+  const hotLine = s.enjoined > 0
+    ? `<span class="hot">${s.enjoined} obligation${s.enjoined>1?'s':''} ENJOINED</span> — enforcement paused by court order.`
+    : s.challenged > 0
+      ? `<span class="hot">${s.contested} of ${s.total} obligations</span> are under legal fire.`
+      : s.contested > 0
+        ? `<span class="hot">${s.exposed} obligation${s.exposed>1?'s':''} exposed</span> to a winning challenge next door.`
+        : `No active challenge across ${s.total} obligations — settled ground.`;
+
+  const bell = d.precedent ? `<div class="bellwether">⚖︎ <b>Precedent alert:</b> the Dormant Commerce Clause theory
+    already <b>won</b> in ${esc(d.precedent.state)} — <i>${esc(d.precedent.case_name)}</i> (PI granted ${esc(d.precedent.date)}).
+    Every packaging-EPR obligation below stands on the same contested ground, sued or not.</div>` : '';
+
+  const facts = [
+    ['Portfolio fee exposure / yr', feeBand + (p.any_fee_grounded ? '' : ' <span class="gauge-l">est.</span>')],
+    ['Obligations', s.total],
+    ['Contested', `${s.contested}`],
+    ['States now in court', s.contested_states.join(', ') || '—'],
+    ['Soonest contested deadline', s.soonest_contested_deadline
+      ? `${s.soonest_contested_deadline}${s.days_until_soonest_contested!=null?` · ${s.days_until_soonest_contested}d`:''}` : '—'],
+  ].map(([l,n]) => `<div class="fact"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+
+  const verdict = `<div class="verdict">
+    <div class="stamp">Litigation posture · ${esc(d.company.name)} · generated ${d.generated_utc.slice(0,10)}</div>
+    <h2>${hotLine}</h2>
+    ${bell}
+    <div class="facts">${facts}</div>
+  </div>`;
+
+  const legend = `<div class="legend">` + Object.keys(LABEL).map(k =>
+    `<span><span class="dot" style="background:${CVAR[k]}"></span>${LABEL[k]}</span>`).join('') + `</div>`;
+
+  out.innerHTML = verdict + legend + d.rows.map(renderOb).join('');
+}
+
+function renderOb(r) {
+  const gaugeColor = r.verdict === 'SETTLED' || r.verdict === 'CONTESTED_REGS' ? 'var(--settled)' : CVAR[r.verdict];
+  const gauge = r.risk > 0 ? `
+    <div class="gauge"><span style="width:${r.risk}%;background:${gaugeColor}"></span></div>
+    <div class="gauge-l">preemption risk ${r.risk}/100${r.risk_basis==='precedent'?' · by precedent':''}</div>` : '';
+
+  const dl = r.deadline_date ? `<div class="ob-meta">⏱ <b>${esc(r.deadline_date)}</b>${r.days_until!=null?` · ${r.days_until}d`:''}
+    ${r.deadline_type?`· ${esc(r.deadline_type.replace(/_/g,' '))}`:''}${r.deadline_detail?` — ${esc(r.deadline_detail)}`:''}</div>` : '';
+
+  const cases = r.cases.map(renderCase).join('');
+
+  return `<div class="ob ${r.verdict}">
+    <div class="ob-top">
+      <div class="ob-law">${esc(r.bill_number)} <span class="st">· ${esc(r.state)}</span><br>
+        <span style="font-weight:400;font-size:13px;color:var(--muted)">${esc(r.bill_title || '')}</span></div>
+      <span class="pill ${r.verdict}">${esc(LABEL[r.verdict])}</span>
+    </div>
+    <div class="ob-head">${esc(r.verdict_headline)}.</div>
+    ${gauge}${dl}${cases}
+  </div>`;
+}
+
+function renderCase(c) {
+  const badges = [
+    c.challenge_type && `<span class="badge">${esc(c.challenge_type.replace(/_/g,' '))}</span>`,
+    c.plaintiff_type && `<span class="badge">${esc(c.plaintiff_type.replace(/_/g,' '))}</span>`,
+    c.direction === 'tighten' && `<span class="badge tighten">wants stricter rules</span>`,
+    ...(c.theories || []).slice(1).map(t => `<span class="badge">${esc(t)}</span>`),
+  ].filter(Boolean).join('');
+
+  const events = (c.events || []).length ? `<ul class="events">` + c.events.map(e =>
+    `<li><span class="when">${esc(e.date_label || e.date_filed || '')}</span>
+      <span class="sig-${esc(e.significance)}">${esc(e.summary)}</span></li>`).join('') + `</ul>` : '';
+
+  const sources = (c.sources || []).length
+    ? `<div class="sources">Sources: ` + c.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join(' · ') + `</div>` : '';
+
+  const court = [c.court_name, c.docket_number].filter(Boolean).map(esc).join(' · ');
+  const judge = c.assigned_judge ? ` · ${esc(c.assigned_judge)}` : '';
+
+  return `<div class="case">
+    <div class="case-name">${esc(c.case_name)}${c.source==='seed'?'<span class="seedtag">seed</span>':''}</div>
+    <div class="ob-meta mono">${court}${judge}${c.filed_label?` · ${esc(c.filed_label)}`:''}</div>
+    <div class="badges">${badges}</div>
+    ${events}${sources}
+  </div>`;
+}
+
+boot();
+</script>
+</body>
+</html>

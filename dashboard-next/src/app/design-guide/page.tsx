@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { CompassIcon, LockIcon } from '@/components/ui/icons';
@@ -6,7 +6,7 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { useBills } from '@/hooks/useBills';
 import { BillModal } from '@/components/ui/BillModal';
 import { PrincipleCard } from '@/components/design-guide/PrincipleCard';
-import { startProCheckout, openFullGuide } from '@/lib/billing';
+import { startProCheckout, openFullGuide, billingErrorMessage } from '@/lib/billing';
 import { upgradeLabel } from '@/lib/tiers';
 import { track } from '@/lib/analytics';
 import { TEASER_LEVERS, GUIDE_COVERAGE, type TeaserLever } from '@/data/designGuideTeaser';
@@ -26,7 +26,7 @@ const GROUPS: { label: string; blurb: string; levers: string[] }[] = [
   {
     label: 'Keep it in the loop',
     blurb:
-      'The Re-X Design Principles extracted from enacted bills. Design for material circulation, highest-value first: reuse and repair down through recycling and composting.',
+      'Design strategies extracted from enacted bills, ordered highest-value first: reuse and repair down through recycling and composting.',
     levers: [
       'reuse_refill',
       'repairability_durability',
@@ -95,7 +95,8 @@ export default function DesignGuidePage() {
       if (isPro) await openFullGuide(getToken);
       else await startProCheckout(getToken);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // Never surface a raw transport error ("Request failed (503): {…}") — map to a friendly line.
+      setError(billingErrorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -115,16 +116,11 @@ export default function DesignGuidePage() {
       />
 
       <p className="text-text-secondary text-body leading-relaxed max-w-3xl">
-        The Battle of the Bills online design guide is built dynamically from the bills ingested into
-        the foundational database. Every design principle below is sourced from enacted and proposed
-        US bills, and it stays current as legislation moves. Stay ahead of non-compliant SKUs and fee
-        penalties, and adapt to changing market conditions. Assembled from{' '}
+        Every principle here is sourced from enacted and proposed bills &mdash;{' '}
         <span className="text-text-primary font-medium">{GUIDE_COVERAGE.bills} bills</span> across{' '}
-        <span className="text-text-primary font-medium">{GUIDE_COVERAGE.states} states</span>.
-      </p>
-
-      <p className="text-text-muted text-xs -mt-4">
-        Flip any card (↻) to see the bills it’s sourced from — each opens the full bill detail.
+        <span className="text-text-primary font-medium">{GUIDE_COVERAGE.states} states</span>, read
+        line by line. The guide stays current as legislation moves.
+        Flip any card (&#8635;) to see the source bills; each opens the full detail.
       </p>
 
       {GROUPS.map(group => {
@@ -165,9 +161,9 @@ export default function DesignGuidePage() {
             </span>
           </div>
           <p className="text-text-secondary text-body leading-relaxed">
-            Every lever, 3–6 canonical imperatives each, the concrete numeric targets (recycled-content
-            %, dates), and the verbatim statutory language behind every line — print-ready and kept
-            current as bills move. The teaser is the headline; this is the playbook.
+            Each card above shows the headline imperative for one design lever. This is the full
+            stack — every imperative, the exact numeric targets (percentages, dates), and the
+            verbatim statutory language behind each line. Print-ready and kept current as bills move.
           </p>
         </div>
         <div className="shrink-0 flex flex-col items-stretch gap-1.5">
@@ -187,8 +183,8 @@ export default function DesignGuidePage() {
       {/* Enterprise / consulting line */}
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <p className="text-text-secondary text-body leading-relaxed max-w-2xl">
-          Need this scoped to your own products and the states you sell in — your SKUs mapped to the
-          exact imperatives and deadlines that hit them? That&apos;s built per engagement.
+          Need this scoped to your own products and the states you sell in — your SKUs mapped to
+          the exact imperatives and deadlines that hit them? We build that per engagement.
         </p>
         <a
           href={BOOKING_URL}

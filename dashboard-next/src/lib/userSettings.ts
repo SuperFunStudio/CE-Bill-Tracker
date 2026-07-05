@@ -31,6 +31,16 @@ export async function saveSettings(token: string | null, prefs: Prefs): Promise<
   });
 }
 
+/** Shallow-merge only the given keys into the account's prefs (server-side merge), so
+ *  independent features (scope, saved studio packages, …) can't clobber each other. */
+export async function patchSettings(token: string | null, prefs: Prefs): Promise<void> {
+  await authedFetch('/me/settings', token, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prefs }),
+  });
+}
+
 export async function getWatchlist(token: string | null): Promise<number[]> {
   const res = await authedFetch('/me/watchlist', token);
   if (!res.ok) return [];

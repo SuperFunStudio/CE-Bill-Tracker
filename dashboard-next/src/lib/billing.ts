@@ -25,6 +25,18 @@ async function postWithToken(
   return url as string;
 }
 
+/** Turn a billing/checkout error into a message safe to show a user. Raw transport errors
+ *  ("Request failed (503): {"detail":"billing not configured"}") must never reach the UI — the
+ *  gate CTAs surface this instead. Already-human messages (e.g. "A Pro subscription is required.")
+ *  pass through unchanged. */
+export function billingErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : '';
+  if (/not configured/i.test(msg)) return 'Checkout isn’t available right now — please try again shortly.';
+  // Pass through messages that are already user-facing (no HTTP status code or JSON payload).
+  if (msg && !/Request failed|[{}]|\(\d{3}\)/.test(msg)) return msg;
+  return 'We couldn’t start checkout just now — please try again in a moment.';
+}
+
 /** Begin the Pro subscription for a billing period (default annual). Opens Checkout — the founding
  *  offer (90-day trial + first-year coupon) is applied server-side — and sends the browser to Stripe. */
 export async function startProCheckout(

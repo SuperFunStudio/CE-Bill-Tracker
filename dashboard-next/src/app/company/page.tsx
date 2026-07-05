@@ -11,6 +11,7 @@ import { DemoBanner } from '@/components/ui/DemoBanner';
 import { LockIcon, StarIcon } from '@/components/ui/icons';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { WatchListSection } from '@/components/watchlist/WatchListSection';
+import { SavedPackagesSection } from '@/components/studio/SavedPackages';
 import { useAuth } from '@/components/auth/AuthContext';
 import { formatCost, fixEncoding, formatDate, daysUntil, STATE_NAMES } from '@/lib/utils';
 import type { CompanyObligation, CompanyObligationsResponse, FinancialStakes } from '@/lib/types';
@@ -47,9 +48,9 @@ function ObligationCard({ o }: { o: CompanyObligation }) {
   const dl = o.next_deadline;
   return (
     <div className="surface-card p-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         {/* Left: what law, why it applies to you */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 basis-56">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-green-accent font-mono text-xs font-semibold">{o.state}</span>
             {o.bill_number && <span className="text-text-secondary text-sm font-medium">{o.bill_number}</span>}
@@ -69,11 +70,11 @@ function ObligationCard({ o }: { o: CompanyObligation }) {
           </div>
         </div>
 
-        {/* Right: next deadline */}
-        <div className="shrink-0 text-right w-44">
+        {/* Right: next deadline — its own full-width row on phones, right column at sm+ */}
+        <div className="shrink-0 w-full text-left sm:w-44 sm:text-right">
           {dl ? (
             <>
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex items-center justify-start sm:justify-end gap-2">
                 <span className="text-text-muted text-meta uppercase tracking-wide">{DEADLINE_TYPE_LABEL[dl.deadline_type] ?? dl.deadline_type}</span>
                 <DeadlineCountdown date={dl.deadline_date} />
               </div>
@@ -229,24 +230,25 @@ function ObligationsView() {
 
   return (
     <div className="space-y-6">
-      {/* Company search + selector */}
-      <div className="flex gap-3 max-w-2xl">
-        <div className="flex-1 flex flex-col gap-1">
+      {/* Company search + selector — stacked on phones; min-w-0 so long company names in the
+          select can't force the row (and the page) wider than the viewport */}
+      <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
           <label className="text-text-muted text-xs uppercase">Search Company</label>
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Company name…"
-            className="bg-bg-secondary border border-border-default rounded px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent"
+            className="w-full min-w-0 bg-bg-secondary border border-border-default rounded px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent"
           />
         </div>
-        <div className="flex-1 flex flex-col gap-1">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
           <label className="text-text-muted text-xs uppercase">Select Company</label>
           <select
             value={selectedId ?? ''}
             onChange={e => setSelectedId(e.target.value || null)}
-            className="bg-bg-secondary border border-border-default rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-green-accent"
+            className="w-full min-w-0 bg-bg-secondary border border-border-default rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-green-accent"
           >
             <option value="">Select a company…</option>
             {companiesLoading && <option disabled>Loading…</option>}
@@ -531,24 +533,24 @@ function CompanyView() {
 
   return (
     <div className="space-y-6">
-      {/* Company search + selector */}
-      <div className="flex gap-3 max-w-2xl">
-        <div className="flex-1 flex flex-col gap-1">
+      {/* Company search + selector — same responsive treatment as ObligationsView's */}
+      <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
           <label className="text-text-muted text-xs uppercase">Search Company</label>
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Company name…"
-            className="bg-bg-secondary border border-border-default rounded px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent"
+            className="w-full min-w-0 bg-bg-secondary border border-border-default rounded px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent"
           />
         </div>
-        <div className="flex-1 flex flex-col gap-1">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
           <label className="text-text-muted text-xs uppercase">Select Company</label>
           <select
             value={selectedId ?? ''}
             onChange={e => { setSelectedId(e.target.value || null); setSelectedBillId(null); }}
-            className="bg-bg-secondary border border-border-default rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-green-accent"
+            className="w-full min-w-0 bg-bg-secondary border border-border-default rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-green-accent"
           >
             <option value="">Select a company…</option>
             {companiesLoading && <option disabled>Loading…</option>}
@@ -702,7 +704,7 @@ function ObligationsTool() {
       <DemoBanner />
       {/* Sub-tabs — Company Profile folded in here per the My Portfolio IA. Cost Estimate (BillView)
           stays disabled; the component + endpoints are intact for re-enable. */}
-      <div className="flex gap-1 bg-bg-secondary border border-border-default rounded-lg p-1 w-fit">
+      <div className="flex flex-wrap gap-1 bg-bg-secondary border border-border-default rounded-lg p-1 w-fit">
         {[
           { id: 'obligations' as const, label: 'Obligations & Deadlines' },
           { id: 'company' as const, label: 'Company Profile' },
@@ -742,6 +744,11 @@ export default function MyPortfolioPage() {
       {/* ── Watch list — the self-serve Pro content; gates itself for anon/non-Pro ── */}
       <section>
         <WatchListSection />
+      </section>
+
+      {/* ── Saved studio packages — free-tier account data; gates itself for anon ── */}
+      <section className="border-t border-border-default pt-8">
+        <SavedPackagesSection />
       </section>
 
       {/* ── Obligations & Deadlines (Beta) — live tool for admins/demos, bespoke inquiry otherwise ── */}

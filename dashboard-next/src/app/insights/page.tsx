@@ -6,6 +6,8 @@ import { BillTimelineChart } from '@/components/insights/BillTimelineChart';
 import { LawsInForceChart } from '@/components/insights/LawsInForceChart';
 import { StanceMomentumChart } from '@/components/insights/StanceMomentumChart';
 import { InstrumentMaterialMatrix } from '@/components/insights/InstrumentMaterialMatrix';
+import { WorldCoverageMap } from '@/components/insights/WorldCoverageMap';
+import { RegionInstrumentMatrix } from '@/components/insights/RegionInstrumentMatrix';
 import { StateGapTable } from '@/components/insights/StateGapTable';
 import { StateCyclesView } from '@/components/insights/StateCyclesView';
 import { ChampionRoster } from '@/components/insights/ChampionRoster';
@@ -29,6 +31,7 @@ const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = 
 // Tabs group the visualizations so the page isn't one long scroll. The region filter applies to the
 // region-generalizable tabs (Momentum, Coverage); Geography is US-only by construction — see below.
 const TABS = [
+  { id: 'world', label: 'World' },
   { id: 'momentum', label: 'Momentum' },
   { id: 'coverage', label: 'Coverage' },
   { id: 'geography', label: 'Geography · US' },
@@ -77,7 +80,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default function InsightsPage() {
-  const [tab, setTab] = useState<TabId>('momentum');
+  const [tab, setTab] = useState<TabId>('world');
   // The global region filter (the bar under the nav) scopes the timeline + momentum + coverage.
   const { regionsParam: regionsCsv } = useRegion();
 
@@ -149,6 +152,36 @@ export default function InsightsPage() {
           })}
         </div>
       </div>
+
+      {tab === 'world' && (
+        <>
+          <div className="rounded-lg border border-border-default bg-bg-primary px-4 py-3 text-sm text-text-secondary">
+            <span className="font-semibold text-text-primary">Every region.</span> This is the cross-jurisdiction
+            overview — it spans the whole tracked corpus regardless of the region filter above. Use it to compare
+            jurisdictions, then click into one to scope the rest of the site.
+          </div>
+
+          <Section kicker="Global coverage" title="Circular-economy laws in force around the world">
+            <p className="text-text-secondary text-body leading-relaxed">
+              The reach of enacted circular-economy law, jurisdiction by jurisdiction — the United States and
+              its states, the EU-central body binding all 27 members, and the national laws we track across
+              Europe, Asia-Pacific, and the Americas. Each country is shaded by how many in-force laws apply
+              there; hover for the count, or click to filter the whole site to that jurisdiction.
+            </p>
+            <WorldCoverageMap />
+          </Section>
+
+          <Section kicker="Regulatory personality" title="Which instruments each jurisdiction leans on">
+            <p className="text-text-secondary text-body leading-relaxed">
+              Every jurisdiction regulates circularity with a different toolkit. Read across a row to see the
+              mix — where a region reaches first for extended-producer-responsibility, where for deposit-return,
+              recycled-content mandates, or right-to-repair. The contrasts are the story: the EU&apos;s ecodesign
+              tilt, the US EPR build-out, France&apos;s repairability push.
+            </p>
+            <RegionInstrumentMatrix />
+          </Section>
+        </>
+      )}
 
       {tab === 'momentum' && (
         <>

@@ -105,7 +105,7 @@ def collect_one_bill(engine, state, bill_number):
     for verification/backtests (e.g. re-deriving the oyster finding to sanity-check the engine).
     Pairs with --preview so it never overwrites the vetted row it's checking against."""
     sql = text("""
-        select b.id, b.state, b.bill_number, b.title, b.description,
+        select b.id, b.region, b.state, b.bill_number, b.title, b.description,
                b.instrument_type, b.material_categories, b.last_action_date
         from bills b
         where upper(b.state) = upper(:state) and b.bill_number = :bn
@@ -115,13 +115,13 @@ def collect_one_bill(engine, state, bill_number):
         return list(c.execute(sql, {"state": state, "bn": bill_number}))
 
 
-def collect_targets(engine, state, material, instrument, since_year, limit, max_per_bill=1):
+def collect_targets(engine, state, material, instrument, since_year, limit, max_per_bill=1, region=None):
     """Enacted, in-scope laws with FEWER than max_per_bill outcomes recorded, newest-acted first,
     bounded. max_per_bill=1 (default) keeps the original "no outcome yet" behaviour; raise it to let
     a single law accumulate several distinct documented impacts (the research pass is told what's
     already on file so it hunts a DIFFERENT one each time)."""
     sql = text("""
-        select b.id, b.state, b.bill_number, b.title, b.description,
+        select b.id, b.region, b.state, b.bill_number, b.title, b.description,
                b.instrument_type, b.material_categories, b.last_action_date,
                coalesce(oc.cnt, 0) as outcome_count
         from bills b
@@ -131,6 +131,7 @@ def collect_targets(engine, state, material, instrument, since_year, limit, max_
           and b.status = 'enacted'
           and b.state <> 'US'
           and coalesce(oc.cnt, 0) < :max_per_bill
+          and (:region is null or b.region = :region)
           and (:state is null or b.state = :state)
           and (:instrument is null or b.instrument_type = :instrument)
           and (:material is null or b.material_categories ? :material)
@@ -142,6 +143,7 @@ def collect_targets(engine, state, material, instrument, since_year, limit, max_
         return list(c.execute(sql, {
             "state": state, "material": material, "instrument": instrument,
             "since_year": since_year, "limit": limit, "max_per_bill": max_per_bill,
+            "region": region,
         }))
 
 
@@ -313,6 +315,9 @@ def upsert_outcome(engine, t, cand, slug):
     rem_bill_id = resolve_bill_id(engine, t.state, rem_bn) if rem_bn else None
     payload = {
         "slug": slug, "bill_id": t.id, "state": t.state, "bill_number": t.bill_number,
+        # region keeps a foreign/EU outcome attributed to its own jurisdiction (the /bills/outcomes
+        # API filters by region) instead of falling to the column default.
+        "region": getattr(t, "region", None) or "US",
         "law_title": cand.get("law_title") or t.title,
         "instrument_type": cand.get("instrument_type") or t.instrument_type,
         "material_categories": json.dumps(cand.get("material_categories") or t.material_categories),
@@ -334,18 +339,18 @@ def upsert_outcome(engine, t, cand, slug):
     with engine.begin() as c:
         c.execute(text("""
             insert into bill_outcome
-              (slug, bill_id, state, bill_number, law_title, instrument_type, material_categories,
+              (slug, bill_id, state, region, bill_number, law_title, instrument_type, material_categories,
                direction, metric_label, metric_value, metric_unit, metric_display, summary,
                attribution, as_of_date, source_name, source_url, confidence, reviewed,
                remediation_note, remediation_bill_number, remediated_by_bill_id, remediation_checked_at)
             values
-              (:slug, :bill_id, :state, :bill_number, :law_title, :instrument_type,
+              (:slug, :bill_id, :state, :region, :bill_number, :law_title, :instrument_type,
                cast(:material_categories as jsonb), :direction, :metric_label, :metric_value,
                :metric_unit, :metric_display, :summary, :attribution, :as_of_date, :source_name,
                :source_url, :confidence, false,
                :remediation_note, :remediation_bill_number, :remediated_by_bill_id, now())
             on conflict (slug) do update set
-              bill_id=excluded.bill_id, law_title=excluded.law_title,
+              bill_id=excluded.bill_id, region=excluded.region, law_title=excluded.law_title,
               instrument_type=excluded.instrument_type, material_categories=excluded.material_categories,
               direction=excluded.direction, metric_label=excluded.metric_label,
               metric_value=excluded.metric_value, metric_unit=excluded.metric_unit,
@@ -366,6 +371,10 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--prod-dsn", default=None)
+    ap.add_argument("--region", default=None,
+                    help="region filter (US, EU, FR, JP, …). Needed to reach EU/foreign laws: they have "
+                         "no last_action_date so they sort to the bottom of the default (US-dominated) slice. "
+                         "Pair with --rank for a foreign run.")
     ap.add_argument("--state", default=None, help="two-letter filter")
     ap.add_argument("--material", default=None, help="material_categories filter, e.g. organics")
     ap.add_argument("--instrument", default=None, help="instrument_type filter, e.g. incentives")
@@ -406,7 +415,8 @@ def main():
     else:
         targets = collect_targets(engine, args.state, args.material, args.instrument,
                                   args.since_year, args.rank_pool if args.rank else args.limit,
-                                  max_per_bill=args.max_per_bill)
+                                  max_per_bill=args.max_per_bill,
+                                  region=args.region.upper() if args.region else None)
     where = " (PROD)" if args.prod_dsn else ""
     cap = "" if args.max_per_bill <= 1 else f" (< {args.max_per_bill} outcomes each)"
     print(f"Enacted in-scope laws needing research{cap}: {len(targets)}{where}\n")

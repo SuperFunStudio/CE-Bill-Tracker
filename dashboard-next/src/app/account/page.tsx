@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { LockIcon, StarIcon } from '@/components/ui/icons';
 import { useAuth } from '@/components/auth/AuthContext';
+import { useBeta } from '@/components/settings/BetaContext';
 import { openBillingPortal, deleteAccount } from '@/lib/billing';
 import { PRO } from '@/lib/tiers';
 import { track } from '@/lib/analytics';
@@ -62,6 +63,7 @@ export default function AccountPage() {
             getToken={getToken}
           />
           <DataCard />
+          <BetaCard />
           <DangerZone
             email={user.email ?? ''}
             getToken={getToken}
@@ -200,6 +202,42 @@ function DataCard() {
         <StarIcon className="text-green-accent" />
         My watch list &amp; alert preferences
       </Link>
+    </Section>
+  );
+}
+
+/** Beta-features opt-in. Off by default; reveals still-in-testing tools (e.g. the Packaging Studio's
+ *  CI export). Stored per-browser via BetaContext. */
+function BetaCard() {
+  const { betaEnabled, setBetaEnabled } = useBeta();
+  return (
+    <Section title="Beta features">
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-text-secondary text-sm leading-relaxed max-w-xl">
+          Turn on early, still-in-testing features before they graduate — like the Packaging Studio&rsquo;s
+          engineering-team CI export. They may change or break; off by default.
+        </p>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={betaEnabled}
+          onClick={() => {
+            setBetaEnabled(!betaEnabled);
+            track('beta_optin_toggle', { enabled: !betaEnabled });
+          }}
+          className={`relative shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60 ${
+            betaEnabled ? 'bg-green-accent' : 'bg-bg-tertiary border border-border-default'
+          }`}
+        >
+          <span className="sr-only">Toggle beta features</span>
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-bg-primary shadow transition-transform ${
+              betaEnabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+      <p className="text-text-muted text-xs">Beta features are {betaEnabled ? 'on' : 'off'} for this browser.</p>
     </Section>
   );
 }

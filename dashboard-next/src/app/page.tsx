@@ -42,7 +42,7 @@ const CoverageStrip = dynamic(
 
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
-  const { region, regionsParam, regions: selectedRegions, setRegions } = useRegion();
+  const { region, regionsParam, regions: selectedRegions, setRegions, isUsView } = useRegion();
 
   // The global region filter (under the nav) drives which jurisdictions the server returns. undefined
   // = "All regions" -> send "all" so the explorer shows every region (not the US-only default).
@@ -181,9 +181,6 @@ export default function HomePage() {
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
-      {/* Scoped deadline banner — "3 deadlines hitting your plastic packaging" (only when a scope is set) */}
-      <ScopedDeadlineBanner />
-
       {/* Above-the-fold value prop + primary CTA — signed-out visitors only, so the app view stays
           uncluttered for users who've already converted. The single loudest action is "start free". */}
       {!user && (
@@ -221,7 +218,9 @@ export default function HomePage() {
         <StatesTicker
           label={leaderboard.label}
           data={leaderboard.data}
-          restHref="/states"
+          // "The rest →" only means the US state standings board — don't offer it under the world/EU
+          // leaderboards, where it wrongly dropped viewers onto the US-states page.
+          restHref={leaderboard.mode === 'us-states' ? '/states' : undefined}
           onSelect={code =>
             leaderboard.mode === 'us-states'
               ? setBillFilters(prev => ({ ...prev, state: prev.state === code ? '' : code }))
@@ -326,8 +325,13 @@ export default function HomePage() {
         )}
       </section>
 
-      {/* Federal watch (pithy, dismissible) */}
-      <FederalWatchBanner highRiskCount={highPreemption} />
+      {/* Alerts, bundled below the table (out of the way of the bills, which are what visitors came
+          for). The scoped deadline count is here rather than at the top so it informs without leading
+          with stress; the Oregon court-case wildcard is US-only — irrelevant to a non-US filter. */}
+      <div className="space-y-3">
+        <ScopedDeadlineBanner />
+        {isUsView && <FederalWatchBanner highRiskCount={highPreemption} />}
+      </div>
 
       {/* Portfolio Exposure front door — promote the paid translation from a buried tab */}
       <section className="rounded-xl border border-green-accent/30 bg-green-dark/20 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

@@ -17,6 +17,7 @@ from app.models import (
 )
 from app.schemas import (
     BillDetail,
+    BillFullText,
     BillOutcomeSummary,
     BillSearchHit,
     BillStancePoint,
@@ -556,6 +557,23 @@ async def get_bill(bill_id: int, db: AsyncSession = Depends(get_db)):
     d.litigation_case_count = row.case_count
     d.max_preemption_risk = row.max_risk
     return d
+
+
+@router.get("/{bill_id}/text", response_model=BillFullText)
+async def get_bill_text(bill_id: int, db: AsyncSession = Depends(get_db)):
+    """The bill's persisted full statute text (the `bill_texts` side table), read by id. Free — a
+    single-bill text read is not the bulk harvest that's gated. Returns text=None when we haven't
+    ingested this bill's text yet, so the modal falls back to its source link rather than an empty box."""
+    row = (
+        await db.execute(
+            select(BillText.text, BillText.char_len, BillText.source).where(
+                BillText.bill_id == bill_id
+            )
+        )
+    ).first()
+    if row is None:
+        return BillFullText(bill_id=bill_id)
+    return BillFullText(bill_id=bill_id, text=row.text, char_len=row.char_len, source=row.source)
 
 
 @router.get("/{bill_id}/litigation-cases", response_model=list[LitigationCaseSummary])

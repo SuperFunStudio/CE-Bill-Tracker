@@ -3,6 +3,7 @@ import type {
   BillSearchHit,
   TextCoverageStats,
   BillDetail,
+  BillFullText,
   BillParams,
   StateMapSummary,
   BillTimelinePoint,
@@ -146,6 +147,11 @@ export async function fetchMaterialMap(): Promise<MaterialMapPoint[]> {
 
 export async function fetchBill(id: number): Promise<BillDetail> {
   return apiFetch<BillDetail>(buildUrl(`/bills/${id}`));
+}
+
+/** One bill's persisted full statute text (side table). `text` is null when not yet ingested. */
+export async function fetchBillText(id: number): Promise<BillFullText> {
+  return apiFetch<BillFullText>(buildUrl(`/bills/${id}/text`));
 }
 
 /** Full-text search over persisted bill text — returns bills whose statute text matches `q`

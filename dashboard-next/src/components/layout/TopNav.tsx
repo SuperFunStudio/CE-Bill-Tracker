@@ -141,10 +141,13 @@ export function TopNav() {
         </button>
       </div>
 
-      {/* Desktop section bar — visible at sm+ */}
-      <nav className="relative hidden sm:flex items-center justify-center flex-wrap gap-x-5 gap-y-1 border-t border-border-default px-4 py-2">
-        {renderLinks('bar')}
-        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+      {/* Desktop section bar — visible at sm+. The auth button lives in its own flex column (not an
+          absolute overlay) so wrapped nav links never slide underneath it on tablet/desktop widths. */}
+      <nav className="hidden sm:flex items-start gap-3 border-t border-border-default px-4 py-2">
+        <div className="flex-1 flex items-center justify-center flex-wrap gap-x-5 gap-y-1">
+          {renderLinks('bar')}
+        </div>
+        <div className="shrink-0 self-center">
           <AuthButton />
         </div>
       </nav>

@@ -31,7 +31,7 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
       >
         {/* ---- FRONT ---- */}
         <div
-          className="[grid-area:1/1] flex flex-col overflow-hidden rounded-xl border border-border-default bg-bg-secondary p-5 [backface-visibility:hidden]"
+          className={`[grid-area:1/1] flex flex-col overflow-hidden rounded-xl border border-border-default bg-bg-secondary p-5 [backface-visibility:hidden] ${flipped ? 'pointer-events-none' : ''}`}
           aria-hidden={flipped}
         >
           <h3 className="font-serif text-lg text-text-primary leading-tight mb-2">{title}</h3>
@@ -107,7 +107,7 @@ export function PrincipleCard({ lever, displayName, onOpenBill }: PrincipleCardP
 
         {/* ---- BACK ---- */}
         <div
-          className="[grid-area:1/1] flex flex-col overflow-hidden rounded-xl border border-green-accent/50 bg-bg-secondary p-5 [transform:rotateY(180deg)] [backface-visibility:hidden]"
+          className={`[grid-area:1/1] flex flex-col overflow-hidden rounded-xl border border-green-accent/50 bg-bg-secondary p-5 [transform:rotateY(180deg)] [backface-visibility:hidden] ${flipped ? '' : 'pointer-events-none'}`}
           aria-hidden={!flipped}
         >
           <div className="flex items-center justify-between gap-2 mb-2">

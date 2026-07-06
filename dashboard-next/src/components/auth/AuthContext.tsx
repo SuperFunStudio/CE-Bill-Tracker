@@ -95,11 +95,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = await u.getIdToken();
       const [entRes, adminRes] = await Promise.all([
         fetch(`${API}/billing/me`, { headers: { Authorization: `Bearer ${token}` } }),
-        // 200 only for an allowlisted admin; 403 for everyone else. Used to reveal the hidden console.
+        // Returns 200 {is_admin: bool} for any signed-in user (no 403 console noise); the flag reveals
+        // the hidden console. See admin_me().
         fetch(`${API}/admin/me`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       setEntitlement(entRes.ok ? await entRes.json() : null);
-      setIsAdmin(adminRes.ok);
+      const adminData = adminRes.ok ? await adminRes.json().catch(() => null) : null;
+      setIsAdmin(adminData?.is_admin === true);
     } catch {
       setEntitlement(null);
       setIsAdmin(false);

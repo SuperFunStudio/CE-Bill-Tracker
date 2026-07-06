@@ -1,6 +1,6 @@
 'use client';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { fetchBills, fetchBill, fetchBillSearch, fetchBillTextCoverage, fetchMapSummary, fetchBillLitigationCases } from '@/lib/api';
+import { fetchBills, fetchBill, fetchBillText, fetchBillSearch, fetchBillTextCoverage, fetchMapSummary, fetchBillLitigationCases } from '@/lib/api';
 import { resilient, getSnapshot } from '@/lib/snapshot';
 import { useDebouncedValue } from './useDebouncedValue';
 import type { BillParams, BillSummary, StateMapSummary } from '@/lib/types';
@@ -45,6 +45,17 @@ export function useBill(id: number | null) {
     queryKey: ['bill', id],
     queryFn: () => fetchBill(id!),
     enabled: id !== null,
+    staleTime: STALE,
+  });
+}
+
+/** A bill's persisted full statute text. Lazy — pass enabled:false until the reader opens the viewer,
+ *  so the (potentially large) text isn't fetched just because the modal opened. */
+export function useBillText(id: number | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['billText', id],
+    queryFn: () => fetchBillText(id!),
+    enabled: id !== null && enabled,
     staleTime: STALE,
   });
 }

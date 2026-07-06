@@ -80,6 +80,18 @@ class TextCoverageStats(BaseModel):
     by_region: list[RegionCoverage] | None = None
 
 
+class BillFullText(BaseModel):
+    """One bill's persisted full statute text (GET /bills/{id}/text). Deliberately its own endpoint,
+    not a field on BillDetail — the text is large and lives in the `bill_texts` side table, kept off
+    the wide bill row and the snapshot list. `text` is None when we haven't ingested this bill's text
+    yet, so the modal can fall back to the source link instead of showing an empty panel."""
+    bill_id: int
+    text: str | None = None
+    char_len: int | None = None
+    # Which rung of the fetch ladder produced the text (nysenate | legiscan | openstates | source_url).
+    source: str | None = None
+
+
 class StateMapSummary(BaseModel):
     state: str
     enacted_count: int

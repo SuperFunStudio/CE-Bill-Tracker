@@ -30,6 +30,16 @@ export function GlobalRegionBar() {
     <div className="border-b border-border-default bg-bg-secondary">
       <div className="mx-auto max-w-6xl px-6 py-2 flex items-center gap-3">
         <RegionFilter selected={regions} onChange={setRegions} />
+        {/* This bar sets the site-wide filter (e.g. it drives the Bill Explorer), so give it an
+            explicit reset back to "All regions" whenever a selection is active. */}
+        {regions.length > 0 && (
+          <button
+            onClick={() => setRegions([])}
+            className="shrink-0 text-xs text-text-muted hover:text-text-primary underline underline-offset-2 whitespace-nowrap"
+          >
+            Clear filter
+          </button>
+        )}
         {sole && (
           <Link
             href={regionProfileHref(sole)}

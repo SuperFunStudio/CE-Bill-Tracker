@@ -259,12 +259,13 @@ export default function PricingPage() {
             paid plans by usage.
           </p>
         </div>
-        <button
-          onClick={() => openPlan('api', 'API')}
+        <Link
+          href="/developers"
+          onClick={() => track('cta_click', { plan: 'api', source: 'pricing_developers' })}
           className="shrink-0 rounded-lg border border-green-accent bg-green-dark px-5 py-2.5 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity"
         >
-          Request API access & pricing →
-        </button>
+          View API docs →
+        </Link>
       </section>
 
       {modal && (

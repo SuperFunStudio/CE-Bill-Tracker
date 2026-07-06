@@ -55,7 +55,9 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
   const isUS = region === 'US';
   const noun = unitNoun(region);
 
-  const { data: bills = [], isLoading } = useBills({ ce_relevant: true, limit: 5000 });
+  // regions:'all' so foreign/EU profiles get their own bills — the endpoint defaults to US, which left
+  // every non-US jurisdiction page showing "0 tracked bills" (billMatcher keys on region/state).
+  const { data: bills = [], isLoading } = useBills({ ce_relevant: true, limit: 5000, regions: 'all' });
   const { data: deadlines = [] } = useDeadlines();
   // Compliance pathways carry the US EPR action taxonomy (PRO/individual-plan); only fetch for US.
   const { data: pathways = [], isLoading: pathwaysLoading, isError: pathwaysError } =

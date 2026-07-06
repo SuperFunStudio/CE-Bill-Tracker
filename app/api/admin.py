@@ -21,7 +21,7 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
-from app.api.auth import AuthedUser, _ensure_firebase, is_pro, require_admin
+from app.api.auth import AuthedUser, _ensure_firebase, get_current_user, is_admin, is_pro, require_admin
 from app.config import settings
 from app.database import get_db
 from app.models import (
@@ -47,9 +47,14 @@ def _clamp_limit(limit: int) -> int:
 
 
 @router.get("/me")
-async def admin_me(user: AuthedUser = Depends(require_admin)):
-    """Cheap admin probe for the frontend: 200 {is_admin: true} for an admin, 403 otherwise."""
-    return {"is_admin": True, "email": user.email}
+async def admin_me(user: AuthedUser = Depends(get_current_user)):
+    """Cheap admin probe for the frontend: 200 {is_admin: bool} for any signed-in user.
+
+    Uses get_current_user (not require_admin) on purpose: a require_admin 403 for every non-admin
+    spammed the browser console with failed-request noise on each token refresh. Now it answers 200
+    with a boolean; the frontend reads the flag. Every *other* admin route still uses require_admin.
+    """
+    return {"is_admin": is_admin(user), "email": user.email}
 
 
 @router.get("/stats")

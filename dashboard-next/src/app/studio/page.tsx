@@ -35,6 +35,7 @@ import { WatchStar } from '@/components/watchlist/WatchStar';
 import { SubscribeForm } from '@/components/about/SubscribeForm';
 import { useRegion } from '@/components/layout/RegionContext';
 import { useAuth } from '@/components/auth/AuthContext';
+import { useBeta } from '@/components/settings/BetaContext';
 import { fetchBill } from '@/lib/api';
 import type { BillSummary } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
@@ -196,6 +197,7 @@ export default function PackagingStudioPage() {
 
   const { isUsView } = useRegion();
   const { showToast } = useAuth();
+  const { betaEnabled } = useBeta();
   const saved = useSavedPackages();
   /** True when the URL opened with a spec in it (share link / reload) — that spec always wins
    *  over the auto-loaded last save. */
@@ -327,6 +329,20 @@ export default function PackagingStudioPage() {
   );
 
   const families = useMemo(() => groupPaletteByFamily(activeSchedule.palette), [activeSchedule]);
+
+  // Source links for EVERY priceable schedule (not just the active one) — so the claim "we price on
+  // the CA SB-54 / UK pEPR / JP JCPRA schedule" is one click from the actual published table.
+  const scheduleSources = useMemo(
+    () =>
+      SCHEDULE_OPTIONS.map((o) => {
+        if (o.id === 'ca') {
+          return { id: o.id, label: o.label, sourceUrl: schedule.sourceUrl, provenance: schedule.engine.provenance };
+        }
+        const reg = o.jurisdiction ? getSchedule(o.jurisdiction) : undefined;
+        return { id: o.id, label: o.label, sourceUrl: reg?.sourceUrl ?? null, provenance: reg?.provenance ?? null };
+      }),
+    [schedule],
+  );
 
   // Switch fee schedule, remapping the package's components onto the new palette so
   // the structure survives (a plastic component stays plastic). Weights are kept.
@@ -493,13 +509,23 @@ export default function PackagingStudioPage() {
       />
 
       {/* Fee-schedule picker — which jurisdiction's producer-fee table to price against. */}
-      <ScheduleSwitcher active={scheduleId} onSwitch={switchSchedule} />
+      <ScheduleSwitcher active={scheduleId} onSwitch={switchSchedule} sources={scheduleSources} />
 
       {/* Honest scoping when the global region view isn't US — don't block, just say it. */}
       {!isUsView && scheduleId === 'ca' && (
         <AlertBanner
           variant="amber"
           message="Fees here are priced on California's SB-54 schedule, US states only — switch the fee schedule above to price against another jurisdiction."
+        />
+      )}
+
+      {/* Foreign fee schedule active: the fee table is that jurisdiction's, but the "Sells into"
+          markets + punch-list obligations below are US-state-based only. Say so rather than imply a
+          US selection means anything under UK/JP pricing. */}
+      {scheduleId !== 'ca' && (
+        <AlertBanner
+          variant="amber"
+          message={`Pricing against ${activeSchedule.engine.program}. Obligation tracking (the punch list and "Sells into" markets below) is US-state only today — the ${activeSchedule.engine.program} fee table drives the costs, not the US markets.`}
         />
       )}
 
@@ -539,6 +565,9 @@ export default function PackagingStudioPage() {
             its family, and what it obligates you to do.
           </p>
         </div>
+
+        {/* First-run coaching — a dismissible three-step walkthrough (remembered per browser). */}
+        <BuildCoach />
 
         {/* The regulatory clock — the anchor every fee below hangs on */}
         <div className="rounded-lg border border-border-default bg-bg-tertiary p-3.5 flex gap-3">
@@ -651,6 +680,7 @@ export default function PackagingStudioPage() {
                 qc={activeQuote}
                 unitsPerYear={spec.unitsPerYear ?? null}
                 markets={markets}
+                programName={activeSchedule.engine.program}
                 onOpenBill={openBill}
                 openingBillId={openingBillId}
               />
@@ -867,9 +897,15 @@ export default function PackagingStudioPage() {
               onSignIn={saved.openAuth}
             />
 
-            {/* CI export — addressed to the people who'll actually wire it up */}
+            {/* CI export — a Beta feature, gated on the /account opt-in (off for new users). */}
+            {betaEnabled && (
             <section className="rounded-panel border border-border-default bg-bg-secondary p-4 space-y-3">
-              <p className="text-meta uppercase tracking-wider text-text-muted">For your engineering team</p>
+              <p className="flex items-center gap-2 text-meta uppercase tracking-wider text-text-muted">
+                For your engineering team
+                <span className="rounded-full border border-green-accent/40 px-1.5 py-px text-[0.6rem] tracking-wider text-green-accent">
+                  Beta
+                </span>
+              </p>
               <p className="text-xs text-text-secondary leading-relaxed">
                 Export this spec as{' '}
                 <code className="font-mono text-meta bg-bg-tertiary px-1 rounded">packaging.yaml</code> — a
@@ -909,6 +945,7 @@ export default function PackagingStudioPage() {
                 findings appear as inline pull-request annotations.
               </p>
             </section>
+            )}
           </div>
 
           {/* ---- RIGHT: the stage ---- */}
@@ -917,18 +954,12 @@ export default function PackagingStudioPage() {
               <p className="text-text-muted italic text-sm">Add a component to price its EPR exposure.</p>
             ) : (
               <>
-                {/* headline metrics */}
+                {/* Redesign headroom — the fee/package and $/yr already live in the sticky bar and the
+                    laws-to-act-on in the rollup below, so this panel keeps only what those don't show:
+                    the best-format floor and how much redesign can save. */}
                 <div className="rounded-panel border border-border-default bg-bg-secondary p-4">
                   <div className="flex flex-wrap gap-x-8 gap-y-3">
-                    <Metric value={fmt.money(t.cents_per_package)} label="EPR fee / package" tone="bad" />
                     <Metric value={fmt.money(t.best_case_cents_per_package)} label="best-format floor" tone="good" />
-                    <Metric value={String(ob.action_law_count)} label="laws to act on" tone="mid" />
-                    {t.annual_fee_usd != null && (
-                      <Metric
-                        value={fmt.amount(t.annual_fee_usd)}
-                        label={`/ yr at ${Number(t.units_per_year).toLocaleString()} units`}
-                      />
-                    )}
                   </div>
                   {t.redesign_headroom_cents > 0.05 && (
                     <p className="mt-3 pt-3 border-t border-border-default text-sm text-text-secondary">
@@ -1013,29 +1044,66 @@ export default function PackagingStudioPage() {
   );
 }
 
-/** Fee-schedule picker — a compact button group over the supported jurisdictions. */
-function ScheduleSwitcher({ active, onSwitch }: { active: string; onSwitch: (id: string) => void }) {
+/** Fee-schedule picker — a compact button group over the supported jurisdictions, with a source
+ *  link per schedule so every fee table we price against is one click from its published basis. */
+function ScheduleSwitcher({
+  active,
+  onSwitch,
+  sources,
+}: {
+  active: string;
+  onSwitch: (id: string) => void;
+  sources: { id: string; label: string; sourceUrl: string | null; provenance: string | null }[];
+}) {
+  const sourceById = new Map(sources.map((s) => [s.id, s]));
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      <span className="text-meta uppercase tracking-wider text-text-muted">Fee schedule</span>
-      {SCHEDULE_OPTIONS.map((o) => {
-        const on = o.id === active;
-        return (
-          <button
-            key={o.id}
-            type="button"
-            onClick={() => onSwitch(o.id)}
-            aria-pressed={on}
-            className={`rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60 ${
-              on
-                ? 'border-green-accent bg-green-dark/40 text-text-primary font-medium'
-                : 'border-border-default bg-bg-tertiary text-text-secondary hover:border-green-accent/60'
-            }`}
-          >
-            {o.label}
-          </button>
-        );
-      })}
+    <div className="space-y-1.5 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-meta uppercase tracking-wider text-text-muted">Fee schedule</span>
+        {SCHEDULE_OPTIONS.map((o) => {
+          const on = o.id === active;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => onSwitch(o.id)}
+              aria-pressed={on}
+              className={`rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60 ${
+                on
+                  ? 'border-green-accent bg-green-dark/40 text-text-primary font-medium'
+                  : 'border-border-default bg-bg-tertiary text-text-secondary hover:border-green-accent/60'
+              }`}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      {/* Trust line — link out to each schedule's published fee table. */}
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-meta text-text-muted">
+        <span>Sources:</span>
+        {SCHEDULE_OPTIONS.map((o, i) => {
+          const s = sourceById.get(o.id);
+          return (
+            <span key={o.id} className="inline-flex items-center">
+              {i > 0 && <span aria-hidden className="mr-2 text-text-muted/50">·</span>}
+              {s?.sourceUrl ? (
+                <a
+                  href={s.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={s.provenance ?? undefined}
+                  className="text-green-accent hover:underline"
+                >
+                  {o.label} ↗
+                </a>
+              ) : (
+                <span>{o.label}</span>
+              )}
+            </span>
+          );
+        })}
+      </p>
     </div>
   );
 }
@@ -1043,6 +1111,46 @@ function ScheduleSwitcher({ active, onSwitch }: { active: string; onSwitch: (id:
 // ---------------------------------------------------------------------------
 // Stage chrome
 // ---------------------------------------------------------------------------
+
+const COACH_KEY = 'studio_coach_dismissed';
+
+/** First-run walkthrough for the Build stage — a compact, dismissible three-step coach. Starts hidden
+ *  to match SSR (no localStorage on the server), then reveals for anyone who hasn't dismissed it, so
+ *  it never causes a hydration mismatch. */
+function BuildCoach() {
+  const [dismissed, setDismissed] = useState(true);
+  useEffect(() => {
+    setDismissed(localStorage.getItem(COACH_KEY) === '1');
+  }, []);
+  if (dismissed) return null;
+  const close = () => {
+    try { localStorage.setItem(COACH_KEY, '1'); } catch { /* private mode — just hide for the session */ }
+    setDismissed(true);
+    track('studio_coach_dismiss');
+  };
+  return (
+    <div className="rounded-panel border border-green-accent/40 bg-green-dark/15 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-text-primary">New here? Build a package in three moves.</p>
+          <ol className="mt-2 space-y-1.5 text-xs text-text-secondary leading-relaxed">
+            <li><b className="text-text-primary">1 ·</b> In the bar above, name your product and toggle the markets you sell into.</li>
+            <li><b className="text-text-primary">2 ·</b> For each component chip, pick a material — every tile shows its fee and whether it&rsquo;s recyclable.</li>
+            <li><b className="text-text-primary">3 ·</b> Read <b className="text-text-primary">The consequence</b> under each pick: what it costs against the best format in its family, and what it obligates.</li>
+          </ol>
+        </div>
+        <button
+          type="button"
+          onClick={close}
+          aria-label="Dismiss walkthrough"
+          className="shrink-0 -mr-1 rounded p-1 text-lg leading-none text-text-muted hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ProgressTrack({ stage, onGo }: { stage: number; onGo: (n: number) => void }) {
   return (
@@ -1423,12 +1531,14 @@ function ConsequenceReveal({
   qc,
   unitsPerYear,
   markets,
+  programName,
   onOpenBill,
   openingBillId,
 }: {
   qc: QuoteComponent;
   unitsPerYear: number | null;
   markets: string[];
+  programName: string;
   onOpenBill: (billId: number) => void;
   openingBillId: number | null;
 }) {
@@ -1483,7 +1593,7 @@ function ConsequenceReveal({
 
       {/* why: the fee-tier logic, in plain words */}
       <p className="border-t border-border-default pt-3 text-xs text-text-secondary leading-relaxed">
-        <b className="text-text-primary">Why this costs more:</b> California charges different fees
+        <b className="text-text-primary">Why this costs more:</b> {programName} charges different fees
         for different {fam} formats — from {fmt.rate(qc.best_per_tonne)} (easiest to recycle) up to{' '}
         {fmt.rate(qc.worst_per_tonne)} (hardest). This pick lands at {fmt.rate(qc.rate_per_tonne)}.
         {qc.headroom_to_best_per_tonne > 0 ? (

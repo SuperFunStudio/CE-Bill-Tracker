@@ -126,6 +126,15 @@ export interface BillDetail extends BillSummary {
   updated_at: string;
 }
 
+/** One bill's persisted full statute text (GET /bills/{id}/text). `text` is null when we haven't
+ *  ingested this bill's text yet — the modal then falls back to the source link. */
+export interface BillFullText {
+  bill_id: number;
+  text: string | null;
+  char_len: number | null;
+  source: string | null;
+}
+
 export interface StateMapSummary {
   state: string;
   enacted_count: number;

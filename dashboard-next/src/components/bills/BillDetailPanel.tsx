@@ -1,9 +1,10 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, isWeakening, resolveSourceLink } from '@/lib/utils';
 import { presentDimensions } from '@/lib/dimensions';
-import { useBill, useBillLitigationCases } from '@/hooks/useBills';
+import { useBill, useBillText, useBillLitigationCases } from '@/hooks/useBills';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { RiskScore } from '@/components/ui/RiskScore';
@@ -24,6 +25,10 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
   const { data: litigationCases = [] } = useBillLitigationCases(
     bill.litigation_case_count > 0 ? bill.id : null
   );
+
+  // Full statute text is lazy — only fetched once the reader expands the viewer (it can be long).
+  const [showText, setShowText] = useState(false);
+  const { data: fullText, isLoading: textLoading } = useBillText(bill.id, showText);
 
   const hasPrimary = (cd?.covered_products?.length ?? 0) > 0
     || (cd?.producer_obligations?.length ?? 0) > 0
@@ -272,6 +277,46 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
           </div>
         </div>
       )}
+
+      {/* Full statute text — lazy-loaded on demand (can be long), shown in a scrollable well. Falls
+          back to a "read it at the source" note when we haven't ingested this bill's text yet. */}
+      <div className="border-t border-border-default pt-3">
+        <button
+          onClick={() => setShowText(v => !v)}
+          className="inline-flex items-center gap-1.5 text-green-accent text-sm hover:underline"
+          aria-expanded={showText}
+        >
+          <span aria-hidden className="text-xs">{showText ? '▾' : '▸'}</span>
+          {showText ? 'Hide full bill text' : 'Read full bill text'}
+        </button>
+        {showText && (
+          <div className="mt-2">
+            {textLoading ? (
+              <div className="space-y-2" aria-live="polite">
+                <div className="h-2.5 w-full animate-pulse rounded bg-bg-tertiary" />
+                <div className="h-2.5 w-5/6 animate-pulse rounded bg-bg-tertiary" />
+                <div className="h-2.5 w-2/3 animate-pulse rounded bg-bg-tertiary" />
+                <span className="sr-only">Loading full bill text…</span>
+              </div>
+            ) : fullText?.text ? (
+              <>
+                <div className="max-h-80 overflow-y-auto rounded-lg border border-border-default bg-bg-primary p-3">
+                  <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-text-secondary">
+                    {fullText.text}
+                  </pre>
+                </div>
+                <p className="text-meta text-text-muted mt-1">
+                  Full text as ingested{fullText.source ? ` · via ${fullText.source}` : ''}. Verify against the official source below.
+                </p>
+              </>
+            ) : (
+              <p className="text-meta text-text-muted">
+                We haven&apos;t ingested this bill&apos;s full text yet — use the source link below to read it.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Source link — resolves to the best available target (updated URL on a moved page, a LegiScan
           backup on a dead one) so a click doesn't drop the user on a connection error. See

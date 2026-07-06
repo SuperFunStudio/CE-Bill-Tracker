@@ -8,8 +8,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { ScoreBadge } from '@/components/ui/ScoreBadge';
 import { DemoBanner } from '@/components/ui/DemoBanner';
-import { LockIcon, StarIcon } from '@/components/ui/icons';
-import { RequestAccessModal } from '@/components/access/RequestAccessModal';
+import { StarIcon } from '@/components/ui/icons';
 import { WatchListSection } from '@/components/watchlist/WatchListSection';
 import { SavedPackagesSection } from '@/components/studio/SavedPackages';
 import { useAuth } from '@/components/auth/AuthContext';
@@ -650,49 +649,7 @@ function CompanyView() {
   );
 }
 
-// ─── Access Gate ─────────────────────────────────────────────────────────────
-
-/** Inline bespoke-inquiry card shown to non-admins in place of the live obligations tool. (Was a
- *  full-page gate; now it sits as a section below the watch list, since the page is no longer
- *  hard-gated — the watch list above is the self-serve Pro content.) */
-function ObligationsBetaInquiry() {
-  const [showModal, setShowModal] = useState(false);
-
-  return (
-    <div className="bg-bg-secondary border border-border-default rounded-panel p-8 text-center space-y-5 max-w-md mx-auto">
-      <LockIcon className="text-4xl mx-auto text-text-muted" />
-      <div>
-        <span className="inline-block mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
-          Bespoke · Kenny Arnold Design
-        </span>
-        <h3 className="text-xl font-bold text-text-primary mb-2">A custom exposure map for your portfolio</h3>
-        <p className="text-text-secondary text-body leading-relaxed">
-          Which enacted laws hit you, what each requires, and the material- and design-level moves that
-          reduce it — built from your own volume and material data, as a scoped engagement with Kenny
-          Arnold Design.
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        <button
-          onClick={() => setShowModal(true)}
-          className="w-full bg-green-accent text-bg-primary font-semibold py-3 rounded-lg text-sm hover:opacity-90 transition-opacity"
-        >
-          Start a conversation →
-        </button>
-      </div>
-
-      {showModal && (
-        <RequestAccessModal
-          plan="bespoke"
-          planLabel="Bespoke — Portfolio Exposure"
-          source="company_gate"
-          onClose={() => setShowModal(false)}
-        />
-      )}
-    </div>
-  );
-}
+// ─── Obligations Tool ────────────────────────────────────────────────────────
 
 /** The live obligations tool (admins / demos): company-exposure obligations + the Company Profile,
  *  folded together as sub-tabs of the Beta section. */
@@ -751,19 +708,22 @@ export default function MyPortfolioPage() {
         <SavedPackagesSection />
       </section>
 
-      {/* ── Obligations & Deadlines (Beta) — live tool for admins/demos, bespoke inquiry otherwise ── */}
-      <section className="space-y-4 border-t border-border-default pt-8">
-        <div className="flex items-center gap-2">
-          <h2 className="font-serif text-2xl text-text-primary">Obligations &amp; Deadlines</h2>
-          <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
-            Beta
-          </span>
-        </div>
-        <p className="text-text-secondary text-body max-w-3xl">
-          Which enacted laws affect a company, what each requires, and when its next deadline falls.
-        </p>
-        {isAdmin ? <ObligationsTool /> : <ObligationsBetaInquiry />}
-      </section>
+      {/* ── Obligations & Deadlines (Beta) — admin-only while it's still in beta; hidden entirely for
+          everyone else (previously non-admins saw a bespoke-inquiry card here). ── */}
+      {isAdmin && (
+        <section className="space-y-4 border-t border-border-default pt-8">
+          <div className="flex items-center gap-2">
+            <h2 className="font-serif text-2xl text-text-primary">Obligations &amp; Deadlines</h2>
+            <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+              Beta
+            </span>
+          </div>
+          <p className="text-text-secondary text-body max-w-3xl">
+            Which enacted laws affect a company, what each requires, and when its next deadline falls.
+          </p>
+          <ObligationsTool />
+        </section>
+      )}
     </div>
   );
 }

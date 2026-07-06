@@ -7,7 +7,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import access, admin, bills, alerts, pipeline, health, federal, companies, webhooks, billing, design, user, compliance, referrals, insights
+from app.api import access, admin, bills, alerts, pipeline, health, federal, companies, webhooks, billing, design, user, compliance, referrals, insights, research, evaluate
 from app.api.federal import litigation_router
 from app.ratelimit import limiter
 
@@ -82,3 +82,5 @@ app.include_router(user.router)
 app.include_router(admin.router)
 app.include_router(compliance.router)
 app.include_router(insights.router)
+app.include_router(research.router)
+app.include_router(evaluate.router)

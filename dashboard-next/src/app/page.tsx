@@ -46,7 +46,10 @@ export default function HomePage() {
 
   // The global region filter (under the nav) drives which jurisdictions the server returns. undefined
   // = "All regions" -> send "all" so the explorer shows every region (not the US-only default).
-  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, regions: regionsParam ?? 'all' });
+  // The compliance-dimension filter is applied server-side (compliance_details isn't in the list
+  // payload), so it rides the fetch params rather than the client-side applyBillFilters below.
+  const dimensionsCsv = billFilters.dimensions.length ? billFilters.dimensions.join(',') : undefined;
+  const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, regions: regionsParam ?? 'all', dimensions: dimensionsCsv });
   const { data: federal = [] } = useFederalActions({ limit: 50 });
 
   // Deep link from emails: /?bill=123 opens that bill's detail panel. Resolved against the FULL bill

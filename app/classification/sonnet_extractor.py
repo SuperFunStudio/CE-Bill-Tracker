@@ -13,8 +13,9 @@ SONNET_MODEL = "claude-sonnet-4-6"
 
 # Bump when the extraction schema changes so backfills can select "bills below current version" and
 # re-run only what's stale. v2 added the eco_modulation / recycled_content / penalties envelopes;
-# v3 added collection_targets / pro_structure / bans_restrictions (one LLM pass fills all six).
-EXTRACTION_VERSION = 3
+# v3 added collection_targets / pro_structure / bans_restrictions; v4 added fee_amounts / labeling
+# (one LLM pass fills all eight).
+EXTRACTION_VERSION = 4
 
 # Region code -> human label injected into the prompts, so the extractor frames the measure for the
 # right jurisdiction (member-state national law extracts richly even in its native language — German
@@ -137,9 +138,9 @@ Title: {title}
 Full text:
 {full_text}
 
-Return this JSON structure. Omit optional keys where data is absent, but ALWAYS include the six
+Return this JSON structure. Omit optional keys where data is absent, but ALWAYS include the eight
 envelope fields (eco_modulation, recycled_content, penalties, collection_targets, pro_structure,
-bans_restrictions) with an explicit "status":
+bans_restrictions, fee_amounts, labeling) with an explicit "status":
   - "present": the measure addresses this; fill in the details and a verbatim source_excerpt.
   - "absent": you read the text and it does not address this (do NOT guess — only after reading).
   - "not_applicable": the concept cannot apply to this kind of measure.
@@ -199,6 +200,16 @@ bans_restrictions) with an explicit "status":
     "status": "<present|absent|not_applicable>",
     "items": [{{"target": "<e.g. single-use plastic bags, PFAS in packaging>", "type": "<sales_ban|material_restriction|design_ban>", "effective_date": "<YYYY or null>"}}],
     "source_excerpt": "<verbatim quote, original language>"
+  }},
+  "fee_amounts": {{
+    "status": "<present|absent|not_applicable>",
+    "rates": [{{"basis": "<per_ton|per_unit|flat|eco_modulated|percent_revenue|unspecified>", "amount": <number or null>, "currency": "<ISO 4217, e.g. USD, EUR>", "material": "<what the rate applies to, or null>"}}],
+    "source_excerpt": "<verbatim quote, original language>"
+  }},
+  "labeling": {{
+    "status": "<present|absent|not_applicable>",
+    "requirements": [{{"type": "<recyclability|material_id|disposal_instructions|deposit_mark|reusability|other>", "on_pack": <true or false>, "detail": "<what must be labeled>"}}],
+    "source_excerpt": "<verbatim quote, original language>"
   }}
 }}
 """
@@ -228,6 +239,8 @@ class SonnetResult:
     collection_targets: dict
     pro_structure: dict
     bans_restrictions: dict
+    fee_amounts: dict
+    labeling: dict
     extraction_version: int
     raw_json: dict
 
@@ -238,8 +251,12 @@ class SonnetExtractor:
         # hung call fails fast instead of pinning the caller — critically, the classification cycle
         # holds a DB transaction across this call, and an unbounded hang there strands a connection
         # idle-in-transaction holding bills locks (see ClassificationPipeline.run Stage 3).
+        # max_retries=4 (was 1): bulk backfills over a flaky network saw ~16% of calls fail with a
+        # transient APIConnectionError; the SDK's exponential backoff absorbs those blips instead of
+        # dropping the bill. The live classification pipeline holds a DB txn across this call, but the
+        # 120s timeout still bounds each attempt, so a few retries can't strand a connection for long.
         self._client = client or anthropic.AsyncAnthropic(
-            api_key=settings.anthropic_api_key, timeout=120.0, max_retries=1
+            api_key=settings.anthropic_api_key, timeout=120.0, max_retries=4
         )
 
     async def extract(
@@ -260,8 +277,8 @@ class SonnetExtractor:
         )
         resp = await self._client.messages.create(
             model=SONNET_MODEL,
-            max_tokens=12000,  # compliance JSON for large bills overflows a smaller budget; v2 pushed
-            # 4000→8000 (envelope truncation), v3's six envelopes need more headroom on omnibus acts
+            max_tokens=16000,  # compliance JSON for large bills overflows a smaller budget; grew with
+            # each envelope wave (4000→8000 v2, →12000 v3, →16000 v4/eight envelopes) to curb truncation
             temperature=0,
             system=SYSTEM_PROMPT_TEMPLATE.format(region=region_label(region)),
             messages=[{"role": "user", "content": prompt}],
@@ -305,6 +322,8 @@ class SonnetExtractor:
             collection_targets=data.get("collection_targets", {}),
             pro_structure=data.get("pro_structure", {}),
             bans_restrictions=data.get("bans_restrictions", {}),
+            fee_amounts=data.get("fee_amounts", {}),
+            labeling=data.get("labeling", {}),
             extraction_version=data.get("extraction_version", 0),
             raw_json=data,
         )

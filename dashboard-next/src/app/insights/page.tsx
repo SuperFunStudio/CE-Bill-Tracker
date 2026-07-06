@@ -5,6 +5,7 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTimelineChart } from '@/components/insights/BillTimelineChart';
 import { LawsInForceChart } from '@/components/insights/LawsInForceChart';
 import { StanceMomentumChart } from '@/components/insights/StanceMomentumChart';
+import { CollectionTargetBasisChart } from '@/components/insights/CollectionTargetBasisChart';
 import { InstrumentMaterialMatrix } from '@/components/insights/InstrumentMaterialMatrix';
 import { WorldCoverageMap } from '@/components/insights/WorldCoverageMap';
 import { RegionInstrumentMatrix } from '@/components/insights/RegionInstrumentMatrix';
@@ -13,6 +14,7 @@ import { StateCyclesView } from '@/components/insights/StateCyclesView';
 import { ChampionRoster } from '@/components/insights/ChampionRoster';
 import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
+import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
 import { useRegion } from '@/components/layout/RegionContext';
 import { fetchBillTimeline } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
@@ -289,6 +291,29 @@ export default function InsightsPage() {
               precedent but no EPR yet is often where the next wave of bills lands.
             </p>
             <InstrumentMaterialMatrix regions={regionsCsv} />
+          </Section>
+
+          <Section kicker="Intervention regime" title="Which materials can go circular incrementally — and which need critical mass">
+            <p className="text-text-secondary text-body leading-relaxed">
+              Not every material needs the same law. High-value, concentrated ones with an established
+              reverse channel (lead-acid batteries, aluminium, precious metals) cross the collection valley
+              on their own economics — legislation only has to stop penalizing the first mover. Low-value,
+              dispersed ones (textiles, footwear, flexible film) have no incremental path: their unit
+              economics never close below near-total coverage, so a law has to engineer critical mass
+              deliberately — mandated collection, pooled PRO financing, and design intervention at once.
+              Where a material sits here is which of those two playbooks its bills should carry.
+            </p>
+            <MaterialRegimeMap />
+          </Section>
+
+          <Section kicker="Coverage" title="How collection targets are measured">
+            <p className="text-text-secondary text-body leading-relaxed">
+              When a law sets a collection or recovery target, what is it measured against? Most set a
+              <em> weight</em> (tonnage) target — but a minority measure <em>value recovered</em> (the
+              critical-metals angle) or apply <em>material-specific</em> mandates. Extracted per target
+              from each bill&apos;s text, so a bill with several targets contributes several.
+            </p>
+            <CollectionTargetBasisChart regions={regionsCsv} />
           </Section>
 
           <Section kicker="Outliers" title="The 'Other' bucket: emergent instruments to watch">

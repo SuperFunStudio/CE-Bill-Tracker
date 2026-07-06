@@ -6,6 +6,7 @@ import { formatInstrumentType } from '@/lib/utils';
 import { formatMaterial } from '@/components/scope/ScopeOnboarding';
 import { track } from '@/lib/analytics';
 import { BillDrilldownPanel } from './BillDrilldownPanel';
+import { EnactedOnlyToggle } from './EnactedOnlyToggle';
 import type { InstrumentMaterialCell } from '@/lib/types';
 
 /**
@@ -35,12 +36,15 @@ export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {})
   // narrows to it; All / multi-select falls back to "all" (the bills list endpoint is single-region
   // today — the global multi-region filter refines this). Each drilled bill shows its own region.
   const [drill, setDrill] = useState<{ instrument: string; material: string } | null>(null);
+  // Default to enacted-only: US regions carry a large introduced-bill pipeline that would otherwise
+  // dwarf foreign/EU regions we track only once they're law. Toggle off to include the full pipeline.
+  const [enactedOnly, setEnactedOnly] = useState(true);
   const selectedRegions = (regions ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   const regionForDrill = selectedRegions.length === 1 ? selectedRegions[0] : 'all';
 
   useEffect(() => {
     let cancelled = false;
-    fetchInstrumentMaterialMatrix({ regions })
+    fetchInstrumentMaterialMatrix({ regions, status: enactedOnly ? 'enacted' : undefined })
       .then((d) => {
         if (!cancelled) setCells(d);
       })
@@ -50,7 +54,7 @@ export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {})
     return () => {
       cancelled = true;
     };
-  }, [regions]);
+  }, [regions, enactedOnly]);
 
   const { instruments, materials, lookup, max } = useMemo(() => {
     if (!cells || cells.length === 0) {
@@ -82,6 +86,14 @@ export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {})
 
   return (
     <div className="space-y-4">
+      <EnactedOnlyToggle
+        enactedOnly={enactedOnly}
+        onChange={(v) => {
+          setEnactedOnly(v);
+          track('insights_coverage_enacted_only', { enacted_only: v });
+        }}
+      />
+
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
@@ -162,6 +174,7 @@ export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {})
                 instrument_type: drill.instrument,
                 material_category: drill.material,
                 region: regionForDrill,
+                ...(enactedOnly ? { status: 'enacted' } : {}),
               }
             : null
         }

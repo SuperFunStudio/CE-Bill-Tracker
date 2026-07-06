@@ -11,6 +11,39 @@ export interface ComplianceFees {
   details: string;
 }
 
+/** Every v2+ extracted dimension is an "envelope": an explicit status (so "measure doesn't address
+ * this" is distinct from "not yet extracted") plus a verbatim source_excerpt for citation. */
+export type DimensionStatus = 'present' | 'absent' | 'not_applicable';
+export interface DimensionEnvelope {
+  status: DimensionStatus;
+  source_excerpt?: string;
+}
+export interface EcoModulation extends DimensionEnvelope { criteria?: string[]; }
+export interface RecycledContent extends DimensionEnvelope {
+  minimums?: { material: string; percent: number | null; by_year: string | null }[];
+}
+export interface Penalties extends DimensionEnvelope {
+  max_amount?: number | null; currency?: string; per?: string | null;
+}
+export interface CollectionTargets extends DimensionEnvelope {
+  targets?: { material: string; percent: number | null; by_year: string | null;
+    basis: 'weight' | 'units' | 'value_recovered' | 'material_specific' | 'unspecified' }[];
+}
+export interface ProStructure extends DimensionEnvelope {
+  model?: 'single_pro' | 'competitive_pros' | 'government_run' | 'individual' | 'unspecified';
+  needs_assessment?: boolean; named_pros?: string[];
+}
+export interface BansRestrictions extends DimensionEnvelope {
+  items?: { target: string; type: 'sales_ban' | 'material_restriction' | 'design_ban';
+    effective_date: string | null }[];
+}
+export interface FeeAmounts extends DimensionEnvelope {
+  rates?: { basis: string; amount: number | null; currency?: string; material?: string | null }[];
+}
+export interface Labeling extends DimensionEnvelope {
+  requirements?: { type: string; on_pack?: boolean; detail?: string }[];
+}
+
 export interface ComplianceDetails {
   producer_definition?: string;
   covered_products?: string[];
@@ -25,6 +58,16 @@ export interface ComplianceDetails {
   effective_date?: string;
   compliance_date?: string;
   reporting_requirements?: string;
+  extraction_version?: number;
+  // v2+ structured dimensions (see scripts/extract_dimensions.py / sonnet_extractor.py).
+  eco_modulation?: EcoModulation;
+  recycled_content?: RecycledContent;
+  penalties?: Penalties;
+  collection_targets?: CollectionTargets;
+  pro_structure?: ProStructure;
+  bans_restrictions?: BansRestrictions;
+  fee_amounts?: FeeAmounts;
+  labeling?: Labeling;
 }
 
 export interface BillSummary {
@@ -106,6 +149,126 @@ export interface BillStancePoint {
   stance: string;
   count: number;
   region?: string;
+}
+
+// "Ask the Bills" (POST /research/ask) — a cited answer, an optional SQL-backed chart, and a
+// coverage note so an answer never implies whole-corpus completeness it doesn't have.
+export interface ResearchChartBar { label: string; value: number; }
+export interface ResearchChart { title: string; bars: ResearchChartBar[]; }
+export interface ResearchCitation {
+  bill_id: number;
+  region?: string | null;
+  state?: string | null;
+  bill_number?: string | null;
+  year?: number | null;
+  snippet?: string | null;
+}
+export interface ResearchAnswer {
+  answer: string;
+  citations: ResearchCitation[];
+  chart?: ResearchChart | null;
+  coverage_note?: string | null;
+}
+
+// --- Bill-strength evaluation (POST /evaluate/bill) — see app/evaluation/strength.py --------------
+// Strength is *conditional on the material*: a lead-acid battery bill can be lean and strong; a
+// textiles bill that lean is weak. So we position the material into a regime, then score the bill's
+// extracted mechanisms against the baseline that regime demands (a fit score, not a flat count).
+export interface RegimeAxes {
+  value_density: number;      // 0..1 — concentrated worth
+  dispersion: number;         // 0..1 — spread thin across many holders
+  channel_maturity: number;   // 0..1 — an established reverse channel exists
+}
+export interface BillRegime {
+  key: 'incremental_viable' | 'critical_mass';
+  label: string;
+  material: string;
+  confidence: 'high' | 'low' | 'estimated';  // seed table | fixed fallback | LLM estimate
+  rationale: string;
+  axes: RegimeAxes;
+}
+export interface RequirementResult {
+  key: string;
+  label: string;
+  importance: 'load_bearing' | 'supporting' | 'bonus';
+  status: 'met' | 'partial' | 'missing';
+  weight: number;
+  your_value: string;   // what this bill has
+  baseline: string;     // what a strong bill for this regime carries
+  note?: string | null;
+}
+export interface StrengthScore {
+  value: number;        // 0..100
+  band: 'strong' | 'moderate' | 'weak';
+  summary: string;
+}
+// Corpus cross-check: the draft measured against ENACTED laws in the same material regime — which
+// mechanisms the ones that made it onto the books carried, and which produced documented outcomes.
+export interface AnalogOutcome {
+  direction: 'positive' | 'negative' | 'mixed';
+  summary: string;
+  metric?: string | null;
+  attribution?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+}
+export interface CorpusAnalog {
+  bill_id?: number | null;
+  region?: string | null;
+  state?: string | null;
+  bill_number?: string | null;
+  title?: string | null;
+  year?: number | null;
+  material: string;
+  same_material: boolean;
+  reviewed: boolean;
+  mechanisms: Record<string, 'met' | 'partial' | 'missing'>;
+  outcomes: AnalogOutcome[];
+}
+export interface CorpusBaselinePoint {
+  key: string;
+  label: string;
+  analog_share: number;   // 0..1 of same-regime enacted analogs carrying this mechanism
+  your_status: 'met' | 'partial' | 'missing';
+}
+export interface CorpusCrossCheck {
+  regime: string;
+  analog_count: number;
+  same_material_count: number;
+  value_basis_share?: number | null;
+  baseline: CorpusBaselinePoint[];
+  analogs: CorpusAnalog[];
+  note: string;
+}
+
+export interface EvaluateResponse {
+  regime: BillRegime;
+  score: StrengthScore;
+  requirements: RequirementResult[];
+  flags: string[];
+  compliance_details: ComplianceDetails;  // extracted envelopes, rendered with dimensions.ts
+  baseline_details: ComplianceDetails;     // the strong model bill for this regime (diff target)
+  corpus?: CorpusCrossCheck | null;
+  title?: string | null;
+  jurisdiction?: string | null;
+}
+
+// The value×dispersion×channel map of known materials + regime — GET /evaluate/material-map.
+export interface MaterialMapPoint {
+  material: string;
+  value_density: number;      // log-normalized recoverable $/tonne, 0..1
+  dispersion: number;
+  channel_maturity: number;
+  regime: 'incremental_viable' | 'critical_mass';
+  value_usd_per_tonne?: number | null;  // raw anchor behind value_density
+}
+
+/** One (basis, region) bucket from /bills/collection-target-basis — how collection/recovery targets
+ * are measured (weight | units | value_recovered | material_specific | unspecified). */
+export interface CollectionTargetBasisPoint {
+  basis: string;
+  count: number;
+  region?: string | null;
 }
 
 /** One (year, region) bucket from /bills/laws-in-force — CE laws that came into force that year. */
@@ -459,6 +622,9 @@ export interface BillParams {
   year_to?: number;
   /** Confidence floor (momentum drill-down passes 0.7 to match the chart). */
   min_confidence?: number;
+  /** CSV of compliance-dimension keys (eco_modulation,collection_targets…) — a bill matches only if
+   * each is `present`. Filtered server-side since compliance_details isn't in the list payload. */
+  dimensions?: string;
   search?: string;
 }
 

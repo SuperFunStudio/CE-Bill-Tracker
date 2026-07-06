@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, isWeakening, resolveSourceLink } from '@/lib/utils';
+import { presentDimensions } from '@/lib/dimensions';
 import { useBill, useBillLitigationCases } from '@/hooks/useBills';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -29,6 +30,9 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
     || (cd?.deadlines?.length ?? 0) > 0;
 
   const hasSecondary = cd?.producer_definition || cd?.fees || cd?.enforcement || cd?.preemption_notes;
+
+  // The eight structured dimensions that are `present` on this bill (see lib/dimensions.ts).
+  const dimensions = presentDimensions(cd);
 
   return (
     <div className="bg-bg-secondary border border-border-default rounded-lg p-5 space-y-4">
@@ -205,6 +209,27 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
               <div className="text-text-secondary">{cd.preemption_notes}</div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Compliance dimensions: structured levers extracted from the bill text, each with a
+          verbatim citation so a claim is traceable to the measure (see lib/dimensions.ts). ── */}
+      {dimensions.length > 0 && (
+        <div className="border-t border-border-default pt-3 space-y-2.5">
+          <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
+            Compliance Dimensions
+          </div>
+          {dimensions.map(d => (
+            <div key={d.key} className="border-l-2 border-green-accent/40 pl-3">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="text-text-secondary text-xs font-medium">{d.label}</span>
+                <span className="text-text-primary text-body">{d.summary}</span>
+              </div>
+              {d.excerpt && (
+                <p className="text-xs text-text-muted italic mt-0.5 leading-snug">“{d.excerpt}”</p>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

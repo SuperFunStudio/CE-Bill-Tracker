@@ -7,6 +7,10 @@ import type {
   StateMapSummary,
   BillTimelinePoint,
   BillStancePoint,
+  CollectionTargetBasisPoint,
+  ResearchAnswer,
+  EvaluateResponse,
+  MaterialMapPoint,
   InstrumentMaterialCell,
   LawsInForcePoint,
   StateGapRow,
@@ -106,6 +110,40 @@ export async function fetchBills(params?: BillParams): Promise<BillSummary[]> {
   return apiFetch<BillSummary[]>(buildUrl('/bills', params as Record<string, string | number | boolean | undefined>));
 }
 
+/** "Ask the Bills" (Pro) — POST a natural-language question, get a cited answer + optional chart. */
+export async function askResearch(question: string, token?: string | null): Promise<ResearchAnswer> {
+  const res = await fetch(buildUrl('/research/ask'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+/** "Evaluate a Bill" (Pro) — POST pasted measure text, get its material regime + a fit score against
+ *  the baseline that regime demands, per-mechanism, plus the extracted compliance envelopes. */
+export async function evaluateBill(
+  input: { text: string; title?: string; jurisdiction?: string; region?: string },
+  token?: string | null,
+): Promise<EvaluateResponse> {
+  const res = await fetch(buildUrl('/evaluate/bill'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `API error ${res.status}`);
+  }
+  return res.json();
+}
+
+/** The material-position map (value×dispersion×channel + regime) — reference data for the viz. */
+export async function fetchMaterialMap(): Promise<MaterialMapPoint[]> {
+  return apiFetch<MaterialMapPoint[]>(buildUrl('/evaluate/material-map'));
+}
+
 export async function fetchBill(id: number): Promise<BillDetail> {
   return apiFetch<BillDetail>(buildUrl(`/bills/${id}`));
 }
@@ -152,9 +190,18 @@ export async function fetchStanceMomentum(params?: {
 export async function fetchInstrumentMaterialMatrix(params?: {
   min_confidence?: number;
   regions?: string;
+  status?: string;
 }): Promise<InstrumentMaterialCell[]> {
   return apiFetch<InstrumentMaterialCell[]>(
     buildUrl('/bills/instrument-material-matrix', params as Record<string, string | number | boolean | undefined>),
+  );
+}
+
+/** Distribution of how collection/recovery targets are measured (weight vs value_recovered vs …),
+ * per region — the Insights "how targets are measured" chart. */
+export async function fetchCollectionTargetBasis(params?: { regions?: string }): Promise<CollectionTargetBasisPoint[]> {
+  return apiFetch<CollectionTargetBasisPoint[]>(
+    buildUrl('/bills/collection-target-basis', params as Record<string, string | number | boolean | undefined>),
   );
 }
 

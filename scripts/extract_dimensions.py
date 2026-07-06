@@ -40,12 +40,15 @@ from app.classification.sonnet_extractor import EXTRACTION_VERSION, SonnetExtrac
 from app.config import settings  # noqa: E402
 
 # The envelope fields this backfill writes (must match SonnetResult attrs). Kept in one place so the
-# merge + reporting stay in sync; v3 added collection_targets / pro_structure / bans_restrictions.
+# merge + reporting stay in sync; v3 added collection_targets/pro_structure/bans_restrictions, v4
+# added fee_amounts/labeling.
 ENVELOPES = ("eco_modulation", "recycled_content", "penalties",
-             "collection_targets", "pro_structure", "bans_restrictions")
-# Short labels for the per-bill progress line so six envelopes fit on one row.
+             "collection_targets", "pro_structure", "bans_restrictions",
+             "fee_amounts", "labeling")
+# Short labels for the per-bill progress line so all envelopes fit on one row.
 _SHORT = {"eco_modulation": "eco", "recycled_content": "rc", "penalties": "pen",
-          "collection_targets": "coll", "pro_structure": "pro", "bans_restrictions": "ban"}
+          "collection_targets": "coll", "pro_structure": "pro", "bans_restrictions": "ban",
+          "fee_amounts": "fee", "labeling": "lbl"}
 
 
 def _normalize_dsn(dsn: str) -> str:
@@ -94,7 +97,9 @@ async def main() -> None:
     args = ap.parse_args()
     regions = [r.strip().upper() for r in (args.region or "").split(",") if r.strip()] or None
 
-    engine = create_async_engine(_normalize_dsn(args.dsn or settings.database_url))
+    # pool_pre_ping so a connection dropped by a transient network blip / Cloud SQL idle-disconnect is
+    # detected and replaced on the next checkout, instead of surfacing mid-write on a long run.
+    engine = create_async_engine(_normalize_dsn(args.dsn or settings.database_url), pool_pre_ping=True)
     Session = async_sessionmaker(engine, expire_on_commit=False)
     extractor = SonnetExtractor()
 
@@ -143,12 +148,19 @@ async def main() -> None:
                     cd = json.loads(cd)
                 cd.update(envs)
                 cd["extraction_version"] = EXTRACTION_VERSION
-                await db.execute(
-                    text("UPDATE bills SET compliance_details = CAST(:cd AS jsonb), updated_at = now() "
-                         "WHERE id = :id"),
-                    {"cd": json.dumps(cd, ensure_ascii=False), "id": b.id})
-                await db.commit()
-                wrote += 1
+                # A dropped connection here must skip this bill (it stays below-version for the next
+                # run), not crash the whole batch — pool_pre_ping hands the next bill a live connection.
+                try:
+                    await db.execute(
+                        text("UPDATE bills SET compliance_details = CAST(:cd AS jsonb), "
+                             "updated_at = now() WHERE id = :id"),
+                        {"cd": json.dumps(cd, ensure_ascii=False), "id": b.id})
+                    await db.commit()
+                    wrote += 1
+                except Exception as e:  # noqa: BLE001
+                    print(f"  [db-fail] {tag}: {type(e).__name__}: {e}", flush=True)
+                    await db.rollback()
+                    failed += 1
             print(f"  … {min(i + step, len(bills))}/{len(bills)} processed "
                   f"({wrote} written, {failed} failed)", flush=True)
 

@@ -5,6 +5,7 @@ from sqlalchemy import Integer, case, func, literal_column, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_optional_pro
+from app.classification.sonnet_extractor import EXTRACTION_VERSION
 from app.database import get_db
 from app.models import (
     Bill,
@@ -21,11 +22,13 @@ from app.schemas import (
     BillStancePoint,
     BillSummary,
     BillTimelinePoint,
+    CollectionTargetBasisPoint,
     DeadlineStats,
     DeadlineSummary,
     InstrumentMaterialCell,
     LawsInForcePoint,
     LitigationCaseSummary,
+    RegionCoverage,
     StateMapSummary,
     TextCoverageStats,
 )
@@ -52,6 +55,15 @@ def _lit_subquery():
     )
 
 
+# The eight extracted compliance dimensions filterable from the bills list (must match the envelope
+# keys in compliance_details — see app/classification/sonnet_extractor.py). Whitelisted so the
+# ?dimensions filter can only reach known JSONB keys.
+_DIMENSION_KEYS = {
+    "eco_modulation", "recycled_content", "penalties", "collection_targets",
+    "pro_structure", "bans_restrictions", "fee_amounts", "labeling",
+}
+
+
 @router.get("", response_model=list[BillSummary])
 async def list_bills(
     state: str | None = None,
@@ -72,6 +84,9 @@ async def list_bills(
     # it (each with its source_url). `year` filters on the year of status_date — the same bucketing the
     # timeline/momentum endpoints use — so the drill-down list matches the bar's count.
     policy_stance: str | None = None,
+    # CSV of compliance-dimension keys (e.g. "eco_modulation,collection_targets"); a bill matches only
+    # if EACH listed dimension is `present` in its compliance_details. See _DIMENSION_KEYS.
+    dimensions: str | None = None,
     year: int | None = None,
     # year_from/year_to bound status_date year — the per-cycle (biennium) drill-down passes the two
     # years of a biennium so a cycle bar lists exactly its bills.
@@ -120,6 +135,11 @@ async def list_bills(
         )
     if policy_stance:
         q = q.where(Bill.policy_stance == policy_stance)
+    if dimensions:
+        # AND semantics: narrow to bills where every requested dimension is present (a bill that both
+        # eco-modulates AND sets collection targets). Unknown keys are ignored (whitelist).
+        for dim in {d.strip() for d in dimensions.split(",")} & _DIMENSION_KEYS:
+            q = q.where(Bill.compliance_details[dim]["status"].astext == "present")
     if year is not None:
         q = q.where(func.extract("year", Bill.status_date) == year)
     if year_from is not None:
@@ -192,9 +212,11 @@ async def search_bills(
 
 
 @router.get("/text-coverage", response_model=TextCoverageStats)
-async def bill_text_coverage(db: AsyncSession = Depends(get_db)):
+async def bill_text_coverage(by_region: bool = False, db: AsyncSession = Depends(get_db)):
     """Counts of ce_relevant bills with vs. without indexed full text, so the deep-search UI can say
-    'covers N of M bills' — keeping an empty full-text result honest (not in our index ≠ nonexistent)."""
+    'covers N of M bills' — keeping an empty full-text result honest (not in our index ≠ nonexistent).
+    ?by_region=true adds a per-region breakdown incl. how many are analyzed at the current dimension
+    schema version, so an 'across all bills' claim can be qualified per region instead of overstated."""
     total = await db.scalar(
         select(func.count()).select_from(Bill).where(Bill.ce_relevant.is_(True))
     )
@@ -204,7 +226,36 @@ async def bill_text_coverage(db: AsyncSession = Depends(get_db)):
         .join(Bill, Bill.id == BillText.bill_id)
         .where(Bill.ce_relevant.is_(True), BillText.text.isnot(None))
     )
-    return TextCoverageStats(indexed_bills=indexed or 0, total_bills=total or 0)
+    regions: list[RegionCoverage] | None = None
+    if by_region:
+        has_text = BillText.text.isnot(None)
+        # extraction_version is a JSONB key on compliance_details; NULL/missing coalesces to 0 (< current).
+        analyzed = func.coalesce(
+            Bill.compliance_details["extraction_version"].as_integer(), 0
+        ) >= EXTRACTION_VERSION
+        rows = (
+            await db.execute(
+                select(
+                    Bill.region,
+                    func.count().label("total"),
+                    func.count().filter(has_text).label("indexed"),
+                    func.count().filter(has_text, analyzed).label("analyzed"),
+                )
+                .select_from(Bill)
+                .outerjoin(BillText, BillText.bill_id == Bill.id)
+                .where(Bill.ce_relevant.is_(True))
+                .group_by(Bill.region)
+                .order_by(func.count().desc())
+            )
+        ).all()
+        regions = [
+            RegionCoverage(
+                region=r.region or "?", total_bills=r.total,
+                indexed_bills=r.indexed, analyzed_bills=r.analyzed,
+            )
+            for r in rows
+        ]
+    return TextCoverageStats(indexed_bills=indexed or 0, total_bills=total or 0, by_region=regions)
 
 
 @router.get("/map-summary", response_model=list[StateMapSummary])
@@ -343,12 +394,17 @@ async def get_stance_momentum(
 async def get_instrument_material_matrix(
     min_confidence: float = 0.7,
     regions: str | None = None,
+    status: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Counts of EPR-relevant bills per (instrument_type × material_category × region) — the Insights
     coverage heatmap. material_categories is a JSONB array, so it's unnested: a bill tagging three
     materials lands in three cells. Cells with no bills simply have no row (the white space). Grouped
     by region so the chart can compare jurisdictions; `regions` (CSV) narrows the set.
+
+    `status` (e.g. "enacted") filters to a single bill status. The charts default to enacted-only so
+    US regions — which carry a large introduced-bill pipeline — are compared on the same footing as
+    foreign/EU regions, which we track only once they're law.
     """
     # Unnest the JSONB material array as a LATERAL set-returning function joined per bill row.
     material = func.jsonb_array_elements_text(Bill.material_categories).table_valued("value").lateral()
@@ -367,6 +423,8 @@ async def get_instrument_material_matrix(
         .where(Bill.confidence_score >= min_confidence)
         .group_by(Bill.instrument_type, material.c.value, Bill.region)
     )
+    if status:
+        q = q.where(Bill.status == status)
     region_codes = _parse_regions(regions)
     if region_codes:
         q = q.where(Bill.region.in_(region_codes))
@@ -378,6 +436,41 @@ async def get_instrument_material_matrix(
             count=row.count,
             region=row.region,
         )
+        for row in rows
+    ]
+
+
+@router.get("/collection-target-basis", response_model=list[CollectionTargetBasisPoint])
+async def get_collection_target_basis(
+    regions: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Distribution of how collection/recovery targets are *measured* — by weight, units, value
+    recovered (critical metals), or material-specific — across EPR-relevant bills, per region.
+    Unnests compliance_details->collection_targets->targets (a JSONB array), so a bill with several
+    targets contributes several rows. Only bills whose collection_targets envelope is `present` count.
+    Grouped by region so the chart can compare jurisdictions; `regions` (CSV) narrows the set."""
+    targets = func.jsonb_array_elements(
+        Bill.compliance_details["collection_targets"]["targets"]
+    ).table_valued("value").lateral()
+    # targets.c.value is an untyped table-valued column, so pull the field with jsonb_extract_path_text
+    # rather than the getitem operator (which needs a JSONB-typed expression).
+    basis = func.jsonb_extract_path_text(targets.c.value, "basis")
+    q = (
+        select(basis.label("basis"), Bill.region, func.count().label("count"))
+        .select_from(Bill)
+        .join(targets, true())
+        .where(Bill.ce_relevant == True)
+        .where(Bill.compliance_details["collection_targets"]["status"].astext == "present")
+        .group_by(basis, Bill.region)
+        .order_by(func.count().desc())
+    )
+    region_codes = _parse_regions(regions)
+    if region_codes:
+        q = q.where(Bill.region.in_(region_codes))
+    rows = (await db.execute(q)).all()
+    return [
+        CollectionTargetBasisPoint(basis=row.basis or "unspecified", count=row.count, region=row.region)
         for row in rows
     ]
 

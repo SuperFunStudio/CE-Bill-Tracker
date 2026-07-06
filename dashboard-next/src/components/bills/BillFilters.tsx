@@ -10,6 +10,8 @@ export interface BillFilterState {
   instrumentType: string;
   materialCategories: string[];
   polymers: string[];
+  /** Compliance-dimension keys that must be `present` (filtered server-side; see _DIMENSION_KEYS). */
+  dimensions: string[];
   urgency: string;
   search: string;
   eprOnly: boolean;
@@ -23,12 +25,26 @@ export const DEFAULT_FILTERS: BillFilterState = {
   instrumentType: '',
   materialCategories: [],
   polymers: [],
+  dimensions: [],
   urgency: '',
   search: '',
   eprOnly: true,
   enactedOnly: false,
   hasLitigation: false,
 };
+
+// The eight extracted compliance dimensions, filterable from the bills list. Keys mirror the envelope
+// keys in compliance_details (app/classification/sonnet_extractor.py) + the backend _DIMENSION_KEYS.
+export const COMPLIANCE_DIMENSIONS: { value: string; label: string }[] = [
+  { value: 'collection_targets', label: 'Collection / recovery targets' },
+  { value: 'recycled_content', label: 'Recycled-content minimums' },
+  { value: 'eco_modulation', label: 'Eco-modulation' },
+  { value: 'fee_amounts', label: 'Producer fees' },
+  { value: 'penalties', label: 'Penalties' },
+  { value: 'bans_restrictions', label: 'Bans & restrictions' },
+  { value: 'pro_structure', label: 'PRO structure' },
+  { value: 'labeling', label: 'Labeling' },
+];
 
 // Example search terms cycled through the placeholder — one bill number, one material, one topic.
 // Search matches bill_number, title, and ai_summary (see applyBillFilters below).
@@ -233,6 +249,7 @@ export function BillFilters({ filters, onChange, hideState, resinOptions }: Bill
     filters.instrumentType,
     filters.materialCategories.length > 0,
     filters.polymers.length > 0,
+    filters.dimensions.length > 0,
     filters.search,
   ].filter(Boolean).length;
 
@@ -269,8 +286,8 @@ export function BillFilters({ filters, onChange, hideState, resinOptions }: Bill
       {/* Filter row. Column count tracks how many controls render: State (US only) + Status +
           Instrument + Materials, plus Resin when the polymer scan has data. */}
       <div className={`grid grid-cols-2 gap-3 ${
-        { 3: 'md:grid-cols-3', 4: 'md:grid-cols-4', 5: 'md:grid-cols-5' }[
-          (showState ? 4 : 3) + (showResin ? 1 : 0)
+        { 4: 'md:grid-cols-4', 5: 'md:grid-cols-5', 6: 'md:grid-cols-6' }[
+          (showState ? 5 : 4) + (showResin ? 1 : 0)
         ]
       }`}>
         {showState && (
@@ -308,6 +325,13 @@ export function BillFilters({ filters, onChange, hideState, resinOptions }: Bill
             label: m.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
           }))}
           placeholder="All"
+        />
+        <MultiSelect
+          label="Compliance"
+          values={filters.dimensions}
+          onChange={v => set({ dimensions: v })}
+          options={COMPLIANCE_DIMENSIONS}
+          placeholder="Any"
         />
         {showResin && (
           <MultiSelect

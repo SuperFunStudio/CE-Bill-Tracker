@@ -9,7 +9,7 @@ import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
 import {
   HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
-  LabelIcon, PackageIcon,
+  LabelIcon, PackageIcon, AskIcon, ScaleIcon,
 } from '@/components/ui/icons';
 
 // `usOnly` items are hidden outside the US: Federal Actions has no EU analog yet (EU-central law is
@@ -20,6 +20,12 @@ const NAV_ITEMS = [
   { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon, usOnly: true },
   { href: '/company', label: 'My Portfolio', Icon: FactoryIcon, usOnly: true },
   { href: '/design-guide', label: 'Design Guide', Icon: CompassIcon },
+  // Admin-only while dogfooding in prod; graduates to a Pro feature once validated (drop adminOnly,
+  // flip the /ask guard + endpoint to Pro). Mirrors the Regulation Facts rollout above.
+  { href: '/ask', label: 'Ask the Bills', Icon: AskIcon, adminOnly: true },
+  // Prototype — dogfooding in prod, admin-only; graduates to Pro alongside /ask (drop adminOnly, the
+  // page + endpoint already gate on isPro / require_pro).
+  { href: '/evaluate', label: 'Evaluate a Bill', Icon: ScaleIcon, adminOnly: true },
   // Regulation Facts is admin-only for now — still being validated, so it's kept off the public nav
   // (and its route guarded) until it graduates. See the /label page guard.
   { href: '/label', label: 'Regulation Facts', Icon: LabelIcon, adminOnly: true },

@@ -5,6 +5,7 @@ import { fetchInstrumentMaterialMatrix } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
 import { BillDrilldownPanel } from './BillDrilldownPanel';
+import { EnactedOnlyToggle } from './EnactedOnlyToggle';
 import { regionLabel } from './RegionFilter';
 import type { InstrumentMaterialCell } from '@/lib/types';
 
@@ -31,14 +32,17 @@ export function RegionInstrumentMatrix() {
   const [cells, setCells] = useState<InstrumentMaterialCell[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drill, setDrill] = useState<{ region: string; instrument: string } | null>(null);
+  // Default to enacted-only: without it the US row (a deep introduced-bill pipeline) dwarfs the
+  // foreign/EU rows we track only once they're law, distorting the cross-region comparison.
+  const [enactedOnly, setEnactedOnly] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    fetchInstrumentMaterialMatrix() // no filter → every region grouped
+    fetchInstrumentMaterialMatrix({ status: enactedOnly ? 'enacted' : undefined }) // every region grouped
       .then(d => { if (!cancelled) setCells(d); })
       .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load matrix.'); });
     return () => { cancelled = true; };
-  }, []);
+  }, [enactedOnly]);
 
   const { regions, instruments, lookup, max } = useMemo(() => {
     if (!cells || cells.length === 0) {
@@ -66,6 +70,14 @@ export function RegionInstrumentMatrix() {
 
   return (
     <div className="space-y-4">
+      <EnactedOnlyToggle
+        enactedOnly={enactedOnly}
+        onChange={(v) => {
+          setEnactedOnly(v);
+          track('insights_region_instrument_enacted_only', { enacted_only: v });
+        }}
+      />
+
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
@@ -133,7 +145,16 @@ export function RegionInstrumentMatrix() {
         onClose={() => setDrill(null)}
         title={drill ? `${regionLabel(drill.region)} · ${formatInstrumentType(drill.instrument)}` : ''}
         subtitle="Bills counted in this cell"
-        params={drill ? { ce_relevant: true, instrument_type: drill.instrument, region: drill.region } : null}
+        params={
+          drill
+            ? {
+                ce_relevant: true,
+                instrument_type: drill.instrument,
+                region: drill.region,
+                ...(enactedOnly ? { status: 'enacted' } : {}),
+              }
+            : null
+        }
         source="region_instrument_matrix"
       />
     </div>

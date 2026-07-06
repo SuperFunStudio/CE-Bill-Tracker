@@ -198,6 +198,31 @@ export function CompassIcon(props: IconProps) {
   );
 }
 
+export function AskIcon(props: IconProps) {
+  // Speech bubble with a question mark — the "Ask the Bills" Q&A feature.
+  return (
+    <Icon {...props}>
+      <path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5Z" />
+      <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7" />
+      <path d="M12 16h.01" />
+    </Icon>
+  );
+}
+
+export function ScaleIcon(props: IconProps) {
+  // Balance scale — weighing a bill against the strong-bill baseline ("Evaluate a Bill").
+  return (
+    <Icon {...props}>
+      <path d="M12 3v18" />
+      <path d="M7 21h10" />
+      <path d="M5 6h14l-3 8H8L5 6Z" />
+      <path d="M3 14a3 3 0 0 0 6 0" />
+      <path d="M15 14a3 3 0 0 0 6 0" />
+      <path d="M5 6l-2 8m16-8l2 8" />
+    </Icon>
+  );
+}
+
 /** User silhouette — account / profile. */
 export function UserIcon(props: IconProps) {
   return (

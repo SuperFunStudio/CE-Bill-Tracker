@@ -60,13 +60,24 @@ class BillSearchHit(BillSummary):
     text_indexed: bool = True
 
 
+class RegionCoverage(BaseModel):
+    """Per-region slice of text + dimension coverage, so an 'across all bills' claim can be qualified
+    honestly (e.g. 'US 98% analyzed, JP 40%') instead of implying completeness."""
+    region: str
+    total_bills: int      # ce_relevant in this region
+    indexed_bills: int    # of those, with full text stored
+    analyzed_bills: int   # of those, extracted at the current dimension schema version
+
+
 class TextCoverageStats(BaseModel):
     """How many ce_relevant bills have indexed full text (GET /bills/text-coverage). Lets the UI be
     honest that full-text search isn't exhaustive — a thin/empty deep-search result means 'not in the
     text we've indexed', not 'nowhere in any bill'. indexed_bills == 0 means the index isn't populated
-    on this environment yet (so the deep-search UI stays hidden)."""
+    on this environment yet (so the deep-search UI stays hidden). by_region is populated only when the
+    caller passes ?by_region=true."""
     indexed_bills: int
     total_bills: int
+    by_region: list[RegionCoverage] | None = None
 
 
 class StateMapSummary(BaseModel):
@@ -114,6 +125,175 @@ class InstrumentMaterialCell(BaseModel):
 
     instrument_type: str
     material_category: str
+    count: int
+    region: str | None = None  # see BillTimelinePoint.region
+
+
+class ResearchAskRequest(BaseModel):
+    """A natural-language question for the 'Ask the Bills' endpoint (POST /research/ask)."""
+    question: str
+
+
+class ResearchChartBar(BaseModel):
+    label: str
+    value: int
+
+
+class ResearchChart(BaseModel):
+    """A chart the answer chose to show. Bars are computed server-side from SQL aggregates (not the
+    LLM), so the numbers are exact; the model only picks WHICH aggregate is relevant."""
+    title: str
+    bars: list[ResearchChartBar]
+
+
+class ResearchCitation(BaseModel):
+    """One bill the answer is grounded in — only bills from the retrieved set can be cited."""
+    bill_id: int
+    region: str | None = None
+    state: str | None = None
+    bill_number: str | None = None
+    year: int | None = None
+    snippet: str | None = None
+
+
+class ResearchAnswer(BaseModel):
+    """The 'Ask the Bills' response: a cited narrative, an optional SQL-backed chart, and a coverage
+    note so an answer over retrieved bills never implies whole-corpus completeness."""
+    answer: str
+    citations: list[ResearchCitation]
+    chart: ResearchChart | None = None
+    coverage_note: str | None = None
+
+
+# --- Bill-strength evaluation (POST /evaluate/bill) — see app/evaluation/strength.py ----------------
+class EvaluateRequest(BaseModel):
+    """A draft/enacted measure to evaluate. Pasted text is run through the same SonnetExtractor as the
+    corpus, then scored against the baseline its target material's regime demands (fit, not a flat count)."""
+    text: str
+    title: str | None = None
+    jurisdiction: str | None = None
+    region: str | None = None  # extractor language/framing; defaults to US
+
+
+class RegimeAxes(BaseModel):
+    """Where the target material sits on the value×dispersion×channel map (0..1 each). Drives the regime."""
+    value_density: float
+    dispersion: float
+    channel_maturity: float
+
+
+class BillRegime(BaseModel):
+    """Which intervention playbook the material demands. `key` is incremental_viable | critical_mass —
+    a lead-acid battery bill can be lean and strong; a textiles bill that lean is weak."""
+    key: str
+    label: str
+    material: str
+    confidence: str  # high (matched a known material) | low (fallback positioning)
+    rationale: str
+    axes: RegimeAxes
+
+
+class RequirementResult(BaseModel):
+    """One mechanism the regime's baseline requires, scored against what the extractor found in the bill."""
+    key: str
+    label: str
+    importance: str  # load_bearing | supporting | bonus
+    status: str      # met | partial | missing
+    weight: int
+    your_value: str  # what this bill has
+    baseline: str    # what a strong bill for this regime carries
+    note: str | None = None
+
+
+class StrengthScore(BaseModel):
+    value: int       # 0..100, weighted fraction of non-bonus requirements met
+    band: str        # strong | moderate | weak
+    summary: str
+
+
+class AnalogOutcome(BaseModel):
+    """A documented real-world result of an enacted analog law (from bill_outcome) — the 'how it landed'."""
+    direction: str          # positive | negative | mixed
+    summary: str
+    metric: str | None = None
+    attribution: str | None = None
+    source_name: str | None = None
+    source_url: str | None = None
+
+
+class CorpusAnalog(BaseModel):
+    """One enacted law in the same material regime as the draft, scored on the same mechanisms — so the
+    draft can be read against measures whose impact has actually landed."""
+    bill_id: int | None = None
+    region: str | None = None
+    state: str | None = None
+    bill_number: str | None = None
+    title: str | None = None
+    year: int | None = None
+    material: str
+    same_material: bool
+    reviewed: bool          # human/Opus-approved classification
+    mechanisms: dict[str, str]  # requirement key -> met | partial | missing
+    outcomes: list[AnalogOutcome] = []
+
+
+class CorpusBaselinePoint(BaseModel):
+    """For one required mechanism: what share of enacted analogs in this regime carry it, vs the draft."""
+    key: str
+    label: str
+    analog_share: float     # 0..1 of same-regime enacted analogs with this mechanism fully in place
+    your_status: str        # met | partial | missing on the draft
+
+
+class CorpusCrossCheck(BaseModel):
+    """The draft measured against enacted laws in the same material regime: which mechanisms the ones
+    that made it onto the books carried, which of those produced documented outcomes, and where the
+    draft sits relative to that field."""
+    regime: str
+    analog_count: int             # same-regime enacted analogs considered
+    same_material_count: int
+    value_basis_share: float | None = None  # share of analogs using value-aligned (not weight) targets
+    baseline: list[CorpusBaselinePoint]
+    analogs: list[CorpusAnalog]
+    note: str
+
+
+class EvaluateResponse(BaseModel):
+    """The bill-strength result: the material's regime, a fit score against that regime's baseline, a
+    per-mechanism comparison, flags (value-vs-weight, implementation-gap), the extracted envelopes
+    (compliance_details-shaped, rendered with the same dimensions.ts as bill detail), and a corpus
+    cross-check against enacted laws in the same regime."""
+    regime: BillRegime
+    score: StrengthScore
+    requirements: list[RequirementResult]
+    flags: list[str]
+    compliance_details: dict
+    # The strong model bill for this regime, compliance_details-shaped — for a dimension-by-dimension
+    # diff against the draft (rendered with the same dimensions.ts). See app/evaluation/baselines.py.
+    baseline_details: dict
+    corpus: CorpusCrossCheck | None = None
+    title: str | None = None
+    jurisdiction: str | None = None
+
+
+class MaterialMapPoint(BaseModel):
+    """One material's position on the value×dispersion×channel map, plus the regime it implies — the
+    reference data behind the material-position viz (GET /evaluate/material-map)."""
+    material: str
+    value_density: float           # log-normalized recoverable $/tonne, 0..1
+    dispersion: float
+    channel_maturity: float
+    regime: str
+    value_usd_per_tonne: float | None = None  # the raw anchor behind value_density (for tooltips)
+
+
+class CollectionTargetBasisPoint(BaseModel):
+    """One (basis, region) bucket of collection/recovery targets: how many targets in `region` are
+    measured on `basis` — weight | units | value_recovered | material_specific | unspecified. Unnested
+    from compliance_details.collection_targets.targets, so a bill with several targets contributes
+    several rows. Answers 'do bills measure collection targets by weight, or by value recovered?'."""
+
+    basis: str
     count: int
     region: str | None = None  # see BillTimelinePoint.region
 

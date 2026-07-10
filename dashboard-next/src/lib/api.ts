@@ -10,6 +10,7 @@ import type {
   BillStancePoint,
   CollectionTargetBasisPoint,
   ResearchAnswer,
+  ResearchBillPage,
   EvaluateResponse,
   MaterialMapPoint,
   InstrumentMaterialCell,
@@ -117,6 +118,18 @@ export async function askResearch(question: string, token?: string | null): Prom
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ question }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+/** Pages 2+ of the full relevant-bill set for an asked question (SQL-only, no LLM). Prev/Next on the
+ *  Ask page call this; the cascade is deterministic so pages align with the answer's page 1. */
+export async function fetchResearchBills(
+  question: string, page: number, pageSize: number, token?: string | null,
+): Promise<ResearchBillPage> {
+  const res = await fetch(buildUrl('/research/bills', { question, page, page_size: pageSize }), {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();

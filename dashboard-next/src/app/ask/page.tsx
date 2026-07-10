@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/components/auth/AuthContext';
-import { askResearch } from '@/lib/api';
-import type { ResearchAnswer } from '@/lib/types';
+import { askResearch, fetchResearchBills } from '@/lib/api';
+import type { ResearchAnswer, ResearchBillPage } from '@/lib/types';
+import { BillTable } from '@/components/bills/BillTable';
 
 // "Ask the Bills" (Pro) — a natural-language question over the extracted corpus. The answer is
 // grounded in retrieved bills + SQL aggregates server-side (numbers are exact, claims are cited);
@@ -61,21 +62,40 @@ export default function AskPage() {
   // swap isAdmin→isPro here, flip the endpoint's require_admin→require_pro, and drop the nav adminOnly.
   const { isAdmin, getToken, loading: authLoading } = useAuth();
   const [question, setQuestion] = useState('');
+  const [asked, setAsked] = useState('');            // the question the current results belong to
   const [answer, setAnswer] = useState<ResearchAnswer | null>(null);
+  const [billPage, setBillPage] = useState<ResearchBillPage | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pageBusy, setPageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function ask(q: string) {
     const trimmed = q.trim();
     if (trimmed.length < 3 || busy || !isAdmin) return;
-    setBusy(true); setError(null); setAnswer(null);
+    setBusy(true); setError(null); setAnswer(null); setBillPage(null);
     try {
       const token = await getToken();
-      setAnswer(await askResearch(trimmed, token));
+      const a = await askResearch(trimmed, token);
+      setAnswer(a);
+      setBillPage(a.bills ?? null);
+      setAsked(trimmed);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function goToPage(page: number) {
+    if (!billPage || pageBusy) return;
+    setPageBusy(true);
+    try {
+      const token = await getToken();
+      setBillPage(await fetchResearchBills(asked, page, billPage.page_size, token));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+    } finally {
+      setPageBusy(false);
     }
   }
 
@@ -89,7 +109,7 @@ export default function AskPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10 space-y-6">
+    <div className="mx-auto max-w-5xl px-6 py-10 space-y-6">
       <div>
         <p className="text-[rgb(var(--green-accent))] text-xs font-semibold uppercase tracking-wider">Ask the Bills</p>
         <h1 className="font-serif text-2xl text-text-primary mt-1">Question the whole corpus</h1>
@@ -167,6 +187,21 @@ export default function AskPage() {
             </div>
           )}
 
+          {billPage && billPage.total > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
+                  Relevant bills ({billPage.total})
+                </div>
+                <span className="text-xs text-text-muted">{strategyLabel(billPage.strategy)}</span>
+              </div>
+              <div className={pageBusy ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
+                <BillTable bills={billPage.items} />
+              </div>
+              <BillPager page={billPage} busy={pageBusy} onGo={goToPage} />
+            </div>
+          )}
+
           {answer.coverage_note && (
             <p className="text-xs text-text-muted border-t border-border-default pt-3">
               {answer.coverage_note}
@@ -174,6 +209,46 @@ export default function AskPage() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Human-readable note for which retrieval tier produced the relevant set. */
+function strategyLabel(strategy: string): string {
+  if (strategy.startsWith('dimension:')) {
+    return `Matched by compliance dimension: ${strategy.slice('dimension:'.length).replace(/_/g, ' ')}`;
+  }
+  if (strategy === 'text_broad') return 'Broadened text match';
+  return 'Full-text match';
+}
+
+/** Server-driven Prev/Next pager over the full relevant set (BillTable's own pager is left off so
+ *  paging fetches from the API rather than slicing an in-memory array). */
+function BillPager({ page, busy, onGo }: { page: ResearchBillPage; busy: boolean; onGo: (p: number) => void }) {
+  const pageCount = Math.max(1, Math.ceil(page.total / page.page_size));
+  if (pageCount <= 1) return null;
+  const start = (page.page - 1) * page.page_size + 1;
+  const end = start + page.items.length - 1;
+  return (
+    <div className="flex items-center justify-between gap-3 pt-1">
+      <span className="text-xs text-text-muted">{start}–{end} of {page.total}</span>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onGo(page.page - 1)}
+          disabled={busy || page.page <= 1}
+          className="rounded-full border border-border-default px-3 py-1 text-xs text-text-secondary hover:text-text-primary disabled:opacity-30"
+        >
+          Prev
+        </button>
+        <span className="text-xs text-text-muted">Page {page.page} / {pageCount}</span>
+        <button
+          onClick={() => onGo(page.page + 1)}
+          disabled={busy || page.page >= pageCount}
+          className="rounded-full border border-border-default px-3 py-1 text-xs text-text-secondary hover:text-text-primary disabled:opacity-30"
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }

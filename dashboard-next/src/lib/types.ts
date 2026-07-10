@@ -172,11 +172,21 @@ export interface ResearchCitation {
   year?: number | null;
   snippet?: string | null;
 }
+// One page of the full relevant-bill set backing an answer (GET /research/bills for pages 2+).
+// `total` is the complete count across all pages, so the table can page through every relevant bill.
+export interface ResearchBillPage {
+  total: number;
+  page: number;
+  page_size: number;
+  strategy: string;   // 'text' | 'dimension:<key>' | 'text_broad'
+  items: BillSummary[];
+}
 export interface ResearchAnswer {
   answer: string;
   citations: ResearchCitation[];
   chart?: ResearchChart | null;
   coverage_note?: string | null;
+  bills?: ResearchBillPage | null;
 }
 
 // --- Bill-strength evaluation (POST /evaluate/bill) — see app/evaluation/strength.py --------------

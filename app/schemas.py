@@ -168,6 +168,19 @@ class ResearchCitation(BaseModel):
     snippet: str | None = None
 
 
+class ResearchBillPage(BaseModel):
+    """One page of the FULL set of bills relevant to an 'Ask the Bills' question. `total` is the
+    complete count across all pages (so the UI can page through every relevant bill, not a capped
+    sample). `strategy` records which retrieval tier produced the set — 'text' (precise full-text),
+    'dimension:<key>' (structured fallback when the question maps to a compliance dimension but text
+    match is thin), or 'text_broad' (OR-broadened last resort) — so the coverage note can be honest."""
+    total: int
+    page: int
+    page_size: int
+    strategy: str
+    items: list[BillSummary]
+
+
 class ResearchAnswer(BaseModel):
     """The 'Ask the Bills' response: a cited narrative, an optional SQL-backed chart, and a coverage
     note so an answer over retrieved bills never implies whole-corpus completeness."""
@@ -175,6 +188,9 @@ class ResearchAnswer(BaseModel):
     citations: list[ResearchCitation]
     chart: ResearchChart | None = None
     coverage_note: str | None = None
+    # Page 1 of the full relevant-bill set backing this answer; subsequent pages come from
+    # GET /research/bills (SQL-only, no LLM). None when the question yields no relevant bills.
+    bills: ResearchBillPage | None = None
 
 
 # --- Bill-strength evaluation (POST /evaluate/bill) — see app/evaluation/strength.py ----------------

@@ -218,8 +218,8 @@ function strategyLabel(strategy: string): string {
   if (strategy.startsWith('dimension:')) {
     return `Matched by compliance dimension: ${strategy.slice('dimension:'.length).replace(/_/g, ' ')}`;
   }
-  if (strategy === 'text_broad') return 'Broadened text match';
-  return 'Full-text match';
+  if (strategy === 'text_broad') return 'Broadened text & title match';
+  return 'Text & title match';
 }
 
 /** Server-driven Prev/Next pager over the full relevant set (BillTable's own pager is left off so

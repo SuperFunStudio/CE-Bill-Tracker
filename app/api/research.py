@@ -16,7 +16,7 @@ import json
 import anthropic
 import structlog
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, literal_column, select, true
+from sqlalchemy import func, literal_column, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import AuthedUser, require_admin
@@ -137,13 +137,27 @@ def _lit_subquery():
     )
 
 
-async def _count_text(db: AsyncSession, tsq) -> int:
+def _meta_doc():
+    """An English tsvector over a bill's title + AI summary. text_tsv indexes only the (English-only)
+    full statute body, so a non-English bill like France's AGEC is unreachable by body text even
+    though the Explorer surfaces it by its (English-descriptor) title. Matching this metadata doc too
+    lets the same titled bills the Explorer shows appear in Ask the Bills, in any language."""
+    return func.to_tsvector(_ENGLISH, func.concat_ws(" ", Bill.title, Bill.ai_summary))
+
+
+def _match_filter(tsq):
+    """A bill is relevant if the query matches its full text OR its title/summary metadata."""
+    return or_(BillText.text_tsv.op("@@")(tsq), _meta_doc().op("@@")(tsq))
+
+
+async def _count_match(db: AsyncSession, tsq) -> int:
+    # LEFT join: title-only matches (no bill_texts row, or foreign body text) must still count.
     return (await db.scalar(
-        select(func.count())
+        select(func.count(func.distinct(Bill.id)))
         .select_from(Bill)
-        .join(BillText, BillText.bill_id == Bill.id)
+        .outerjoin(BillText, BillText.bill_id == Bill.id)
         .where(Bill.ce_relevant.is_(True))
-        .where(BillText.text_tsv.op("@@")(tsq))
+        .where(_match_filter(tsq))
     )) or 0
 
 
@@ -152,19 +166,26 @@ async def _relevant_bills(
 ) -> tuple[list, int, str]:
     """The FULL set of bills relevant to `question`, one page at a time. Returns (rows, total,
     strategy). A 3-tier cascade, deterministic so paging is stable across calls (no LLM here):
-      1. precise websearch full-text (ranked) — precise when it lands;
-      2. structured-by-dimension — when text is thin AND the question maps to a compliance dimension;
-      3. OR-broadened full-text — last resort for thin, non-dimensional questions.
-    Text tiers carry a plain `snippet` (ts_headline) for the LLM/citations; the structured tier does
-    not (rows expose it via getattr default). Litigation columns are joined for the table."""
+      1. precise websearch match over full text OR title/summary metadata (ranked) — the metadata
+         arm reaches the same titled bills the Explorer shows, incl. non-English laws (e.g. AGEC);
+      2. structured-by-dimension — when tier 1 is thin AND the question maps to a compliance dimension;
+      3. OR-broadened match — last resort for thin, non-dimensional questions.
+    Match tiers carry a plain `snippet` (ts_headline over body text, falling back to title) for the
+    LLM/citations; the structured tier does not (rows expose it via getattr default). Litigation
+    columns are joined for the table."""
     page = max(1, page)
     page_size = max(1, min(page_size, _MAX_PAGE_SIZE))
     offset = (page - 1) * page_size
     lit = _lit_subquery()
 
-    def _text_page(tsq):
-        rank = func.ts_rank(BillText.text_tsv, tsq)
-        headline = func.ts_headline(_ENGLISH, BillText.text, tsq, _HEADLINE_PLAIN)
+    def _match_page(tsq):
+        # Rank = best of body-text relevance and title/summary relevance (0 when a bill has no text
+        # row, so a title-only match still ranks by its metadata score). Snippet falls back to title.
+        text_rank = func.coalesce(func.ts_rank(BillText.text_tsv, tsq), 0.0)
+        rank = func.greatest(text_rank, func.ts_rank(_meta_doc(), tsq))
+        headline = func.ts_headline(
+            _ENGLISH, func.coalesce(BillText.text, Bill.title, ""), tsq, _HEADLINE_PLAIN
+        )
         stmt = (
             select(
                 Bill,
@@ -172,21 +193,21 @@ async def _relevant_bills(
                 lit.c.max_risk.label("max_risk"),
                 headline.label("snippet"),
             )
-            .join(BillText, BillText.bill_id == Bill.id)
+            .outerjoin(BillText, BillText.bill_id == Bill.id)
             .outerjoin(lit, Bill.id == lit.c.related_law_id)
             .where(Bill.ce_relevant.is_(True))
-            .where(BillText.text_tsv.op("@@")(tsq))
+            .where(_match_filter(tsq))
             .order_by(rank.desc(), Bill.id.desc())
             .offset(offset)
             .limit(page_size)
         )
         return stmt
 
-    # Tier 1 — precise websearch.
+    # Tier 1 — precise websearch over text + title/summary metadata.
     tsq = func.websearch_to_tsquery(_ENGLISH, question)
-    total = await _count_text(db, tsq)
+    total = await _count_match(db, tsq)
     if total >= _MIN_TEXT_HITS:
-        rows = (await db.execute(_text_page(tsq))).all()
+        rows = (await db.execute(_match_page(tsq))).all()
         return rows, total, "text"
 
     # Tier 2 — structured fallback when the question is clearly about a dimension.
@@ -218,13 +239,13 @@ async def _relevant_bills(
     words = _tokenize(question)
     if words:
         or_tsq = func.to_tsquery(_ENGLISH, " | ".join(words))
-        or_total = await _count_text(db, or_tsq)
+        or_total = await _count_match(db, or_tsq)
         if or_total > total:
-            rows = (await db.execute(_text_page(or_tsq))).all()
+            rows = (await db.execute(_match_page(or_tsq))).all()
             return rows, or_total, "text_broad"
 
     # Precise tier is all we have (0–2 hits); return it rather than nothing.
-    rows = (await db.execute(_text_page(tsq))).all() if total else []
+    rows = (await db.execute(_match_page(tsq))).all() if total else []
     return rows, total, "text"
 
 

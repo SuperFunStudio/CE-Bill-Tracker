@@ -213,13 +213,18 @@ export default function AskPage() {
   );
 }
 
-/** Human-readable note for which retrieval tier produced the relevant set. */
+/** Human-readable note for which retrieval tier produced the relevant set. Strategy may carry a
+ *  jurisdiction suffix after "·" (e.g. "text·France,United States" or "jurisdiction·France"). */
 function strategyLabel(strategy: string): string {
-  if (strategy.startsWith('dimension:')) {
-    return `Matched by compliance dimension: ${strategy.slice('dimension:'.length).replace(/_/g, ' ')}`;
+  const [base, places] = strategy.split('·');
+  const where = places ? ` · ${places}` : '';
+  if (base.startsWith('dimension:')) {
+    return `Compliance dimension: ${base.slice('dimension:'.length).replace(/_/g, ' ')}${where}`;
   }
-  if (strategy === 'text_broad') return 'Broadened text & title match';
-  return 'Text & title match';
+  if (base === 'jurisdiction') return `Jurisdiction${places ? `: ${places}` : ''}`;
+  if (base === 'all') return 'All bills';
+  if (base === 'text_broad') return `Broadened text & title match${where}`;
+  return `Text & title match${where}`;
 }
 
 /** Server-driven Prev/Next pager over the full relevant set (BillTable's own pager is left off so

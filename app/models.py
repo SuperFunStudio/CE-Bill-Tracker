@@ -14,8 +14,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text as sa_text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -43,6 +44,10 @@ class Bill(Base):
     # Within-region jurisdiction code. US: "CA"/"OR" for states, "US" for federal. EU: "EU" for
     # EU-wide acts (and "DE"/"FR"/… for member states once those are added).
     state: Mapped[str] = mapped_column(String(2), nullable=False)  # "CA", "OR", "US" federal; "EU" EU-wide
+    # Atlas Circular jurisdiction node (migration 036). The normalized tree replacing the flat
+    # region/state pair (which stay as denormalized mirrors during transition). Backfilled from
+    # (region, state) via app/geo/jurisdictions.jurisdiction_code — e.g. (US,CA)->US-CA, (CA,CA)->CA.
+    jurisdiction_id: Mapped[int | None] = mapped_column(ForeignKey("jurisdictions.id"), nullable=True)
     bill_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -129,6 +134,31 @@ class Bill(Base):
         Index("idx_bills_policy_stance", "policy_stance"),
         Index("idx_bills_material_categories", "material_categories", postgresql_using="gin"),
         Index("idx_bills_instrument_types", "instrument_types", postgresql_using="gin"),
+        Index("idx_bills_jurisdiction", "jurisdiction_id"),
+    )
+
+
+class Jurisdiction(Base):
+    """Atlas Circular's jurisdiction tree (migration 036) — world -> bloc/country -> state ->
+    municipality (municipality unseeded for now). Every bill attaches via Bill.jurisdiction_id. The
+    seed data + the (region,state)->code mapping live in app/geo/jurisdictions.py so the tree and the
+    backfill never drift. `aliases` (lowercased) is what lets a query resolve "France"/"French" to the
+    FR node — the fix for geographic queries that the flat region/state columns can't serve."""
+    __tablename__ = "jurisdictions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("jurisdictions.id"), nullable=True)
+    level: Mapped[str] = mapped_column(String(16), nullable=False)  # world|bloc|country|state|municipality
+    code: Mapped[str] = mapped_column(String(24), nullable=False, unique=True)  # 'FR','US','US-CA'
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Lowercased search synonyms (country name, demonym, ISO code, state name/abbr). GIN-indexed.
+    aliases: Mapped[list] = mapped_column(ARRAY(Text), nullable=False, server_default=sa_text("'{}'"))
+    path: Mapped[str] = mapped_column(Text, nullable=False)  # dotted, e.g. 'world.us.us_ca'
+    bill_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+    __table_args__ = (
+        Index("idx_jurisdictions_path", "path"),
+        Index("idx_jurisdictions_aliases", "aliases", postgresql_using="gin"),
     )
 
 
@@ -1076,3 +1106,57 @@ class BillOutcome(Base):
         Index("idx_bill_outcome_bill_id", "bill_id"),
         Index("idx_bill_outcome_direction", "direction"),
     )
+
+
+class ResearchSession(Base):
+    """A persisted 'Ask the Bills' research thread — the primitive that turns ephemeral asks into a
+    saveable, shareable analysis layer (migration 037; see docs/PUBLIC_AFFAIRS_RESEARCH_DESIGN.md).
+    Owned by a Firebase uid (same pattern as alert_subscriptions.firebase_uid). Private by default;
+    `share_token` is minted on first share for an unlisted, noindex read link. Not exposed to users
+    until Phase A2 — the tables land now so /ask can start persisting."""
+    __tablename__ = "research_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    owner_uid: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False, server_default="private")  # private|link|public
+    share_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    turns: Mapped[list["ResearchTurn"]] = relationship(
+        "ResearchTurn", back_populates="session", cascade="all, delete-orphan", order_by="ResearchTurn.seq"
+    )
+
+    __table_args__ = (Index("idx_research_sessions_owner", "owner_uid"),)
+
+
+class ResearchTurn(Base):
+    """One question+answer within a ResearchSession. `bill_ids` snapshots the ranked relevant set at
+    ask time (citability — a shared briefing shows what it showed); `rewritten_query`+`facets` capture
+    how retrieval interpreted the (possibly follow-up) question so a page can be re-run deterministically."""
+    __tablename__ = "research_turns"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("research_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    rewritten_query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    facets: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # resolved facet interpretation
+    strategy: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    answer: Mapped[dict | None] = mapped_column(JSONB, nullable=True)  # the ResearchAnswer payload
+    bill_ids: Mapped[list | None] = mapped_column(ARRAY(Integer), nullable=True)  # ranked snapshot
+    bill_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    session: Mapped["ResearchSession"] = relationship("ResearchSession", back_populates="turns")
+
+    __table_args__ = (Index("idx_research_turns_session", "session_id", "seq"),)

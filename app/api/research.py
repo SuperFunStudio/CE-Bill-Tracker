@@ -20,9 +20,10 @@ from sqlalchemy import func, literal_column, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import AuthedUser, require_admin
+from app.api.research_facets import resolve_facets
 from app.config import settings
 from app.database import get_db
-from app.models import Bill, BillText, LitigationCase
+from app.models import Bill, BillText, Jurisdiction, LitigationCase
 from app.schemas import (
     BillSummary,
     ResearchAnswer,
@@ -58,9 +59,15 @@ You are a research analyst for an EPR / circular-economy legislation database. A
 question using ONLY the RETRIEVED BILLS and AGGREGATES provided — never outside knowledge. Rules:
 - Cite every factual claim with a bill from the retrieved set, as [STATE BILL_NUMBER].
 - You MAY state exact numbers from the AGGREGATES (they are computed over the whole corpus).
-- Retrieved bills are a relevance-ranked SAMPLE, not the whole corpus. Do NOT say "all bills" unless \
-you are citing an AGGREGATE (which is complete). Otherwise say "among the bills found…".
-- If the material does not support an answer, say so plainly and say what's missing. Do not guess.
+- The retrieved bills are the TOP of a larger matched set — SCOPE gives its total size (and how the \
+question was interpreted, e.g. jurisdiction = France). The sample is a window onto that set.
+- NEVER assert that something is absent from the corpus. If SCOPE.total > 0, the set is non-empty — \
+describe only what the sample shows ("among the N France bills, the top results are…"), never "there \
+are no records" / "no French bills exist". A true absence is ONLY when SCOPE.total = 0.
+- Honor the interpretation: if SCOPE names a jurisdiction/filter, frame the answer to it \
+("Interpreting this as France…") rather than answering about the whole corpus.
+- Do NOT say "all bills" unless citing an AGGREGATE (which is complete). Otherwise "among the bills found…".
+- If SCOPE.total = 0, say plainly nothing matched and what would broaden it. Do not guess.
 - Write concise plain prose with short "- " bullets. Do NOT use markdown tables or headings — a chart
   is rendered separately for the numbers. Light **bold** for key terms is fine.
 Respond with ONLY valid JSON:
@@ -115,13 +122,6 @@ def _map_dimension(question: str) -> str | None:
     return None
 
 
-def _tokenize(question: str) -> list[str]:
-    """Alnum words (len>2) for the OR-broadened tsquery. Stripping non-alnum makes each term safe to
-    interpolate into to_tsquery (no reserved chars)."""
-    cleaned = "".join(c.lower() if c.isalnum() else " " for c in question)
-    return [w for w in cleaned.split() if len(w) > 2]
-
-
 def _lit_subquery():
     """Active-litigation counts per bill, so the relevant-bill table's Litigation column populates
     (mirrors app/api/bills.py._lit_subquery — kept local to avoid a cross-module private import)."""
@@ -150,103 +150,129 @@ def _match_filter(tsq):
     return or_(BillText.text_tsv.op("@@")(tsq), _meta_doc().op("@@")(tsq))
 
 
-async def _count_match(db: AsyncSession, tsq) -> int:
+async def _count_match(db: AsyncSession, tsq, extra=()) -> int:
     # LEFT join: title-only matches (no bill_texts row, or foreign body text) must still count.
-    return (await db.scalar(
-        select(func.count(func.distinct(Bill.id)))
-        .select_from(Bill)
-        .outerjoin(BillText, BillText.bill_id == Bill.id)
-        .where(Bill.ce_relevant.is_(True))
-        .where(_match_filter(tsq))
-    )) or 0
+    q = (select(func.count(func.distinct(Bill.id)))
+         .select_from(Bill)
+         .outerjoin(BillText, BillText.bill_id == Bill.id)
+         .where(Bill.ce_relevant.is_(True))
+         .where(_match_filter(tsq)))
+    for c in extra:
+        q = q.where(c)
+    return (await db.scalar(q)) or 0
 
 
 async def _relevant_bills(
     db: AsyncSession, question: str, page: int = 1, page_size: int = _PAGE_SIZE
 ) -> tuple[list, int, str]:
-    """The FULL set of bills relevant to `question`, one page at a time. Returns (rows, total,
-    strategy). A 3-tier cascade, deterministic so paging is stable across calls (no LLM here):
-      1. precise websearch match over full text OR title/summary metadata (ranked) — the metadata
-         arm reaches the same titled bills the Explorer shows, incl. non-English laws (e.g. AGEC);
-      2. structured-by-dimension — when tier 1 is thin AND the question maps to a compliance dimension;
-      3. OR-broadened match — last resort for thin, non-dimensional questions.
-    Match tiers carry a plain `snippet` (ts_headline over body text, falling back to title) for the
-    LLM/citations; the structured tier does not (rows expose it via getattr default). Litigation
-    columns are joined for the table."""
+    """The FULL set of bills relevant to `question`, one page at a time — (rows, total, strategy),
+    deterministic so paging is stable. Facet-hybrid: jurisdiction is resolved from the question
+    (app/api/research_facets) into an authoritative filter, so "examples from France" returns FR bills
+    by construction — never dependent on the word appearing in (foreign-language) body text. Ordered
+    rules, first match wins:
+      1. free-text (full text OR title/summary metadata) *within* the resolved scope;
+      2. structured-by-dimension — only when NO place was named (a place means "list bills there");
+      3. OR-broaden — only when no place was named and free text found nothing precise;
+      4. listing — the base set (place-scoped, or the whole corpus) ranked by recency.
+    The metadata arm reaches the same titled bills the Explorer shows (incl. non-English laws like
+    AGEC). Match rules carry a `snippet` (ts_headline, body text falling back to title); listing/
+    dimension rules don't (rows expose it via getattr default). Litigation columns join for the table.
+    """
     page = max(1, page)
     page_size = max(1, min(page_size, _MAX_PAGE_SIZE))
     offset = (page - 1) * page_size
     lit = _lit_subquery()
 
+    facets = await resolve_facets(db, question)
+    geo = facets.place_ids
+    extra = [Bill.jurisdiction_id.in_(geo)] if geo else []
+
+    def _cols():
+        return (Bill,
+                func.coalesce(lit.c.case_count, 0).label("case_count"),
+                lit.c.max_risk.label("max_risk"))
+
+    def _place_strategy(base: str) -> str:
+        return f"{base}·{','.join(facets.place_labels)}" if facets.place_labels else base
+
     def _match_page(tsq):
-        # Rank = best of body-text relevance and title/summary relevance (0 when a bill has no text
-        # row, so a title-only match still ranks by its metadata score). Snippet falls back to title.
+        # Rank = best of body-text and title/summary relevance (0 when a bill has no text row, so a
+        # title-only match still ranks by its metadata score). Snippet falls back to title.
         text_rank = func.coalesce(func.ts_rank(BillText.text_tsv, tsq), 0.0)
         rank = func.greatest(text_rank, func.ts_rank(_meta_doc(), tsq))
         headline = func.ts_headline(
             _ENGLISH, func.coalesce(BillText.text, Bill.title, ""), tsq, _HEADLINE_PLAIN
         )
-        stmt = (
-            select(
-                Bill,
-                func.coalesce(lit.c.case_count, 0).label("case_count"),
-                lit.c.max_risk.label("max_risk"),
-                headline.label("snippet"),
+        q = (select(*_cols(), headline.label("snippet"))
+             .outerjoin(BillText, BillText.bill_id == Bill.id)
+             .outerjoin(lit, Bill.id == lit.c.related_law_id)
+             .where(Bill.ce_relevant.is_(True))
+             .where(_match_filter(tsq)))
+        for c in extra:
+            q = q.where(c)
+        return q.order_by(rank.desc(), Bill.id.desc()).offset(offset).limit(page_size)
+
+    def _plain_page(where_extra, interleave=False):
+        q = (select(*_cols())
+             .outerjoin(lit, Bill.id == lit.c.related_law_id)
+             .where(Bill.ce_relevant.is_(True)))
+        for c in list(extra) + list(where_extra):
+            q = q.where(c)
+        if interleave:
+            # Round-robin at the COUNTRY level so a comparison ("France vs US") is balanced on page 1
+            # — plain recency buries foreign bills (mostly no status_date), and partitioning by leaf
+            # jurisdiction lets the US's 50 state nodes flood France's single node. split_part(path,2)
+            # is the country segment ('world.us.us_ca' -> 'us', 'world.fr' -> 'fr').
+            country = func.split_part(Jurisdiction.path, ".", 2)
+            rn = func.row_number().over(
+                partition_by=country,
+                order_by=[Bill.status_date.desc().nullslast(), Bill.id.desc()],
             )
-            .outerjoin(BillText, BillText.bill_id == Bill.id)
-            .outerjoin(lit, Bill.id == lit.c.related_law_id)
-            .where(Bill.ce_relevant.is_(True))
-            .where(_match_filter(tsq))
-            .order_by(rank.desc(), Bill.id.desc())
-            .offset(offset)
-            .limit(page_size)
-        )
-        return stmt
+            q = q.join(Jurisdiction, Jurisdiction.id == Bill.jurisdiction_id)
+            return q.order_by(rn.asc(), country).offset(offset).limit(page_size)
+        return q.order_by(Bill.status_date.desc().nullslast(), Bill.id.desc()).offset(offset).limit(page_size)
 
-    # Tier 1 — precise websearch over text + title/summary metadata.
-    tsq = func.websearch_to_tsquery(_ENGLISH, question)
-    total = await _count_match(db, tsq)
-    if total >= _MIN_TEXT_HITS:
-        rows = (await db.execute(_match_page(tsq))).all()
-        return rows, total, "text"
+    async def _count_plain(where_extra) -> int:
+        q = select(func.count()).select_from(Bill).where(Bill.ce_relevant.is_(True))
+        for c in list(extra) + list(where_extra):
+            q = q.where(c)
+        return (await db.scalar(q)) or 0
 
-    # Tier 2 — structured fallback when the question is clearly about a dimension.
+    terms = facets.meaningful_terms()
+
+    # RULE 1 — free-text (text OR title/summary metadata) within the resolved scope. Build the query
+    # from stopword-filtered terms so meta-words in the question ("which bills law…", rare in statute
+    # text) can't poison the AND-match and drop an otherwise-good hit.
+    if terms:
+        tsq = func.websearch_to_tsquery(_ENGLISH, " ".join(terms))
+        n = await _count_match(db, tsq, extra)
+        if n > 0:
+            rows = (await db.execute(_match_page(tsq))).all()
+            return rows, n, _place_strategy("text")
+
+    # RULE 2 — structured-by-dimension, only when no place was named.
     dim = _map_dimension(question)
-    if dim:
-        where_dim = Bill.compliance_details[dim]["status"].astext == "present"
-        d_total = (await db.scalar(
-            select(func.count()).select_from(Bill)
-            .where(Bill.ce_relevant.is_(True)).where(where_dim)
-        )) or 0
-        if d_total > total:
-            stmt = (
-                select(
-                    Bill,
-                    func.coalesce(lit.c.case_count, 0).label("case_count"),
-                    lit.c.max_risk.label("max_risk"),
-                )
-                .outerjoin(lit, Bill.id == lit.c.related_law_id)
-                .where(Bill.ce_relevant.is_(True))
-                .where(where_dim)
-                .order_by(Bill.status_date.desc().nullslast(), Bill.id.desc())
-                .offset(offset)
-                .limit(page_size)
-            )
-            rows = (await db.execute(stmt)).all()
+    if dim and not geo:
+        where_dim = [Bill.compliance_details[dim]["status"].astext == "present"]
+        d_total = await _count_plain(where_dim)
+        if d_total > 0:
+            rows = (await db.execute(_plain_page(where_dim))).all()
             return rows, d_total, f"dimension:{dim}"
 
-    # Tier 3 — OR-broaden the query words as a last resort.
-    words = _tokenize(question)
-    if words:
-        or_tsq = func.to_tsquery(_ENGLISH, " | ".join(words))
-        or_total = await _count_match(db, or_tsq)
-        if or_total > total:
+    # RULE 3 — OR-broaden, only when no place was named and free text found nothing precise.
+    if terms and not geo:
+        or_tsq = func.to_tsquery(_ENGLISH, " | ".join(terms))
+        n = await _count_match(db, or_tsq, extra)
+        if n > 0:
             rows = (await db.execute(_match_page(or_tsq))).all()
-            return rows, or_total, "text_broad"
+            return rows, n, "text_broad"
 
-    # Precise tier is all we have (0–2 hits); return it rather than nothing.
-    rows = (await db.execute(_match_page(tsq))).all() if total else []
-    return rows, total, "text"
+    # RULE 4 — listing: the base set (place-scoped or whole corpus). Interleave across jurisdictions
+    # when comparing 2+ named places so each shows on page 1; otherwise straight recency.
+    interleave = len(facets.place_labels) > 1
+    n = await _count_plain([])
+    rows = (await db.execute(_plain_page([], interleave=interleave))).all() if n else []
+    return rows, n, (_place_strategy("jurisdiction") if geo else "all")
 
 
 def _row_to_summary(row) -> BillSummary:
@@ -321,6 +347,7 @@ async def ask_the_bills(
     # this same set, so the answer and the table the user pages through are consistent by construction.
     page_rows, total, strategy = await _relevant_bills(db, question, page=1, page_size=_PAGE_SIZE)
     sample = page_rows[:_LLM_SAMPLE]
+    facets = await resolve_facets(db, question)  # for the SCOPE the model must honor (never assert absence)
     agg = await _aggregates(db)
 
     # Compact, model-facing view of the retrieved sample — ref + snippet + which dimensions are present.
@@ -336,10 +363,14 @@ async def ask_the_bills(
             "snippet": (getattr(r, "snippet", None) or "").strip()[:280], "present_dimensions": present,
         })
 
+    scope = {"total": total, "strategy": strategy}
+    if facets.place_labels:
+        scope["jurisdiction"] = facets.place_labels
     user_msg = (
         f"QUESTION: {question}\n\n"
+        f"SCOPE (the matched set the sample is drawn from):\n{json.dumps(scope, ensure_ascii=False)}\n\n"
         f"AGGREGATES (exact, whole-corpus):\n{json.dumps(agg, ensure_ascii=False)}\n\n"
-        f"RETRIEVED BILLS (top of {total} relevant, strategy={strategy}):\n"
+        f"RETRIEVED BILLS (top {len(retrieved)} of {total} matched):\n"
         f"{json.dumps(retrieved, ensure_ascii=False)}"
     )
     resp = await _client.messages.create(

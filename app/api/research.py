@@ -27,7 +27,7 @@ from app.api.auth import AuthedUser, require_admin
 from app.api.research_facets import resolve_facets
 from app.config import settings
 from app.database import AsyncSessionLocal, get_db
-from app.models import Bill, BillText, Jurisdiction, LitigationCase
+from app.models import Bill, BillProductCoverage, BillText, Jurisdiction, LitigationCase
 from app.schemas import (
     BillSummary,
     ResearchAnswer,
@@ -152,7 +152,8 @@ async def _relevant_bills(
 
     facets = await resolve_facets(db, question)
     geo = facets.place_ids
-    scoped = bool(facets.place_ids or facets.material_slugs or facets.instrument_slugs)
+    scoped = bool(facets.place_ids or facets.material_slugs or facets.instrument_slugs
+                  or facets.product_slugs)
     extra = _scope_extra(facets)
 
     def _cols():
@@ -161,7 +162,8 @@ async def _relevant_bills(
                 lit.c.max_risk.label("max_risk"))
 
     def _place_strategy(base: str) -> str:
-        tags = facets.place_labels + facets.material_labels + facets.instrument_labels
+        tags = (facets.place_labels + facets.material_labels + facets.instrument_labels
+                + facets.product_labels)
         return f"{base}·{','.join(tags)}" if tags else base
 
     def _match_page(tsq):
@@ -243,6 +245,7 @@ async def _relevant_bills(
     n = await _count_plain([])
     rows = (await db.execute(_plain_page([], interleave=interleave))).all() if n else []
     base = ("jurisdiction" if geo else "material" if facets.material_slugs
+            else "product" if facets.product_slugs
             else "instrument" if facets.instrument_slugs else "all")
     return rows, n, _place_strategy(base)
 
@@ -259,6 +262,12 @@ def _scope_extra(facets) -> list:
         # Match the primary instrument_type OR the full instrument_types set (mirrors GET /bills).
         extra.append(or_(Bill.instrument_type.in_(facets.instrument_slugs),
                          Bill.instrument_types.op("?|")(array(facets.instrument_slugs))))
+    if facets.product_slugs:
+        # Bills that actually cover the named product (exclude explicit exemptions).
+        covered = (select(BillProductCoverage.bill_id)
+                   .where(BillProductCoverage.product_slug.in_(facets.product_slugs))
+                   .where(BillProductCoverage.status != "exempt"))
+        extra.append(Bill.id.in_(covered))
     return extra
 
 
@@ -304,11 +313,28 @@ async def _aggregates(db: AsyncSession, extra=()) -> dict:
     for c in extra:
         mat_q = mat_q.where(c)
     mat_rows = (await db.execute(mat_q.group_by(mat.c.value).order_by(func.count().desc()))).all()
-    return {
+    # Per-PRODUCT coverage (electronics/batteries/textiles only — the extracted subset). Self-gating:
+    # included only when the scoped set actually has product rows, so it's silent for unrelated
+    # questions (a France query gets no product breakdown) and answers "which bills cover laptops" exactly.
+    pc_bill = func.count(func.distinct(BillProductCoverage.bill_id)).label("n")
+    pc_q = (select(BillProductCoverage.product_slug.label("product"), pc_bill)
+            .join(Bill, Bill.id == BillProductCoverage.bill_id)
+            .where(Bill.ce_relevant.is_(True))
+            .where(BillProductCoverage.status != "exempt"))
+    for c in extra:
+        pc_q = pc_q.where(c)
+    pc_rows = (await db.execute(pc_q.group_by(BillProductCoverage.product_slug).order_by(pc_bill.desc()))).all()
+    agg = {
         "collection_target_basis": [{"basis": r.basis or "unspecified", "count": r.n} for r in basis_rows],
         "dimension_prevalence": {d: getattr(prevalence_row, d) for d in DIMENSION_KEYS},
         "material_coverage": [{"material": r.material, "count": r.n} for r in mat_rows],
     }
+    if pc_rows:
+        agg["product_coverage"] = {
+            "note": "covered-product counts (electronics/batteries/textiles EPR bills only)",
+            "products": [{"product": r.product, "count": r.n} for r in pc_rows],
+        }
+    return agg
 
 
 # --- Deep synthesis: the DEFAULT answer mode. Read full-text passages from the matched set (not 15
@@ -440,6 +466,8 @@ async def ask_the_bills(
         scope["jurisdiction"] = facets.place_labels
     if facets.material_labels:
         scope["material"] = facets.material_labels
+    if facets.product_labels:
+        scope["product"] = facets.product_labels
     if facets.instrument_labels:
         scope["instrument"] = facets.instrument_labels
     if facets.reference_labels:

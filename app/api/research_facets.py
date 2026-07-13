@@ -30,6 +30,7 @@ _STOPWORDS = frozenset({
     # AND-poison a search. Conservative: only unambiguous query-framing words (NOT topic nouns like
     # "corpus"/"incentives" whose presence/absence affects dimension routing — that's LLM-router work).
     "database", "have", "has", "please", "can", "you", "your", "like", "such", "including",
+    "cover", "covers", "covered", "covering",  # "which bills COVER laptops" — chrome, not a search term
 })
 
 
@@ -97,6 +98,70 @@ _INSTRUMENT_LABELS: dict[str, str] = {
     "epr": "EPR", "right_to_repair": "right to repair", "deposit_return": "deposit return",
 }
 
+# Natural-language → bill_product_coverage.product_slug (see app/synthesis/product_taxonomy.py). The
+# finest facet: "which bills cover laptops?" / "EV vs portable batteries" / "footwear EPR" filter via
+# the extracted per-product coverage (electronics + batteries + textiles). Catch-all *_other slugs are
+# intentionally not aliased (nobody queries "other electronics"). Lowercased; matched >=3-char phrases.
+_PRODUCT_ALIASES: dict[str, list[str]] = {
+    # Electronics
+    "televisions": ["television", "televisions", "tvs"],
+    "computer_monitors": ["monitor", "monitors", "computer monitor"],
+    "desktop_computers": ["desktop", "desktops", "desktop computer"],
+    "laptops": ["laptop", "laptops", "notebook computer"],
+    "tablets": ["tablet", "tablets"],
+    "phones": ["phone", "phones", "smartphone", "smartphones", "cell phone", "cellphone", "mobile phone"],
+    "printers": ["printer", "printers"],
+    "computer_peripherals": ["keyboard", "keyboards", "peripheral", "peripherals"],
+    "e_readers": ["e-reader", "e-readers", "ereader", "kindle"],
+    "cameras": ["camera", "cameras"],
+    "media_players": ["media player", "audio player", "headphones", "earbuds"],
+    "wearables": ["wearable", "wearables", "smartwatch", "smartwatches", "fitness tracker"],
+    "game_consoles": ["game console", "game consoles", "gaming console"],
+    "streaming_devices": ["streaming device", "set-top box", "set top box"],
+    "large_appliances": ["large appliance", "large appliances", "refrigerator", "washing machine",
+                         "white goods", "major appliance"],
+    "small_appliances": ["small appliance", "small appliances", "microwave", "toaster"],
+    "medical_devices": ["medical device", "medical devices", "medical equipment"],
+    "mobility_devices": ["mobility device", "mobility devices", "wheelchair", "wheelchairs"],
+    "ag_industrial_equipment": ["agricultural equipment", "farm equipment", "tractor", "tractors"],
+    # Batteries
+    "rechargeable_portable": ["rechargeable battery", "rechargeable batteries", "portable battery",
+                              "portable batteries"],
+    "single_use_primary": ["single-use battery", "primary battery", "disposable battery", "alkaline battery"],
+    "embedded_batteries": ["embedded battery", "embedded batteries", "built-in battery"],
+    "ev_propulsion": ["ev battery", "ev batteries", "electric vehicle battery", "propulsion battery",
+                      "traction battery"],
+    "large_format_stationary": ["stationary battery", "energy storage", "grid storage",
+                                "large-format battery", "storage battery"],
+    "lead_acid": ["lead-acid", "lead acid", "car battery", "automotive battery"],
+    # Textiles
+    "clothing": ["clothing", "clothes", "apparel", "garment", "garments"],
+    "footwear": ["footwear", "shoe", "shoes", "sneakers"],
+    "home_textiles": ["home textile", "home textiles", "linen", "linens", "bedding", "towels",
+                      "household textile"],
+    "fashion_accessories": ["fashion accessory", "fashion accessories", "handbag", "handbags"],
+    "industrial_textiles": ["industrial textile", "industrial textiles", "workwear", "uniforms"],
+}
+
+
+def _match_products(question: str, stripped: str) -> tuple[list[str], list[str], str]:
+    """Scan for specific product mentions → bill_product_coverage.product_slug (longest alias first
+    so 'electric vehicle battery' beats 'battery')."""
+    lower_q = f" {question.lower()} "
+    slugs: list[str] = []
+    pairs = sorted(
+        [(a, slug) for slug, aliases in _PRODUCT_ALIASES.items() for a in aliases],
+        key=lambda p: -len(p[0]))
+    for alias, slug in pairs:
+        if len(alias) < 3:
+            continue
+        pat = re.compile(r"\b" + re.escape(alias) + r"\b", re.IGNORECASE)
+        if pat.search(lower_q) and slug not in slugs:
+            slugs.append(slug)
+            stripped = pat.sub(" ", stripped)
+    labels = sorted({s.replace("_", " ") for s in slugs})
+    return slugs, labels, stripped
+
 
 def _match_materials(question: str, stripped: str) -> tuple[list[str], list[str], str]:
     """Scan for material/product mentions → canonical slugs (+ group expansion). Returns
@@ -148,7 +213,9 @@ class Facets:
     material_labels: list[str]  # display names ("tires", "electronics")
     instrument_slugs: list[str]  # instrument_type slugs to filter on (epr, right_to_repair, …)
     instrument_labels: list[str]
-    free_text: str            # the question with matched place/material/instrument aliases removed
+    product_slugs: list[str]   # bill_product_coverage.product_slug filters (laptops, ev_propulsion, …)
+    product_labels: list[str]
+    free_text: str            # the question with matched place/material/instrument/product aliases removed
     raw_question: str
 
     def meaningful_terms(self) -> list[str]:
@@ -187,10 +254,12 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
     place_labels = sorted({n.name for n in matched.values()})
     material_slugs, material_labels, stripped = _match_materials(question, stripped)
     instrument_slugs, instrument_labels, stripped = _match_instruments(question, stripped)
+    product_slugs, product_labels, stripped = _match_products(question, stripped)
     free_text = re.sub(r"\s+", " ", stripped).strip()
 
     common = dict(material_slugs=material_slugs, material_labels=material_labels,
                   instrument_slugs=instrument_slugs, instrument_labels=instrument_labels,
+                  product_slugs=product_slugs, product_labels=product_labels,
                   free_text=free_text, raw_question=question)
 
     # Expansion cue → the named place is a reference subject, not a scope filter: don't restrict by

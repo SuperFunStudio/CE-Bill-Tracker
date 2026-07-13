@@ -242,6 +242,7 @@ function strategyLabel(strategy: string): string {
   }
   if (base === 'jurisdiction') return `Jurisdiction${tags ? `: ${tags}` : ''}`;
   if (base === 'material') return `Product / material${tags ? `: ${tags}` : ''}`;
+  if (base === 'product') return `Product${tags ? `: ${tags}` : ''}`;
   if (base === 'instrument') return `Instrument${tags ? `: ${tags}` : ''}`;
   if (base === 'all') return 'All bills';
   if (base === 'text_broad') return `Broadened text & title match${where}`;

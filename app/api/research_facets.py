@@ -26,6 +26,10 @@ _STOPWORDS = frozenset({
     "is", "are", "there", "what", "which", "how", "do", "does", "bills", "bill", "law", "laws",
     "records", "record", "examples", "example", "compare", "comparison", "show", "me", "us",  # "us" here is the pronoun; the country is caught as an uppercase code
     "list", "give", "tell", "find", "get", "that", "this", "these", "those", "their", "its",
+    # Chrome words that describe the QUERY, not the subject — kept out of the tsquery so they can't
+    # AND-poison a search. Conservative: only unambiguous query-framing words (NOT topic nouns like
+    # "corpus"/"incentives" whose presence/absence affects dimension routing — that's LLM-router work).
+    "database", "have", "has", "please", "can", "you", "your", "like", "such", "including",
 })
 
 
@@ -40,13 +44,111 @@ _EXPANSION_CUES = (
 )
 
 
+# Natural-language → canonical material_categories slug (see app/classification/materials.py). Lets
+# "what does the corpus have about tires?" resolve to the material FACET (material_categories @>
+# ['tires'], the clean 77-bill set) instead of a junk-polluted text search, and folds UK/US spellings
+# (tyre/tire) so the user never has to. Aliases are lowercased; matched >=3-char whole words/phrases.
+_MATERIAL_ALIASES: dict[str, list[str]] = {
+    "tires": ["tire", "tires", "tyre", "tyres", "scrap tire", "waste tire"],
+    "electronics": ["electronics", "electronic", "e-waste", "ewaste", "weee", "consumer electronics",
+                    "appliance", "appliances", "electronic device", "electronic devices"],
+    "batteries": ["battery", "batteries", "lithium-ion", "lithium ion", "lead-acid", "lead acid"],
+    "plastic_packaging": ["plastic packaging", "plastics", "plastic", "single-use plastic",
+                          "single use plastic", "plastic bottle", "plastic bottles"],
+    "paper_packaging": ["paper packaging", "cardboard", "paperboard", "fiber packaging"],
+    "glass": ["glass"],
+    "metals": ["aluminum", "aluminium", "steel can", "metal can", "metal cans", "metals"],
+    "paint": ["paint", "paints", "architectural paint", "coating"],
+    "carpet": ["carpet", "carpets", "carpeting"],
+    "mattresses": ["mattress", "mattresses", "bedding"],
+    "vehicles": ["vehicle", "vehicles", "automobile", "automobiles", "end-of-life vehicle", "elv"],
+    "construction": ["construction and demolition", "construction & demolition", "c&d waste",
+                     "building material", "building materials"],
+    "furniture": ["furniture"],
+    "used_oil": ["used oil", "motor oil", "waste oil", "lubricant", "lubricating oil"],
+    "pharmaceuticals": ["pharmaceutical", "pharmaceuticals", "drug", "drugs", "medication",
+                        "medications", "medicine", "medicines", "sharps"],
+    "solar_panels": ["solar panel", "solar panels", "solar module", "solar modules", "photovoltaic",
+                     "solar"],
+    "textiles": ["textile", "textiles", "clothing", "apparel", "fashion", "fabric"],
+    "organics": ["organics", "organic waste", "compost", "composting", "food waste", "yard waste",
+                 "food scraps"],
+    "biobased": ["biobased", "bio-based", "bioplastic", "bioplastics", "biomaterial", "biomaterials"],
+    "agriculture": ["agriculture", "agricultural", "pesticide", "pesticides", "farm waste"],
+    "hazardous_materials": ["hazardous material", "hazardous materials", "hazardous waste",
+                            "household hazardous", "mercury", "toxic substance"],
+}
+# Group names expand to member slugs (a bill can carry several packaging tags).
+_MATERIAL_GROUPS: dict[str, list[str]] = {
+    "packaging": ["plastic_packaging", "paper_packaging", "glass", "metals"],
+}
+_MATERIAL_LABELS: dict[str, str] = {s: s.replace("_", " ") for s in _MATERIAL_ALIASES}
+
+# Natural-language → instrument_type slug. "EPR bills on electronics" should filter by the epr
+# instrument (a structured field), not text-match "epr" — which is unreliable (bills say "extended
+# producer responsibility", and the acronym rarely appears verbatim). Kept to unambiguous instruments.
+_INSTRUMENT_ALIASES: dict[str, list[str]] = {
+    "epr": ["epr", "extended producer responsibility"],
+    "right_to_repair": ["right to repair", "right-to-repair"],
+    "deposit_return": ["deposit return", "deposit-return", "bottle bill", "container deposit",
+                       "deposit refund", "deposit scheme"],
+}
+_INSTRUMENT_LABELS: dict[str, str] = {
+    "epr": "EPR", "right_to_repair": "right to repair", "deposit_return": "deposit return",
+}
+
+
+def _match_materials(question: str, stripped: str) -> tuple[list[str], list[str], str]:
+    """Scan for material/product mentions → canonical slugs (+ group expansion). Returns
+    (slugs, labels, stripped_text_with_material_words_removed)."""
+    lower_q = f" {question.lower()} "
+    slugs: list[str] = []
+    # (alias, slug) longest-first so "plastic packaging" wins over "plastic".
+    pairs = sorted(
+        ([(a, slug) for slug, aliases in _MATERIAL_ALIASES.items() for a in aliases]
+         + [(g, g) for g in _MATERIAL_GROUPS]),
+        key=lambda p: -len(p[0]))
+    for alias, target in pairs:
+        if len(alias) < 3:
+            continue
+        pat = re.compile(r"\b" + re.escape(alias) + r"\b", re.IGNORECASE)
+        if pat.search(lower_q):
+            members = _MATERIAL_GROUPS.get(target, [target])
+            for s in members:
+                if s not in slugs:
+                    slugs.append(s)
+            stripped = pat.sub(" ", stripped)
+    labels = sorted({_MATERIAL_LABELS.get(s, s.replace("_", " ")) for s in slugs})
+    return slugs, labels, stripped
+
+
+def _match_instruments(question: str, stripped: str) -> tuple[list[str], list[str], str]:
+    """Scan for instrument mentions (EPR, right-to-repair, deposit-return) → instrument_type slugs."""
+    lower_q = f" {question.lower()} "
+    slugs: list[str] = []
+    pairs = sorted(
+        [(a, slug) for slug, aliases in _INSTRUMENT_ALIASES.items() for a in aliases],
+        key=lambda p: -len(p[0]))
+    for alias, slug in pairs:
+        pat = re.compile(r"\b" + re.escape(alias) + r"\b", re.IGNORECASE)
+        if pat.search(lower_q) and slug not in slugs:
+            slugs.append(slug)
+            stripped = pat.sub(" ", stripped)
+    labels = sorted({_INSTRUMENT_LABELS.get(s, s.replace("_", " ")) for s in slugs})
+    return slugs, labels, stripped
+
+
 @dataclass
 class Facets:
     """Resolved structured interpretation of a question."""
     place_ids: list[int]      # subtree-expanded jurisdiction ids ([] = no geographic filter)
     place_labels: list[str]   # display names of the matched nodes ("France", "United States")
     reference_labels: list[str]  # places named only as a reference subject (expansion cue → not a filter)
-    free_text: str            # the question with matched place aliases removed
+    material_slugs: list[str]  # canonical material_categories slugs to filter on ([] = no material filter)
+    material_labels: list[str]  # display names ("tires", "electronics")
+    instrument_slugs: list[str]  # instrument_type slugs to filter on (epr, right_to_repair, …)
+    instrument_labels: list[str]
+    free_text: str            # the question with matched place/material/instrument aliases removed
     raw_question: str
 
     def meaningful_terms(self) -> list[str]:
@@ -83,17 +185,22 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
                     break
 
     place_labels = sorted({n.name for n in matched.values()})
+    material_slugs, material_labels, stripped = _match_materials(question, stripped)
+    instrument_slugs, instrument_labels, stripped = _match_instruments(question, stripped)
     free_text = re.sub(r"\s+", " ", stripped).strip()
 
-    # Expansion cue → the named place is a reference subject, not a scope filter: don't restrict.
+    common = dict(material_slugs=material_slugs, material_labels=material_labels,
+                  instrument_slugs=instrument_slugs, instrument_labels=instrument_labels,
+                  free_text=free_text, raw_question=question)
+
+    # Expansion cue → the named place is a reference subject, not a scope filter: don't restrict by
+    # jurisdiction (materials/instruments still apply — "carpet EPR like France's everywhere").
     if matched and any(cue in lower_q for cue in _EXPANSION_CUES):
-        return Facets(place_ids=[], place_labels=[], reference_labels=place_labels,
-                      free_text=free_text, raw_question=question)
+        return Facets(place_ids=[], place_labels=[], reference_labels=place_labels, **common)
 
     matched_paths = {n.path for n in matched.values()}
     place_ids = [
         n.id for n in nodes
         if any(n.path == p or n.path.startswith(p + ".") for p in matched_paths)
     ]
-    return Facets(place_ids=place_ids, place_labels=place_labels, reference_labels=[],
-                  free_text=free_text, raw_question=question)
+    return Facets(place_ids=place_ids, place_labels=place_labels, reference_labels=[], **common)

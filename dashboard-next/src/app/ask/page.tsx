@@ -235,12 +235,14 @@ export default function AskPage() {
 /** Human-readable note for which retrieval tier produced the relevant set. Strategy may carry a
  *  jurisdiction suffix after "·" (e.g. "text·France,United States" or "jurisdiction·France"). */
 function strategyLabel(strategy: string): string {
-  const [base, places] = strategy.split('·');
-  const where = places ? ` · ${places}` : '';
+  const [base, tags] = strategy.split('·');
+  const where = tags ? ` · ${tags}` : '';
   if (base.startsWith('dimension:')) {
     return `Compliance dimension: ${base.slice('dimension:'.length).replace(/_/g, ' ')}${where}`;
   }
-  if (base === 'jurisdiction') return `Jurisdiction${places ? `: ${places}` : ''}`;
+  if (base === 'jurisdiction') return `Jurisdiction${tags ? `: ${tags}` : ''}`;
+  if (base === 'material') return `Product / material${tags ? `: ${tags}` : ''}`;
+  if (base === 'instrument') return `Instrument${tags ? `: ${tags}` : ''}`;
   if (base === 'all') return 'All bills';
   if (base === 'text_broad') return `Broadened text & title match${where}`;
   return `Text & title match${where}`;

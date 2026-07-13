@@ -20,6 +20,7 @@ import anthropic
 import structlog
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, literal_column, or_, select, true
+from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import AuthedUser, require_admin
@@ -151,7 +152,8 @@ async def _relevant_bills(
 
     facets = await resolve_facets(db, question)
     geo = facets.place_ids
-    extra = [Bill.jurisdiction_id.in_(geo)] if geo else []
+    scoped = bool(facets.place_ids or facets.material_slugs or facets.instrument_slugs)
+    extra = _scope_extra(facets)
 
     def _cols():
         return (Bill,
@@ -159,7 +161,8 @@ async def _relevant_bills(
                 lit.c.max_risk.label("max_risk"))
 
     def _place_strategy(base: str) -> str:
-        return f"{base}·{','.join(facets.place_labels)}" if facets.place_labels else base
+        tags = facets.place_labels + facets.material_labels + facets.instrument_labels
+        return f"{base}·{','.join(tags)}" if tags else base
 
     def _match_page(tsq):
         # Rank = best of body-text and title/summary relevance (0 when a bill has no text row, so a
@@ -216,29 +219,47 @@ async def _relevant_bills(
             rows = (await db.execute(_match_page(tsq))).all()
             return rows, n, _place_strategy("text")
 
-    # RULE 2 — structured-by-dimension, only when no place was named.
+    # RULE 2 — structured-by-dimension, only when the user did NOT scope (place/material means "list
+    # what's there", not "search the whole corpus by dimension").
     dim = _map_dimension(question)
-    if dim and not geo:
+    if dim and not scoped:
         where_dim = [Bill.compliance_details[dim]["status"].astext == "present"]
         d_total = await _count_plain(where_dim)
         if d_total > 0:
             rows = (await db.execute(_plain_page(where_dim))).all()
             return rows, d_total, f"dimension:{dim}"
 
-    # RULE 3 — OR-broaden, only when no place was named and free text found nothing precise.
-    if terms and not geo:
+    # RULE 3 — OR-broaden, only when not scoped and free text found nothing precise.
+    if terms and not scoped:
         or_tsq = func.to_tsquery(_ENGLISH, " | ".join(terms))
         n = await _count_match(db, or_tsq, extra)
         if n > 0:
             rows = (await db.execute(_match_page(or_tsq))).all()
             return rows, n, "text_broad"
 
-    # RULE 4 — listing: the base set (place-scoped or whole corpus). Interleave across jurisdictions
-    # when comparing 2+ named places so each shows on page 1; otherwise straight recency.
+    # RULE 4 — listing: the base set (place/material-scoped or whole corpus). Interleave across
+    # jurisdictions when comparing 2+ named places so each shows on page 1; otherwise straight recency.
     interleave = len(facets.place_labels) > 1
     n = await _count_plain([])
     rows = (await db.execute(_plain_page([], interleave=interleave))).all() if n else []
-    return rows, n, (_place_strategy("jurisdiction") if geo else "all")
+    base = ("jurisdiction" if geo else "material" if facets.material_slugs
+            else "instrument" if facets.instrument_slugs else "all")
+    return rows, n, _place_strategy(base)
+
+
+def _scope_extra(facets) -> list:
+    """The structured scope filters (jurisdiction + material + instrument) shared by retrieval and the
+    scoped aggregates, so both apply the same facets. `?|` = the JSONB array overlaps any slug."""
+    extra = []
+    if facets.place_ids:
+        extra.append(Bill.jurisdiction_id.in_(facets.place_ids))
+    if facets.material_slugs:
+        extra.append(Bill.material_categories.op("?|")(array(facets.material_slugs)))
+    if facets.instrument_slugs:
+        # Match the primary instrument_type OR the full instrument_types set (mirrors GET /bills).
+        extra.append(or_(Bill.instrument_type.in_(facets.instrument_slugs),
+                         Bill.instrument_types.op("?|")(array(facets.instrument_slugs))))
+    return extra
 
 
 def _row_to_summary(row) -> BillSummary:
@@ -275,9 +296,18 @@ async def _aggregates(db: AsyncSession, extra=()) -> dict:
     for c in extra:
         prev_q = prev_q.where(c)
     prevalence_row = (await db.execute(prev_q)).first()
+    # Product/material coverage — how many bills cover each material_category. Answers "how many
+    # different product types are covered" exactly from SQL instead of guessing from a sample.
+    mat = func.jsonb_array_elements_text(Bill.material_categories).table_valued("value").lateral()
+    mat_q = (select(mat.c.value.label("material"), func.count().label("n"))
+             .select_from(Bill).join(mat, true()).where(Bill.ce_relevant.is_(True)))
+    for c in extra:
+        mat_q = mat_q.where(c)
+    mat_rows = (await db.execute(mat_q.group_by(mat.c.value).order_by(func.count().desc()))).all()
     return {
         "collection_target_basis": [{"basis": r.basis or "unspecified", "count": r.n} for r in basis_rows],
         "dimension_prevalence": {d: getattr(prevalence_row, d) for d in DIMENSION_KEYS},
+        "material_coverage": [{"material": r.material, "count": r.n} for r in mat_rows],
     }
 
 
@@ -389,7 +419,7 @@ async def ask_the_bills(
         return ResearchAnswer(answer="Please ask a fuller question.", citations=[], coverage_note=None)
 
     facets = await resolve_facets(db, question)
-    geo_extra = [Bill.jurisdiction_id.in_(facets.place_ids)] if facets.place_ids else []
+    geo_extra = _scope_extra(facets)  # jurisdiction + material scope for the scoped aggregates
 
     # The full matched set drives the table (page 1); the top _DEEP_READ are read DEEPLY — their
     # full-text passages, not summaries — and synthesized into a cited answer.
@@ -408,6 +438,10 @@ async def ask_the_bills(
     scope: dict = {"total": total, "strategy": strategy, "read": len(packed)}
     if facets.place_labels:
         scope["jurisdiction"] = facets.place_labels
+    if facets.material_labels:
+        scope["material"] = facets.material_labels
+    if facets.instrument_labels:
+        scope["instrument"] = facets.instrument_labels
     if facets.reference_labels:
         scope["reference"] = facets.reference_labels
 

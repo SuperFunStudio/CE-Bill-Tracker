@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from app.models import Bill, BillChange
 
@@ -9,6 +10,13 @@ SIGNIFICANT_STATUSES = {
 
 # Minimum composite score shift (0–100 scale) that triggers an impact_score_change alert
 SCORE_DELTA_THRESHOLD = 10.0
+
+# A status_change whose underlying legislative action is older than this is treated as a catch-up
+# correction — our stored status lagged and a re-ingest just reconciled it — NOT live movement. We
+# still record the BillChange (it's real history), but we don't email subscribers about a months-old
+# event. Without this gate, any backfill that fixes stale statuses blasts "fresh" alerts for actions
+# that happened long ago (e.g. IL HB-3098: enacted 2025-08-15, first correctly ingested 2026-07).
+STALE_STATUS_ACTION_DAYS = 45
 
 
 class ChangeDetector:
@@ -73,10 +81,22 @@ class ChangeDetector:
             },
         )
 
-    def is_alert_worthy(self, change: BillChange, bill: Bill) -> bool:
+    def is_alert_worthy(
+        self, change: BillChange, bill: Bill, today: date | None = None
+    ) -> bool:
         if change.change_type == "status_change":
             new_status = (change.new_value or {}).get("status", "")
-            return new_status in SIGNIFICANT_STATUSES
+            if new_status not in SIGNIFICANT_STATUSES:
+                return False
+            # Suppress stale, catch-up corrections: if the actual legislative action is far in the
+            # past, this "change" is only our records reconciling — not the statehouse moving now.
+            # Fall back to status_date; if we can't date the action at all, alert (fail open).
+            action_date = bill.last_action_date or bill.status_date
+            if isinstance(action_date, date):
+                ref = today or date.today()
+                if (ref - action_date).days > STALE_STATUS_ACTION_DAYS:
+                    return False
+            return True
         if change.change_type == "text_update":
             # Only alert on text changes for high-confidence bills
             return (bill.confidence_score or 0) >= 0.7

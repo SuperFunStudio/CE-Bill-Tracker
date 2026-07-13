@@ -1,8 +1,12 @@
+from datetime import date, timedelta
+
 import pytest
 from unittest.mock import MagicMock
 
-from app.alerts.detector import ChangeDetector
+from app.alerts.detector import STALE_STATUS_ACTION_DAYS, ChangeDetector
 from app.models import Bill, BillChange
+
+_TODAY = date(2026, 7, 13)
 
 
 def _make_bill(**kwargs) -> Bill:
@@ -14,6 +18,9 @@ def _make_bill(**kwargs) -> Bill:
     bill.change_hash = kwargs.get("change_hash", "abc123")
     bill.confidence_score = kwargs.get("confidence_score", 0.9)
     bill.material_categories = kwargs.get("material_categories", ["plastic_packaging"])
+    # Default to a recent action so status-change alerts are worthy unless a test says otherwise.
+    bill.last_action_date = kwargs.get("last_action_date", _TODAY - timedelta(days=2))
+    bill.status_date = kwargs.get("status_date", None)
     return bill
 
 
@@ -56,7 +63,30 @@ class TestChangeDetector:
         change = MagicMock(spec=BillChange)
         change.change_type = "status_change"
         change.new_value = {"status": "enacted"}
-        assert self.detector.is_alert_worthy(change, bill)
+        assert self.detector.is_alert_worthy(change, bill, today=_TODAY)
+
+    def test_stale_status_change_not_alert_worthy(self):
+        # Action happened long ago; a re-ingest just reconciled our stale status -> no email.
+        bill = _make_bill(last_action_date=_TODAY - timedelta(days=STALE_STATUS_ACTION_DAYS + 1))
+        change = MagicMock(spec=BillChange)
+        change.change_type = "status_change"
+        change.new_value = {"status": "enacted"}
+        assert not self.detector.is_alert_worthy(change, bill, today=_TODAY)
+
+    def test_recent_status_change_within_window_is_alert_worthy(self):
+        bill = _make_bill(last_action_date=_TODAY - timedelta(days=STALE_STATUS_ACTION_DAYS - 1))
+        change = MagicMock(spec=BillChange)
+        change.change_type = "status_change"
+        change.new_value = {"status": "enacted"}
+        assert self.detector.is_alert_worthy(change, bill, today=_TODAY)
+
+    def test_status_change_with_undateable_action_alerts_fail_open(self):
+        # No action date at all -> can't judge staleness, so alert (preserve prior behavior).
+        bill = _make_bill(last_action_date=None, status_date=None)
+        change = MagicMock(spec=BillChange)
+        change.change_type = "status_change"
+        change.new_value = {"status": "enacted"}
+        assert self.detector.is_alert_worthy(change, bill, today=_TODAY)
 
     def test_low_confidence_text_update_not_alert_worthy(self):
         bill = _make_bill(confidence_score=0.3)

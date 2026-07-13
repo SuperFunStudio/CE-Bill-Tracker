@@ -32,7 +32,7 @@ RELATIONSHIPS = ("stewarded", "repairable", "disposal_banned", "deposit_return")
 # Whether the product is in scope, carved out, or in only past a threshold.
 STATUSES = ("covered", "exempt", "conditional")
 # Top-level streams this taxonomy spans (the existing material_categories slugs).
-CATEGORIES = ("electronics", "batteries")
+CATEGORIES = ("electronics", "batteries", "textiles")
 
 
 @dataclass(frozen=True)
@@ -116,7 +116,29 @@ _BATTERIES: tuple[Product, ...] = (
     Product("other_batteries", "Other batteries", "batteries", "Other", "battery-low"),
 )
 
-PRODUCTS: tuple[Product, ...] = _ELECTRONICS + _BATTERIES
+# ---------------------------------------------------------------------------
+# Textiles — how apparel/textile EPR laws actually scope (CA SB-707, EU textile EPR, France's
+# Refashion / AGEC). Laws distinguish worn apparel + footwear from household linens, often carve out
+# accessories, and exempt industrial/commercial or specialty (PPE, medical) textiles. Relationships
+# are stewarded (EPR) + disposal_banned (textile landfill bans) + repairable (France's repair bonus /
+# repairability provisions for clothing & footwear); deposit-return doesn't apply to textiles.
+# ---------------------------------------------------------------------------
+_TEXTILE_REL = ("stewarded", "disposal_banned", "repairable")
+_TEXTILES: tuple[Product, ...] = (
+    Product("clothing", "Apparel / clothing", "textiles", "Apparel", "shirt", relationships=_TEXTILE_REL),
+    Product("footwear", "Footwear", "textiles", "Apparel", "footprints", relationships=_TEXTILE_REL),
+    Product("home_textiles", "Home textiles / linens", "textiles", "Household", "bed",
+            relationships=_TEXTILE_REL),
+    # Accessories (bags, belts, hats) are usually scoped explicitly, not swept in by a blanket clause.
+    Product("fashion_accessories", "Accessories (bags, etc.)", "textiles", "Apparel", "shopping-bag",
+            relationships=_TEXTILE_REL, blanket_expand=False),
+    # Industrial / commercial textiles (uniforms, workwear) — typically a separate or exempt scope.
+    Product("industrial_textiles", "Industrial / commercial", "textiles", "Specialty", "hard-hat",
+            relationships=_TEXTILE_REL, blanket_expand=False),
+    Product("other_textiles", "Other textiles", "textiles", "Other", "layers"),
+)
+
+PRODUCTS: tuple[Product, ...] = _ELECTRONICS + _BATTERIES + _TEXTILES
 
 # Chemistry qualifiers a coverage row may tag (validated; not products).
 BATTERY_CHEMISTRIES = ("lithium_ion", "lead_acid", "nickel", "alkaline", "other_chemistry")

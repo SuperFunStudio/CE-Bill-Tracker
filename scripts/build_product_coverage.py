@@ -44,7 +44,7 @@ from app.synthesis.product_coverage import (  # noqa: E402
 from app.synthesis.product_taxonomy import BY_SLUG  # noqa: E402
 
 TMP = Path(__file__).parent.parent / "tmp"
-CATEGORIES = ("electronics", "batteries")
+CATEGORIES = ("electronics", "batteries", "textiles")
 
 
 async def persist(dsn: str, coverages: list, processed_bill_ids: list[int], model: str) -> int:
@@ -96,9 +96,14 @@ async def main() -> None:
     conn = await asyncpg.connect(args.dsn)
     try:
         q = (
-            "SELECT id, state, bill_number, title, status, instrument_type, source_url, "
-            "       openstates_id, material_categories, compliance_details "
+            "SELECT bills.id, bills.state, bills.bill_number, bills.title, bills.status, "
+            "       bills.instrument_type, bills.source_url, bills.openstates_id, "
+            "       bills.material_categories, bills.compliance_details, bt.text AS stored_text "
             "FROM bills "
+            # Prefer the already-stored full statute text (Layer B, ~95% coverage) over re-fetching:
+            # 157 bills had no fetchable OpenStates text last run but DO have bill_texts.
+            "LEFT JOIN LATERAL (SELECT text FROM bill_texts WHERE bill_id = bills.id "
+            "                   ORDER BY length(text) DESC NULLS LAST LIMIT 1) bt ON true "
             "WHERE ce_relevant = true "
             "  AND material_categories ?| $1::text[] "
             "  AND instrument_type = ANY($2::text[]) "
@@ -138,7 +143,7 @@ async def main() -> None:
             "id": r["id"], "state": r["state"], "bill_number": r["bill_number"],
             "title": r["title"], "status": r["status"],
             "instrument_type": r["instrument_type"], "source_url": r["source_url"],
-            "openstates_id": r["openstates_id"],
+            "openstates_id": r["openstates_id"], "stored_text": r["stored_text"],
             "categories": cats, "compliance_details": details,
         })
 
@@ -157,12 +162,13 @@ async def main() -> None:
             nonlocal total_dropped, no_text, done
             async with sem:
                 try:
-                    text = ""
-                    if bill.get("source_url"):
+                    # Prefer the already-stored full statute text (no network, ~95% coverage) — this
+                    # is what recovers the bills whose OpenStates source_url yields nothing.
+                    text = (bill.get("stored_text") or "").strip()
+                    if len(text) < 200 and bill.get("source_url"):
                         text = await os_client.get_text_from_source(bill["source_url"])
-                    # Our stored source_url is often a bill landing page with no inline text. When it
-                    # yields little, fall back to the OpenStates versions API, which returns the
-                    # curated document links (text/plain -> html -> PDF) instead of the status page.
+                    # source_url is often a landing page with no inline text; fall back to the
+                    # OpenStates versions API (curated text/plain -> html -> PDF links).
                     if len((text or "").strip()) < 200 and bill.get("openstates_id"):
                         alt = await os_client.get_bill_text(bill["openstates_id"])
                         if len((alt or "").strip()) > len((text or "").strip()):

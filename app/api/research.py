@@ -1,13 +1,16 @@
-"""'Ask the Bills' — a retrieval-grounded, cited Q&A endpoint over the bill corpus (Pro).
+"""'Ask the Bills' — a deep, retrieval-grounded, cited analysis endpoint over the bill corpus (Pro).
 
-Design (see the plan): the LLM ROUTES and NARRATES; SQL COMPUTES. For every question we
-  1. retrieve the top-K bills by full-text relevance (each with its extracted dimension statuses), and
-  2. precompute a couple of exact whole-corpus aggregates (collection-target basis, dimension
-     prevalence) — cheap GROUP BY queries whose numbers are ground truth.
-Then ONE Sonnet call answers using ONLY that material: it must cite bills from the retrieved set,
-may reference the exact aggregate numbers, picks which (if any) aggregate to chart, and abstains when
-the material doesn't support an answer. This keeps numbers trustworthy (from SQL) and claims traceable
-(to cited bills) — the two things a compliance product can't get wrong.
+Design (Atlas Circular deep-default mode — see docs/ATLAS_CIRCULAR_ROADMAP.md). SQL COMPUTES, the LLM
+SYNTHESIZES. For every question we:
+  1. resolve facets (jurisdiction via app/api/research_facets, dimension, free text) → a matched set;
+  2. read the FULL-TEXT passages of the top ~50 most-relevant bills (SQL ts_headline, not summaries);
+  3. compute exact aggregates, scoped to the facet set plus the corpus-wide baseline;
+  4. run ONE Sonnet synthesis over that material → a thorough, cited markdown briefing.
+The full matched set also drives a paginated table (GET /research/bills). Numbers come from SQL
+(trustworthy), claims are cited to bills the model was actually given (traceable), and the model is
+barred from asserting absence when the set is non-empty. Each answer is persisted (research_turns) as
+the analysis layer that later becomes the Layer-1 knowledge cache. Batched map-reduce beyond ~50 bills
+is the documented scale-up.
 """
 from __future__ import annotations
 
@@ -22,15 +25,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.auth import AuthedUser, require_admin
 from app.api.research_facets import resolve_facets
 from app.config import settings
-from app.database import get_db
+from app.database import AsyncSessionLocal, get_db
 from app.models import Bill, BillText, Jurisdiction, LitigationCase
 from app.schemas import (
     BillSummary,
     ResearchAnswer,
     ResearchAskRequest,
     ResearchBillPage,
-    ResearchChart,
-    ResearchChartBar,
     ResearchCitation,
 )
 
@@ -44,40 +45,6 @@ DIMENSION_KEYS = [
     "collection_targets", "recycled_content", "eco_modulation", "fee_amounts",
     "penalties", "bans_restrictions", "pro_structure", "labeling",
 ]
-_DIM_LABEL = {
-    "collection_targets": "Collection / recovery targets", "recycled_content": "Recycled-content minimums",
-    "eco_modulation": "Eco-modulation", "fee_amounts": "Producer fees", "penalties": "Penalties",
-    "bans_restrictions": "Bans & restrictions", "pro_structure": "PRO structure", "labeling": "Labeling",
-}
-_BASIS_LABEL = {
-    "weight": "Weight (tonnage)", "value_recovered": "Value recovered (critical metals)",
-    "units": "Units / count", "material_specific": "Material-specific", "unspecified": "Unspecified",
-}
-
-SYSTEM_PROMPT = """\
-You are a research analyst for an EPR / circular-economy legislation database. Answer the user's \
-question using ONLY the RETRIEVED BILLS and AGGREGATES provided — never outside knowledge. Rules:
-- Cite every factual claim with a bill from the retrieved set, as [STATE BILL_NUMBER].
-- You MAY state exact numbers from the AGGREGATES (they are computed over the whole corpus).
-- The retrieved bills are the TOP of a larger matched set — SCOPE gives its total size (and how the \
-question was interpreted, e.g. jurisdiction = France). The sample is a window onto that set.
-- NEVER assert that something is absent from the corpus. If SCOPE.total > 0, the set is non-empty — \
-describe only what the sample shows ("among the N France bills, the top results are…"), never "there \
-are no records" / "no French bills exist". A true absence is ONLY when SCOPE.total = 0.
-- Honor the interpretation: if SCOPE names a jurisdiction/filter, frame the answer to it \
-("Interpreting this as France…") rather than answering about the whole corpus.
-- Do NOT say "all bills" unless citing an AGGREGATE (which is complete). Otherwise "among the bills found…".
-- If SCOPE.total = 0, say plainly nothing matched and what would broaden it. Do not guess.
-- Write concise plain prose with short "- " bullets. Do NOT use markdown tables or headings — a chart
-  is rendered separately for the numbers. Light **bold** for key terms is fine.
-Respond with ONLY valid JSON:
-{
-  "answer": "<plain prose + '- ' bullets; concise, with [STATE BILL_NUMBER] citations>",
-  "cited_bill_ids": [<ids of retrieved bills you cited>],
-  "chart": "<collection_target_basis|dimension_prevalence|none>",
-  "coverage_note": "<one line qualifying completeness, e.g. 'Based on the 12 most relevant bills' or 'Aggregate over all analyzed bills'>"
-}
-"""
 
 
 # 'english' as a SQL literal (regconfig), not a bind param — matches app/api/bills.py.
@@ -90,7 +57,6 @@ _HEADLINE_PLAIN = "MaxFragments=1,MaxWords=30,MinWords=12,StartSel=,StopSel="
 _MIN_TEXT_HITS = 3
 _PAGE_SIZE = 25          # default page of the relevant-bill table
 _MAX_PAGE_SIZE = 100     # ceiling per request (paging reaches the whole set across pages)
-_LLM_SAMPLE = 15         # top-N of the relevant set narrated by the LLM
 
 # Keyword → compliance-dimension map for the structured fallback tier: when precise full-text match
 # is thin AND the question is clearly *about* a dimension, the relevant set is that dimension's bills
@@ -282,53 +248,132 @@ def _row_to_summary(row) -> BillSummary:
     return s
 
 
-async def _aggregates(db: AsyncSession) -> dict:
-    """Exact whole-corpus aggregates the answer may cite/chart (numbers are ground truth, not LLM)."""
+async def _aggregates(db: AsyncSession, extra=()) -> dict:
+    """Exact aggregates (ground truth, not LLM). `extra` scopes them to the question's facet set (e.g.
+    a jurisdiction), so numbers reflect the question instead of always being whole-corpus. Called with
+    no extra for the corpus-wide baseline; a comparison answer gets both ('122 in France of 146 total')."""
     # Collection-target basis distribution (unnest targets; the founding-question axis).
     targets = func.jsonb_array_elements(
         Bill.compliance_details["collection_targets"]["targets"]
     ).table_valued("value").lateral()
     basis = func.jsonb_extract_path_text(targets.c.value, "basis")
-    basis_rows = (
-        await db.execute(
-            select(basis.label("basis"), func.count().label("n"))
-            .select_from(Bill)
-            .join(targets, true())
-            .where(Bill.ce_relevant.is_(True))
-            .where(Bill.compliance_details["collection_targets"]["status"].astext == "present")
-            .group_by(basis)
-            .order_by(func.count().desc())
-        )
-    ).all()
+    basis_q = (
+        select(basis.label("basis"), func.count().label("n"))
+        .select_from(Bill)
+        .join(targets, true())
+        .where(Bill.ce_relevant.is_(True))
+        .where(Bill.compliance_details["collection_targets"]["status"].astext == "present")
+    )
+    for c in extra:
+        basis_q = basis_q.where(c)
+    basis_rows = (await db.execute(basis_q.group_by(basis).order_by(func.count().desc()))).all()
     # Per-dimension "present" counts in one pass.
-    prevalence_row = (
-        await db.execute(
-            select(
-                *[
-                    func.count()
-                    .filter(Bill.compliance_details[d]["status"].astext == "present")
-                    .label(d)
-                    for d in DIMENSION_KEYS
-                ]
-            ).where(Bill.ce_relevant.is_(True))
-        )
-    ).first()
+    prev_q = select(
+        *[func.count().filter(Bill.compliance_details[d]["status"].astext == "present").label(d)
+          for d in DIMENSION_KEYS]
+    ).where(Bill.ce_relevant.is_(True))
+    for c in extra:
+        prev_q = prev_q.where(c)
+    prevalence_row = (await db.execute(prev_q)).first()
     return {
         "collection_target_basis": [{"basis": r.basis or "unspecified", "count": r.n} for r in basis_rows],
         "dimension_prevalence": {d: getattr(prevalence_row, d) for d in DIMENSION_KEYS},
     }
 
 
-def _build_chart(kind: str, agg: dict) -> ResearchChart | None:
-    if kind == "collection_target_basis":
-        bars = [ResearchChartBar(label=_BASIS_LABEL.get(r["basis"], r["basis"]), value=r["count"])
-                for r in agg["collection_target_basis"]]
-        return ResearchChart(title="How collection targets are measured", bars=bars) if bars else None
-    if kind == "dimension_prevalence":
-        bars = [ResearchChartBar(label=_DIM_LABEL[d], value=n)
-                for d, n in sorted(agg["dimension_prevalence"].items(), key=lambda x: -x[1]) if n]
-        return ResearchChart(title="Bills addressing each dimension", bars=bars) if bars else None
-    return None
+# --- Deep synthesis: the DEFAULT answer mode. Read full-text passages from the matched set (not 15
+# summaries) and synthesize a cited briefing. Proven on prod ("stewardship plan recommendations").
+# See docs/ATLAS_CIRCULAR_ROADMAP.md + memory atlas-circular-rebrand. -------------------------------
+_DEEP_READ = 50          # max bills whose full-text passages we read into one synthesis call (v1);
+                         # batched map-reduce beyond this is the documented scale-up.
+
+_DEEP_SYSTEM = """\
+You are a policy-research analyst for a circular-economy / EPR legislation database. You are given the
+QUESTION, the SCOPE (how it was interpreted + how many bills matched), exact AGGREGATES, and BILL
+MATERIAL — real excerpts from the FULL TEXT of the most relevant bills (or a bill's summary when no
+text passage matched). Write a thorough, genuinely useful, CITED answer grounded ONLY in this material.
+Rules:
+- Cite each supported point inline with the bill(s), EXACTLY as [STATE BILL_NUMBER] using the `ref`
+  field from the BILL MATERIAL verbatim (e.g. [MD HB331], [FR JORFTEXT000041553759]). Cite only bills
+  present in the BILL MATERIAL.
+- Where a requirement/finding recurs across bills, say so and cite several; flag single-bill outliers.
+- You MAY state exact numbers from AGGREGATES. If both a scoped and corpus-wide count are given, reason
+  about coverage from them ("122 of the 146 corpus-wide sit in France; the rest are elsewhere").
+- NEVER claim something is absent when SCOPE.total > 0 — describe what the material shows. A true zero
+  is only when SCOPE.total = 0.
+- Be concrete and practical — this should help someone act.
+Output the answer as MARKDOWN directly (no JSON, no preamble): short "## " section headers, "- "
+bullets, **bold** key terms, inline [STATE BILL_NUMBER] citations. No markdown tables.
+"""
+
+
+async def _passages_for(db: AsyncSession, ids: list[int], terms: list[str]) -> dict[int, str]:
+    """Full-text ts_headline passages for the given bills, keyed to the question terms. Only bills
+    whose text matches a term get a passage; the rest fall back to their summary at pack time."""
+    if not ids or not terms:
+        return {}
+    tsq = func.to_tsquery(_ENGLISH, " | ".join(terms))
+    headline = func.ts_headline(
+        _ENGLISH, BillText.text, tsq,
+        "MaxFragments=4,MinWords=10,MaxWords=26,FragmentDelimiter= / ")
+    rows = (await db.execute(
+        select(BillText.bill_id, headline.label("h"))
+        .where(BillText.bill_id.in_(ids))
+        .where(BillText.text_tsv.op("@@")(tsq)))).all()
+    return {r.bill_id: (r.h or "").strip() for r in rows if (r.h or "").strip()}
+
+
+def _pack_material(rows, passages: dict[int, str]) -> list[dict]:
+    packed = []
+    for r in rows:
+        b = r.Bill
+        cd = b.compliance_details or {}
+        present = [d for d in DIMENSION_KEYS if isinstance(cd.get(d), dict) and cd[d].get("status") == "present"]
+        excerpt = passages.get(b.id) or (b.ai_summary or "")
+        packed.append({
+            "id": b.id, "ref": f"{b.state} {b.bill_number or '?'}", "region": b.region,
+            "year": b.status_date.year if b.status_date else None,
+            "title": (b.title or "")[:140], "dimensions": present,
+            "excerpt": (excerpt or "").strip()[:800],
+        })
+    return packed
+
+
+async def _deep_answer(question: str, scope: dict, agg_scoped: dict, agg_corpus, packed: list) -> str:
+    """One synthesis call → the markdown briefing (returned directly, not JSON, so a long answer can't
+    be broken by truncated-JSON parsing). Citations are recovered from the [REF] mentions afterward."""
+    agg_block: dict = {"scoped": agg_scoped}
+    if agg_corpus is not None:
+        agg_block["corpus_wide"] = agg_corpus
+    user_msg = (
+        f"QUESTION: {question}\n\n"
+        f"SCOPE:\n{json.dumps(scope, ensure_ascii=False)}\n\n"
+        f"AGGREGATES:\n{json.dumps(agg_block, ensure_ascii=False)}\n\n"
+        f"BILL MATERIAL ({len(packed)} bills, full-text excerpts):\n"
+        f"{json.dumps(packed, ensure_ascii=False)}"
+    )
+    resp = await _client.messages.create(
+        model=RESEARCH_MODEL, max_tokens=4096, temperature=0,
+        system=_DEEP_SYSTEM, messages=[{"role": "user", "content": user_msg}])
+    return resp.content[0].text.strip()
+
+
+async def _persist_turn(uid, question, facets, strategy, total, answer_text, cited_ids, bill_ids):
+    """Persist the answer as a research_session + turn — the analysis layer that later becomes the
+    Layer-1 knowledge cache. Uses its OWN fresh session (not the request's, which was released before
+    the long LLM call) so a healthy connection does the write. Best-effort; the caller swallows
+    failures so a save error never breaks the answer."""
+    from app.models import ResearchSession, ResearchTurn
+    async with AsyncSessionLocal() as s:
+        sess = ResearchSession(owner_uid=uid, title=question[:200])
+        s.add(sess)
+        await s.flush()
+        s.add(ResearchTurn(
+            session_id=sess.id, seq=1, question=question, rewritten_query=facets.free_text,
+            facets={"places": facets.place_labels, "reference": facets.reference_labels, "strategy": strategy},
+            strategy=strategy, answer={"text": answer_text, "cited_bill_ids": cited_ids},
+            bill_ids=bill_ids, bill_total=total))
+        await s.commit()
 
 
 @router.post("/ask", response_model=ResearchAnswer)
@@ -343,72 +388,65 @@ async def ask_the_bills(
     if len(question) < 3:
         return ResearchAnswer(answer="Please ask a fuller question.", citations=[], coverage_note=None)
 
-    # Page 1 of the FULL relevant-bill set (paged, uncapped total). The LLM narrates the top slice of
-    # this same set, so the answer and the table the user pages through are consistent by construction.
+    facets = await resolve_facets(db, question)
+    geo_extra = [Bill.jurisdiction_id.in_(facets.place_ids)] if facets.place_ids else []
+
+    # The full matched set drives the table (page 1); the top _DEEP_READ are read DEEPLY — their
+    # full-text passages, not summaries — and synthesized into a cited answer.
     page_rows, total, strategy = await _relevant_bills(db, question, page=1, page_size=_PAGE_SIZE)
-    sample = page_rows[:_LLM_SAMPLE]
-    facets = await resolve_facets(db, question)  # for the SCOPE the model must honor (never assert absence)
-    agg = await _aggregates(db)
+    read_rows, _, _ = await _relevant_bills(db, question, page=1, page_size=_DEEP_READ)
 
-    # Compact, model-facing view of the retrieved sample — ref + snippet + which dimensions are present.
-    retrieved = []
-    for r in sample:
-        b = r.Bill
-        year = b.status_date.year if b.status_date else None
-        cd = b.compliance_details or {}
-        present = [d for d in DIMENSION_KEYS if isinstance(cd.get(d), dict) and cd[d].get("status") == "present"]
-        retrieved.append({
-            "id": b.id, "ref": f"{b.state} {b.bill_number or '?'}",
-            "region": b.region, "year": year, "title": (b.title or "")[:140],
-            "snippet": (getattr(r, "snippet", None) or "").strip()[:280], "present_dimensions": present,
-        })
+    terms = facets.meaningful_terms()
+    passages = await _passages_for(db, [r.Bill.id for r in read_rows], terms)
+    packed = _pack_material(read_rows, passages)
 
-    scope = {"total": total, "strategy": strategy}
+    # Scoped aggregates (numbers that reflect the question) + the corpus-wide baseline when scoped, so
+    # a comparison answer can reason "N of M corpus-wide sit in <place>".
+    agg_scoped = await _aggregates(db, geo_extra)
+    agg_corpus = await _aggregates(db) if geo_extra else None
+
+    scope: dict = {"total": total, "strategy": strategy, "read": len(packed)}
     if facets.place_labels:
         scope["jurisdiction"] = facets.place_labels
-    user_msg = (
-        f"QUESTION: {question}\n\n"
-        f"SCOPE (the matched set the sample is drawn from):\n{json.dumps(scope, ensure_ascii=False)}\n\n"
-        f"AGGREGATES (exact, whole-corpus):\n{json.dumps(agg, ensure_ascii=False)}\n\n"
-        f"RETRIEVED BILLS (top {len(retrieved)} of {total} matched):\n"
-        f"{json.dumps(retrieved, ensure_ascii=False)}"
-    )
-    resp = await _client.messages.create(
-        model=RESEARCH_MODEL, max_tokens=1500, temperature=0,
-        system=SYSTEM_PROMPT, messages=[{"role": "user", "content": user_msg}],
-    )
-    raw = resp.content[0].text.strip()
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        import re
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        data = json.loads(m.group()) if m else {}
+    if facets.reference_labels:
+        scope["reference"] = facets.reference_labels
 
-    # Citations: only bills in the sample the model actually saw (it cannot cite outside that set).
-    by_id = {r.Bill.id: r for r in sample}
-    cited_ids = [i for i in (data.get("cited_bill_ids") or []) if i in by_id]
-    citations = []
-    for i in cited_ids:
-        r = by_id[i]
+    # Release the request's DB connection before the ~30s synthesis so it isn't held idle (and dropped)
+    # across the LLM call; the read data is already materialized and persistence uses a fresh session.
+    read_bill_ids = [r.Bill.id for r in read_rows]
+    await db.close()
+
+    answer_text = await _deep_answer(question, scope, agg_scoped, agg_corpus, packed)
+    answer_text = answer_text or "I couldn't find enough in the corpus to answer that."
+
+    # Citations: bills from the read set whose ref (e.g. "MD HB331") appears in the answer. Recovered
+    # from the markdown rather than a JSON field, so a long/truncated answer still yields citations.
+    citations, cited_ids = [], []
+    for r in read_rows:
         b = r.Bill
-        citations.append(ResearchCitation(
-            bill_id=b.id, region=b.region, state=b.state, bill_number=b.bill_number,
-            year=b.status_date.year if b.status_date else None,
-            snippet=(getattr(r, "snippet", None) or "").strip()[:280] or None,
-        ))
+        ref = f"{b.state} {b.bill_number}" if b.bill_number else None
+        if ref and ref in answer_text and b.id not in cited_ids:
+            cited_ids.append(b.id)
+            citations.append(ResearchCitation(
+                bill_id=b.id, region=b.region, state=b.state, bill_number=b.bill_number,
+                year=b.status_date.year if b.status_date else None,
+                snippet=(passages.get(b.id) or "").strip()[:280] or None))
+
+    coverage = (f"Synthesized from the {len(packed)} most relevant of {total} matched bills."
+                if total > len(packed) else f"Synthesized from all {total} matched bills.")
+
+    # Persist the answer (analysis layer / future Layer-1 cache). Best-effort — never break the answer.
+    try:
+        await _persist_turn(_user.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids)
+    except Exception as e:  # noqa: BLE001
+        log.warning("research_persist_failed", error=str(e))
 
     bills = ResearchBillPage(
         total=total, page=1, page_size=_PAGE_SIZE, strategy=strategy,
         items=[_row_to_summary(r) for r in page_rows],
     )
-    return ResearchAnswer(
-        answer=data.get("answer", "").strip() or "I couldn't find enough in the corpus to answer that.",
-        citations=citations,
-        chart=_build_chart(data.get("chart", "none"), agg),
-        coverage_note=data.get("coverage_note"),
-        bills=bills,
-    )
+    return ResearchAnswer(answer=answer_text, citations=citations, chart=None,
+                          coverage_note=coverage, bills=bills)
 
 
 @router.get("/bills", response_model=ResearchBillPage)

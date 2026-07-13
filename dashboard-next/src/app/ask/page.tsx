@@ -17,21 +17,32 @@ const EXAMPLES = [
   'Which bills ban PFAS in packaging?',
 ];
 
-/** Render answer text with minimal formatting: **bold** spans, one paragraph per line. */
+/** Inline **bold** rendering. */
+function inline(line: string) {
+  return line.split(/(\*\*[^*]+\*\*)/g).map((p, j) =>
+    p.startsWith('**') && p.endsWith('**')
+      ? <strong key={j} className="text-text-primary font-semibold">{p.slice(2, -2)}</strong>
+      : <span key={j}>{p}</span>);
+}
+
+/** Render the deep-synthesis markdown: ## / ### headers, "- " bullets, --- rules, **bold**. */
 function AnswerText({ text }: { text: string }) {
   return (
     <div className="space-y-2 text-body text-text-primary leading-relaxed">
-      {text.split('\n').filter(l => l.trim()).map((line, i) => {
-        const parts = line.split(/(\*\*[^*]+\*\*)/g);
-        return (
-          <p key={i} className={line.trimStart().startsWith('- ') ? 'pl-4 -indent-4' : ''}>
-            {parts.map((p, j) =>
-              p.startsWith('**') && p.endsWith('**')
-                ? <strong key={j} className="text-text-primary font-semibold">{p.slice(2, -2)}</strong>
-                : <span key={j}>{p}</span>,
-            )}
-          </p>
-        );
+      {text.split('\n').map(l => l.trimEnd()).filter(l => l.trim()).map((line, i) => {
+        const t = line.trimStart();
+        const hm = t.match(/^(#{1,6})\s+(.*)$/);
+        if (hm) {
+          const cls = hm[1].length <= 2
+            ? 'font-serif text-lg text-text-primary mt-4 mb-1'
+            : 'text-sm font-semibold uppercase tracking-wide text-text-secondary mt-3';
+          return <div key={i} className={cls}>{inline(hm[2])}</div>;
+        }
+        if (/^-{3,}$/.test(t)) return <hr key={i} className="border-border-default my-2" />;
+        if (t.startsWith('- ') || t.startsWith('* ')) {
+          return <p key={i} className="pl-4 -indent-4">{inline('• ' + t.slice(2))}</p>;
+        }
+        return <p key={i}>{inline(line)}</p>;
       })}
     </div>
   );
@@ -157,7 +168,15 @@ export default function AskPage() {
 
       {error && <p className="text-sm text-error">{error}</p>}
 
-      {busy && <div className="h-24 w-full animate-pulse rounded-lg bg-bg-tertiary" />}
+      {busy && (
+        <div className="space-y-3">
+          <p className="text-sm text-text-secondary">
+            Reading the full text of the most relevant bills and synthesizing a cited answer — this
+            takes a moment.
+          </p>
+          <div className="h-24 w-full animate-pulse rounded-lg bg-bg-tertiary" />
+        </div>
+      )}
 
       {answer && (
         <div className="space-y-5 border-t border-border-default pt-6">

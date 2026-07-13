@@ -29,11 +29,23 @@ _STOPWORDS = frozenset({
 })
 
 
+# Phrases that mean "search everywhere" — a named place is then a REFERENCE subject, not a scope
+# filter. "Comparable laws to France's AGEC across all regions" must NOT lock retrieval to France.
+_EXPANSION_CUES = (
+    "all regions", "all jurisdictions", "all countries", "every region", "every country",
+    "other regions", "other jurisdictions", "other countries", "other states",
+    "whole corpus", "entire corpus", "across the corpus", "across regions", "across jurisdictions",
+    "globally", "worldwide", "world wide", "everywhere", "anywhere else", "elsewhere",
+    "compared to other", "comparable", "similar to", "similar law", "similar mechanism", "counterpart",
+)
+
+
 @dataclass
 class Facets:
     """Resolved structured interpretation of a question."""
     place_ids: list[int]      # subtree-expanded jurisdiction ids ([] = no geographic filter)
     place_labels: list[str]   # display names of the matched nodes ("France", "United States")
+    reference_labels: list[str]  # places named only as a reference subject (expansion cue → not a filter)
     free_text: str            # the question with matched place aliases removed
     raw_question: str
 
@@ -70,12 +82,18 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
                     stripped = pat.sub(" ", stripped)
                     break
 
+    place_labels = sorted({n.name for n in matched.values()})
+    free_text = re.sub(r"\s+", " ", stripped).strip()
+
+    # Expansion cue → the named place is a reference subject, not a scope filter: don't restrict.
+    if matched and any(cue in lower_q for cue in _EXPANSION_CUES):
+        return Facets(place_ids=[], place_labels=[], reference_labels=place_labels,
+                      free_text=free_text, raw_question=question)
+
     matched_paths = {n.path for n in matched.values()}
     place_ids = [
         n.id for n in nodes
         if any(n.path == p or n.path.startswith(p + ".") for p in matched_paths)
     ]
-    place_labels = sorted({n.name for n in matched.values()})
-    free_text = re.sub(r"\s+", " ", stripped).strip()
-    return Facets(place_ids=place_ids, place_labels=place_labels, free_text=free_text,
-                  raw_question=question)
+    return Facets(place_ids=place_ids, place_labels=place_labels, reference_labels=[],
+                  free_text=free_text, raw_question=question)

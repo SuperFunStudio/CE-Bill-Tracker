@@ -37,7 +37,7 @@ except Exception:
 
 from app.ingestion.openstates import OpenStatesClient  # noqa: E402
 from app.synthesis.product_coverage import (  # noqa: E402
-    SONNET_MODEL,
+    MODELS,
     ProductCoverageExtractor,
     RELATIONSHIP_BY_INSTRUMENT,
 )
@@ -47,7 +47,7 @@ TMP = Path(__file__).parent.parent / "tmp"
 CATEGORIES = ("electronics", "batteries")
 
 
-async def persist(dsn: str, coverages: list, processed_bill_ids: list[int]) -> int:
+async def persist(dsn: str, coverages: list, processed_bill_ids: list[int], model: str) -> int:
     """Idempotently replace coverage for the processed bills: delete their rows (so bills that now
     yield nothing are cleared), then insert the fresh set. Re-running converges."""
     conn = await asyncpg.connect(dsn)
@@ -66,7 +66,7 @@ async def persist(dsn: str, coverages: list, processed_bill_ids: list[int]) -> i
                     "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
                     [(c.bill_id, c.product_slug, c.category, c.relationship_type, c.status,
                       c.defined_by_reference, c.source_excerpt, c.threshold_value,
-                      c.threshold_unit, c.confidence, SONNET_MODEL) for c in coverages],
+                      c.threshold_unit, c.confidence, model) for c in coverages],
                 )
     finally:
         await conn.close()
@@ -84,6 +84,8 @@ async def main() -> None:
                     help="Comma-separated bill ids to (re)process — e.g. retry the no-text set.")
     ap.add_argument("--persist", action="store_true",
                     help="Write to bill_product_coverage (replaces rows for processed bills).")
+    ap.add_argument("--model", choices=sorted(MODELS), default="sonnet",
+                    help="Extraction model (haiku is ~10x cheaper; validate recall first).")
     args = ap.parse_args()
 
     wanted = [args.category] if args.category else list(CATEGORIES)
@@ -143,7 +145,7 @@ async def main() -> None:
     print(f"Extracting product coverage from {len(bills)} bills "
           f"(categories={'+'.join(wanted)}, concurrency={args.concurrency})...")
 
-    extractor = ProductCoverageExtractor()
+    extractor = ProductCoverageExtractor(model=MODELS[args.model])
     sem = asyncio.Semaphore(args.concurrency)
     all_cov: list = []
     total_dropped = 0
@@ -208,7 +210,7 @@ async def main() -> None:
     print(f"\nArtifact: {TMP / 'product_coverage.json'}")
 
     if args.persist:
-        n = await persist(args.dsn, all_cov, [b["id"] for b in bills])
+        n = await persist(args.dsn, all_cov, [b["id"] for b in bills], MODELS[args.model])
         print(f"\nPersisted {n} coverage rows to bill_product_coverage "
               f"(replaced rows for {len(bills)} bills).")
 

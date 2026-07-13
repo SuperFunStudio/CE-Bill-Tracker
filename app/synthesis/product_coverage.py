@@ -34,6 +34,8 @@ from app.utils.retry import retry_with_backoff
 log = structlog.get_logger()
 
 SONNET_MODEL = "claude-sonnet-4-6"
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+MODELS = {"sonnet": SONNET_MODEL, "haiku": HAIKU_MODEL}
 
 # Which obligation each instrument_type implies. Bills outside this map are pre-filtered out by the
 # backfill script (other / budget / preemption / recycled_content don't enumerate covered products).
@@ -258,15 +260,16 @@ def validate_coverages(
 
 
 class ProductCoverageExtractor:
-    def __init__(self, client: anthropic.AsyncAnthropic | None = None):
+    def __init__(self, client: anthropic.AsyncAnthropic | None = None, model: str = SONNET_MODEL):
         self._client = client or anthropic.AsyncAnthropic(
             api_key=settings.anthropic_api_key, timeout=60.0, max_retries=0
         )
+        self.model = model
 
     @retry_with_backoff(max_attempts=3, base_delay=1.0)
     async def _call(self, prompt: str) -> dict:
         resp = await self._client.messages.create(
-            model=SONNET_MODEL,
+            model=self.model,
             max_tokens=2500,
             temperature=0,
             system=SYSTEM_PROMPT,

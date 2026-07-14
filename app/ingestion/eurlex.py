@@ -311,6 +311,7 @@ async def sync_eurlex(
     from app.classification.pipeline import ClassificationPipeline
     from app.config import settings
     from app.database import AsyncSessionLocal
+    from app.ingestion.law_dates import derive_status_date
     from app.models import Bill, BillText
 
     async with EurLexClient() as client:
@@ -365,6 +366,9 @@ async def sync_eurlex(
                 bill.description = act.summary
                 bill.status = act.status
                 bill.source_url = act.source_url
+                # Year-only enactment date (Jan 1) from the CELEX id, so EU acts land dated on the year
+                # charts. `or` keeps an already-set date if a re-run somehow can't re-derive it.
+                bill.status_date = derive_status_date(act.celex, act.title) or bill.status_date
                 await db.flush()
 
                 bt = (

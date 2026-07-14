@@ -19,6 +19,7 @@ text in bill_texts. Driver: scripts/ingest_foreign.py. Not wired into the US Ing
 """
 from __future__ import annotations
 
+import datetime
 import html
 import io
 import re
@@ -112,6 +113,10 @@ class ForeignLaw:
     english_label: str = "" # optional curated English name (seed list) — strong classifier signal
     status: str = "enacted" # national law in force
     source: str = "foreign" # source-system tag, e.g. "egov"; namespaces the foreign_id
+    # Explicit enactment date, ONLY when the adapter obtains a real one from the source (most don't).
+    # Left None, `resolved_status_date` derives a year-only date from the id/title so every law — incl.
+    # future regions — still lands dated. Set this to override with a precise date. See law_dates.
+    status_date: datetime.date | None = None
 
     @property
     def foreign_id(self) -> str:
@@ -128,6 +133,15 @@ class ForeignLaw:
         that carries the most signal — then a slice of the body."""
         head = " — ".join(p for p in (self.english_label, self.title) if p)
         return (head + "\n\n" + self.full_text[:1500]).strip()
+
+    @property
+    def resolved_status_date(self) -> datetime.date | None:
+        """Enactment date for the bill: the adapter's explicit date if it set one, else a year-only
+        date derived from the id/title (same logic as the one-time backfill, so dates stay consistent).
+        Derives from the English label first, then native title — the DB `title` sync_foreign stores."""
+        from app.ingestion.law_dates import derive_status_date
+        return self.status_date or derive_status_date(
+            self.source_id, self.english_label or self.title)
 
 
 class ForeignSourceClient(ABC):
@@ -2870,6 +2884,10 @@ async def sync_foreign(
                 bill.description = law.summary
                 bill.status = law.status
                 bill.source_url = law.source_url
+                # Year-only enactment date (Jan 1) derived from the id/title, unless the adapter set a
+                # precise one — so foreign law is no longer dateless on the year charts. `or` guards an
+                # already-set date from being cleared when a re-run can't re-derive (JP/CN residual).
+                bill.status_date = law.resolved_status_date or bill.status_date
                 await db.flush()
 
                 bt = (

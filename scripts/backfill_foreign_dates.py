@@ -34,7 +34,6 @@ residual (still-dateless) rows without writing.
 import argparse
 import asyncio
 import datetime
-import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -43,38 +42,9 @@ import asyncpg
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-MIN_YEAR = 1950
-MAX_YEAR = datetime.date.today().year
-
-# EU CELEX: sector digit + 4-digit year + document-type letter (+ number). 32023R1542 -> 2023.
-_CELEX_RE = re.compile(r"^\d(\d{4})[A-Z]")
-# A standalone 4-digit year token (word-bounded, so it won't match inside a longer number).
-_YEAR_RE = re.compile(r"(?<!\d)(\d{4})(?!\d)")
-
-
-def _in_range(y: int) -> bool:
-    return MIN_YEAR <= y <= MAX_YEAR
-
-
-def derive_year(region: str | None, bill_number: str | None, title: str | None) -> tuple[int, str] | None:
-    """Return (year, source) or None. Source is one of celex|title|bill_number, for the report."""
-    bn = (bill_number or "").strip()
-    # 1. CELEX (EU) — most reliable; the identifier IS the year.
-    if region == "EU":
-        m = _CELEX_RE.match(bn)
-        if m and _in_range(int(m.group(1))):
-            return int(m.group(1)), "celex"
-    # 2. First in-range year token in the title (the name/enactment year precedes target years).
-    for m in _YEAR_RE.finditer(title or ""):
-        y = int(m.group(1))
-        if _in_range(y):
-            return y, "title"
-    # 3. First in-range year token anywhere in the bill_number (AU-style ids).
-    for m in _YEAR_RE.finditer(bn):
-        y = int(m.group(1))
-        if _in_range(y):
-            return y, "bill_number"
-    return None
+# Single source of truth for the derivation — shared with the forward ingest path (foreign.sync_foreign
+# + eurlex.sync_eurlex), so backfilled and newly-ingested dates agree. See app/ingestion/law_dates.py.
+from app.ingestion.law_dates import derive_law_year  # noqa: E402
 
 
 async def main() -> None:
@@ -103,7 +73,7 @@ async def main() -> None:
         by_region_miss = Counter()
         updates: list[tuple[datetime.date, int]] = []
         for r in rows:
-            got = derive_year(r["region"], r["bill_number"], r["title"])
+            got = derive_law_year(r["bill_number"], r["title"])
             if got is None:
                 by_region_miss[r["region"]] += 1
                 continue

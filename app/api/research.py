@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 import anthropic
 import structlog
@@ -34,6 +35,8 @@ from app.schemas import (
     ResearchAnswer,
     ResearchAskRequest,
     ResearchBillPage,
+    ResearchChart,
+    ResearchChartBar,
     ResearchCitation,
 )
 
@@ -102,6 +105,35 @@ def _map_dimension(question: str) -> str | None:
         if any(t in q for t in triggers):
             return dim
     return None
+
+
+# A "trend / over time / count-by-year" question wants the year distribution shown as a chart. Cheap
+# deterministic trigger (the shadow router's intent=count is Haiku and not yet driving); the bars come
+# from the SQL year aggregate, so the numbers are exact — the model never fabricates them.
+_YEAR_CHART_TRIGGERS = (
+    "over time", "by year", "per year", "each year", "year over year", "year-over-year",
+    "trend", "timeline", "time series", "time-series", "chart", "graph", "plot",
+    "how many.*introduced", "introduced.*over", "growth", "history of", "historical",
+)
+
+
+def _wants_year_chart(question: str) -> bool:
+    q = question.lower()
+    return any(re.search(t, q) if "." in t else t in q for t in _YEAR_CHART_TRIGGERS)
+
+
+def _year_chart(question: str, agg_scoped: dict, scope_labels: list[str]) -> ResearchChart | None:
+    """A bills-by-year bar chart from the SCOPED year aggregate, when the question asks for a trend and
+    the set spans ≥2 years. Returns None otherwise (the AnswerChart component hides an absent chart)."""
+    if not _wants_year_chart(question):
+        return None
+    by_year = (agg_scoped or {}).get("bills_by_year") or []
+    if len({b["year"] for b in by_year}) < 2:
+        return None
+    bars = [ResearchChartBar(label=str(b["year"]), value=b["count"])
+            for b in sorted(by_year, key=lambda b: b["year"])]
+    suffix = f" — {', '.join(scope_labels)}" if scope_labels else ""
+    return ResearchChart(title=f"Bills by year{suffix}", bars=bars)
 
 
 def _lit_subquery():
@@ -342,10 +374,29 @@ async def _aggregates(db: AsyncSession, extra=()) -> dict:
     for c in extra:
         pc_q = pc_q.where(c)
     pc_rows = (await db.execute(pc_q.group_by(BillProductCoverage.product_slug).order_by(pc_bill.desc()))).all()
+    # Bills-by-year — the same status_date basis the Insights momentum chart uses (extract year, drop
+    # nulls). Foreign law is now dated (scripts/backfill_foreign_dates.py derives a year from CELEX /
+    # title), so this is no longer US-only. `undated` is reported alongside so the model can state the
+    # coverage honestly ("N of the set carry no date yet") instead of falsely claiming absence — the
+    # exact failure that motivated this (a starved sample made it deny corpus-wide year data existed).
+    year = func.extract("year", Bill.status_date)
+    year_q = (select(year.label("yr"), func.count().label("n"))
+              .select_from(Bill).where(Bill.ce_relevant.is_(True))
+              .where(Bill.status_date.isnot(None)))
+    for c in extra:
+        year_q = year_q.where(c)
+    year_rows = (await db.execute(year_q.group_by(year).order_by(year))).all()
+    undated_q = (select(func.count()).select_from(Bill).where(Bill.ce_relevant.is_(True))
+                 .where(Bill.status_date.is_(None)))
+    for c in extra:
+        undated_q = undated_q.where(c)
+    undated = (await db.scalar(undated_q)) or 0
     agg = {
         "collection_target_basis": [{"basis": r.basis or "unspecified", "count": r.n} for r in basis_rows],
         "dimension_prevalence": {d: getattr(prevalence_row, d) for d in DIMENSION_KEYS},
         "material_coverage": [{"material": r.material, "count": r.n} for r in mat_rows],
+        "bills_by_year": [{"year": int(r.yr), "count": r.n} for r in year_rows if r.yr is not None],
+        "undated_bills": undated,
     }
     if pc_rows:
         agg["product_coverage"] = {
@@ -375,6 +426,11 @@ Rules:
   about coverage from them ("122 of the 146 corpus-wide sit in France; the rest are elsewhere").
 - NEVER claim something is absent when SCOPE.total > 0 — describe what the material shows. A true zero
   is only when SCOPE.total = 0.
+- For "over time / by year / trend" questions, use AGGREGATES.bills_by_year (exact per-year counts from
+  the corpus, not the read sample) to describe the distribution. If AGGREGATES.undated_bills > 0, say so
+  plainly ("N bills carry no date yet and are excluded from the year breakdown") — this is a coverage
+  caveat, NOT evidence that year data is missing. Never infer from the read sample that the corpus lacks
+  dates; the year counts are authoritative.
 - Be concrete and practical — this should help someone act.
 Output the answer as MARKDOWN directly (no JSON, no preamble): short "## " section headers, "- "
 bullets, **bold** key terms, inline [STATE BILL_NUMBER] citations. No markdown tables.
@@ -602,7 +658,11 @@ async def ask_the_bills(
         total=total, page=1, page_size=_PAGE_SIZE, strategy=strategy,
         items=[_row_to_summary(r) for r in page_rows],
     )
-    return ResearchAnswer(answer=answer_text, citations=citations, chart=None,
+    # A bills-by-year chart when the question asks for a trend — exact bars from the SQL year aggregate.
+    scope_labels = (facets.place_labels + facets.material_labels + facets.instrument_labels
+                    + facets.product_labels)
+    chart = _year_chart(question, agg_scoped, scope_labels)
+    return ResearchAnswer(answer=answer_text, citations=citations, chart=chart,
                           coverage_note=coverage, bills=bills)
 
 

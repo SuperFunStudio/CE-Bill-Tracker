@@ -38,6 +38,45 @@ from app.links.health import classify
 
 MODEL = "claude-opus-4-8"  # default per house guidance; override with --model (e.g. claude-sonnet-4-6 for cost)
 
+# Per-region framing for the finder. US keeps its own prompt; each foreign region tells Claude what an
+# authoritative "where to comply" page looks like there (the éco-organisme / national register), so it
+# stops returning the raw statute (wall of text) or a ministry homepage. Regions not listed fall back
+# to the generic profile.
+REGION_PROFILE = {
+    "FR": dict(name="France", lang="French",
+               authority="the designated éco-organisme for this filière (e.g. Citeo for packaging/paper, "
+                         "Ecologic for WEEE/batteries, Refashion for textiles) or the SYDEREP national "
+                         "producer register run by ADEME"),
+    "JP": dict(name="Japan", lang="Japanese",
+               authority="the designated recycling corporation for this product (e.g. JCPRA for containers "
+                         "& packaging) or the specific METI/MOE recycling-law program page"),
+    "UK": dict(name="the United Kingdom", lang="English",
+               authority="the GOV.UK producer-responsibility registration/report service (e.g. Report "
+                         "packaging data) or an approved producer compliance scheme (PCS)"),
+    "DE": dict(name="Germany", lang="German",
+               authority="the mandatory register — Zentrale Stelle Verpackungsregister (LUCID) for "
+                         "packaging, stiftung ear for electrical equipment and batteries"),
+    "EU": dict(name="the European Union", lang="English",
+               authority="each member state's national producer register (there is no single EU register) "
+                         "or the official EU guidance page for this instrument"),
+}
+GENERIC_PROFILE = dict(name=None, lang="the local language",
+                       authority="the national producer register or the designated producer-responsibility "
+                                 "organization / compliance scheme")
+
+# Found-URL domain -> a curated foreign entity slug, so the pathway's entity matches the page the
+# finder chose (avoids a "Citeo ->" label pointing at the SYDEREP register). Only unambiguous
+# single-entity domains are listed. gov.uk is deliberately omitted: it hosts three UK entities
+# (uk-epr-packaging / uk-weee / uk-producer-responsibility), so we keep the material-routed baseline
+# there. When no domain matches, write_pathway keeps the baseline entity so the link still renders.
+# Kept in sync with FOREIGN_ENTITIES in build_compliance_pathways.py.
+FOREIGN_DOMAIN_TO_SLUG = {
+    "citeo.com": "fr-citeo", "ecologic-france.com": "fr-ecologic", "refashion.fr": "fr-refashion",
+    "syderep.ademe.fr": "fr-syderep", "ademe.fr": "fr-syderep",
+    "jcpra.or.jp": "jp-jcpra", "meti.go.jp": "jp-meti",
+    "verpackungsregister.org": "de-lucid", "stiftung-ear.de": "de-ear", "bmuv.de": "de-bmuv",
+}
+
 # JSON shape we ask Claude to return as its final message.
 RESULT_SCHEMA_HINT = """Return ONLY a JSON object (no prose, no code fence) of exactly this shape:
 {
@@ -66,23 +105,30 @@ WEAK_KIND_SQL = {
 }
 
 
-def collect_targets(engine, state, material, limit, weak_kind):
-    """Weak pathways worth researching: not already hand-curated (basis != 'manual'), filtered to
-    the requested slice (see WEAK_KIND_SQL)."""
-    # weak_kind is a validated enum (argparse choices) — safe to interpolate.
+def collect_targets(engine, regions, state, material, limit, weak_kind):
+    """Weak pathways worth researching: not already hand-curated or finder-written (basis not in
+    manual/ai_verified), filtered to the requested slice (see WEAK_KIND_SQL). `regions` is None for
+    the default US mode (region='US', excluding the federal state='US' row) or an explicit list of
+    foreign region codes."""
+    # weak_kind is a validated enum (argparse choices); region codes are validated below — safe to interpolate.
+    if regions:
+        codes = [r for r in regions if r.isalnum() and len(r) <= 4]
+        region_clause = "b.region in (" + ",".join(f"'{c}'" for c in codes) + ")"
+    else:
+        region_clause = "b.region = 'US' and b.state <> 'US'"
     sql = text(f"""
-        select b.id, b.state, b.bill_number, b.title, b.material_categories,
+        select b.id, b.region, b.state, b.bill_number, b.title, b.material_categories,
                p.action_type, p.management_model, p.registration_url, p.basis,
                e.name as entity_name, e.url as entity_url
         from compliance_pathway p
         join bills b on b.id = p.bill_id
         left join compliance_entity e on e.id = p.entity_id
-        where coalesce(p.basis,'') <> 'manual'
-          and b.state <> 'US'
+        where coalesce(p.basis,'') not in ('manual', 'ai_verified')
+          and {region_clause}
           and {WEAK_KIND_SQL[weak_kind]}
           and (:state is null or b.state = :state)
           and (:material is null or b.material_categories ? :material)
-        order by (p.action_type in ('none','monitor')) desc, b.state, b.bill_number
+        order by (p.action_type in ('none','monitor')) desc, b.region, b.state, b.bill_number
         limit :limit
     """)
     with engine.connect() as c:
@@ -91,21 +137,49 @@ def collect_targets(engine, state, material, limit, weak_kind):
 
 def build_prompt(t):
     mats = ", ".join(t.material_categories or []) or "unspecified"
+    if t.region == "US":
+        return (
+            f"You are auditing producer-compliance links for U.S. extended-producer-responsibility "
+            f"(EPR) laws. Find where a producer must register/report to comply with THIS enacted law.\n\n"
+            f"State: {t.state}\n"
+            f"Bill: {t.bill_number}\n"
+            f"Title: {t.title}\n"
+            f"Material(s): {mats}\n"
+            f"Current classification: action_type={t.action_type}, model={t.management_model}\n"
+            f"Current link (may be wrong, a homepage, or missing): {t.registration_url or '(none)'}\n\n"
+            f"Search the web for the authoritative official page — the state agency program page for "
+            f"this material, or the statute's designated producer responsibility organization (PRO). "
+            f"Note: some laws classified 'no obligation' actually have a producer-registration or "
+            f"reporting form (e.g. mercury-added products report to a state/regional clearinghouse). "
+            f"Look specifically for 'producer registration' / 'manufacturer reporting' for this material "
+            f"in this state.\n\n"
+            + RESULT_SCHEMA_HINT
+        )
+    # Foreign national/EU law: point Claude at the éco-organisme / national register, and forbid the
+    # two failure modes we see — returning the statute text or a bare ministry homepage.
+    prof = REGION_PROFILE.get(t.region, GENERIC_PROFILE)
+    juris = prof["name"] or t.region
     return (
-        f"You are auditing producer-compliance links for U.S. extended-producer-responsibility "
-        f"(EPR) laws. Find where a producer must register/report to comply with THIS enacted law.\n\n"
-        f"State: {t.state}\n"
-        f"Bill: {t.bill_number}\n"
+        f"You are auditing producer-compliance links for extended-producer-responsibility (EPR) laws "
+        f"OUTSIDE the United States. Find the single page where a producer REGISTERS or REPORTS to "
+        f"comply with THIS enacted law.\n\n"
+        f"Jurisdiction: {juris}\n"
+        f"Act / bill id: {t.bill_number}\n"
         f"Title: {t.title}\n"
         f"Material(s): {mats}\n"
-        f"Current classification: action_type={t.action_type}, model={t.management_model}\n"
-        f"Current link (may be wrong, a homepage, or missing): {t.registration_url or '(none)'}\n\n"
-        f"Search the web for the authoritative official page — the state agency program page for "
-        f"this material, or the statute's designated producer responsibility organization (PRO). "
-        f"Note: some laws classified 'no obligation' actually have a producer-registration or "
-        f"reporting form (e.g. mercury-added products report to a state/regional clearinghouse). "
-        f"Look specifically for 'producer registration' / 'manufacturer reporting' for this material "
-        f"in this state.\n\n"
+        f"Current link (often the raw statute, a ministry homepage, or missing): "
+        f"{t.registration_url or '(none)'}\n\n"
+        f"Find the authoritative page: {prof['authority']}.\n"
+        f"Hard rules:\n"
+        f"- Do NOT return the statute or a legislation portal (e.g. Légifrance, gov.uk/legislation, "
+        f"gesetze-im-internet.de, e-gov.go.jp, EUR-Lex) — that is the law itself, not where a producer "
+        f"complies.\n"
+        f"- Do NOT return a generic ministry/government homepage — return the SPECIFIC "
+        f"producer-registration or éco-organisme membership/reporting page.\n"
+        f"- The law's text may be in {prof['lang']}; the compliance page may be in {prof['lang']} or "
+        f"English. Prefer the official éco-organisme/register domain.\n"
+        f"- Set found=false if this act genuinely creates no producer registration/reporting duty "
+        f"(e.g. a framework or enabling law with obligations only in later decrees).\n\n"
         + RESULT_SCHEMA_HINT
     )
 
@@ -144,20 +218,54 @@ def research_one(client, t, model, web_tools):
 
 
 def override_snippet(t, cand, verify):
-    """A ready-to-paste BILL_OVERRIDES entry (the conservative, per-bill granularity)."""
+    """A ready-to-paste override entry (per-bill granularity). US -> BILL_OVERRIDES keyed (state, bn);
+    foreign -> FOREIGN_OVERRIDES keyed (region, bn). For foreign we auto-write by default, so this is
+    mainly a paper trail / for --no-apply review runs."""
     def q(s):
         return json.dumps(s) if s is not None else "None"
+    key = (f'("{t.state}", _norm_bn("{t.bill_number}"))' if t.region == "US"
+           else f'("{t.region}", _norm_bn("{t.bill_number}"))')
+    dest = "BILL_OVERRIDES" if t.region == "US" else "FOREIGN_OVERRIDES"
     lines = [
-        f'    ("{t.state}", _norm_bn("{t.bill_number}")): dict(',
+        f"    {key}: dict(",
         f"        url={q(cand.get('url'))},",
         f"        action_type={q(cand.get('action_type'))},",
         f"        action_summary={q(cand.get('action_summary'))}),",
     ]
     ent = cand.get("entity_name")
-    head = (f"    # {t.state} {t.bill_number} — {cand.get('justification','')}\n"
+    head = (f"    # [{dest}] {t.region} {t.state or ''} {t.bill_number} — {cand.get('justification','')}\n"
             f"    #   verify: [{verify[0]}] {verify[1]}  |  confidence={cand.get('confidence')}"
             f"  |  suggested entity: {ent or '(none)'} ({cand.get('entity_type') or '-'})")
     return head + "\n" + "\n".join(lines)
+
+
+def _domain(url):
+    """Bare registrable-ish host of a URL, lowercased, no leading www."""
+    host = (url or "").split("//", 1)[-1].split("/", 1)[0].lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def write_pathway(engine, entity_id_by_slug, t, cand, bucket, note):
+    """Auto-write a verified foreign link to compliance_pathway (basis='ai_verified'). Upgrades the
+    entity to a specific known éco-organisme when the found domain maps to one; otherwise keeps the
+    baseline hub entity so the link still renders. Returns the entity slug used (or None)."""
+    dom = _domain(cand["url"])
+    slug = next((s for d, s in FOREIGN_DOMAIN_TO_SLUG.items() if d in dom), None)
+    eid = entity_id_by_slug.get(slug) if slug else None
+    set_entity = ", entity_id = :eid" if eid else ""  # only override when we matched a known éco-organisme
+    with engine.begin() as c:
+        c.execute(text(f"""
+            update compliance_pathway
+               set registration_url = :url,
+                   action_type = :at,
+                   action_summary = :sm,
+                   confidence = :conf,
+                   basis = 'ai_verified'{set_entity}
+             where bill_id = :bid
+        """), {"url": cand["url"], "at": cand.get("action_type") or "register_with_state",
+               "sm": cand.get("action_summary"), "conf": cand.get("confidence"),
+               "eid": eid, "bid": t.id})
+    return slug
 
 
 def main():
@@ -170,6 +278,9 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--prod-dsn", default=None)
+    ap.add_argument("--region", default="US",
+                    help="US (default; state-level EPR) or a CSV of foreign region codes, e.g. "
+                         "FR,JP,UK,DE,EU. Foreign mode uses the region-aware prompt + auto-write.")
     ap.add_argument("--state", default=None, help="two-letter filter")
     ap.add_argument("--material", default=None, help="material_categories filter, e.g. electronics")
     ap.add_argument("--weak-kind", choices=list(WEAK_KIND_SQL), default="all",
@@ -179,16 +290,34 @@ def main():
     ap.add_argument("--delay", type=float, default=1.0)
     ap.add_argument("--min-confidence", type=float, default=0.5,
                     help="drop proposals below this confidence")
+    ap.add_argument("--apply", action="store_true",
+                    help="FOREIGN ONLY: write verified links straight to compliance_pathway "
+                         "(basis='ai_verified'). Without it, foreign runs are propose-only.")
     ap.add_argument("--dry-run", action="store_true", help="list targets, make no API calls")
     ap.add_argument("--out", default=None, help="also write the proposals to this file")
     args = ap.parse_args()
 
+    region_arg = args.region.strip().upper()
+    is_us = region_arg == "US"
+    regions = None if is_us else [c.strip() for c in region_arg.split(",") if c.strip()]
+    if args.apply and is_us:
+        sys.exit("--apply is foreign-only; US links are curated via BILL_OVERRIDES (paste-to-Python).")
+
     engine = create_engine(args.prod_dsn or settings.database_url)
-    targets = collect_targets(engine, args.state, args.material, args.limit, args.weak_kind)
-    print(f"Weak pathways to research: {len(targets)}"
+    # entity slug -> id, for upgrading a foreign pathway's entity to a matched éco-organisme on write.
+    entity_id_by_slug = {}
+    if args.apply:
+        with engine.connect() as c:
+            entity_id_by_slug = {r[0]: r[1] for r in c.execute(
+                text("select slug, id from compliance_entity"))}
+
+    targets = collect_targets(engine, regions, args.state, args.material, args.limit, args.weak_kind)
+    mode = "US" if is_us else f"foreign {','.join(regions)}" + (" [APPLY]" if args.apply else " [propose]")
+    print(f"Weak pathways to research ({mode}): {len(targets)}"
           f"{' (PROD)' if args.prod_dsn else ''}\n")
     for t in targets:
-        print(f"  {t.state} {t.bill_number:24s} [{t.action_type or '-':>18s}]  {t.registration_url or '(no link)'}")
+        print(f"  {t.region} {t.state or '':2s} {t.bill_number:24s} "
+              f"[{t.action_type or '-':>18s}]  {t.registration_url or '(no link)'}")
     if args.dry_run:
         print("\n--dry-run: no API calls made.")
         return
@@ -242,7 +371,11 @@ def main():
                 time.sleep(args.delay)
                 continue
 
-            print(f"    [OK] {bucket} [{code}]  {cand['url']}")
+            wrote = ""
+            if args.apply:
+                slug = write_pathway(engine, entity_id_by_slug, t, cand, bucket, note)
+                wrote = f"  -> WROTE ai_verified" + (f" (entity={slug})" if slug else " (kept baseline entity)")
+            print(f"    [OK] {bucket} [{code}]  {cand['url']}{wrote}")
             accepted.append((t, cand, (bucket, note)))
             snippets.append(override_snippet(t, cand, (bucket, note)))
             time.sleep(args.delay)
@@ -250,21 +383,27 @@ def main():
     # --- Reviewable diff ---
     report = []
     report.append("\n" + "=" * 72)
-    report.append(f"PROPOSALS — {len(accepted)} accepted, {len(rejected)} rejected "
+    verb = "written to compliance_pathway (basis='ai_verified')" if args.apply else "accepted"
+    report.append(f"PROPOSALS — {len(accepted)} {verb}, {len(rejected)} rejected "
                   f"(of {len(targets)} researched)")
-    report.append("Review each, then paste approved entries into BILL_OVERRIDES in "
-                  "scripts/build_compliance_pathways.py.")
+    if args.apply:
+        report.append("Foreign links were auto-written. Rebuilds won't clobber them (basis guard).")
+    else:
+        dest = "BILL_OVERRIDES" if is_us else "FOREIGN_OVERRIDES"
+        report.append(f"Review each, then paste approved entries into {dest} in "
+                      "scripts/build_compliance_pathways.py (or re-run foreign with --apply).")
     report.append("Blocked-bucket links are correct-but-WAF'd (fine to keep); dead links were "
                   "already dropped.")
     report.append("=" * 72)
-    if snippets:
-        report.append("\nBILL_OVERRIDES = {")
+    if snippets and not args.apply:
+        dest = "BILL_OVERRIDES" if is_us else "FOREIGN_OVERRIDES"
+        report.append(f"\n{dest} = {{")
         report.append("\n".join(snippets))
         report.append("}")
     if rejected:
         report.append("\n# --- not proposed (verify manually if you disagree) ---")
         for t, cand, why in rejected:
-            report.append(f"#   {t.state} {t.bill_number}: {why}"
+            report.append(f"#   {t.region} {t.state or ''} {t.bill_number}: {why}"
                           + (f"  -> {cand.get('url')}" if cand.get("url") else ""))
     out = "\n".join(report)
     print(out)

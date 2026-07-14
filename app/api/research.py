@@ -14,6 +14,7 @@ is the documented scale-up.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 
 import anthropic
@@ -64,6 +65,20 @@ _MAX_PAGE_SIZE = 100     # ceiling per request (paging reaches the whole set acr
 # (e.g. "compelling incentives" → eco_modulation), which is cleaner than OR-broadening the words.
 # First match wins, so order encodes priority. Keys must match the compliance_details JSONB envelope.
 _DIM_TRIGGERS: list[tuple[str, tuple[str, ...]]] = [
+    # New (2026-07-13) — placed first so specific phrases win over generic "label"/"restrict"; each
+    # degrades gracefully until its compliance_details envelope is populated (DIMENSION_EXPANSION_PLAN).
+    ("repairability", ("repairability", "repair index", "repair score", "reparability", "durability label",
+                       "durability standard", "durability score", "planned obsolescence",
+                       "premature obsolescence", "product lifespan", "product lifetime",
+                       "design for repair", "design for disassembly")),
+    ("reuse_refill", ("reuse mandate", "reuse target", "reuse system", "reusable packaging", "refillable",
+                      "refill station", "refill infrastructure", "reuse and refill", "returnable packaging",
+                      "packaging reuse")),
+    ("digital_product_passport", ("digital product passport", "product passport", "product traceability",
+                                  "material traceability", "lifecycle data", "circularity assessment",
+                                  "material composition disclosure", "supply chain transparency")),
+    ("remanufacturing", ("remanufactur", "refurbishment standard", "refurbished", "industrial symbiosis",
+                         "secondary raw material", "by-product synergy")),
     ("eco_modulation", ("eco-modulation", "eco modulation", "modulat", "bonus-malus", "bonus/malus",
                         "incentiv", "reward", "fee discount", "fee reduction")),
     ("recycled_content", ("recycled content", "recycled-content", "post-consumer", "post consumer",
@@ -130,7 +145,7 @@ async def _count_match(db: AsyncSession, tsq, extra=()) -> int:
 
 
 async def _relevant_bills(
-    db: AsyncSession, question: str, page: int = 1, page_size: int = _PAGE_SIZE
+    db: AsyncSession, question: str, page: int = 1, page_size: int = _PAGE_SIZE, facets=None
 ) -> tuple[list, int, str]:
     """The FULL set of bills relevant to `question`, one page at a time — (rows, total, strategy),
     deterministic so paging is stable. Facet-hybrid: jurisdiction is resolved from the question
@@ -150,7 +165,10 @@ async def _relevant_bills(
     offset = (page - 1) * page_size
     lit = _lit_subquery()
 
-    facets = await resolve_facets(db, question)
+    # facets default to the deterministic resolver; the shadow router passes its own (via to_facets())
+    # so the SAME retrieval runs both ways for the results-diff. This param is also the flip point:
+    # once the router graduates, /ask passes the router facets here.
+    facets = facets or await resolve_facets(db, question)
     geo = facets.place_ids
     scoped = bool(facets.place_ids or facets.material_slugs or facets.instrument_slugs
                   or facets.product_slugs)
@@ -414,7 +432,7 @@ async def _deep_answer(question: str, scope: dict, agg_scoped: dict, agg_corpus,
     return resp.content[0].text.strip()
 
 
-async def _persist_turn(uid, question, facets, strategy, total, answer_text, cited_ids, bill_ids):
+async def _persist_turn(uid, question, facets, strategy, total, answer_text, cited_ids, bill_ids, shadow=None):
     """Persist the answer as a research_session + turn — the analysis layer that later becomes the
     Layer-1 knowledge cache. Uses its OWN fresh session (not the request's, which was released before
     the long LLM call) so a healthy connection does the write. Best-effort; the caller swallows
@@ -424,12 +442,84 @@ async def _persist_turn(uid, question, facets, strategy, total, answer_text, cit
         sess = ResearchSession(owner_uid=uid, title=question[:200])
         s.add(sess)
         await s.flush()
+        fac = {"places": facets.place_labels, "reference": facets.reference_labels, "strategy": strategy}
+        if shadow:
+            fac["shadow_router"] = shadow  # A1 shadow-mode comparison (router vs deterministic); not used for retrieval
         s.add(ResearchTurn(
             session_id=sess.id, seq=1, question=question, rewritten_query=facets.free_text,
-            facets={"places": facets.place_labels, "reference": facets.reference_labels, "strategy": strategy},
-            strategy=strategy, answer={"text": answer_text, "cited_bill_ids": cited_ids},
+            facets=fac,
+            strategy=(strategy or "")[:40],  # column is VARCHAR(40); multi-material strategies overflow
+            answer={"text": answer_text, "cited_bill_ids": cited_ids},
             bill_ids=bill_ids, bill_total=total))
         await s.commit()
+
+
+# --- Shadow-mode LLM router (A1) -----------------------------------------------------------------
+# Runs the LLM query router (app/api/research_router.py) alongside the deterministic resolver on every
+# ask, logs + persists the comparison, but does NOT drive retrieval yet. Fired concurrently with the
+# Sonnet synthesis (which makes no DB calls), so it adds ~no latency. Flip to router-driven retrieval
+# only after the shadow diffs on real traffic look right. See tests/eval/README.md.
+_query_router = None
+
+
+def _get_router():
+    global _query_router
+    if _query_router is None:
+        from app.api.research_router import QueryRouter
+        _query_router = QueryRouter()
+    return _query_router
+
+
+def _facet_diff(det_slugs, router_slugs):
+    d, r = set(det_slugs), set(router_slugs)
+    only_d, only_r = sorted(d - r), sorted(r - d)
+    return {"only_deterministic": only_d, "only_router": only_r} if (only_d or only_r) else None
+
+
+async def _shadow_route(question: str, det, det_total: int, det_top_ids: list) -> dict | None:
+    """Best-effort shadow comparison. On a fresh session: route `question`, diff the facets vs the
+    deterministic `det`, AND re-run the SAME retrieval with the router's facets to record the actual
+    RESULTS delta (total + top-page bill-set difference) vs the deterministic result the user got.
+    MUST NOT raise — it runs in a gather() with synthesis, so an exception here would break the answer."""
+    try:
+        async with AsyncSessionLocal() as s:
+            rf = await _get_router().route(s, question)
+            r_rows, r_total, r_strategy = await _relevant_bills(
+                s, question, page=1, page_size=_PAGE_SIZE, facets=rf.to_facets())
+            r_ids = [row.Bill.id for row in r_rows]
+        diff = {k: v for k, v in {
+            "materials": _facet_diff(det.material_slugs, rf.material_slugs),
+            "instruments": _facet_diff(det.instrument_slugs, rf.instrument_slugs),
+            "products": _facet_diff(det.product_slugs, rf.product_slugs),
+            "places": _facet_diff(det.place_labels, rf.place_labels),
+        }.items() if v}
+        d, r = set(det_top_ids), set(r_ids)
+        results = {
+            "det_total": det_total, "router_total": r_total, "router_strategy": r_strategy,
+            "top_overlap": len(d & r), "top_only_deterministic": sorted(d - r),
+            "top_only_router": sorted(r - d),
+        }
+        has_illus = bool(rf.material_illustrations or rf.product_illustrations or rf.instrument_illustrations)
+        shadow = {
+            "intent": rf.intent,
+            "router": {
+                "places": rf.place_labels, "reference": rf.reference_labels, "exclude": rf.exclude_place_labels,
+                "materials": rf.material_slugs, "instruments": rf.instrument_slugs,
+                "products": rf.product_slugs, "dimensions": rf.dimensions,
+                "material_illustrations": rf.material_illustrations,
+                "product_illustrations": rf.product_illustrations,
+                "instrument_illustrations": rf.instrument_illustrations,
+                "free_text": rf.free_text,
+            },
+            "diff": diff, "results": results, "has_illustrations": has_illus,
+        }
+        log.info("research_shadow_router", q=question[:120], intent=rf.intent, diff=diff or None,
+                 det_total=det_total, router_total=r_total,
+                 top_changed=len(d ^ r), illus=has_illus)
+        return shadow
+    except Exception as e:  # noqa: BLE001 — shadow must never affect the ask
+        log.warning("research_shadow_router_failed", error=str(e))
+        return None
 
 
 @router.post("/ask", response_model=ResearchAnswer)
@@ -478,7 +568,12 @@ async def ask_the_bills(
     read_bill_ids = [r.Bill.id for r in read_rows]
     await db.close()
 
-    answer_text = await _deep_answer(question, scope, agg_scoped, agg_corpus, packed)
+    # Synthesis (Sonnet, DB-free) and the shadow router (Haiku, own session) run concurrently — the
+    # router finishes within the synthesis window, so shadow mode costs ~no added latency.
+    answer_text, shadow = await asyncio.gather(
+        _deep_answer(question, scope, agg_scoped, agg_corpus, packed),
+        _shadow_route(question, facets, total, [r.Bill.id for r in page_rows]),
+    )
     answer_text = answer_text or "I couldn't find enough in the corpus to answer that."
 
     # Citations: bills from the read set whose ref (e.g. "MD HB331") appears in the answer. Recovered
@@ -499,7 +594,7 @@ async def ask_the_bills(
 
     # Persist the answer (analysis layer / future Layer-1 cache). Best-effort — never break the answer.
     try:
-        await _persist_turn(_user.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids)
+        await _persist_turn(_user.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids, shadow=shadow)
     except Exception as e:  # noqa: BLE001
         log.warning("research_persist_failed", error=str(e))
 

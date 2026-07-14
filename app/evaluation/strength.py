@@ -358,10 +358,11 @@ def requirements_for(result: SonnetResult, regime_key: str) -> tuple[list[Requir
     return _critical_requirements(result) if regime_key == CRITICAL else _incremental_requirements(result)
 
 
-# The eight envelope keys mirrored between a SonnetResult and a stored compliance_details dict.
+# The envelope keys mirrored between a SonnetResult and a stored compliance_details dict.
 _ENVELOPE_KEYS = (
     "eco_modulation", "recycled_content", "penalties", "collection_targets",
     "pro_structure", "bans_restrictions", "fee_amounts", "labeling",
+    "repairability", "reuse_refill", "digital_product_passport", "remanufacturing",
 )
 
 

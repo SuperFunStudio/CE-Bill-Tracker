@@ -13,9 +13,10 @@ SONNET_MODEL = "claude-sonnet-4-6"
 
 # Bump when the extraction schema changes so backfills can select "bills below current version" and
 # re-run only what's stale. v2 added the eco_modulation / recycled_content / penalties envelopes;
-# v3 added collection_targets / pro_structure / bans_restrictions; v4 added fee_amounts / labeling
-# (one LLM pass fills all eight).
-EXTRACTION_VERSION = 4
+# v3 added collection_targets / pro_structure / bans_restrictions; v4 added fee_amounts / labeling;
+# v5 added repairability / reuse_refill / digital_product_passport / remanufacturing (one LLM pass
+# fills all twelve). See docs/DIMENSION_EXPANSION_PLAN.md.
+EXTRACTION_VERSION = 5
 
 # Region code -> human label injected into the prompts, so the extractor frames the measure for the
 # right jurisdiction (member-state national law extracts richly even in its native language — German
@@ -48,6 +49,9 @@ _BASE_ANCHORS = [
     r"packaging", r"deposit return", r"deposit scheme", r"deposit and return", r"take[-\s]?back",
     r"recycled content", r"right to repair", r"single[-\s]use plastic", r"eco[-\s]?modulat",
     r"collection target", r"recycling target", r"stewardship",
+    # v5 envelope anchors so large omnibus acts window onto these provisions too.
+    r"repairab", r"repair index", r"durabilit", r"planned obsolescence", r"reuse", r"refill",
+    r"reusable", r"product passport", r"traceabilit", r"remanufactur", r"refurbish",
 ]
 _BASE_ANCHOR_RE = re.compile(r"\b(?:" + "|".join(_BASE_ANCHORS) + r")\b", re.IGNORECASE)
 
@@ -58,7 +62,8 @@ _BASE_ANCHOR_RE = re.compile(r"\b(?:" + "|".join(_BASE_ANCHORS) + r")\b", re.IGN
 # app/ingestion/foreign.py). CJK terms carry no word boundaries, so native anchors match without \b.
 _NATIVE_ANCHORS = {
     "fr": ["responsabilité élargie", "déchets d'emballages", "éco-modulation", "consigne",
-           "filière REP", "reprise", "collecte", "recyclage"],
+           "filière REP", "reprise", "collecte", "recyclage",
+           "réparabilité", "indice de réparabilité", "réemploi", "réutilisation", "reconditionn"],
     "de": ["Herstellerverantwortung", "Produktverantwortung", "Verpackung", "Rücknahme",
            "Pfand", "Mehrweg", "Recycling", "Rezyklat"],
     "es": ["responsabilidad ampliada", "envases", "residuos", "depósito", "reciclaje", "recogida"],
@@ -138,9 +143,10 @@ Title: {title}
 Full text:
 {full_text}
 
-Return this JSON structure. Omit optional keys where data is absent, but ALWAYS include the eight
+Return this JSON structure. Omit optional keys where data is absent, but ALWAYS include the twelve
 envelope fields (eco_modulation, recycled_content, penalties, collection_targets, pro_structure,
-bans_restrictions, fee_amounts, labeling) with an explicit "status":
+bans_restrictions, fee_amounts, labeling, repairability, reuse_refill, digital_product_passport,
+remanufacturing) with an explicit "status":
   - "present": the measure addresses this; fill in the details and a verbatim source_excerpt.
   - "absent": you read the text and it does not address this (do NOT guess — only after reading).
   - "not_applicable": the concept cannot apply to this kind of measure.
@@ -210,6 +216,37 @@ bans_restrictions, fee_amounts, labeling) with an explicit "status":
     "status": "<present|absent|not_applicable>",
     "requirements": [{{"type": "<recyclability|material_id|disposal_instructions|deposit_mark|reusability|other>", "on_pack": <true or false>, "detail": "<what must be labeled>"}}],
     "source_excerpt": "<verbatim quote, original language>"
+  }},
+  "repairability": {{
+    "status": "<present|absent|not_applicable>",
+    "has_repair_score": <true or false>,
+    "score_scheme": "<e.g. FR indice de réparabilité, EU repair index/scoring, durability score, or null>",
+    "parts_availability_years": <number or null>,
+    "manuals_required": <true or false>,
+    "disassembly_required": <true or false>,
+    "obsolescence_clause": <true or false>,
+    "source_excerpt": "<verbatim quote, original language>"
+  }},
+  "reuse_refill": {{
+    "status": "<present|absent|not_applicable>",
+    "targets": [{{"scope": "<e.g. beverage packaging, foodware, transport packaging>", "percent": <number or null>, "by_year": "<YYYY or null>"}}],
+    "refill_infrastructure_required": <true or false>,
+    "source_excerpt": "<verbatim quote, original language>"
+  }},
+  "digital_product_passport": {{
+    "status": "<present|absent|not_applicable>",
+    "dpp_required": <true or false>,
+    "data_fields": ["<e.g. material_composition, provenance, repair_info, recycled_content, carbon_footprint>"],
+    "carrier": "<QR|RFID|barcode|unspecified|null>",
+    "effective_year": "<YYYY or null>",
+    "source_excerpt": "<verbatim quote, original language>"
+  }},
+  "remanufacturing": {{
+    "status": "<present|absent|not_applicable>",
+    "remanufacture_allowed": <true or false>,
+    "refurb_standard": "<name/description of any refurbishment or remanufacturing standard, or null>",
+    "secondary_material_targets": [{{"material": "<what the secondary/recovered-material target applies to>", "percent": <number or null>, "by_year": "<YYYY or null>"}}],
+    "source_excerpt": "<verbatim quote, original language>"
   }}
 }}
 """
@@ -241,12 +278,20 @@ class SonnetResult:
     bans_restrictions: dict
     fee_amounts: dict
     labeling: dict
+    # v5 envelopes — repair/durability, reuse & refill, digital product passport, remanufacturing.
+    repairability: dict
+    reuse_refill: dict
+    digital_product_passport: dict
+    remanufacturing: dict
     extraction_version: int
     raw_json: dict
 
 
 class SonnetExtractor:
-    def __init__(self, client: anthropic.AsyncAnthropic | None = None):
+    def __init__(self, client: anthropic.AsyncAnthropic | None = None, model: str = SONNET_MODEL):
+        # model is parameterized (default Sonnet, unchanged) so a Haiku pass can be run for the
+        # cost/quality A/B and the hybrid triage (Haiku presence-detect → Sonnet precise extract).
+        self._model = model
         # 120s timeout (extraction is heavier than Haiku classification, so longer than its 60s) so a
         # hung call fails fast instead of pinning the caller — critically, the classification cycle
         # holds a DB transaction across this call, and an unbounded hang there strands a connection
@@ -259,14 +304,11 @@ class SonnetExtractor:
             api_key=settings.anthropic_api_key, timeout=120.0, max_retries=4
         )
 
-    async def extract(
-        self,
-        state: str,
-        bill_number: str,
-        title: str,
-        full_text: str,
-        region: str = "US",
-    ) -> SonnetResult:
+    def build_params(
+        self, state: str, bill_number: str, title: str, full_text: str, region: str = "US",
+    ) -> dict:
+        """The messages.create kwargs for one bill — factored out so the Batch API can submit the
+        SAME request (model/prompt/schema) without a live call. See scripts/extract_dimensions_batch.py."""
         prompt = USER_TEMPLATE.format(
             state=state,
             bill_number=bill_number or "Unknown",
@@ -275,15 +317,19 @@ class SonnetExtractor:
             # region drives language-aware anchors so native-language law windows on its obligations.
             full_text=select_text_window(full_text, region=region),
         )
-        resp = await self._client.messages.create(
-            model=SONNET_MODEL,
-            max_tokens=16000,  # compliance JSON for large bills overflows a smaller budget; grew with
-            # each envelope wave (4000→8000 v2, →12000 v3, →16000 v4/eight envelopes) to curb truncation
-            temperature=0,
-            system=SYSTEM_PROMPT_TEMPLATE.format(region=region_label(region)),
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = resp.content[0].text.strip()
+        return {
+            "model": self._model,
+            "max_tokens": 16000,  # compliance JSON for large bills overflows a smaller budget; grew with
+            # each envelope wave (4000→8000 v2, →12000 v3, →16000 v4/eight, →v5 twelve) to curb truncation
+            "temperature": 0,
+            "system": SYSTEM_PROMPT_TEMPLATE.format(region=region_label(region)),
+            "messages": [{"role": "user", "content": prompt}],
+        }
+
+    def parse_response(self, raw: str, bill_number: str = "") -> SonnetResult:
+        """Parse a model response (live or batched) into a SonnetResult. Tolerant of prose-wrapped or
+        truncated JSON, exactly as the live path was."""
+        raw = (raw or "").strip()
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
@@ -324,6 +370,17 @@ class SonnetExtractor:
             bans_restrictions=data.get("bans_restrictions", {}),
             fee_amounts=data.get("fee_amounts", {}),
             labeling=data.get("labeling", {}),
+            repairability=data.get("repairability", {}),
+            reuse_refill=data.get("reuse_refill", {}),
+            digital_product_passport=data.get("digital_product_passport", {}),
+            remanufacturing=data.get("remanufacturing", {}),
             extraction_version=data.get("extraction_version", 0),
             raw_json=data,
         )
+
+    async def extract(
+        self, state: str, bill_number: str, title: str, full_text: str, region: str = "US",
+    ) -> SonnetResult:
+        params = self.build_params(state, bill_number, title, full_text, region)
+        resp = await self._client.messages.create(**params)
+        return self.parse_response(resp.content[0].text, bill_number=bill_number)

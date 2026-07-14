@@ -1,0 +1,465 @@
+{
+  "meta": {
+    "version": 1,
+    "purpose": "Golden eval set for the NL->facet query-understanding router (Atlas A1). Each case pins the ideal structured interpretation of a natural-language question so any router (today's deterministic resolve_facets, or a future LLM router) can be scored against a fixed target. Curate this by hand; it is ground truth, not generated.",
+    "how_to_read": "expect.* is the IDEAL router output. baseline.* is a hand-predicted grade of the CURRENT deterministic resolver (app/api/research_facets.py + research.py dimension map), confirmed by tests/eval/score_baseline.py. The gap between them is the router's job.",
+    "role_vocab": {
+      "filter": "hard scope -> becomes a WHERE clause (today's only behavior).",
+      "illustration": "an EXAMPLE of a broader filter ('electronics like phones'); must NOT become an independent AND filter. This is the lever the deterministic scanner cannot pull.",
+      "reference": "a named subject used for comparison, not a scope ('comparable to France's AGEC across all regions'). resolve_facets already does this for places via _EXPANSION_CUES; the router generalizes it."
+    },
+    "intent_vocab": ["lookup", "list", "compare", "count"],
+    "facet_slug_sources": {
+      "materials": "keys of _MATERIAL_ALIASES in app/api/research_facets.py (canonical material_categories). Group 'packaging' expands to plastic_packaging,paper_packaging,glass,metals.",
+      "instruments": "keys of _INSTRUMENT_ALIASES: epr, right_to_repair, deposit_return.",
+      "products": "keys of _PRODUCT_ALIASES: bill_product_coverage.product_slug (electronics/batteries/textiles).",
+      "dimensions": "keys of _DIM_TRIGGERS in app/api/research.py: eco_modulation, recycled_content, collection_targets, pro_structure, labeling, penalties, fee_amounts, bans_restrictions.",
+      "places": "Jurisdiction.name from the DB alias table (data, not code)."
+    },
+    "scoring": {
+      "slug_extraction": "set precision/recall/F1 of extracted vs expected slugs per facet type (materials/instruments/products/dimensions). Places need a DB and are scored separately.",
+      "role_accuracy": "fraction of expected facets whose ROLE (filter/illustration/reference) the router got right. Deterministic baseline = every extracted facet is implicitly 'filter', so non-filter expectations count as role errors.",
+      "intent_accuracy": "exact-match on intent. Deterministic baseline has no intent field -> 0 by construction.",
+      "headline": "role_accuracy + intent_accuracy on the illustrative-vs-filter, reference, and count categories is the number that must move when the router ships."
+    },
+    "baseline_grade_values": ["pass", "partial", "fail", "na", "unknown"]
+  },
+  "cases": [
+    {
+      "id": "reg-france-compare-us",
+      "question": "Is there any examples from France to compare to the US?",
+      "source": "prod-observed",
+      "category": "regression",
+      "why": "Section 2a failure #1. France must be a jurisdiction filter (not a body-text token). Guards the facet layer; the original miss was downstream ranking/narration.",
+      "expect": {
+        "intent": "compare",
+        "places": [{"label": "France", "role": "filter"}, {"label": "United States", "role": "filter"}],
+        "materials": [], "instruments": [], "products": [], "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": ["france", "us"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "Places resolve (France via alias, US via uppercase-code). intent=compare not captured."}
+    },
+    {
+      "id": "reg-france-agec-lookup",
+      "question": "records about the france anti waste law? AGEC?",
+      "source": "prod-observed",
+      "category": "regression",
+      "why": "Section 2a failure #2. AGEC was buried at rank 346 by OR-broad noise. Facet layer must set France=filter and keep 'agec'/'anti waste' as free_text; ranking is the A1.2 fix.",
+      "expect": {
+        "intent": "lookup",
+        "places": [{"label": "France", "role": "filter"}],
+        "materials": [], "instruments": [], "products": [], "dimensions": [],
+        "free_text_includes": ["anti", "waste", "agec"], "free_text_excludes": ["france"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "France->filter, agec survives to free_text. rank-346 dilution is downstream of routing."}
+    },
+    {
+      "id": "ref-france-agec-everywhere",
+      "question": "comparable laws to France's AGEC across all regions",
+      "source": "synthetic",
+      "category": "reference-expansion",
+      "why": "France is a REFERENCE subject, not a scope. 'across all regions' + 'comparable' must NOT lock retrieval to France.",
+      "expect": {
+        "intent": "compare",
+        "places": [{"label": "France", "role": "reference"}],
+        "materials": [], "instruments": [], "products": [], "dimensions": [],
+        "free_text_includes": ["agec"], "free_text_excludes": []
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "partial", "note": "_EXPANSION_CUES already yields reference_labels=[France] (role=reference correct!); intent=compare still not captured."}
+    },
+    {
+      "id": "ref-california-vs-others",
+      "question": "how does California's approach compare to other states?",
+      "source": "synthetic",
+      "category": "reference-expansion",
+      "why": "California is the reference subject; 'other states' is an expansion cue -> don't scope to CA.",
+      "expect": {
+        "intent": "compare",
+        "places": [{"label": "California", "role": "reference"}],
+        "materials": [], "instruments": [], "products": [], "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": []
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "partial", "note": "'other states' is an _EXPANSION_CUE -> reference. intent=compare missed."}
+    },
+    {
+      "id": "repairability-french-repair-index",
+      "question": "are there any similar examples to the French repair index in the corpus?",
+      "source": "prod-observed",
+      "category": "reference-expansion",
+      "why": "France's repair index (AGEC indice de réparabilité) is the exemplar; the user wants comparable measures across the whole corpus. Needs (1) France=reference not scope, (2) intent=compare, (3) a repairability DIMENSION to target the repair-scoring/index/label subset — NARROWER than the broad right_to_repair instrument (378 bills). Surfaces the missing repairability dimension; the instrument alone can't isolate index/scoring measures.",
+      "expect": {
+        "intent": "compare",
+        "places": [{"label": "France", "role": "reference"}],
+        "materials": [], "instruments": [],
+        "products": [],
+        "dimensions": ["repairability"],
+        "free_text_includes": ["repair"], "free_text_excludes": ["france", "french"]
+      },
+      "baseline": {"facet_slugs": "fail", "role_intent": "fail", "note": "No repairability dimension exists (not a compliance_details envelope, not a _DIM_TRIGGER); right_to_repair is only the broad instrument. Deterministic resolver has no such concept and no intent. This case defines the target for the new repairability dimension."}
+    },
+    {
+      "id": "dim-reuse-refill-packaging",
+      "question": "reuse and refill targets for packaging",
+      "source": "synthetic",
+      "category": "dimension-new",
+      "why": "Defines the reuse_refill dimension target — the biggest keyword-theme orphan (125 hits). Reuse/refill mandates are a compliance requirement, not a material or instrument.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [
+          {"slug": "plastic_packaging", "role": "filter"}, {"slug": "paper_packaging", "role": "filter"},
+          {"slug": "glass", "role": "filter"}, {"slug": "metals", "role": "filter"}
+        ],
+        "instruments": [], "products": [],
+        "dimensions": ["reuse_refill"],
+        "free_text_includes": [], "free_text_excludes": ["packaging"]
+      },
+      "baseline": {"facet_slugs": "partial", "role_intent": "fail", "note": "After the 2026-07-13 trigger add, _map_dimension routes reuse_refill; retrieval degrades (no envelope yet). Intent absent in deterministic."}
+    },
+    {
+      "id": "dim-digital-product-passport-batteries",
+      "question": "which bills require a digital product passport for batteries?",
+      "source": "synthetic",
+      "category": "dimension-new",
+      "why": "Defines the digital_product_passport dimension target (EU ESPR / battery reg). Distinct from generic labeling — it's a traceability/disclosure requirement.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [{"slug": "batteries", "role": "filter"}],
+        "instruments": [], "products": [],
+        "dimensions": ["digital_product_passport"],
+        "free_text_includes": [], "free_text_excludes": ["battery", "batteries"]
+      },
+      "baseline": {"facet_slugs": "partial", "role_intent": "fail", "note": "batteries resolves; DPP dimension routes after the trigger add but has no envelope yet."}
+    },
+    {
+      "id": "dim-remanufacturing-electronics",
+      "question": "refurbishment and remanufacturing standards for electronics",
+      "source": "synthetic",
+      "category": "dimension-new",
+      "why": "Defines the remanufacturing dimension target (25 hits). Refurbishment/remanufacturing standards as a requirement facet.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [{"slug": "electronics", "role": "filter"}],
+        "instruments": [], "products": [],
+        "dimensions": ["remanufacturing"],
+        "free_text_includes": [], "free_text_excludes": ["electronics"]
+      },
+      "baseline": {"facet_slugs": "partial", "role_intent": "fail", "note": "electronics resolves; remanufacturing dimension routes after the trigger add but has no envelope yet."}
+    },
+    {
+      "id": "illus-epr-electronics-phones-laptops",
+      "question": "EPR bills on electronics like phones and laptops",
+      "source": "synthetic",
+      "category": "illustrative-vs-filter",
+      "why": "THE canonical lever. 'phones'/'laptops' are illustrations of the electronics filter, not independent product filters. This is what deterministic scanning cannot decide.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [{"slug": "electronics", "role": "filter"}],
+        "instruments": [{"slug": "epr", "role": "filter"}],
+        "products": [{"slug": "phones", "role": "illustration"}, {"slug": "laptops", "role": "illustration"}],
+        "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": []
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "Extracts epr+electronics+phones+laptops all as filters. _scope_extra ANDs material=electronics AND product IN (phones,laptops); an electronics EPR bill without per-product coverage rows for BOTH phones and laptops is wrongly excluded."}
+    },
+    {
+      "id": "illus-discriminator-cover-laptops",
+      "question": "which bills cover laptops?",
+      "source": "synthetic",
+      "category": "illustrative-vs-filter",
+      "why": "Discriminator partner to the above. Same token 'laptops' but here it IS the filter. A router must not over-generalize illustration detection.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [], "instruments": [],
+        "products": [{"slug": "laptops", "role": "filter"}],
+        "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": ["laptops"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "pass", "note": "product=laptops as filter is correct here. Deterministic gets this one right; the router must too."}
+    },
+    {
+      "id": "illus-recycled-content-packaging-bottles-cans",
+      "question": "recycled content rules for packaging such as bottles and cans",
+      "source": "synthetic",
+      "category": "illustrative-vs-filter",
+      "why": "'bottles and cans' illustrate packaging; should not become hard product/material filters on top of the packaging group.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [
+          {"slug": "plastic_packaging", "role": "filter"}, {"slug": "paper_packaging", "role": "filter"},
+          {"slug": "glass", "role": "filter"}, {"slug": "metals", "role": "filter"}
+        ],
+        "instruments": [],
+        "products": [],
+        "dimensions": ["recycled_content"],
+        "free_text_includes": [], "free_text_excludes": ["packaging"]
+      },
+      "baseline": {"facet_slugs": "partial", "role_intent": "fail", "note": "'packaging' group expands correctly; 'bottles'/'cans' fall to free_text (no standalone alias). Dimension recycled_content is resolved in research.py, not the facet resolver -> split ownership."}
+    },
+    {
+      "id": "illus-textile-takeback-clothing-footwear",
+      "question": "textile take-back schemes covering clothing and footwear",
+      "source": "synthetic",
+      "category": "illustrative-vs-filter",
+      "why": "clothing/footwear illustrate the textiles filter; ANDing them as product filters over-narrows.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [{"slug": "textiles", "role": "filter"}],
+        "instruments": [],
+        "products": [{"slug": "clothing", "role": "illustration"}, {"slug": "footwear", "role": "illustration"}],
+        "dimensions": ["collection_targets"],
+        "free_text_includes": [], "free_text_excludes": ["textile"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "textiles + clothing + footwear all extracted as filters -> _scope_extra ANDs product coverage IN (clothing,footwear), over-filtering the textiles set."}
+    },
+    {
+      "id": "para-ewaste-eu",
+      "question": "what's happening with e-waste in the EU?",
+      "source": "synthetic",
+      "category": "paraphrase",
+      "why": "Colloquial 'e-waste' + region code. Shows a paraphrase the alias table DOES cover (electronics) and a jurisdiction subtree (EU).",
+      "expect": {
+        "intent": "list",
+        "places": [{"label": "European Union", "role": "filter"}],
+        "materials": [{"slug": "electronics", "role": "filter"}],
+        "instruments": [], "products": [], "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": ["e-waste", "eu"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "'e-waste' aliased to electronics; 'EU' uppercase -> jurisdiction. Works today."}
+    },
+    {
+      "id": "para-mattresses-disposal",
+      "question": "any rules about throwing away old mattresses?",
+      "source": "synthetic",
+      "category": "paraphrase",
+      "why": "Indirect phrasing for a material. Material alias fires; the router should also strip 'throwing away old' chrome that survives today.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [{"slug": "mattresses", "role": "filter"}],
+        "instruments": [], "products": [], "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": ["mattresses"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "mattresses matched; 'throwing/away/old' pollute free_text (not stopwords)."}
+    },
+    {
+      "id": "para-single-use-plastic-bans",
+      "question": "single-use plastic bans",
+      "source": "synthetic",
+      "category": "paraphrase",
+      "why": "Compound material alias + dimension trigger.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [{"slug": "plastic_packaging", "role": "filter"}],
+        "instruments": [], "products": [],
+        "dimensions": ["bans_restrictions"],
+        "free_text_includes": [], "free_text_excludes": ["plastic"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "'single-use plastic' -> plastic_packaging; 'bans' -> bans_restrictions (research.py)."}
+    },
+    {
+      "id": "para-smartphone-repairability-gap",
+      "question": "smartphone take-back and repairability requirements",
+      "source": "synthetic",
+      "category": "paraphrase",
+      "why": "ALIAS-COVERAGE GAP: 'repairability' is not in _INSTRUMENT_ALIASES ('right to repair' only), so the scanner misses the right_to_repair instrument. The router should infer it.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [],
+        "instruments": [{"slug": "right_to_repair", "role": "filter"}],
+        "products": [{"slug": "phones", "role": "filter"}],
+        "dimensions": ["collection_targets"],
+        "free_text_includes": [], "free_text_excludes": ["smartphone"]
+      },
+      "baseline": {"facet_slugs": "partial", "role_intent": "fail", "note": "'smartphone'->phones works; 'repairability' does NOT match right_to_repair (alias is 'right to repair'). Instrument missed entirely."}
+    },
+    {
+      "id": "degrade-cigarette-litter",
+      "question": "cigarette butt litter laws",
+      "source": "synthetic",
+      "category": "graceful-degradation",
+      "why": "Out-of-taxonomy subject. Correct behavior is NO facet + everything to free_text. Tests that the ROUTER also refuses to hallucinate a slug.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [], "instruments": [], "products": [], "dimensions": [],
+        "free_text_includes": ["cigarette", "butt", "litter"], "free_text_excludes": []
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "na", "note": "No facet aliases fire; all to free_text. Correct. The risk here is a future LLM router inventing a bogus material."}
+    },
+    {
+      "id": "degrade-pfas-food-packaging",
+      "question": "PFAS restrictions in food packaging",
+      "source": "synthetic",
+      "category": "graceful-degradation",
+      "why": "PFAS is a substance not in the material taxonomy -> free_text; 'packaging' -> group filter; 'restrictions' -> dimension.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [
+          {"slug": "plastic_packaging", "role": "filter"}, {"slug": "paper_packaging", "role": "filter"},
+          {"slug": "glass", "role": "filter"}, {"slug": "metals", "role": "filter"}
+        ],
+        "instruments": [], "products": [],
+        "dimensions": ["bans_restrictions"],
+        "free_text_includes": ["pfas"], "free_text_excludes": ["packaging"]
+      },
+      "baseline": {"facet_slugs": "partial", "role_intent": "fail", "note": "'packaging' group fires; PFAS->free_text (correct); 'restrict' dimension in research.py. Arguably packaging is too broad for 'food packaging' - router could narrow to plastic+paper."}
+    },
+    {
+      "id": "ambig-georgia",
+      "question": "Georgia recycling laws",
+      "source": "synthetic",
+      "category": "ambiguity",
+      "why": "'Georgia' = US state OR country. Router should surface BOTH (spec open decision), not silently pick one.",
+      "expect": {
+        "intent": "list",
+        "places": [
+          {"label": "Georgia", "role": "filter", "ambiguous": true, "disambig": "US state"},
+          {"label": "Georgia", "role": "filter", "ambiguous": true, "disambig": "country"}
+        ],
+        "materials": [], "instruments": [], "products": [], "dimensions": [],
+        "free_text_includes": ["recycling"], "free_text_excludes": ["georgia"]
+      },
+      "baseline": {"facet_slugs": "unknown", "role_intent": "fail", "note": "alias 'georgia' matches both nodes -> both in place_ids, but no ambiguity flag surfaced to the user. Needs DB to confirm."}
+    },
+    {
+      "id": "count-states-battery-epr",
+      "question": "how many US states have battery EPR?",
+      "source": "synthetic",
+      "category": "count",
+      "why": "Intent=count changes the answer shape (a number, not a list). Nothing today captures count-vs-list.",
+      "expect": {
+        "intent": "count",
+        "places": [{"label": "United States", "role": "filter"}],
+        "materials": [{"slug": "batteries", "role": "filter"}],
+        "instruments": [{"slug": "epr", "role": "filter"}],
+        "products": [], "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": ["battery", "epr", "us"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "batteries+epr+US all resolve as filters. intent=count entirely absent -> answer would list, not count."}
+    },
+    {
+      "id": "count-compare-ca-eu-recycled",
+      "question": "compare recycled-content mandates between California and the EU",
+      "source": "synthetic",
+      "category": "compare",
+      "why": "Two-jurisdiction compare + dimension. intent=compare should drive a side-by-side answer.",
+      "expect": {
+        "intent": "compare",
+        "places": [{"label": "California", "role": "filter"}, {"label": "European Union", "role": "filter"}],
+        "materials": [], "instruments": [], "products": [],
+        "dimensions": ["recycled_content"],
+        "free_text_includes": [], "free_text_excludes": ["california", "eu"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "CA + EU resolve; 'recycled-content' dimension. intent=compare missed."}
+    },
+    {
+      "id": "noreg-most-compelling-incentives",
+      "question": "most compelling incentives",
+      "source": "spec-a1.5",
+      "category": "no-regress",
+      "why": "Known good case (spec A1.5 #3). Must still resolve to the eco_modulation set, not a junk text search.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [], "instruments": [], "products": [],
+        "dimensions": ["eco_modulation"],
+        "free_text_includes": [], "free_text_excludes": []
+      },
+      "baseline": {"facet_slugs": "unknown", "role_intent": "fail", "note": "Dimension routing ('incentiv'->eco_modulation) lives in _relevant_bills and competes with the free-text tier; run the harness/prod to confirm which wins."}
+    },
+    {
+      "id": "noreg-deposit-return-beverage",
+      "question": "deposit return for beverage containers",
+      "source": "spec-a1.5",
+      "category": "no-regress",
+      "why": "Known good precise case. Instrument alias must win.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [],
+        "instruments": [{"slug": "deposit_return", "role": "filter"}],
+        "products": [], "dimensions": [],
+        "free_text_includes": ["beverage"], "free_text_excludes": ["deposit"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "'deposit return' -> deposit_return instrument. 'beverage containers' to free_text."}
+    },
+    {
+      "id": "noreg-paint-epr-us",
+      "question": "paint EPR in the US",
+      "source": "synthetic",
+      "category": "no-regress",
+      "why": "Clean multi-facet regression guard (material + instrument + place).",
+      "expect": {
+        "intent": "list",
+        "places": [{"label": "United States", "role": "filter"}],
+        "materials": [{"slug": "paint", "role": "filter"}],
+        "instruments": [{"slug": "epr", "role": "filter"}],
+        "products": [], "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": ["paint", "epr", "us"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "fail", "note": "paint+epr+US all resolve. Clean today."}
+    },
+    {
+      "id": "noreg-carpet-stewardship",
+      "question": "carpet stewardship programs",
+      "source": "synthetic",
+      "category": "no-regress",
+      "why": "Material + PRO-structure dimension; 'stewardship programs' should ideally hit pro_structure.",
+      "expect": {
+        "intent": "list",
+        "places": [],
+        "materials": [{"slug": "carpet", "role": "filter"}],
+        "instruments": [], "products": [],
+        "dimensions": ["pro_structure"],
+        "free_text_includes": [], "free_text_excludes": ["carpet"]
+      },
+      "baseline": {"facet_slugs": "partial", "role_intent": "fail", "note": "carpet matched; but _DIM_TRIGGERS wants 'stewardship organization/plan', so bare 'stewardship programs' likely misses pro_structure -> a dimension gap the router can close."}
+    },
+    {
+      "id": "neg-packaging-epr-except-ca",
+      "question": "packaging EPR everywhere except California",
+      "source": "synthetic",
+      "category": "negation",
+      "why": "STRETCH. Exclusion is not in the Facets contract. Tracks whether the router (or a later phase) can express NOT-a-place.",
+      "expect": {
+        "intent": "list",
+        "places": [{"label": "California", "role": "exclude"}],
+        "materials": [
+          {"slug": "plastic_packaging", "role": "filter"}, {"slug": "paper_packaging", "role": "filter"},
+          {"slug": "glass", "role": "filter"}, {"slug": "metals", "role": "filter"}
+        ],
+        "instruments": [{"slug": "epr", "role": "filter"}],
+        "products": [], "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": ["packaging", "epr", "california"]
+      },
+      "baseline": {"facet_slugs": "fail", "role_intent": "fail", "note": "California would be ADDED as a filter (opposite of intent). Exclusion unsupported end to end; expected-fail until a later phase. Included to track the ceiling."}
+    },
+    {
+      "id": "ctx-followup-just-california",
+      "question": "what about just California?",
+      "source": "synthetic",
+      "category": "follow-up",
+      "why": "STRETCH (A2 contextual rewrite). Standalone this is meaningless; with prior turn 'tires EPR' it means 'tires EPR in California'. Defines the follow-up target.",
+      "context_prior": ["tires EPR"],
+      "expect": {
+        "intent": "list",
+        "places": [{"label": "California", "role": "filter"}],
+        "materials": [{"slug": "tires", "role": "filter"}],
+        "instruments": [{"slug": "epr", "role": "filter"}],
+        "products": [], "dimensions": [],
+        "free_text_includes": [], "free_text_excludes": ["california"]
+      },
+      "baseline": {"facet_slugs": "fail", "role_intent": "fail", "note": "Stateless resolver sees only 'what about just California?' -> place=California, loses tires+epr. Needs the A2 contextual rewrite; excluded from the offline baseline run."}
+    }
+  ]
+}

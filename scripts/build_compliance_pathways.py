@@ -195,6 +195,89 @@ EU_MATERIAL_TO_SLUG = {
     "batteries": "eu-batteries", "plastics": "eu-sup",
 }
 
+# --- Foreign national directory (region != US/EU). Foreign acts carry no US-style management_model,
+# so they route through build_pathway_foreign: a per-region national producer register / éco-organisme
+# hub (so the frontend has an entity to render a link), which scripts/propose_compliance_links.py then
+# upgrades to the bill-specific registration page. Wave 1 = FR/JP/UK/DE (EU handled separately). Long-
+# tail regions fall back to their bill source_url until curated. ---
+FOREIGN_ENTITIES = [
+    # France — SYDEREP (ADEME's national producer register) is the hub; per-filière éco-organismes below.
+    dict(slug="fr-syderep", region="FR", name="ADEME — Registre SYDEREP (French EPR producer register)",
+         entity_type="agency", url="https://www.syderep.ademe.fr/",
+         registration_url="https://www.syderep.ademe.fr/", jurisdiction_scope="single_state",
+         home_state=None, materials=None,
+         description="France's national register where producers declare under each REP filière (managed by ADEME)."),
+    dict(slug="fr-citeo", region="FR", name="Citeo (packaging & paper éco-organisme)", entity_type="pro",
+         url="https://www.citeo.com/", registration_url="https://www.citeo.com/nous-rejoindre",
+         jurisdiction_scope="single_state", home_state=None,
+         materials=["packaging", "plastic_packaging", "paper_packaging", "paper"],
+         description="Designated éco-organisme for household packaging and graphic paper in France."),
+    dict(slug="fr-ecologic", region="FR", name="Ecologic (WEEE & batteries éco-organisme)", entity_type="pro",
+         url="https://www.ecologic-france.com/", registration_url="https://www.ecologic-france.com/producteurs",
+         jurisdiction_scope="single_state", home_state=None, materials=["electronics", "batteries"],
+         description="French éco-organisme for electrical & electronic equipment and batteries."),
+    dict(slug="fr-refashion", region="FR", name="Refashion (textiles & footwear éco-organisme)",
+         entity_type="pro", url="https://refashion.fr/",
+         registration_url="https://refashion.fr/pro/fr/adherer", jurisdiction_scope="single_state",
+         home_state=None, materials=["textiles"],
+         description="Designated éco-organisme for the clothing, household-linen and footwear REP in France."),
+    # Japan — no single register; producers comply via designated corporations per recycling law. METI/MOE hub.
+    dict(slug="jp-meti", region="JP", name="METI/MOE — Japan recycling schemes", entity_type="agency",
+         url="https://www.meti.go.jp/policy/recycle/", registration_url=None,
+         jurisdiction_scope="single_state", home_state=None, materials=None,
+         description="Ministry hub for Japan's product-specific recycling laws (containers, appliances, small electronics)."),
+    dict(slug="jp-jcpra", region="JP", name="Japan Containers and Packaging Recycling Association (JCPRA)",
+         entity_type="pro", url="https://www.jcpra.or.jp/",
+         registration_url="https://www.jcpra.or.jp/business/", jurisdiction_scope="single_state",
+         home_state=None, materials=["packaging", "plastic_packaging", "paper_packaging", "glass"],
+         description="Designated body specified businesses pay into under Japan's Containers & Packaging Recycling Law."),
+    # United Kingdom — gov.uk producer-responsibility services (packaging EPR, WEEE via approved schemes).
+    dict(slug="uk-producer-responsibility", region="UK", name="GOV.UK — Producer responsibility",
+         entity_type="agency", url="https://www.gov.uk/guidance/producer-responsibility-regulations",
+         registration_url="https://www.gov.uk/guidance/producer-responsibility-regulations",
+         jurisdiction_scope="single_state", home_state=None, materials=None,
+         description="UK guidance hub for packaging, WEEE, batteries and ELV producer-responsibility duties."),
+    dict(slug="uk-epr-packaging", region="UK", name="GOV.UK — Extended producer responsibility for packaging",
+         entity_type="agency", url="https://www.gov.uk/guidance/extended-producer-responsibility-for-packaging-who-is-affected-and-what-to-do",
+         registration_url="https://www.gov.uk/guidance/report-packaging-data",
+         jurisdiction_scope="single_state", home_state=None,
+         materials=["packaging", "plastic_packaging", "paper_packaging"],
+         description="UK packaging EPR: obligated producers register and report packaging data via the RPD service."),
+    dict(slug="uk-weee", region="UK", name="GOV.UK — WEEE producer responsibility", entity_type="agency",
+         url="https://www.gov.uk/guidance/electrical-and-electronic-equipment-eee-producer-responsibility",
+         registration_url="https://www.gov.uk/guidance/electrical-and-electronic-equipment-eee-producer-responsibility",
+         jurisdiction_scope="single_state", home_state=None, materials=["electronics"],
+         description="EEE producers must join an approved WEEE producer compliance scheme (PCS) and register."),
+    # Germany — LUCID (packaging register) and stiftung ear (EEE/batteries register).
+    dict(slug="de-lucid", region="DE", name="Stiftung Zentrale Stelle Verpackungsregister (LUCID)",
+         entity_type="agency", url="https://www.verpackungsregister.org/",
+         registration_url="https://lucid.verpackungsregister.org/", jurisdiction_scope="single_state",
+         home_state=None, materials=["packaging", "plastic_packaging", "paper_packaging", "glass"],
+         description="Germany's mandatory packaging register (VerpackG); producers register in LUCID before selling."),
+    dict(slug="de-ear", region="DE", name="stiftung ear (EEE & batteries register)", entity_type="agency",
+         url="https://www.stiftung-ear.de/", registration_url="https://www.stiftung-ear.de/en/registration",
+         jurisdiction_scope="single_state", home_state=None, materials=["electronics", "batteries"],
+         description="Germany's registration authority for electrical equipment (ElektroG) and batteries (BattG)."),
+    # Neutral DE hub — the default for German laws with no material-specific register (ELV, waste wood,
+    # bio-waste, etc.), so an unresolved baseline doesn't point at the packaging register by mistake.
+    dict(slug="de-bmuv", region="DE", name="German Environment Ministry (BMUV) — waste & circular economy",
+         entity_type="agency", url="https://www.bmuv.de/themen/wasser-ressourcen-abfall",
+         registration_url=None, jurisdiction_scope="single_state", home_state=None, materials=None,
+         description="Federal ministry hub for German waste and circular-economy law; starting point where no dedicated register applies."),
+]
+ENTITIES += FOREIGN_ENTITIES
+
+# (region, material) -> foreign entity slug; falls back to FOREIGN_REGION_DEFAULT when no material match.
+FOREIGN_MATERIAL_TO_SLUG = {}
+for _fe in FOREIGN_ENTITIES:
+    for _m in (_fe.get("materials") or []):
+        FOREIGN_MATERIAL_TO_SLUG.setdefault((_fe["region"], _m), _fe["slug"])
+# The generic per-region hub entity used when no material-specific éco-organisme is known.
+FOREIGN_REGION_DEFAULT = {"FR": "fr-syderep", "JP": "jp-meti", "UK": "uk-producer-responsibility",
+                          "DE": "de-bmuv"}
+# Human-readable jurisdiction names for the action_summary framing.
+FOREIGN_REGION_LABELS = {"FR": "France", "JP": "Japan", "UK": "the United Kingdom", "DE": "Germany"}
+
 # source_url domain -> entity slug (highest-precision link signal)
 DOMAIN_TO_SLUG = {
     "paintcare.org": "paintcare",
@@ -599,6 +682,55 @@ EU_OVERRIDES = {
 }
 
 
+# --- Foreign per-bill overrides (region != US/EU). The analog of BILL_OVERRIDES, keyed on
+# (region, normalized bill_number). Human-curated entries land here; the finder's auto-writes go
+# straight to compliance_pathway (basis='ai_verified') and are NOT clobbered on rebuild. ---
+FOREIGN_OVERRIDES = {
+    # ("FR", _norm_bn("...")): dict(entity_slug="fr-refashion", url="...",
+    #     action_type="join_pro", action_summary="..."),
+}
+
+
+def apply_foreign_override(region, bn, p, entities_by_slug):
+    """Apply a curated FOREIGN_OVERRIDES entry (per region+bill) onto a computed foreign pathway."""
+    ov = FOREIGN_OVERRIDES.get((region, _norm_bn(bn)))
+    if not ov:
+        return p
+    if ov.get("entity_slug"):
+        ent = entities_by_slug.get(ov["entity_slug"])
+        if ent:
+            p["entity_slug"] = ent["slug"]
+            p["registration_url"] = ov.get("url") or ent.get("registration_url") or ent.get("url")
+    if ov.get("url"):
+        p["registration_url"] = ov["url"]
+    if ov.get("action_type"):
+        p["action_type"] = ov["action_type"]
+    if ov.get("action_summary"):
+        p["action_summary"] = ov["action_summary"]
+    p["basis"] = "manual"
+    return p
+
+
+def build_pathway_foreign(law, entities_by_slug, region):
+    """Foreign national law: attach the per-region register/éco-organisme hub (material-specific if
+    known) so a link renders, default action to 'monitor', then apply any curated override. The
+    bill-specific registration page is filled later by propose_compliance_links.py (basis='ai_verified')."""
+    state, bn, model, scope, conf, mats, surl, next_dl, has_fee = law
+    mat = material_label(mats)
+    slug = next((FOREIGN_MATERIAL_TO_SLUG[(region, m)] for m in (mats or [])
+                 if (region, m) in FOREIGN_MATERIAL_TO_SLUG), None) or FOREIGN_REGION_DEFAULT.get(region)
+    entity = entities_by_slug.get(slug) if slug else None
+    reg = (entity.get("registration_url") or entity.get("url")) if entity else surl
+    country = FOREIGN_REGION_LABELS.get(region, region)
+    p = dict(entity_slug=(entity["slug"] if entity else None), action_type="monitor",
+             action_summary=(f"National EPR law of {country} affecting {mat}. Register with the "
+                             f"designated national producer register / éco-organisme and monitor "
+                             f"implementing decrees for your obligations."),
+             registration_url=reg, management_model=None, next_deadline_date=next_dl,
+             has_fee=has_fee, confidence=conf, basis="region_default")
+    return apply_foreign_override(region, bn, p, entities_by_slug)
+
+
 def _eu_material_slug(mats):
     for m in (mats or []):
         if m in EU_MATERIAL_TO_SLUG:
@@ -634,6 +766,8 @@ def build_pathway_eu(law, entities_by_slug):
 def build_pathway(law, entities_by_slug, region="US"):
     if region == "EU":
         return build_pathway_eu(law, entities_by_slug)
+    if region != "US":  # any foreign national law — never run through US management-model logic
+        return build_pathway_foreign(law, entities_by_slug, region)
     state, bn, model, scope, conf, mats, surl, next_dl, has_fee = law
     mat = material_label(mats)
     slug, basis = pick_entity_slug(model, mats, surl)
@@ -724,6 +858,19 @@ def main():
         region_clause = "and b.region='US' and b.state!='US'"
     elif region == "ALL":
         region_clause = "and ((b.region='US' and b.state!='US') or b.region!='US')"
+    elif "," in region:
+        # Explicit CSV list, e.g. FR,JP,UK,DE,EU. Codes are validated (alnum, <=4) before interpolation.
+        codes = [c.strip() for c in region.split(",") if c.strip()]
+        if not all(c.isalnum() and len(c) <= 4 for c in codes):
+            sys.exit(f"invalid --region list: {region}")
+        # US in the list means "US bills excluding the federal state='US' pseudo-row".
+        parts = []
+        if "US" in codes:
+            parts.append("(b.region='US' and b.state!='US')")
+        foreign = [c for c in codes if c != "US"]
+        if foreign:
+            parts.append("b.region in (" + ",".join(f"'{c}'" for c in foreign) + ")")
+        region_clause = "and (" + " or ".join(parts) + ")"
     else:
         region_clause = "and b.region=:region"
     sql = text(f"""
@@ -738,7 +885,7 @@ def main():
         from bills b
         where b.ce_relevant and b.status='enacted' {region_clause}
     """)
-    params = {} if region in ("US", "ALL") else {"region": region}
+    params = {} if (region in ("US", "ALL") or "," in region) else {"region": region}
     with engine.connect() as c:
         rows = list(c.execute(sql, params))
 
@@ -764,6 +911,7 @@ def main():
                       action_type=excluded.action_type, action_summary=excluded.action_summary,
                       registration_url=excluded.registration_url, next_deadline_date=excluded.next_deadline_date,
                       has_fee=excluded.has_fee, confidence=excluded.confidence, basis=excluded.basis
+                    where compliance_pathway.basis is distinct from 'ai_verified'
                 """), {"bid": bid, "eid": ent_id, "region": bregion, "mm": p["management_model"],
                        "at": p["action_type"], "sm": p["action_summary"], "reg": p["registration_url"],
                        "dl": p["next_deadline_date"], "fee": p["has_fee"], "conf": p["confidence"],

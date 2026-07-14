@@ -39,16 +39,24 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.classification.sonnet_extractor import EXTRACTION_VERSION, SonnetExtractor  # noqa: E402
 from app.config import settings  # noqa: E402
 
+# Triage model for the hybrid --triage pass (see docs/DIMENSION_EXPANSION_PLAN.md 2a: measured 87%
+# presence-recall, so a cheap Haiku "is there any dimension here?" gate escalates to Sonnet only the
+# bills that carry content).
+HAIKU_TRIAGE_MODEL = "claude-haiku-4-5-20251001"
+
 # The envelope fields this backfill writes (must match SonnetResult attrs). Kept in one place so the
 # merge + reporting stay in sync; v3 added collection_targets/pro_structure/bans_restrictions, v4
 # added fee_amounts/labeling.
 ENVELOPES = ("eco_modulation", "recycled_content", "penalties",
              "collection_targets", "pro_structure", "bans_restrictions",
-             "fee_amounts", "labeling")
+             "fee_amounts", "labeling",
+             "repairability", "reuse_refill", "digital_product_passport", "remanufacturing")
 # Short labels for the per-bill progress line so all envelopes fit on one row.
 _SHORT = {"eco_modulation": "eco", "recycled_content": "rc", "penalties": "pen",
           "collection_targets": "coll", "pro_structure": "pro", "bans_restrictions": "ban",
-          "fee_amounts": "fee", "labeling": "lbl"}
+          "fee_amounts": "fee", "labeling": "lbl",
+          "repairability": "rep", "reuse_refill": "reu", "digital_product_passport": "dpp",
+          "remanufacturing": "rem"}
 
 
 def _normalize_dsn(dsn: str) -> str:
@@ -93,6 +101,11 @@ async def main() -> None:
                     "overlapping calls cuts a ~1000-bill run from hours to ~1h. DB writes stay serial.")
     ap.add_argument("--all", action="store_true",
                     help="Reprocess bills already at the current extraction_version.")
+    ap.add_argument("--triage", action="store_true",
+                    help="Hybrid: a cheap Haiku presence-pass runs first; Sonnet does the precise "
+                    "extraction only on bills Haiku flags with >=1 dimension present (or where Haiku "
+                    "is uncertain). Records compliance_details.extraction_triage so a later Sonnet "
+                    "audit can revisit the Haiku-only bills. See DIMENSION_EXPANSION_PLAN.md 2a.")
     ap.add_argument("--dry-run", action="store_true", help="Extract + report; no writes.")
     args = ap.parse_args()
     regions = [r.strip().upper() for r in (args.region or "").split(",") if r.strip()] or None
@@ -102,29 +115,41 @@ async def main() -> None:
     engine = create_async_engine(_normalize_dsn(args.dsn or settings.database_url), pool_pre_ping=True)
     Session = async_sessionmaker(engine, expire_on_commit=False)
     extractor = SonnetExtractor()
+    haiku = SonnetExtractor(model=HAIKU_TRIAGE_MODEL) if args.triage else None
 
     async with Session() as db:
         bills = await _candidates(db, regions, only_stale=not args.all, limit=args.limit)
         print(f"{len(bills)} candidate bills (regions={regions or 'all'}, "
               f"{'all' if args.all else f'below v{EXTRACTION_VERSION}'}, limit={args.limit})\n")
 
+        def _any_present(ex) -> bool:
+            return any(_status(getattr(ex, e) or {}) == "present" for e in ENVELOPES)
+
         async def _do_extract(b):
             # Extract only (no DB) so a whole chunk's slow LLM calls overlap; caller writes serially.
+            kw = dict(state=b.state, bill_number=b.bill_number or "", title=b.title or "",
+                      full_text=b.full_text, region=b.region)
             try:
-                ex = await extractor.extract(
-                    state=b.state, bill_number=b.bill_number or "", title=b.title or "",
-                    full_text=b.full_text, region=b.region,
-                )
-                return b, ex, None
+                if haiku is not None:
+                    hr = await haiku.extract(**kw)
+                    # Only skip Sonnet when Haiku parsed cleanly AND found nothing. If Haiku found any
+                    # dimension (it over-triggers, so this is high-recall) OR failed to parse, escalate.
+                    if hr.raw_json and not _any_present(hr):
+                        return b, hr, "haiku_only", None
+                    ex = await extractor.extract(**kw)
+                    return b, ex, "sonnet_escalated", None
+                ex = await extractor.extract(**kw)
+                return b, ex, "sonnet", None
             except Exception as e:  # noqa: BLE001
-                return b, None, e
+                return b, None, None, e
 
         tallies = {e: Counter() for e in ENVELOPES}
+        src_counts: Counter = Counter()
         wrote = failed = 0
         step = max(1, args.concurrency)
         for i in range(0, len(bills), step):
             chunk = bills[i:i + step]
-            for b, ex, err in await asyncio.gather(*[_do_extract(x) for x in chunk]):
+            for b, ex, source, err in await asyncio.gather(*[_do_extract(x) for x in chunk]):
                 tag = f"{b.region}/{b.state} {b.bill_number or '?'}"
                 if err is not None:
                     print(f"  [fail]  {tag}: {type(err).__name__}: {err}", flush=True)
@@ -134,12 +159,14 @@ async def main() -> None:
                     print(f"  [empty] {tag}: parse failed, left unversioned for retry", flush=True)
                     failed += 1
                     continue
+                src_counts[source] += 1
                 envs = {e: getattr(ex, e) or {} for e in ENVELOPES}
                 for e in ENVELOPES:
                     tallies[e][_status(envs[e])] += 1
-                # Compact one-line status for all six (p=present, a=absent, n/a=not_applicable, -=missing).
+                # Compact one-line status for all envelopes (p/a/n/a/-); src tag shows the hybrid path.
                 compact = " ".join(f"{_SHORT[e]}={_status(envs[e])[:3]}" for e in ENVELOPES)
-                print(f"  {tag:22s} {compact}", flush=True)
+                srctag = {"haiku_only": "[H] ", "sonnet_escalated": "[H>S]", "sonnet": ""}.get(source, "")
+                print(f"  {tag:22s} {srctag:5s}{compact}", flush=True)
 
                 if args.dry_run:
                     continue
@@ -148,6 +175,7 @@ async def main() -> None:
                     cd = json.loads(cd)
                 cd.update(envs)
                 cd["extraction_version"] = EXTRACTION_VERSION
+                cd["extraction_triage"] = source  # sonnet | sonnet_escalated | haiku_only
                 # A dropped connection here must skip this bill (it stays below-version for the next
                 # run), not crash the whole batch — pool_pre_ping hands the next bill a live connection.
                 try:
@@ -165,6 +193,11 @@ async def main() -> None:
                   f"({wrote} written, {failed} failed)", flush=True)
 
         print(f"\nprocessed {len(bills)} ({failed} failed/empty)")
+        if args.triage:
+            esc = src_counts["sonnet_escalated"]
+            done = esc + src_counts["haiku_only"]
+            print(f"  triage: {src_counts['haiku_only']} haiku-only (Sonnet skipped), {esc} escalated "
+                  f"to Sonnet" + (f" — {esc/done*100:.0f}% needed Sonnet" if done else ""))
         for e in ENVELOPES:
             summary = ", ".join(f"{k}={n}" for k, n in tallies[e].most_common())
             print(f"  {e:18s} {summary or '—'}")

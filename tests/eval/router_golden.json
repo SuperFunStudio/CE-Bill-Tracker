@@ -98,6 +98,21 @@
       "baseline": {"facet_slugs": "fail", "role_intent": "fail", "note": "No repairability dimension exists (not a compliance_details envelope, not a _DIM_TRIGGER); right_to_repair is only the broad instrument. Deterministic resolver has no such concept and no intent. This case defines the target for the new repairability dimension."}
     },
     {
+      "id": "diversity-unique-types-oyster-repair",
+      "question": "What are the most unique types of bills and laws across the corpus for example material specific incentives like texas's oyster bills, france's repairability index, etc?",
+      "source": "prod-observed",
+      "category": "diversity-outlier",
+      "why": "Prod regression (2026-07-15). A corpus-DIVERSITY ask ('most unique TYPES across the corpus') whose named entities are all EXAMPLES: Texas/France are benchmarks (reference, via the 'across the corpus' everywhere-cue), and 'incentives'/'repairability index' merely illustrate what a 'unique type' means. The deterministic path collapsed the answer to dimension:repairability (389 repair bills): the multi-term free-text AND found 0, and the RULE-2 fallback latched onto the lone word 'repairability' sitting inside the France example. Ideal interpretation: NO hard filter at all — least of all a repairability dimension. Fix lives at the retrieval layer (an illustrative-aside guard on RULE 2 + a diversity/outlier sampler, RULE 2.5, that spreads across instrument_type clusters); this case guards that the facet interpretation derives no spurious scope so retrieval is free to sample the corpus's variety.",
+      "expect": {
+        "intent": "list",
+        "places": [{"label": "France", "role": "reference"}, {"label": "Texas", "role": "reference"}],
+        "materials": [], "instruments": [], "products": [],
+        "dimensions": [],
+        "free_text_includes": ["oyster"], "free_text_excludes": ["france", "texas"]
+      },
+      "baseline": {"facet_slugs": "pass", "role_intent": "partial", "note": "Post-fix: France+Texas resolve as reference (everywhere-cue), no material/instrument/product scope, and dimensions is empty because _trigger_is_illustrative suppresses the illustrative 'repairability' — so the facet layer now derives the correct no-scope interpretation. The diversity SAMPLING itself (RULE 2.5 in _relevant_bills) is a retrieval mode not representable in this facet schema; it is downstream of what this case scores. intent=list still missing (no field)."}
+    },
+    {
       "id": "dim-reuse-refill-packaging",
       "question": "reuse and refill targets for packaging",
       "source": "synthetic",

@@ -33,17 +33,25 @@ sys.path.insert(0, ROOT)
 from app.api.research_facets import _match_materials, _match_instruments, _match_products  # noqa: E402
 
 try:
-    from app.api.research import _map_dimension  # noqa: E402
+    from app.api.research import _map_dimension, _trigger_is_illustrative  # noqa: E402
     HAVE_DIM = True
 except Exception as e:
-    _map_dimension, HAVE_DIM, _DIM_IMPORT_ERR = None, False, repr(e)
+    _map_dimension, _trigger_is_illustrative, HAVE_DIM, _DIM_IMPORT_ERR = None, None, False, repr(e)
 
 SLUG_FACETS = ("materials", "instruments", "products")
 
 
 # ---------- normalized `got` shape: {facet: {slug: role}}, places {label: role}, dimensions set ----------
 def _dim(q):
-    return {_map_dimension(q)} - {None} if HAVE_DIM else set()
+    """The dimension the deterministic RETRIEVAL would actually filter by — i.e. _map_dimension's hit
+    minus the illustrative-aside guard RULE 2 applies, so the eval mirrors _relevant_bills (a dimension
+    word that only appears inside a '...like X' example never becomes a filter)."""
+    if not HAVE_DIM:
+        return set()
+    dim, trig = _map_dimension(q)
+    if dim and _trigger_is_illustrative(q, trig):
+        return set()
+    return {dim} - {None}
 
 
 def resolve_offline(q: str) -> dict:

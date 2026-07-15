@@ -102,12 +102,58 @@ _DIM_TRIGGERS: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
-def _map_dimension(question: str) -> str | None:
+# Example markers that introduce an ILLUSTRATION ("...like France's repairability index") rather than
+# a filter. A dimension keyword that only ever appears right after one of these is clarifying the ask,
+# not defining the set — so it must not drive RULE 2.
+_EXAMPLE_CUES = ("like ", "such as", "e.g", "eg ", "for example", "for instance", "including ",
+                 "similar to", "e.x")
+
+
+def _map_dimension(question: str) -> tuple[str | None, str | None]:
+    """First matching (dimension, trigger-phrase) for the structured fallback, or (None, None)."""
     q = f" {question.lower()} "
     for dim, triggers in _DIM_TRIGGERS:
-        if any(t in q for t in triggers):
-            return dim
-    return None
+        for t in triggers:
+            if t in q:
+                return dim, t
+    return None, None
+
+
+def _trigger_is_illustrative(question: str, trigger: str | None) -> bool:
+    """True when EVERY occurrence of the dimension trigger sits just after an example cue — i.e. the
+    keyword only appears inside an illustrative aside and shouldn't be read as a filter. One bare
+    (non-example) occurrence means it's a genuine topic, so return False and let RULE 2 use it."""
+    if not trigger:
+        return False
+    ql = question.lower()
+    idxs = [m.start() for m in re.finditer(re.escape(trigger), ql)]
+    if not idxs:
+        return False
+    return all(any(cue in ql[max(0, i - 40):i] for cue in _EXAMPLE_CUES) for i in idxs)
+
+
+# A "what are the most unique / unusual / different TYPES of bills" question wants a broad SPREAD across
+# the corpus's distinct policy types, not a narrowing filter. Detected here (cheap, deterministic) to
+# route to the diversity sampler (RULE 2.5) instead of the dimension fallback, which otherwise latches
+# onto whatever dimension word appears (even one inside an example) and collapses the answer to it.
+_DIVERSITY_TRIGGERS = (
+    "most unique", "unique type", "unique kind", "unique bill", "unique law", "uniqueness",
+    "unusual", "outlier", "outliers", "most distinctive", "distinctive", "one-of-a-kind",
+    "different types", "different kinds", "different sorts", "what types", "what kinds",
+    "range of", "variety of", "diverse", "diversity of", "novel", "uncommon", "most creative",
+    "most interesting", "most surprising", "stand out", "standout",
+)
+# Framing words stripped from the tsquery on a diversity ask (they describe the QUERY, not the subject,
+# so they must not AND-poison or junk-rank RULE 1/3) — a diversity-scoped superset of nothing else.
+_DIVERSITY_WORDS = frozenset({
+    "unique", "uniqueness", "unusual", "outlier", "outliers", "distinctive", "different", "types",
+    "type", "kinds", "kind", "sorts", "sort", "variety", "diverse", "diversity", "novel",
+    "uncommon", "rare", "most", "range", "creative", "interesting", "surprising", "standout",
+})
+
+
+def _wants_diversity(question: str) -> bool:
+    return any(t in question.lower() for t in _DIVERSITY_TRIGGERS)
 
 
 # A "trend / over time / count-by-year" question wants the year distribution shown as a chart. Cheap
@@ -256,6 +302,25 @@ async def _relevant_bills(
             return q.order_by(rn.asc(), country).offset(offset).limit(page_size)
         return q.order_by(Bill.status_date.desc().nullslast(), Bill.id.desc()).offset(offset).limit(page_size)
 
+    def _diversity_page():
+        # Spread across the corpus's distinct policy TYPES: round-robin one representative per
+        # instrument_type before a second from any (rn), rarest type first (freq asc) so genuine
+        # outliers lead. Scoped by `extra` like every other rule. Deterministic (status_date desc, id
+        # desc tiebreak) so paging is stable. instrument_type is the primary "kind of policy" axis;
+        # material variety rides along because rare instruments (incentives, chemical_restriction)
+        # carry the off-beat materials (organics, biobased) the common EPR bulk doesn't.
+        itype = func.coalesce(Bill.instrument_type, "other")
+        freq = func.count().over(partition_by=itype)
+        rn = func.row_number().over(
+            partition_by=itype,
+            order_by=[Bill.status_date.desc().nullslast(), Bill.id.desc()])
+        q = (select(*_cols())
+             .outerjoin(lit, Bill.id == lit.c.related_law_id)
+             .where(Bill.ce_relevant.is_(True)))
+        for c in extra:
+            q = q.where(c)
+        return q.order_by(rn.asc(), freq.asc(), itype).offset(offset).limit(page_size)
+
     async def _count_plain(where_extra) -> int:
         q = select(func.count()).select_from(Bill).where(Bill.ce_relevant.is_(True))
         for c in list(extra) + list(where_extra):
@@ -263,30 +328,46 @@ async def _relevant_bills(
         return (await db.scalar(q)) or 0
 
     terms = facets.meaningful_terms()
+    diversity = _wants_diversity(question)
+    # On a diversity ask, drop the framing words ("most unique types") from the tsquery so they can't
+    # AND-poison or junk-rank the match — the subject words (if any) still drive RULE 1/3. For a normal
+    # question `substantive` == `terms` (no diversity words present), so nothing changes.
+    substantive = [t for t in terms if t not in _DIVERSITY_WORDS] if diversity else terms
 
     # RULE 1 — free-text (text OR title/summary metadata) within the resolved scope. Build the query
     # from stopword-filtered terms so meta-words in the question ("which bills law…", rare in statute
     # text) can't poison the AND-match and drop an otherwise-good hit.
-    if terms:
-        tsq = func.websearch_to_tsquery(_ENGLISH, " ".join(terms))
+    if substantive:
+        tsq = func.websearch_to_tsquery(_ENGLISH, " ".join(substantive))
         n = await _count_match(db, tsq, extra)
         if n > 0:
             rows = (await db.execute(_match_page(tsq))).all()
             return rows, n, _place_strategy("text")
 
     # RULE 2 — structured-by-dimension, only when the user did NOT scope (place/material means "list
-    # what's there", not "search the whole corpus by dimension").
-    dim = _map_dimension(question)
-    if dim and not scoped:
+    # what's there"), it is NOT a diversity ask (which wants a spread, not one dimension), and the
+    # dimension keyword is a real topic — not merely a word inside an illustrative aside ("...like
+    # France's repairability index"), which must never hijack the whole retrieval.
+    dim, trig = _map_dimension(question)
+    if dim and not scoped and not diversity and not _trigger_is_illustrative(question, trig):
         where_dim = [Bill.compliance_details[dim]["status"].astext == "present"]
         d_total = await _count_plain(where_dim)
         if d_total > 0:
             rows = (await db.execute(_plain_page(where_dim))).all()
             return rows, d_total, f"dimension:{dim}"
 
+    # RULE 2.5 — diversity/outlier spread: "what are the most unique TYPES of bills?" wants a broad
+    # sample across the corpus's distinct policy types, not a narrowing filter. Fires even when scoped
+    # (e.g. "what's unusual in France" → the spread within France). Falls through to listing if empty.
+    if diversity:
+        n = await _count_plain([])
+        if n > 0:
+            rows = (await db.execute(_diversity_page())).all()
+            return rows, n, _place_strategy("diversity")
+
     # RULE 3 — OR-broaden, only when not scoped and free text found nothing precise.
-    if terms and not scoped:
-        or_tsq = func.to_tsquery(_ENGLISH, " | ".join(terms))
+    if substantive and not scoped:
+        or_tsq = func.to_tsquery(_ENGLISH, " | ".join(substantive))
         n = await _count_match(db, or_tsq, extra)
         if n > 0:
             rows = (await db.execute(_match_page(or_tsq))).all()
@@ -434,6 +515,9 @@ Rules:
   plainly ("N bills carry no date yet and are excluded from the year breakdown") — this is a coverage
   caveat, NOT evidence that year data is missing. Never infer from the read sample that the corpus lacks
   dates; the year counts are authoritative.
+- If SCOPE.note is present, follow it: it says how this set was assembled and what to emphasize (e.g. a
+  diversity sample → describe the RANGE of distinct/outlier bill TYPES, citing a representative bill or
+  two per type, and call out genuine single-bill outliers rather than summarizing one theme).
 - Be concrete and practical — this should help someone act.
 Output the answer as MARKDOWN directly (no JSON, no preamble): short "## " section headers, "- "
 bullets, **bold** key terms, inline [STATE BILL_NUMBER] citations. No markdown tables.
@@ -705,6 +789,11 @@ async def ask_the_bills(
         scope["instrument"] = facets.instrument_labels
     if facets.reference_labels:
         scope["reference"] = facets.reference_labels
+    if strategy.startswith("diversity"):
+        scope["note"] = ("This set is a DIVERSITY SAMPLE across the corpus's distinct policy types "
+                         "(instrument_type clusters, rarest first — one+ representative each), NOT an "
+                         "exhaustive keyword match. Describe the most unique / outlier bill TYPES you "
+                         "see, citing representative bills for each; flag true single-bill outliers.")
 
     # Release the request's DB connection before the ~30s synthesis so it isn't held idle (and dropped)
     # across the LLM call; the read data is already materialized and persistence uses a fresh session.

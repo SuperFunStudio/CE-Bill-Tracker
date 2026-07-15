@@ -292,6 +292,60 @@ def jp_promulgation_date(raw_xml: str, law_id: str = "") -> "datetime.date | Non
     return None
 
 
+# --- Shared status_date parsers for the per-source date capture in the adapters below. Each adapter
+# extracts the raw date token from the document its fetch() ALREADY holds, then converts here. Most EU
+# sources publish ISO YYYY-MM-DD; a few differ (LV/EE DD.MM.YYYY, BC "Month D, YYYY", FR epoch-ms). ---
+_ISO_DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+_DMY_DATE_RE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
+_EN_MONTHS = {m: i for i, m in enumerate(
+    ("january", "february", "march", "april", "may", "june", "july", "august",
+     "september", "october", "november", "december"), 1)}
+_EN_LONGDATE_RE = re.compile(r"([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})")
+
+
+def _iso_to_date(s: str | None) -> "datetime.date | None":
+    """First 'YYYY-MM-DD' in the string (handles ISO datetimes like '2019-03-12T22:00:00Z' too)."""
+    m = _ISO_DATE_RE.search(s or "")
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m[1]), int(m[2]), int(m[3]))
+    except ValueError:
+        return None
+
+
+def _dmy_to_date(s: str | None) -> "datetime.date | None":
+    """First 'DD.MM.YYYY' in the string (LV/EE gazette convention)."""
+    m = _DMY_DATE_RE.search(s or "")
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m[3]), int(m[2]), int(m[1]))
+    except ValueError:
+        return None
+
+
+def _en_longdate_to_date(s: str | None) -> "datetime.date | None":
+    """English 'Month D, YYYY' (BC Laws <deposited>)."""
+    m = _EN_LONGDATE_RE.search(s or "")
+    if not m or m[1].lower() not in _EN_MONTHS:
+        return None
+    try:
+        return datetime.date(int(m[3]), _EN_MONTHS[m[1].lower()], int(m[2]))
+    except ValueError:
+        return None
+
+
+def _epoch_ms_to_date(ms) -> "datetime.date | None":
+    """Epoch-milliseconds (UTC) -> date (Légifrance dateDebut)."""
+    if not isinstance(ms, (int, float)):
+        return None
+    try:
+        return datetime.datetime.fromtimestamp(ms / 1000, tz=datetime.timezone.utc).date()
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
 # Drop obvious off-topic matches that share an EPR keyword: nuclear spent-fuel / reprocessing (使用済燃料,
 # 原子力, 再処理, 廃炉) ride in on 使用済 ("used"); water/marine/space/mineral/genetic "resources" ride in
 # on 資源. The seed list pins the statutes we always want regardless.
@@ -867,6 +921,7 @@ class LegifranceCodeClient(LegifranceClient):
             source_url=f"https://www.legifrance.gouv.fr/codes/article_lc/{aid}",
             # Consistent English EPR framing so Haiku has signal even on short codified articles.
             english_label="France Code de l'environnement — Extended Producer Responsibility (REP) provision",
+            status_date=_epoch_ms_to_date(article.get("dateDebut")),  # current-version start (epoch ms)
         )
 
 
@@ -918,6 +973,8 @@ _DE_KURZUE_RE = re.compile(r"<kurzue>(.*?)</kurzue>", re.S)
 _DE_LANGUE_RE = re.compile(r"<langue>(.*?)</langue>", re.S)
 _DE_JURABK_RE = re.compile(r"<jurabk>(.*?)</jurabk>", re.S)
 _DE_TEXTDATEN_RE = re.compile(r"<textdaten>(.*?)</textdaten>", re.S)
+# Ausfertigungsdatum (date of execution/enactment) — element TEXT in the gii-norm metadaten block.
+_DE_AUSF_RE = re.compile(r"<ausfertigung-datum[^>]*>(\d{4}-\d{2}-\d{2})</ausfertigung-datum>")
 
 
 class GermanyGiiClient(ForeignSourceClient):
@@ -990,6 +1047,7 @@ class GermanyGiiClient(ForeignSourceClient):
             log.warning("de_thin_text", slug=source_id, chars=len(full_text))
             return None
 
+        dm = _DE_AUSF_RE.search(raw)
         return ForeignLaw(
             source_id=source_id,
             region=self.region,
@@ -998,6 +1056,7 @@ class GermanyGiiClient(ForeignSourceClient):
             full_text=full_text,
             source_url=DE_PAGE.format(slug=source_id),
             english_label=english_label,
+            status_date=_iso_to_date(dm.group(1)) if dm else None,  # Ausfertigungsdatum (enactment)
         )
 
 
@@ -1032,6 +1091,8 @@ _NL_REC_RE = re.compile(
     r"<dcterms:identifier>(BWBR\d+)</dcterms:identifier>\s*<dcterms:title>(.*?)</dcterms:title>", re.S
 )
 _NL_LATEST_RE = re.compile(r'_latestItem="([^"]+)"')
+# Work-level (first) <metadata><datum_inwerkingtreding> = the law's original entry-into-force date.
+_NL_IWT_RE = re.compile(r"<metadata>\s*<datum_inwerkingtreding>(\d{4}-\d{2}-\d{2})</datum_inwerkingtreding>")
 # The citeertitel element holds the short title but inlines a <meta-data> block after it.
 _NL_CITEER_RE = re.compile(r"<citeertitel[^>]*>(.*?)(?:<meta-data>|</citeertitel>)", re.S)
 
@@ -1068,6 +1129,9 @@ class NetherlandsBwbClient(ForeignSourceClient):
         except httpx.HTTPError as e:
             log.warning("nl_manifest_failed", bwb=source_id, error=str(e))
             return None
+        # Work-level <metadata> holds the ORIGINAL entry-into-force (first match), closest to enactment;
+        # per-<expression> copies are the later consolidated-version dates.
+        im = _NL_IWT_RE.search(m.text)
         lm = _NL_LATEST_RE.search(m.text)
         if not lm:
             log.warning("nl_no_latest", bwb=source_id)
@@ -1087,6 +1151,7 @@ class NetherlandsBwbClient(ForeignSourceClient):
         return ForeignLaw(
             source_id=source_id, region=self.region, source=self.source, title=title,
             full_text=full_text, source_url=NL_PAGE.format(bwb=source_id), english_label=english_label,
+            status_date=_iso_to_date(im.group(1)) if im else None,  # original datum_inwerkingtreding
         )
 
 
@@ -1165,6 +1230,7 @@ CL_SEED_LAWS: list[dict] = [
 ]
 _CL_TITULO_RE = re.compile(r"<TituloNorma>(.*?)</TituloNorma>", re.S)
 _CL_DEROGADO_RE = re.compile(r'derogado="([^"]+)"')
+_CL_FECHAPUB_RE = re.compile(r'fechaPublicacion="(\d{4}-\d{2}-\d{2})"')  # Diario Oficial publication
 
 
 class ChileLeychileClient(ForeignSourceClient):
@@ -1196,9 +1262,11 @@ class ChileLeychileClient(ForeignSourceClient):
         if len(full_text) < 100:
             log.warning("cl_thin_text", id=source_id, chars=len(full_text))
             return None
+        pm = _CL_FECHAPUB_RE.search(r.text)
         return ForeignLaw(
             source_id=source_id, region=self.region, source=self.source, title=title,
             full_text=full_text, source_url=CL_PAGE.format(id=source_id), english_label=english_label,
+            status_date=_iso_to_date(pm.group(1)) if pm else None,  # fechaPublicacion
         )
 
 
@@ -1352,6 +1420,25 @@ class AustriaRisClient(ForeignSourceClient):
         log.info("at_discovered", total=len(AT_SEED_LAWS), seeded=len(AT_SEED_LAWS))
         return [(s["gn"], s["en"]) for s in AT_SEED_LAWS]
 
+    async def _kons_date(self, gn: str) -> "datetime.date | None":
+        """Enactment date from the RIS OGD API (the GeltendeFassung HTML carries no clean date). The
+        BrKons metadata lists an Inkrafttretensdatum per §/version; the earliest is the Stammnorm's
+        (original enactment). Falls back to the StammnormBgblnummer year ('159/2008' -> 2008)."""
+        try:
+            r = await self.http.get(
+                "https://data.bka.gv.at/ris/api/v2.6/Bundesrecht",
+                params={"Applikation": "BrKons", "Gesetzesnummer": gn})
+            r.raise_for_status()
+            body = r.text
+        except httpx.HTTPError as e:
+            log.warning("at_kons_failed", gn=gn, error=str(e))
+            return None
+        dates = re.findall(r'"Inkrafttretensdatum"\s*:\s*"(\d{4}-\d{2}-\d{2})"', body)
+        if dates:
+            return _iso_to_date(min(dates))
+        ym = re.search(r'"StammnormBgblnummer"\s*:\s*"[^"]*?/(\d{4})"', body)  # year-only fallback
+        return datetime.date(int(ym.group(1)), 1, 1) if ym else None
+
     async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
         try:
             r = await self.http.get(AT_FASSUNG.format(gn=source_id))
@@ -1369,6 +1456,7 @@ class AustriaRisClient(ForeignSourceClient):
             source_id=source_id, region=self.region, source=self.source,
             title=english_label or f"RIS Bundesrecht {source_id}",
             full_text=full_text, source_url=AT_PAGE.format(gn=source_id), english_label=english_label,
+            status_date=await self._kons_date(source_id),
         )
 
 
@@ -1920,6 +2008,18 @@ class EstoniaRiigiClient(ForeignSourceClient):
         log.info("ee_discovered", total=len(EE_SEED_LAWS))
         return [(s["id"], s["en"]) for s in EE_SEED_LAWS]
 
+    async def _pub_date(self, akt_id: str) -> "datetime.date | None":
+        """Publication date from the akt metadata JSON (the blob-html the body uses has no date).
+        avaldamiseKuupaev is null on historical-version ids -> fall back to kehtivuseAlgus (in-force)."""
+        try:
+            r = await self.http.get(f"{EE_BASE}/akt/{akt_id}")
+            r.raise_for_status()
+            p = (r.json() or {}).get("aktiParameetrid") or {}
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("ee_meta_failed", id=akt_id, error=str(e))
+            return None
+        return _iso_to_date(p.get("avaldamiseKuupaev") or p.get("kehtivuseAlgus"))
+
     async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
         try:
             r = await self.http.get(f"{EE_BASE}/akt/{source_id}/blob-html")
@@ -1935,6 +2035,7 @@ class EstoniaRiigiClient(ForeignSourceClient):
             source_id=source_id, region=self.region, source=self.source,
             title=english_label or source_id, full_text=full_text,
             source_url=EE_PAGE.format(id=source_id), english_label=english_label,
+            status_date=await self._pub_date(source_id),
         )
 
 
@@ -1980,10 +2081,13 @@ class LatviaLikumiClient(ForeignSourceClient):
         if len(full_text) < 100:
             log.warning("lv_thin_text", id=source_id, chars=len(full_text))
             return None
+        # "Publicēts: … Latvijas Vēstnesis, <nr>, DD.MM.YYYY." — official publication date.
+        pm = re.search(r"Public\w*ts.*?(\d{2}\.\d{2}\.\d{4})", raw, re.S)
         return ForeignLaw(
             source_id=source_id, region=self.region, source=self.source,
             title=english_label or source_id, full_text=full_text,
             source_url=f"{LV_BASE}/{source_id}", english_label=english_label,
+            status_date=_dmy_to_date(pm.group(1)) if pm else None,
         )
 
 
@@ -2252,18 +2356,10 @@ CN_DISCOVERY_TERMS = [
 # not-yet-effective, 1=repealed/expired. Ingest 3 + 4 (current + upcoming); skip 1/2 in discovery.
 _CN_STATUS = {3: "enacted", 4: "adopted", 2: "superseded", 1: "repealed"}
 
-_CN_ISO_DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
-
 
 def cn_date(raw: str | None) -> "datetime.date | None":
     """Parse a flk date string (公布日期 gbrq / 施行日期 sxrq), format 'YYYY-MM-DD', into a date."""
-    m = _CN_ISO_DATE_RE.match((raw or "").strip())
-    if not m:
-        return None
-    try:
-        return datetime.date(int(m[1]), int(m[2]), int(m[3]))
-    except ValueError:
-        return None
+    return _iso_to_date(raw)
 
 
 class ChinaFlkClient(ForeignSourceClient):
@@ -2532,6 +2628,32 @@ _BC_RELEVANT = re.compile(
 _BC_TITLE_RE = re.compile(r"<bcl:title\b[^>]*>(.*?)</bcl:title>", re.S | re.I)
 
 
+# BC Laws: the deposit/filing date in the statreg XML (namespace prefix varies: <deposited> or
+# <reg:deposited>), value like "October 7, 2004" — the regulation's effective enactment.
+_BC_DEPOSITED_RE = re.compile(r"<(?:reg:)?deposited>([^<]+)</(?:reg:)?deposited>", re.I)
+
+
+def _bc_id_year_date(source_id: str) -> "datetime.date | None":
+    """Year-only fallback from the BC id '<regnum>_<year>[_pit]' (111_97 -> 1997, 449_2004 -> 2004)."""
+    core = source_id[:-4] if source_id.endswith("_pit") else source_id
+    parts = core.split("_")
+    if len(parts) >= 2 and parts[1].isdigit():
+        yr = int(parts[1])
+        yr = yr if len(parts[1]) == 4 else 1900 + yr  # a 2-digit BC year is always 19xx
+        if 1900 <= yr <= datetime.date.today().year + 1:
+            return datetime.date(yr, 1, 1)
+    return None
+
+
+def _on_code_year_date(code: str) -> "datetime.date | None":
+    """Year (Jan 1) from an Ontario e-Laws code — the first 2 digits are the year: regulation '210449'
+    -> 2021, statute '16r12' -> 2016. Pivot at 50 so a 9x code reads 19xx (Ontario numbered regs ~1990+)."""
+    if len(code) >= 2 and code[:2].isdigit():
+        yy = int(code[:2])
+        return datetime.date(1900 + yy if yy > 50 else 2000 + yy, 1, 1)
+    return None
+
+
 class CanadaBcLawsClient(ForeignSourceClient):
     """BC Laws CiviX adapter. British Columbia statutes/regulations, structured XML."""
 
@@ -2585,9 +2707,11 @@ class CanadaBcLawsClient(ForeignSourceClient):
         if len(full_text) < 100:
             log.warning("ca_bc_thin_text", id=source_id, chars=len(full_text))
             return None
+        dm = _BC_DEPOSITED_RE.search(raw)  # full deposit date; fall back to the year in the id
         return ForeignLaw(
             source_id=source_id, region=self.region, source=self.source, title=title,
             full_text=full_text, source_url=CA_BC_DOC.format(id=source_id), english_label=english_label,
+            status_date=(_en_longdate_to_date(dm.group(1)) if dm else None) or _bc_id_year_date(source_id),
         )
 
 
@@ -2646,6 +2770,8 @@ class CanadaOntarioClient(ForeignSourceClient):
             source_id=source_id, region=self.region, source=self.source, title=title,
             full_text=full_text, english_label=english_label,
             source_url=CA_ON_PAGE.format(type=doc_type, code=code),
+            # API returns only consolidation dates; the code's leading 2 digits are the enactment year.
+            status_date=_on_code_year_date(code),
         )
 
 

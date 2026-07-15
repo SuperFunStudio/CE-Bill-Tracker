@@ -254,6 +254,44 @@ def _jp_is_ordinance(law_id: str) -> bool:
     return len(law_id) >= 5 and (law_id[3] == "M" or law_id[3:5] == "CO")
 
 
+# Japanese era -> Gregorian base year (era year N = base + N - 1). e-Gov <Law> tags name the era; the
+# LawId's leading digit is the era CODE (1=Meiji … 5=Reiwa), used as a fallback when the tag is absent.
+_JP_ERA_BASE = {"Meiji": 1868, "Taisho": 1912, "Showa": 1926, "Heisei": 1989, "Reiwa": 2019}
+_JP_ERA_DIGIT = {"1": 1868, "2": 1912, "3": 1926, "4": 1989, "5": 2019}
+_JP_LAW_TAG_RE = re.compile(r"<Law\b[^>]*>")
+
+
+def jp_promulgation_date(raw_xml: str, law_id: str = "") -> "datetime.date | None":
+    """Real promulgation date from the e-Gov <Law> root tag — <Law Era="Heisei" Year="24"
+    PromulgateMonth="8" PromulgateDay="1"> -> 2012-08-01. Degrades to the era code + year encoded in the
+    LawId (year-only, Jan 1) when the tag/day is missing. Gregorian year = era base + era year - 1."""
+    base = jyear = mon = day = None
+    m = _JP_LAW_TAG_RE.search(raw_xml or "")
+    if m:
+        tag = m.group(0)
+        if e := re.search(r'Era="([^"]+)"', tag):
+            base = _JP_ERA_BASE.get(e.group(1))
+        if y := re.search(r'Year="(\d+)"', tag):
+            jyear = int(y.group(1))
+        if mo := re.search(r'PromulgateMonth="(\d+)"', tag):
+            mon = int(mo.group(1))
+        if da := re.search(r'PromulgateDay="(\d+)"', tag):
+            day = int(da.group(1))
+    if (base is None or jyear is None) and len(law_id) >= 3:  # fallback: era code + year in the LawId
+        base = base or _JP_ERA_DIGIT.get(law_id[0])
+        if jyear is None and law_id[1:3].isdigit():
+            jyear = int(law_id[1:3])
+    if not (base and jyear):
+        return None
+    g = base + jyear - 1
+    for mm, dd in ((mon, day), (mon, 1), (1, 1)):  # degrade day -> month -> year on any invalid part
+        try:
+            return datetime.date(g, mm or 1, dd or 1)
+        except ValueError:
+            continue
+    return None
+
+
 # Drop obvious off-topic matches that share an EPR keyword: nuclear spent-fuel / reprocessing (使用済燃料,
 # 原子力, 再処理, 廃炉) ride in on 使用済 ("used"); water/marine/space/mineral/genetic "resources" ride in
 # on 資源. The seed list pins the statutes we always want regardless.
@@ -344,6 +382,7 @@ class JapanEgovClient(ForeignSourceClient):
             full_text=full_text,
             source_url=JP_PAGE.format(law_id=source_id),
             english_label=english_label,
+            status_date=jp_promulgation_date(raw, source_id),  # real promulgation date from <Law> tag
         )
 
 
@@ -2213,6 +2252,19 @@ CN_DISCOVERY_TERMS = [
 # not-yet-effective, 1=repealed/expired. Ingest 3 + 4 (current + upcoming); skip 1/2 in discovery.
 _CN_STATUS = {3: "enacted", 4: "adopted", 2: "superseded", 1: "repealed"}
 
+_CN_ISO_DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+
+
+def cn_date(raw: str | None) -> "datetime.date | None":
+    """Parse a flk date string (公布日期 gbrq / 施行日期 sxrq), format 'YYYY-MM-DD', into a date."""
+    m = _CN_ISO_DATE_RE.match((raw or "").strip())
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m[1]), int(m[2]), int(m[3]))
+    except ValueError:
+        return None
+
 
 class ChinaFlkClient(ForeignSourceClient):
     """flk.npc.gov.cn adapter. PRC national laws + State Council/provincial regs; body via DOCX."""
@@ -2244,6 +2296,7 @@ class ChinaFlkClient(ForeignSourceClient):
                 self._meta[bbbs] = {
                     "title": _strip_tags(row.get("title", "")),  # drop the <em> highlight tags
                     "status": _CN_STATUS.get(row.get("sxx"), "enacted"),
+                    "gbrq": row.get("gbrq"),  # 公布日期 (promulgation date) — the real status_date
                 }
                 out.setdefault(bbbs, "")
         log.info("cn_discovered", total=len(out), seeded=sum(1 for v in out.values() if v))
@@ -2274,10 +2327,14 @@ class ChinaFlkClient(ForeignSourceClient):
         meta = self._meta.get(source_id, {})
         title = meta.get("title", "")
         status = meta.get("status", "enacted")
-        if not title:  # a seed not seen in a search — resolve the clean title from flfgDetails
-            lsyg = (await self._details(source_id)).get("lsyg") or []
-            if lsyg:
+        gbrq = meta.get("gbrq")
+        if not title or not gbrq:  # a seed not seen in a search — resolve title/date from flfgDetails
+            det = await self._details(source_id)
+            lsyg = det.get("lsyg") or []
+            if not title and lsyg:
                 title = _strip_tags(lsyg[0].get("title", ""))
+            if not gbrq:  # top-level gbrq, else the earliest lineage entry's
+                gbrq = det.get("gbrq") or (lsyg[0].get("gbrq") if lsyg else None)
         url = await self._docx_url(source_id)
         if not url:
             return None
@@ -2295,6 +2352,7 @@ class ChinaFlkClient(ForeignSourceClient):
             source_id=source_id, region=self.region, source=self.source,
             title=title or english_label or source_id, full_text=full_text,
             source_url=CN_FLK_PAGE.format(bbbs=source_id), english_label=english_label, status=status,
+            status_date=cn_date(gbrq),  # real 公布日期 (promulgation date) from flk
         )
 
 

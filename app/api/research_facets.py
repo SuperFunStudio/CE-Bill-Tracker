@@ -36,19 +36,31 @@ _STOPWORDS = frozenset({
     # happened to contain rest+regions+learn, starving the answer to 8, while foreign regions' non-
     # English text matched none and correctly fell through to the full-region listing. "region(s)" is
     # chrome in a jurisdiction tool; the topical "across/other regions" senses are handled by
-    # _EXPANSION_CUES above, not here.
+    # _EVERYWHERE_CUES / _COMPARISON_CUES above, not here.
     "learn", "learns", "learned", "teach", "teaches", "lesson", "lessons", "rest", "others",
     "region", "regions", "regional", "jurisdiction", "jurisdictions",
 })
 
 
-# Phrases that mean "search everywhere" — a named place is then a REFERENCE subject, not a scope
-# filter. "Comparable laws to France's AGEC across all regions" must NOT lock retrieval to France.
-_EXPANSION_CUES = (
+# Two kinds of "the named place isn't a hard filter" cue, which behave DIFFERENTLY for retrieval:
+#
+# _EVERYWHERE_CUES — a genuine "search the whole corpus" instruction. The named place is a pure
+#   benchmark; retrieval must NOT scope to it ("comparable laws to France's AGEC across all regions"
+#   → search everywhere, France is just the example).
+#
+# _COMPARISON_CUES — comparison/"learn from" framing ("how does California compare to other states?",
+#   "what can other regions learn from Germany"). Here the named place is the SUBJECT of the comparison,
+#   so it is still the retrieval ANCHOR — we scope to it (its bills are the evidence) but LABEL it a
+#   reference for narration. Demoting it to no-scope (the old behavior) left the country name to poison a
+#   free-text AND-match — fatal for a real comparison ("Germany vs China" retrieved neither corpus).
+_EVERYWHERE_CUES = (
     "all regions", "all jurisdictions", "all countries", "every region", "every country",
-    "other regions", "other jurisdictions", "other countries", "other states",
-    "whole corpus", "entire corpus", "across the corpus", "across regions", "across jurisdictions",
+    "whole corpus", "entire corpus", "across the corpus", "in the corpus", "the corpus",
+    "across regions", "across jurisdictions",
     "globally", "worldwide", "world wide", "everywhere", "anywhere else", "elsewhere",
+)
+_COMPARISON_CUES = (
+    "other regions", "other jurisdictions", "other countries", "other states",
     "compared to other", "comparable", "similar to", "similar law", "similar mechanism", "counterpart",
 )
 
@@ -270,14 +282,28 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
                   product_slugs=product_slugs, product_labels=product_labels,
                   free_text=free_text, raw_question=question)
 
-    # Expansion cue → the named place is a reference subject, not a scope filter: don't restrict by
-    # jurisdiction (materials/instruments still apply — "carpet EPR like France's everywhere").
-    if matched and any(cue in lower_q for cue in _EXPANSION_CUES):
-        return Facets(place_ids=[], place_labels=[], reference_labels=place_labels, **common)
-
     matched_paths = {n.path for n in matched.values()}
     place_ids = [
         n.id for n in nodes
         if any(n.path == p or n.path.startswith(p + ".") for p in matched_paths)
     ]
+
+    # 1) Explicit "search everywhere" + a named place → the place is a pure benchmark, don't scope by
+    #    jurisdiction (materials/instruments still apply — "carpet EPR like France's everywhere").
+    if matched and any(cue in lower_q for cue in _EVERYWHERE_CUES):
+        return Facets(place_ids=[], place_labels=[], reference_labels=place_labels, **common)
+
+    # 2) Two or more named places → a head-to-head comparison ("Germany vs China"): scope to ALL of them
+    #    as filters so retrieval returns each corpus (interleaved), instead of a free-text match on bills
+    #    that merely mention the names.
+    if len(matched) >= 2:
+        return Facets(place_ids=place_ids, place_labels=place_labels, reference_labels=[], **common)
+
+    # 3) A single named place under a comparison / "learn from" cue → still the retrieval ANCHOR (scope to
+    #    it) but LABELED a reference for narration. This is the fix for reference→no-scope junk: the old
+    #    code cleared scope here, leaving the country name to poison a free-text AND-match.
+    if matched and any(cue in lower_q for cue in _COMPARISON_CUES):
+        return Facets(place_ids=place_ids, place_labels=[], reference_labels=place_labels, **common)
+
+    # 4) Plain filter (zero or one place, no cue).
     return Facets(place_ids=place_ids, place_labels=place_labels, reference_labels=[], **common)

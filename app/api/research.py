@@ -643,7 +643,8 @@ async def ask_the_bills(
             citations.append(ResearchCitation(
                 bill_id=b.id, region=b.region, state=b.state, bill_number=b.bill_number,
                 year=b.status_date.year if b.status_date else None,
-                snippet=(passages.get(b.id) or "").strip()[:280] or None))
+                snippet=(passages.get(b.id) or "").strip()[:280] or None,
+                bill=_row_to_summary(r)))
 
     coverage = (f"Synthesized from the {len(packed)} most relevant of {total} matched bills."
                 if total > len(packed) else f"Synthesized from all {total} matched bills.")

@@ -159,13 +159,17 @@ class ResearchChart(BaseModel):
 
 
 class ResearchCitation(BaseModel):
-    """One bill the answer is grounded in — only bills from the retrieved set can be cited."""
+    """One bill the answer is grounded in — only bills from the retrieved set can be cited.
+    `bill` carries the full summary so the UI can open the same bill modal an in-sentence
+    [STATE BILL_NUMBER] marker or the cited-bills list points at, even when that bill isn't on
+    page 1 of the relevant-bill table."""
     bill_id: int
     region: str | None = None
     state: str | None = None
     bill_number: str | None = None
     year: int | None = None
     snippet: str | None = None
+    bill: BillSummary | None = None
 
 
 class ResearchBillPage(BaseModel):

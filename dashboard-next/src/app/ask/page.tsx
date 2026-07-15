@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth/AuthContext';
 import { askResearch, fetchResearchBills } from '@/lib/api';
-import type { ResearchAnswer, ResearchBillPage } from '@/lib/types';
+import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchCitation } from '@/lib/types';
 import { BillTable } from '@/components/bills/BillTable';
+import { BillModal } from '@/components/ui/BillModal';
 
 // "Ask the Bills" (Pro) — a natural-language question over the extracted corpus. The answer is
 // grounded in retrieved bills + SQL aggregates server-side (numbers are exact, claims are cited);
@@ -17,16 +18,48 @@ const EXAMPLES = [
   'Which bills ban PFAS in packaging?',
 ];
 
-/** Inline **bold** rendering. */
-function inline(line: string) {
-  return line.split(/(\*\*[^*]+\*\*)/g).map((p, j) =>
-    p.startsWith('**') && p.endsWith('**')
-      ? <strong key={j} className="text-text-primary font-semibold">{p.slice(2, -2)}</strong>
-      : <span key={j}>{p}</span>);
+/** The synthesis cites bills inline as `[STATE BILL_NUMBER]` (verbatim `ref`). Map each ref to its
+ *  citation so the marker can open the same bill modal the table opens. */
+function citationRef(c: ResearchCitation): string {
+  return `${c.state ?? ''} ${c.bill_number ?? ''}`.trim();
 }
 
-/** Render the deep-synthesis markdown: ## / ### headers, "- " bullets, --- rules, **bold**. */
-function AnswerText({ text }: { text: string }) {
+/** Inline rendering: **bold** + clickable `[STATE BILL_NUMBER]` citations. A bracketed token that
+ *  matches a known citation (with a bill payload) becomes a button that opens the bill modal; any
+ *  other bracketed text renders literally. */
+function inline(line: string, cites: Map<string, ResearchCitation>, onCite: (c: ResearchCitation) => void) {
+  // Split keeping **bold** and [bracketed] tokens as their own parts (brackets don't nest).
+  return line.split(/(\*\*[^*]+\*\*|\[[^\][]+\])/g).map((p, j) => {
+    if (p.startsWith('**') && p.endsWith('**')) {
+      return <strong key={j} className="text-text-primary font-semibold">{p.slice(2, -2)}</strong>;
+    }
+    if (p.startsWith('[') && p.endsWith(']')) {
+      const c = cites.get(p.slice(1, -1));
+      if (c?.bill) {
+        return (
+          <button
+            key={j}
+            type="button"
+            onClick={() => onCite(c)}
+            title={`Open ${citationRef(c)} details`}
+            className="font-mono text-green-accent hover:underline focus:outline-none focus:underline"
+          >
+            {p}
+          </button>
+        );
+      }
+    }
+    return <span key={j}>{p}</span>;
+  });
+}
+
+/** Render the deep-synthesis markdown: ## / ### headers, "- " bullets, --- rules, **bold**, and
+ *  clickable inline `[STATE BILL_NUMBER]` citations. */
+function AnswerText({ text, cites, onCite }: {
+  text: string;
+  cites: Map<string, ResearchCitation>;
+  onCite: (c: ResearchCitation) => void;
+}) {
   return (
     <div className="space-y-2 text-body text-text-primary leading-relaxed">
       {text.split('\n').map(l => l.trimEnd()).filter(l => l.trim()).map((line, i) => {
@@ -36,13 +69,13 @@ function AnswerText({ text }: { text: string }) {
           const cls = hm[1].length <= 2
             ? 'font-serif text-lg text-text-primary mt-4 mb-1'
             : 'text-sm font-semibold uppercase tracking-wide text-text-secondary mt-3';
-          return <div key={i} className={cls}>{inline(hm[2])}</div>;
+          return <div key={i} className={cls}>{inline(hm[2], cites, onCite)}</div>;
         }
         if (/^-{3,}$/.test(t)) return <hr key={i} className="border-border-default my-2" />;
         if (t.startsWith('- ') || t.startsWith('* ')) {
-          return <p key={i} className="pl-4 -indent-4">{inline('• ' + t.slice(2))}</p>;
+          return <p key={i} className="pl-4 -indent-4">{inline('• ' + t.slice(2), cites, onCite)}</p>;
         }
-        return <p key={i}>{inline(line)}</p>;
+        return <p key={i}>{inline(line, cites, onCite)}</p>;
       })}
     </div>
   );
@@ -79,6 +112,14 @@ export default function AskPage() {
   const [busy, setBusy] = useState(false);
   const [pageBusy, setPageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modalBill, setModalBill] = useState<BillSummary | null>(null);  // opened from a citation
+
+  // ref ("STATE BILL_NUMBER") → citation, so inline [markers] and the cited list open the bill modal.
+  const citeByRef = useMemo(() => {
+    const m = new Map<string, ResearchCitation>();
+    for (const c of answer?.citations ?? []) if (c.bill) m.set(citationRef(c), c);
+    return m;
+  }, [answer]);
 
   async function ask(q: string) {
     const trimmed = q.trim();
@@ -180,7 +221,7 @@ export default function AskPage() {
 
       {answer && (
         <div className="space-y-5 border-t border-border-default pt-6">
-          <AnswerText text={answer.answer} />
+          <AnswerText text={answer.answer} cites={citeByRef} onCite={c => c.bill && setModalBill(c.bill)} />
 
           {answer.chart && answer.chart.bars.length > 0 && (
             <AnswerChart title={answer.chart.title} bars={answer.chart.bars} />
@@ -192,16 +233,32 @@ export default function AskPage() {
                 Cited bills ({answer.citations.length})
               </div>
               <ul className="space-y-2">
-                {answer.citations.map(c => (
-                  <li key={c.bill_id} className="border-l-2 border-green-accent/40 pl-3">
-                    <div className="text-body text-text-primary">
-                      <span className="font-mono text-green-accent text-sm">{c.state} {c.bill_number}</span>
-                      {c.region && c.region !== c.state && <span className="text-text-muted text-xs ml-2">{c.region}</span>}
-                      {c.year && <span className="text-text-muted text-xs ml-2">{c.year}</span>}
-                    </div>
-                    {c.snippet && <p className="text-xs text-text-muted italic mt-0.5 leading-snug">…{c.snippet}…</p>}
-                  </li>
-                ))}
+                {answer.citations.map(c => {
+                  const body = (
+                    <>
+                      <div className="text-body text-text-primary">
+                        <span className="font-mono text-green-accent text-sm">{c.state} {c.bill_number}</span>
+                        {c.region && c.region !== c.state && <span className="text-text-muted text-xs ml-2">{c.region}</span>}
+                        {c.year && <span className="text-text-muted text-xs ml-2">{c.year}</span>}
+                      </div>
+                      {c.snippet && <p className="text-xs text-text-muted italic mt-0.5 leading-snug">…{c.snippet}…</p>}
+                    </>
+                  );
+                  // Clickable when the bill payload is present — opens the same modal as the table.
+                  return c.bill ? (
+                    <li key={c.bill_id}>
+                      <button
+                        type="button"
+                        onClick={() => setModalBill(c.bill!)}
+                        className="w-full text-left border-l-2 border-green-accent/40 pl-3 rounded-sm hover:bg-bg-secondary focus:outline-none focus:bg-bg-secondary transition-colors"
+                      >
+                        {body}
+                      </button>
+                    </li>
+                  ) : (
+                    <li key={c.bill_id} className="border-l-2 border-green-accent/40 pl-3">{body}</li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -228,6 +285,10 @@ export default function AskPage() {
           )}
         </div>
       )}
+
+      {/* Modal opened from an inline citation or the cited-bills list. The bottom relevant-bills
+          table owns its own modal instance; this one covers cited bills that may not be on page 1. */}
+      <BillModal bill={modalBill} onClose={() => setModalBill(null)} />
     </div>
   );
 }

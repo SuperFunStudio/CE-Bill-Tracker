@@ -171,6 +171,9 @@ export interface ResearchCitation {
   bill_number?: string | null;
   year?: number | null;
   snippet?: string | null;
+  // Full summary so an in-sentence [STATE BILL_NUMBER] marker or the cited-bills list can open the
+  // same bill modal the relevant-bills table opens — even for a cited bill not on table page 1.
+  bill?: BillSummary | null;
 }
 // One page of the full relevant-bill set backing an answer (GET /research/bills for pages 2+).
 // `total` is the complete count across all pages, so the table can page through every relevant bill.

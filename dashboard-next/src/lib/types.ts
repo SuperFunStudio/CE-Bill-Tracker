@@ -190,6 +190,11 @@ export interface ResearchAnswer {
   chart?: ResearchChart | null;
   coverage_note?: string | null;
   bills?: ResearchBillPage | null;
+  // Thread continuity — pass session_id back to ask a follow-up; retrieval_query is the standalone
+  // query this turn actually ran on (set only when it differs from the raw follow-up), used for paging.
+  session_id?: string | null;
+  seq?: number | null;
+  retrieval_query?: string | null;
 }
 
 // --- Bill-strength evaluation (POST /evaluate/bill) — see app/evaluation/strength.py --------------

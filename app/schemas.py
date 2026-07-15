@@ -142,8 +142,13 @@ class InstrumentMaterialCell(BaseModel):
 
 
 class ResearchAskRequest(BaseModel):
-    """A natural-language question for the 'Ask the Bills' endpoint (POST /research/ask)."""
+    """A natural-language question for the 'Ask the Bills' endpoint (POST /research/ask).
+
+    `session_id` continues an existing research thread: when present (and owned by the caller), the
+    question is treated as a FOLLOW-UP — condensed against the thread into a standalone retrieval query
+    and appended as the next turn. Omit it to start a fresh session."""
     question: str
+    session_id: str | None = None
 
 
 class ResearchChartBar(BaseModel):
@@ -195,6 +200,29 @@ class ResearchAnswer(BaseModel):
     # Page 1 of the full relevant-bill set backing this answer; subsequent pages come from
     # GET /research/bills (SQL-only, no LLM). None when the question yields no relevant bills.
     bills: ResearchBillPage | None = None
+    # Thread continuity: the session this turn belongs to (pass back as ResearchAskRequest.session_id to
+    # ask a follow-up) and its 1-based position. `retrieval_query` is the standalone query retrieval
+    # actually ran — equal to `question` for a first turn, the rewritten form for a follow-up; the client
+    # pages GET /research/bills with THIS (not the raw follow-up) so pages match the answer.
+    session_id: str | None = None
+    seq: int | None = None
+    retrieval_query: str | None = None
+
+
+class ResearchTurnOut(BaseModel):
+    """One persisted turn of a research thread (for GET /research/session/{id} — thread restore)."""
+    seq: int
+    question: str
+    retrieval_query: str | None = None
+    answer: str | None = None
+    bill_total: int = 0
+
+
+class ResearchSessionOut(BaseModel):
+    """A research thread with its turns in order, for restoring/continuing a conversation."""
+    session_id: str
+    title: str | None = None
+    turns: list[ResearchTurnOut]
 
 
 # --- Bill-strength evaluation (POST /evaluate/bill) — see app/evaluation/strength.py ----------------

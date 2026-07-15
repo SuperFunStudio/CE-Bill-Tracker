@@ -12,8 +12,11 @@ import { ScopeOnboarding } from '@/components/scope/ScopeOnboarding';
  */
 // Pages where the global jurisdiction filter is meaningless and only sends mixed signals: Upcoming
 // Deadlines + Federal Actions are US-only datasets, and Packaging Studio quotes fixed foreign fee
-// schedules (UK pEPR, JP JCPRA) that a US-state region selector would contradict.
-const REGION_BAR_HIDDEN = ['/compliance', '/federal', '/studio'];
+// schedules (UK pEPR, JP JCPRA) that a US-state region selector would contradict. Ask the Bills scopes
+// geography from the QUESTION TEXT (resolve_facets), so the bar is a dead control there — it never
+// reached the request. Atlas-migration note: when the ask textbox becomes the primary home UI, the
+// global region filter should fold into the unified bill-explorer filter set, not sit above the ask.
+const REGION_BAR_HIDDEN = ['/compliance', '/federal', '/studio', '/ask'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

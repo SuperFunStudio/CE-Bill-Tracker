@@ -113,11 +113,15 @@ export async function fetchBills(params?: BillParams): Promise<BillSummary[]> {
 }
 
 /** "Ask the Bills" (Pro) — POST a natural-language question, get a cited answer + optional chart. */
-export async function askResearch(question: string, token?: string | null): Promise<ResearchAnswer> {
+/** Ask a question. Pass `sessionId` to continue an existing thread — the server treats the question as
+ *  a follow-up (condensed against the thread) and appends it as the next turn. Omit it to start fresh. */
+export async function askResearch(
+  question: string, token?: string | null, sessionId?: string | null,
+): Promise<ResearchAnswer> {
   const res = await fetch(buildUrl('/research/ask'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, ...(sessionId ? { session_id: sessionId } : {}) }),
   });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();

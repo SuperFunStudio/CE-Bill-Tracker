@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/components/auth/AuthContext';
 import { askResearch, fetchResearchBills } from '@/lib/api';
 import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchCitation } from '@/lib/types';
@@ -101,36 +101,73 @@ function AnswerChart({ title, bars }: { title: string; bars: { label: string; va
   );
 }
 
+/** The cited-bills list for one answer. Each entry opens the same bill modal the inline [markers] and
+ *  the relevant-bills table open. */
+function CitedBills({ citations, onOpen }: { citations: ResearchCitation[]; onOpen: (b: BillSummary) => void }) {
+  return (
+    <div className="space-y-2">
+      <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
+        Cited bills ({citations.length})
+      </div>
+      <ul className="space-y-2">
+        {citations.map(c => {
+          const body = (
+            <>
+              <div className="text-body text-text-primary">
+                <span className="font-mono text-green-accent text-sm">{c.state} {c.bill_number}</span>
+                {c.region && c.region !== c.state && <span className="text-text-muted text-xs ml-2">{c.region}</span>}
+                {c.year && <span className="text-text-muted text-xs ml-2">{c.year}</span>}
+              </div>
+              {c.snippet && <p className="text-xs text-text-muted italic mt-0.5 leading-snug">…{c.snippet}…</p>}
+            </>
+          );
+          return c.bill ? (
+            <li key={c.bill_id}>
+              <button
+                type="button"
+                onClick={() => onOpen(c.bill!)}
+                className="w-full text-left border-l-2 border-green-accent/40 pl-3 rounded-sm hover:bg-bg-secondary focus:outline-none focus:bg-bg-secondary transition-colors"
+              >
+                {body}
+              </button>
+            </li>
+          ) : (
+            <li key={c.bill_id} className="border-l-2 border-green-accent/40 pl-3">{body}</li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export default function AskPage() {
   // Admin-gated for now (dogfooding in prod before it opens to Pro). To graduate to a Pro feature,
   // swap isAdmin→isPro here, flip the endpoint's require_admin→require_pro, and drop the nav adminOnly.
   const { isAdmin, getToken, loading: authLoading } = useAuth();
   const [question, setQuestion] = useState('');
-  const [asked, setAsked] = useState('');            // the question the current results belong to
-  const [answer, setAnswer] = useState<ResearchAnswer | null>(null);
-  const [billPage, setBillPage] = useState<ResearchBillPage | null>(null);
+  // The conversation: each turn is a question + its grounded answer. A follow-up is asked with the
+  // current sessionId so the server condenses it against the thread before retrieving.
+  const [turns, setTurns] = useState<{ q: string; answer: ResearchAnswer }[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [billPage, setBillPage] = useState<ResearchBillPage | null>(null);  // relevant-bills table for the LAST turn
+  const [lastQuery, setLastQuery] = useState('');   // the retrieval query backing that table (for paging)
   const [busy, setBusy] = useState(false);
   const [pageBusy, setPageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalBill, setModalBill] = useState<BillSummary | null>(null);  // opened from a citation
 
-  // ref ("STATE BILL_NUMBER") → citation, so inline [markers] and the cited list open the bill modal.
-  const citeByRef = useMemo(() => {
-    const m = new Map<string, ResearchCitation>();
-    for (const c of answer?.citations ?? []) if (c.bill) m.set(citationRef(c), c);
-    return m;
-  }, [answer]);
-
   async function ask(q: string) {
     const trimmed = q.trim();
     if (trimmed.length < 3 || busy || !isAdmin) return;
-    setBusy(true); setError(null); setAnswer(null); setBillPage(null);
+    setBusy(true); setError(null);
     try {
       const token = await getToken();
-      const a = await askResearch(trimmed, token);
-      setAnswer(a);
+      const a = await askResearch(trimmed, token, sessionId);   // sessionId null on the first turn
+      setTurns(prev => [...prev, { q: trimmed, answer: a }]);
+      setSessionId(a.session_id ?? sessionId);
       setBillPage(a.bills ?? null);
-      setAsked(trimmed);
+      setLastQuery(a.retrieval_query ?? trimmed);
+      setQuestion('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -138,12 +175,17 @@ export default function AskPage() {
     }
   }
 
+  function newThread() {
+    setTurns([]); setSessionId(null); setBillPage(null); setLastQuery('');
+    setQuestion(''); setError(null);
+  }
+
   async function goToPage(page: number) {
     if (!billPage || pageBusy) return;
     setPageBusy(true);
     try {
       const token = await getToken();
-      setBillPage(await fetchResearchBills(asked, page, billPage.page_size, token));
+      setBillPage(await fetchResearchBills(lastQuery, page, billPage.page_size, token));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -177,23 +219,39 @@ export default function AskPage() {
           value={question}
           onChange={e => setQuestion(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ask(question); }}
-          placeholder="e.g. Do bills measure collection targets by weight or by value recovered?"
+          placeholder={turns.length === 0
+            ? 'e.g. Do bills measure collection targets by weight or by value recovered?'
+            : 'Ask a follow-up — e.g. "what about Japan?" or "just the enacted ones"'}
           rows={3}
           className="w-full rounded-lg border border-border-default bg-bg-primary px-4 py-3 text-body text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent resize-none"
         />
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-text-muted">Admin preview · ⌘/Ctrl+Enter to ask</span>
-          <button
-            type="submit"
-            disabled={busy || question.trim().length < 3}
-            className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
-          >
-            {busy ? 'Thinking…' : 'Ask'}
-          </button>
+          <span className="text-xs text-text-muted">
+            {turns.length > 0 ? 'Follow-up · keeps the thread’s context' : 'Admin preview'} · ⌘/Ctrl+Enter to ask
+          </span>
+          <div className="flex items-center gap-2">
+            {turns.length > 0 && (
+              <button
+                type="button"
+                onClick={newThread}
+                disabled={busy}
+                className="rounded-full border border-border-default px-4 py-2 text-sm text-text-secondary hover:text-text-primary disabled:opacity-40"
+              >
+                New thread
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={busy || question.trim().length < 3}
+              className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              {busy ? 'Thinking…' : turns.length > 0 ? 'Ask follow-up' : 'Ask'}
+            </button>
+          </div>
         </div>
       </form>
 
-      {!answer && !busy && (
+      {turns.length === 0 && !busy && (
         <div className="flex flex-wrap gap-2">
           {EXAMPLES.map(ex => (
             <button
@@ -209,80 +267,61 @@ export default function AskPage() {
 
       {error && <p className="text-sm text-error">{error}</p>}
 
+      {/* The conversation, oldest first. Each turn shows its question, the grounded answer, any chart
+          and cited bills; only the latest turn carries the paginated relevant-bills table. */}
+      {turns.map((t, ti) => {
+        const isLast = ti === turns.length - 1;
+        const cites = new Map<string, ResearchCitation>();
+        for (const c of t.answer.citations) if (c.bill) cites.set(citationRef(c), c);
+        return (
+          <div key={ti} className="space-y-5 border-t border-border-default pt-6">
+            <div className="flex gap-2 font-serif text-lg text-text-primary">
+              <span className="shrink-0 text-green-accent">{turns.length > 1 ? `Q${ti + 1}.` : 'Q.'}</span>
+              <span>{t.q}</span>
+            </div>
+
+            <AnswerText text={t.answer.answer} cites={cites} onCite={c => c.bill && setModalBill(c.bill)} />
+
+            {t.answer.chart && t.answer.chart.bars.length > 0 && (
+              <AnswerChart title={t.answer.chart.title} bars={t.answer.chart.bars} />
+            )}
+
+            {t.answer.citations.length > 0 && (
+              <CitedBills citations={t.answer.citations} onOpen={setModalBill} />
+            )}
+
+            {isLast && billPage && billPage.total > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
+                    Relevant bills ({billPage.total})
+                  </div>
+                  <span className="text-xs text-text-muted">{strategyLabel(billPage.strategy)}</span>
+                </div>
+                <div className={pageBusy ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
+                  <BillTable bills={billPage.items} />
+                </div>
+                <BillPager page={billPage} busy={pageBusy} onGo={goToPage} />
+              </div>
+            )}
+
+            {t.answer.coverage_note && (
+              <p className="text-xs text-text-muted border-t border-border-default pt-3">
+                {t.answer.coverage_note}
+              </p>
+            )}
+          </div>
+        );
+      })}
+
       {busy && (
-        <div className="space-y-3">
+        <div className="space-y-3 border-t border-border-default pt-6">
           <p className="text-sm text-text-secondary">
-            Reading the full text of the most relevant bills and synthesizing a cited answer — this
-            takes a moment.
+            {turns.length > 0
+              ? 'Following up on the thread — reading the most relevant bills and synthesizing a cited answer.'
+              : 'Reading the full text of the most relevant bills and synthesizing a cited answer — this takes a moment.'}
           </p>
           <div className="h-24 w-full animate-pulse rounded-lg bg-bg-tertiary" />
-        </div>
-      )}
-
-      {answer && (
-        <div className="space-y-5 border-t border-border-default pt-6">
-          <AnswerText text={answer.answer} cites={citeByRef} onCite={c => c.bill && setModalBill(c.bill)} />
-
-          {answer.chart && answer.chart.bars.length > 0 && (
-            <AnswerChart title={answer.chart.title} bars={answer.chart.bars} />
-          )}
-
-          {answer.citations.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
-                Cited bills ({answer.citations.length})
-              </div>
-              <ul className="space-y-2">
-                {answer.citations.map(c => {
-                  const body = (
-                    <>
-                      <div className="text-body text-text-primary">
-                        <span className="font-mono text-green-accent text-sm">{c.state} {c.bill_number}</span>
-                        {c.region && c.region !== c.state && <span className="text-text-muted text-xs ml-2">{c.region}</span>}
-                        {c.year && <span className="text-text-muted text-xs ml-2">{c.year}</span>}
-                      </div>
-                      {c.snippet && <p className="text-xs text-text-muted italic mt-0.5 leading-snug">…{c.snippet}…</p>}
-                    </>
-                  );
-                  // Clickable when the bill payload is present — opens the same modal as the table.
-                  return c.bill ? (
-                    <li key={c.bill_id}>
-                      <button
-                        type="button"
-                        onClick={() => setModalBill(c.bill!)}
-                        className="w-full text-left border-l-2 border-green-accent/40 pl-3 rounded-sm hover:bg-bg-secondary focus:outline-none focus:bg-bg-secondary transition-colors"
-                      >
-                        {body}
-                      </button>
-                    </li>
-                  ) : (
-                    <li key={c.bill_id} className="border-l-2 border-green-accent/40 pl-3">{body}</li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-
-          {billPage && billPage.total > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
-                  Relevant bills ({billPage.total})
-                </div>
-                <span className="text-xs text-text-muted">{strategyLabel(billPage.strategy)}</span>
-              </div>
-              <div className={pageBusy ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
-                <BillTable bills={billPage.items} />
-              </div>
-              <BillPager page={billPage} busy={pageBusy} onGo={goToPage} />
-            </div>
-          )}
-
-          {answer.coverage_note && (
-            <p className="text-xs text-text-muted border-t border-border-default pt-3">
-              {answer.coverage_note}
-            </p>
-          )}
         </div>
       )}
 

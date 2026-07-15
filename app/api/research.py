@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import uuid
 
 import anthropic
 import structlog
@@ -38,6 +39,8 @@ from app.schemas import (
     ResearchChart,
     ResearchChartBar,
     ResearchCitation,
+    ResearchSessionOut,
+    ResearchTurnOut,
 )
 
 router = APIRouter(prefix="/research", tags=["research"])
@@ -469,13 +472,26 @@ def _pack_material(rows, passages: dict[int, str]) -> list[dict]:
     return packed
 
 
-async def _deep_answer(question: str, scope: dict, agg_scoped: dict, agg_corpus, packed: list) -> str:
+async def _deep_answer(question: str, scope: dict, agg_scoped: dict, agg_corpus, packed: list,
+                       history: list[dict] | None = None) -> str:
     """One synthesis call → the markdown briefing (returned directly, not JSON, so a long answer can't
-    be broken by truncated-JSON parsing). Citations are recovered from the [REF] mentions afterward."""
+    be broken by truncated-JSON parsing). Citations are recovered from the [REF] mentions afterward.
+    On a follow-up, `history` (prior [{question, answer}] turns) is prepended so references like "those"
+    or "compare that to Japan" resolve; the BILL MATERIAL is still freshly retrieved for THIS turn."""
     agg_block: dict = {"scoped": agg_scoped}
     if agg_corpus is not None:
         agg_block["corpus_wide"] = agg_corpus
+    convo = ""
+    if history:
+        # Prior answers can be long; a short tail per turn is enough to resolve references without
+        # blowing the context or re-citing stale bills (this turn cites only THIS turn's material).
+        turns = "\n\n".join(
+            f"Q{i+1}: {h['question']}\nA{i+1}: {(h.get('answer') or '')[:1200]}"
+            for i, h in enumerate(history))
+        convo = (f"CONVERSATION SO FAR (for context — resolve references against it, but ground every "
+                 f"citation ONLY in the BILL MATERIAL below):\n{turns}\n\n")
     user_msg = (
+        f"{convo}"
         f"QUESTION: {question}\n\n"
         f"SCOPE:\n{json.dumps(scope, ensure_ascii=False)}\n\n"
         f"AGGREGATES:\n{json.dumps(agg_block, ensure_ascii=False)}\n\n"
@@ -488,26 +504,87 @@ async def _deep_answer(question: str, scope: dict, agg_scoped: dict, agg_corpus,
     return resp.content[0].text.strip()
 
 
-async def _persist_turn(uid, question, facets, strategy, total, answer_text, cited_ids, bill_ids, shadow=None):
+_REWRITE_SYSTEM = (
+    "You rewrite a user's FOLLOW-UP question in a research conversation into a single, standalone search "
+    "query that captures everything needed to retrieve the right bills WITHOUT the conversation. Resolve "
+    "pronouns and references ('those', 'that', 'the enacted ones', 'same but for Japan') using the prior "
+    "turns, and carry forward any still-applicable scope (jurisdiction, material, instrument) unless the "
+    "follow-up overrides or drops it.\n"
+    "PRESERVE THE ANALYTICAL FRAME of the thread: if the conversation asks what OTHER regions can learn "
+    "FROM a place, or compares X against Y, keep that same direction/verb and only substitute the new "
+    "entity the follow-up introduces. Example: prior 'what can the rest of the regions learn from the "
+    "Chinese bills?' + follow-up 'what about Japan?' -> 'what can the rest of the regions learn from the "
+    "Japanese bills?' (NOT 'what can Japan learn').\n"
+    "Output ONLY the rewritten query text — no preamble, no quotes."
+)
+
+
+async def _rewrite_followup(history: list[dict], question: str) -> str:
+    """Condense (thread + follow-up) into a standalone retrieval query via one cheap Haiku call. The
+    rewritten query then flows through the SAME deterministic resolve_facets / _relevant_bills path, so
+    no follow-up-specific retrieval logic is needed. Best-effort: on any failure, fall back to the raw
+    question (retrieval still works, just without carried context)."""
+    if not history:
+        return question
+    convo = "\n".join(f"Q: {h['question']}\nA: {(h.get('answer') or '')[:500]}" for h in history)
+    try:
+        resp = await _client.messages.create(
+            model="claude-haiku-4-5-20251001", max_tokens=200, temperature=0,
+            system=_REWRITE_SYSTEM,
+            messages=[{"role": "user", "content": f"CONVERSATION:\n{convo}\n\nFOLLOW-UP: {question}\n\n"
+                                                  f"Standalone query:"}])
+        text = "".join(getattr(b, "text", "") for b in resp.content).strip()
+        return text or question
+    except Exception as e:  # noqa: BLE001 — never let the rewrite break the ask
+        log.warning("research_followup_rewrite_failed", error=str(e))
+        return question
+
+
+async def _load_history(db: AsyncSession, uid: str, session_id: str):
+    """Load an owned session's prior turns as [{question, answer}] + the next seq. Returns ([], 1, None)
+    when the session is missing or not owned by `uid` (→ caller silently starts a fresh session)."""
+    from app.models import ResearchSession, ResearchTurn
+    try:
+        sess = await db.get(ResearchSession, uuid.UUID(str(session_id)))
+    except (ValueError, TypeError):
+        return [], 1, None
+    if not sess or sess.owner_uid != uid:
+        return [], 1, None
+    rows = (await db.execute(
+        select(ResearchTurn.question, ResearchTurn.answer, ResearchTurn.seq)
+        .where(ResearchTurn.session_id == sess.id).order_by(ResearchTurn.seq))).all()
+    history = [{"question": r.question, "answer": (r.answer or {}).get("text", "")} for r in rows]
+    next_seq = (max((r.seq for r in rows), default=0)) + 1
+    return history, next_seq, sess.id
+
+
+async def _persist_turn(uid, question, facets, strategy, total, answer_text, cited_ids, bill_ids,
+                        shadow=None, session_id=None, seq=1, retrieval_query=None):
     """Persist the answer as a research_session + turn — the analysis layer that later becomes the
     Layer-1 knowledge cache. Uses its OWN fresh session (not the request's, which was released before
-    the long LLM call) so a healthy connection does the write. Best-effort; the caller swallows
-    failures so a save error never breaks the answer."""
+    the long LLM call) so a healthy connection does the write. When `session_id` is given (a follow-up),
+    the turn is APPENDED at `seq`; otherwise a new session is created at seq=1. Returns the session id so
+    the caller can hand it back for threading. Best-effort; the caller swallows failures so a save error
+    never breaks the answer."""
     from app.models import ResearchSession, ResearchTurn
     async with AsyncSessionLocal() as s:
-        sess = ResearchSession(owner_uid=uid, title=question[:200])
-        s.add(sess)
-        await s.flush()
+        if session_id is None:
+            sess = ResearchSession(owner_uid=uid, title=question[:200])
+            s.add(sess)
+            await s.flush()
+            session_id = sess.id
         fac = {"places": facets.place_labels, "reference": facets.reference_labels, "strategy": strategy}
         if shadow:
             fac["shadow_router"] = shadow  # A1 shadow-mode comparison (router vs deterministic); not used for retrieval
         s.add(ResearchTurn(
-            session_id=sess.id, seq=1, question=question, rewritten_query=facets.free_text,
+            session_id=session_id, seq=seq, question=question,
+            rewritten_query=(retrieval_query if retrieval_query is not None else facets.free_text),
             facets=fac,
             strategy=(strategy or "")[:40],  # column is VARCHAR(40); multi-material strategies overflow
             answer={"text": answer_text, "cited_bill_ids": cited_ids},
             bill_ids=bill_ids, bill_total=total))
         await s.commit()
+        return session_id
 
 
 # --- Shadow-mode LLM router (A1) -----------------------------------------------------------------
@@ -590,13 +667,23 @@ async def ask_the_bills(
     if len(question) < 3:
         return ResearchAnswer(answer="Please ask a fuller question.", citations=[], coverage_note=None)
 
-    facets = await resolve_facets(db, question)
+    # Thread continuity: if a valid owned session was passed, this is a FOLLOW-UP. Load its prior turns
+    # and condense (thread + this question) into a standalone retrieval query, so the deterministic
+    # retrieval path below is unchanged — it just runs on the rewritten query. First turns are untouched
+    # (history empty → retrieval_q == question → no extra LLM call).
+    history, seq, session_id = [], 1, None
+    if body.session_id:
+        history, seq, session_id = await _load_history(db, _user.uid, body.session_id)
+    retrieval_q = await _rewrite_followup(history, question) if history else question
+
+    facets = await resolve_facets(db, retrieval_q)
     geo_extra = _scope_extra(facets)  # jurisdiction + material scope for the scoped aggregates
 
     # The full matched set drives the table (page 1); the top _DEEP_READ are read DEEPLY — their
-    # full-text passages, not summaries — and synthesized into a cited answer.
-    page_rows, total, strategy = await _relevant_bills(db, question, page=1, page_size=_PAGE_SIZE)
-    read_rows, _, _ = await _relevant_bills(db, question, page=1, page_size=_DEEP_READ)
+    # full-text passages, not summaries — and synthesized into a cited answer. Retrieval runs on the
+    # (possibly rewritten) standalone query, with the resolved facets passed so it isn't re-resolved.
+    page_rows, total, strategy = await _relevant_bills(db, retrieval_q, page=1, page_size=_PAGE_SIZE, facets=facets)
+    read_rows, _, _ = await _relevant_bills(db, retrieval_q, page=1, page_size=_DEEP_READ, facets=facets)
 
     terms = facets.meaningful_terms()
     passages = await _passages_for(db, [r.Bill.id for r in read_rows], terms)
@@ -627,8 +714,8 @@ async def ask_the_bills(
     # Synthesis (Sonnet, DB-free) and the shadow router (Haiku, own session) run concurrently — the
     # router finishes within the synthesis window, so shadow mode costs ~no added latency.
     answer_text, shadow = await asyncio.gather(
-        _deep_answer(question, scope, agg_scoped, agg_corpus, packed),
-        _shadow_route(question, facets, total, [r.Bill.id for r in page_rows]),
+        _deep_answer(question, scope, agg_scoped, agg_corpus, packed, history=history),
+        _shadow_route(retrieval_q, facets, total, [r.Bill.id for r in page_rows]),
     )
     answer_text = answer_text or "I couldn't find enough in the corpus to answer that."
 
@@ -650,8 +737,11 @@ async def ask_the_bills(
                 if total > len(packed) else f"Synthesized from all {total} matched bills.")
 
     # Persist the answer (analysis layer / future Layer-1 cache). Best-effort — never break the answer.
+    # Appends to the existing session on a follow-up, else mints one; returns the id for threading.
     try:
-        await _persist_turn(_user.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids, shadow=shadow)
+        session_id = await _persist_turn(
+            _user.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids,
+            shadow=shadow, session_id=session_id, seq=seq, retrieval_query=retrieval_q)
     except Exception as e:  # noqa: BLE001
         log.warning("research_persist_failed", error=str(e))
 
@@ -660,11 +750,14 @@ async def ask_the_bills(
         items=[_row_to_summary(r) for r in page_rows],
     )
     # A bills-by-year chart when the question asks for a trend — exact bars from the SQL year aggregate.
+    # Triggered on the rewritten query so a follow-up like "show that over time" still fires.
     scope_labels = (facets.place_labels + facets.material_labels + facets.instrument_labels
                     + facets.product_labels)
-    chart = _year_chart(question, agg_scoped, scope_labels)
+    chart = _year_chart(retrieval_q, agg_scoped, scope_labels)
     return ResearchAnswer(answer=answer_text, citations=citations, chart=chart,
-                          coverage_note=coverage, bills=bills)
+                          coverage_note=coverage, bills=bills,
+                          session_id=str(session_id) if session_id else None, seq=seq,
+                          retrieval_query=(retrieval_q if retrieval_q != question else None))
 
 
 @router.get("/bills", response_model=ResearchBillPage)
@@ -682,4 +775,33 @@ async def research_bills(
     return ResearchBillPage(
         total=total, page=page, page_size=page_size, strategy=strategy,
         items=[_row_to_summary(r) for r in rows],
+    )
+
+
+@router.get("/session/{session_id}", response_model=ResearchSessionOut)
+async def research_session(
+    session_id: str,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ResearchSessionOut:
+    """Load an owned research thread with its turns in order — so the Ask page can restore/continue a
+    conversation. 404 if the session doesn't exist or isn't owned by the caller (no cross-user reads)."""
+    from fastapi import HTTPException
+    from app.models import ResearchSession, ResearchTurn
+    try:
+        sid = uuid.UUID(session_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="No such session.")
+    sess = await db.get(ResearchSession, sid)
+    if not sess or sess.owner_uid != _user.uid:
+        raise HTTPException(status_code=404, detail="No such session.")
+    rows = (await db.execute(
+        select(ResearchTurn.seq, ResearchTurn.question, ResearchTurn.rewritten_query, ResearchTurn.answer,
+               ResearchTurn.bill_total)
+        .where(ResearchTurn.session_id == sid).order_by(ResearchTurn.seq))).all()
+    return ResearchSessionOut(
+        session_id=str(sid), title=sess.title,
+        turns=[ResearchTurnOut(
+            seq=r.seq, question=r.question, retrieval_query=r.rewritten_query,
+            answer=(r.answer or {}).get("text"), bill_total=r.bill_total or 0) for r in rows],
     )

@@ -31,6 +31,14 @@ _STOPWORDS = frozenset({
     # "corpus"/"incentives" whose presence/absence affects dimension routing — that's LLM-router work).
     "database", "have", "has", "please", "can", "you", "your", "like", "such", "including",
     "cover", "covers", "covered", "covering",  # "which bills COVER laptops" — chrome, not a search term
+    # Comparative-framing chrome — "what can the rest of the regions LEARN from the US bills?". With a
+    # place scoped, these survived into the tsquery and AND-poisoned Rule 1: US (8443 bills) had 8 that
+    # happened to contain rest+regions+learn, starving the answer to 8, while foreign regions' non-
+    # English text matched none and correctly fell through to the full-region listing. "region(s)" is
+    # chrome in a jurisdiction tool; the topical "across/other regions" senses are handled by
+    # _EXPANSION_CUES above, not here.
+    "learn", "learns", "learned", "teach", "teaches", "lesson", "lessons", "rest", "others",
+    "region", "regions", "regional", "jurisdiction", "jurisdictions",
 })
 
 

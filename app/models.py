@@ -1160,3 +1160,32 @@ class ResearchTurn(Base):
     session: Mapped["ResearchSession"] = relationship("ResearchSession", back_populates="turns")
 
     __table_args__ = (Index("idx_research_turns_session", "session_id", "seq"),)
+
+
+class ContentDraft(Base):
+    """An editorial draft distilled from a research turn — the staging area behind the Substack content
+    engine (migration 038). An admin runs a turn through the linking + editorial pass and it lands here;
+    `body_markdown` already has its [STATE BILL_NUMBER] citations rewritten to /?bill=<id> deep links so
+    it can be pasted straight into Substack. Nothing here auto-publishes — `status` tracks the manual
+    workflow (staged → published-once-copied-out). See app/api/research.py."""
+    __tablename__ = "content_drafts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    # Provenance — nullable + SET NULL so deleting a research thread can't destroy an article draft.
+    source_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("research_sessions.id", ondelete="SET NULL"), nullable=True
+    )
+    source_seq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    dek: Mapped[str | None] = mapped_column(Text, nullable=True)  # subtitle / standfirst
+    body_markdown: Mapped[str] = mapped_column(Text, nullable=False)  # linked + edited article body
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="staged")  # staged|draft|published
+    created_by: Mapped[str | None] = mapped_column(String(200), nullable=True)  # admin email
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (Index("idx_content_drafts_status", "status", "created_at"),)

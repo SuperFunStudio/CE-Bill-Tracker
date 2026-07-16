@@ -225,6 +225,96 @@ class ResearchSessionOut(BaseModel):
     turns: list[ResearchTurnOut]
 
 
+# --- Admin research log + sharing + content staging (the Substack content engine) ------------------
+class ResearchTurnAdminItem(BaseModel):
+    """One persisted turn as the admin log sees it — every ask across every owner, so the whole
+    research history is auditable and mineable for publishable content. Carries the parent session's
+    share state so the log can offer share/draft actions inline."""
+    turn_id: str
+    session_id: str
+    session_title: str | None = None
+    owner_uid: str
+    seq: int
+    question: str
+    answer: str | None = None            # linked markdown ([REF] rewritten to /?bill=<id>)
+    strategy: str | None = None
+    bill_total: int = 0
+    cited_count: int = 0
+    visibility: str = "private"          # private | link
+    share_token: str | None = None
+    created_at: datetime | None = None
+
+
+class ResearchTurnAdminPage(BaseModel):
+    total: int
+    items: list[ResearchTurnAdminItem]
+
+
+class ShareOut(BaseModel):
+    """The result of sharing (or unsharing) a research session — the unguessable link a colleague opens."""
+    session_id: str
+    visibility: str          # link | private
+    share_token: str | None = None
+    share_url: str | None = None
+
+
+class SharedCitationOut(BaseModel):
+    """A cited bill on a public shared page — links out to the live bill modal (no in-app modal here)."""
+    bill_id: int
+    ref: str                 # "MD HB331"
+    region: str | None = None
+    year: int | None = None
+    url: str                 # battleofbills.com/?bill=<id>
+
+
+class SharedTurnOut(BaseModel):
+    seq: int
+    question: str
+    answer: str | None = None            # linked markdown
+    citations: list[SharedCitationOut] = []
+
+
+class SharedSessionOut(BaseModel):
+    """A publicly shared research thread (GET /research/shared/{token}) — read-only, noindex."""
+    title: str | None = None
+    created_at: datetime | None = None
+    turns: list[SharedTurnOut]
+
+
+class ContentDraftCreate(BaseModel):
+    """Send a research turn to the staging area. `seq` picks the turn within the session (defaults to
+    the latest). `editorial` runs a light LLM pass for a headline + dek + reshaped lede; off = the
+    linked answer verbatim with the question as the title."""
+    session_id: str
+    seq: int | None = None
+    editorial: bool = True
+
+
+class ContentDraftPatch(BaseModel):
+    title: str | None = None
+    dek: str | None = None
+    body_markdown: str | None = None
+    status: str | None = None            # staged | draft | published
+
+
+class ContentDraftOut(BaseModel):
+    id: str
+    source_session_id: str | None = None
+    source_seq: int | None = None
+    title: str
+    dek: str | None = None
+    body_markdown: str
+    status: str
+    created_by: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ContentDraftPage(BaseModel):
+    total: int
+    items: list[ContentDraftOut]
+
+
 # --- Bill-strength evaluation (POST /evaluate/bill) — see app/evaluation/strength.py ----------------
 class EvaluateRequest(BaseModel):
     """A draft/enacted measure to evaluate. Pasted text is run through the same SonnetExtractor as the

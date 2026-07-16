@@ -17,15 +17,17 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import secrets
 import uuid
 
 import anthropic
 import structlog
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, literal_column, or_, select, true
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.alerts.applinks import DASHBOARD_URL, bill_url
 from app.api.auth import AuthedUser, require_admin
 from app.api.research_facets import resolve_facets
 from app.config import settings
@@ -33,6 +35,10 @@ from app.database import AsyncSessionLocal, get_db
 from app.models import Bill, BillProductCoverage, BillText, Jurisdiction, LitigationCase
 from app.schemas import (
     BillSummary,
+    ContentDraftCreate,
+    ContentDraftOut,
+    ContentDraftPage,
+    ContentDraftPatch,
     ResearchAnswer,
     ResearchAskRequest,
     ResearchBillPage,
@@ -40,7 +46,13 @@ from app.schemas import (
     ResearchChartBar,
     ResearchCitation,
     ResearchSessionOut,
+    ResearchTurnAdminItem,
+    ResearchTurnAdminPage,
     ResearchTurnOut,
+    SharedCitationOut,
+    SharedSessionOut,
+    SharedTurnOut,
+    ShareOut,
 )
 
 router = APIRouter(prefix="/research", tags=["research"])
@@ -894,3 +906,347 @@ async def research_session(
             seq=r.seq, question=r.question, retrieval_query=r.rewritten_query,
             answer=(r.answer or {}).get("text"), bill_total=r.bill_total or 0) for r in rows],
     )
+
+
+# ============================================================================
+# Admin research log · sharing · content staging (the Substack content engine)
+# ============================================================================
+# All three surfaces read the same persisted research_turns. Two of them (a public shared thread, a
+# staged article) render the answer OUTSIDE the app — a standalone page or a Substack paste — where the
+# in-app citation modal doesn't exist. So the inline [STATE BILL_NUMBER] markers are rewritten to
+# battleofbills.com/?bill=<id> deep links (the SAME link the email alerts already use, see
+# app/alerts/applinks). link_citations does the rewrite; _ref_map_for builds the ref->id table.
+
+_CITE_TOKEN = re.compile(r"\[([^\[\]]+)\]")
+
+
+async def _ref_map_for(db: AsyncSession, bill_ids: list[int]) -> dict[str, int]:
+    """{'MD HB331': 4021, ...} for the given bills — the table that turns a citation marker into a deep
+    link. Keyed on the same 'STATE BILL_NUMBER' ref the synthesis prompt emits verbatim."""
+    ids = [i for i in dict.fromkeys(bill_ids) if i is not None]
+    if not ids:
+        return {}
+    rows = (await db.execute(
+        select(Bill.id, Bill.state, Bill.bill_number).where(Bill.id.in_(ids)))).all()
+    return {f"{r.state} {r.bill_number}": r.id for r in rows if r.bill_number}
+
+
+def link_citations(text: str | None, ref_to_id: dict[str, int]) -> str:
+    """Rewrite inline [STATE BILL_NUMBER] markers to markdown deep links [STATE BILL_NUMBER](url) so a
+    cited answer stays clickable outside the app. Markers with no matching bill are left verbatim; the
+    stored answer carries no links yet, so this never double-links."""
+    if not text or not ref_to_id:
+        return text or ""
+
+    def repl(m: "re.Match[str]") -> str:
+        bid = ref_to_id.get(m.group(1).strip())
+        return f"[{m.group(1)}]({bill_url(bid)})" if bid is not None else m.group(0)
+
+    return _CITE_TOKEN.sub(repl, text)
+
+
+def _cited_ids(turn) -> list[int]:
+    """The bills a turn's answer actually cites (falls back to the full ranked set for older turns)."""
+    ans = turn.answer or {}
+    return list(ans.get("cited_bill_ids") or turn.bill_ids or [])
+
+
+async def _get_session_or_404(db: AsyncSession, session_id: str):
+    from app.models import ResearchSession
+    try:
+        sid = uuid.UUID(str(session_id))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="No such session.")
+    sess = await db.get(ResearchSession, sid)
+    if not sess:
+        raise HTTPException(status_code=404, detail="No such session.")
+    return sess
+
+
+# --- Admin research log: every ask, across every owner --------------------------------------------
+@router.get("/admin/turns", response_model=ResearchTurnAdminPage)
+async def admin_research_turns(
+    q: str | None = Query(default=None, description="Substring filter on the question."),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ResearchTurnAdminPage:
+    """The full research history — newest first — so an admin can audit questions and mine good answers
+    for publishable content. Each turn's answer comes back with its citations already rewritten to
+    /?bill=<id> deep links, and carries the parent session's share state for inline share/draft actions."""
+    from app.models import ResearchSession, ResearchTurn
+    stmt = (select(ResearchTurn, ResearchSession)
+            .join(ResearchSession, ResearchTurn.session_id == ResearchSession.id))
+    if q:
+        stmt = stmt.where(ResearchTurn.question.ilike(f"%{q}%"))
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+    rows = (await db.execute(
+        stmt.order_by(ResearchTurn.created_at.desc()).limit(limit).offset(offset))).all()
+
+    # One ref->id lookup for every bill cited on this page, then link each answer against it.
+    all_ids = [i for t, _ in rows for i in _cited_ids(t)]
+    ref_map = await _ref_map_for(db, all_ids)
+    items = []
+    for t, s in rows:
+        ans = (t.answer or {}).get("text")
+        items.append(ResearchTurnAdminItem(
+            turn_id=str(t.id), session_id=str(s.id), session_title=s.title, owner_uid=s.owner_uid,
+            seq=t.seq, question=t.question,
+            answer=link_citations(ans, ref_map) if ans else None,
+            strategy=t.strategy, bill_total=t.bill_total or 0, cited_count=len(_cited_ids(t)),
+            visibility=s.visibility, share_token=s.share_token, created_at=t.created_at))
+    return ResearchTurnAdminPage(total=total, items=items)
+
+
+# --- Sharing: an unguessable, revocable link to a whole thread ------------------------------------
+def _share_url(token: str) -> str:
+    # Query-param form (not a /r/<token> path): the dashboard is a static export, so the reader page is
+    # a single static /r/ route that pulls the token from the query string — same reason bill deep links
+    # use /?bill=<id> rather than a dynamic route.
+    return f"{DASHBOARD_URL}/r/?token={token}"
+
+
+@router.post("/session/{session_id}/share", response_model=ShareOut)
+async def share_session(
+    session_id: str,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ShareOut:
+    """Mint (or reuse) an unguessable share link for a research thread and flip it to link-visible. The
+    token is only ever handed out here; the public read at /research/shared/{token} matches on it."""
+    sess = await _get_session_or_404(db, session_id)
+    if not sess.share_token:
+        sess.share_token = secrets.token_urlsafe(16)
+    sess.visibility = "link"
+    await db.commit()
+    return ShareOut(session_id=str(sess.id), visibility="link", share_token=sess.share_token,
+                    share_url=_share_url(sess.share_token))
+
+
+@router.post("/session/{session_id}/unshare", response_model=ShareOut)
+async def unshare_session(
+    session_id: str,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ShareOut:
+    """Revoke sharing: back to private AND drop the token, so a link that already leaked stops working
+    (re-sharing mints a fresh one)."""
+    sess = await _get_session_or_404(db, session_id)
+    sess.visibility = "private"
+    sess.share_token = None
+    await db.commit()
+    return ShareOut(session_id=str(sess.id), visibility="private")
+
+
+@router.get("/shared/{token}", response_model=SharedSessionOut)
+async def shared_session(token: str, db: AsyncSession = Depends(get_db)) -> SharedSessionOut:
+    """PUBLIC read of a shared research thread — no auth. Resolves ONLY when the session is explicitly
+    link-shared and the token matches, so a private or never-shared thread can't leak. Citations render
+    as outbound /?bill=<id> links (there's no in-app modal on a standalone page)."""
+    from app.models import ResearchSession, ResearchTurn
+    tok = (token or "").strip()
+    if len(tok) < 8:
+        raise HTTPException(status_code=404, detail="Not found.")
+    sess = (await db.execute(
+        select(ResearchSession).where(ResearchSession.share_token == tok,
+                                      ResearchSession.visibility == "link"))).scalar_one_or_none()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Not found.")
+    turns = (await db.execute(
+        select(ResearchTurn).where(ResearchTurn.session_id == sess.id)
+        .order_by(ResearchTurn.seq))).scalars().all()
+
+    all_ids = [i for t in turns for i in _cited_ids(t)]
+    ref_map = await _ref_map_for(db, all_ids)
+    bills = {}
+    if all_ids:
+        brows = (await db.execute(
+            select(Bill).where(Bill.id.in_(list(dict.fromkeys(all_ids)))))).scalars().all()
+        bills = {b.id: b for b in brows}
+
+    turns_out = []
+    for t in turns:
+        ans = (t.answer or {}).get("text")
+        cites = []
+        for bid in _cited_ids(t):
+            b = bills.get(bid)
+            if not b or not b.bill_number:
+                continue
+            cites.append(SharedCitationOut(
+                bill_id=b.id, ref=f"{b.state} {b.bill_number}", region=b.region,
+                year=b.status_date.year if b.status_date else None, url=bill_url(b.id)))
+        turns_out.append(SharedTurnOut(
+            seq=t.seq, question=t.question,
+            answer=link_citations(ans, ref_map) if ans else None, citations=cites))
+    return SharedSessionOut(title=sess.title, created_at=sess.created_at, turns=turns_out)
+
+
+# --- Content staging: distill a turn into an editable, linkable article draft ---------------------
+_EDITORIAL_SYSTEM = """\
+You are an editor turning an internal policy-research Q&A into a short, publishable article for a
+circular-economy / EPR policy newsletter — a sharp Substack post read by producers, compliance teams,
+and policy staff. You are given the QUESTION and the grounded ANSWER (markdown, with inline
+[STATE BILL_NUMBER] citation markers).
+Return a JSON object with EXACTLY these keys:
+- "title": a specific, non-clickbait headline (<= 90 chars) — concrete about the finding, not "A look at…".
+- "dek": one-sentence standfirst saying what the reader will learn (<= 160 chars).
+- "body": the article body in markdown. Open with a 1-2 sentence lede on why this matters, then present
+  the answer's substance. You MAY lightly restructure and tighten and add connective prose, but DO NOT
+  invent facts, numbers, or bills beyond the ANSWER. PRESERVE every [STATE BILL_NUMBER] citation marker
+  EXACTLY as written and keep it beside the claim it supports (they become links downstream). Use "## "
+  subheads and "- " bullets. Do not repeat the title inside the body.
+Output ONLY the JSON object — no preamble, no code fence.
+"""
+
+
+async def _editorialize(question: str, answer_text: str) -> dict | None:
+    """One best-effort LLM pass: raw answer -> {title, dek, body} shaped like an article, citation
+    markers preserved for the downstream link pass. None on any failure (caller falls back to verbatim)."""
+    try:
+        resp = await _client.messages.create(
+            model=RESEARCH_MODEL, max_tokens=2200, temperature=0.3,
+            system=_EDITORIAL_SYSTEM,
+            messages=[{"role": "user", "content": f"QUESTION: {question}\n\nANSWER:\n{answer_text}"}])
+        raw = "".join(getattr(b, "text", "") for b in resp.content).strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+            if raw.rstrip().endswith("```"):
+                raw = raw.rstrip()[:-3]
+        data = json.loads(raw)
+        if isinstance(data, dict) and data.get("body"):
+            return {"title": str(data.get("title") or question)[:300],
+                    "dek": (str(data["dek"]) if data.get("dek") else None),
+                    "body": str(data["body"])}
+    except Exception as e:  # noqa: BLE001 — editorial is optional polish, never block staging
+        log.warning("content_editorial_failed", error=str(e))
+    return None
+
+
+def _draft_out(d) -> ContentDraftOut:
+    return ContentDraftOut(
+        id=str(d.id),
+        source_session_id=str(d.source_session_id) if d.source_session_id else None,
+        source_seq=d.source_seq, title=d.title, dek=d.dek, body_markdown=d.body_markdown,
+        status=d.status, created_by=d.created_by, created_at=d.created_at, updated_at=d.updated_at)
+
+
+@router.post("/drafts", response_model=ContentDraftOut)
+async def create_content_draft(
+    body: ContentDraftCreate,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ContentDraftOut:
+    """Send a research turn to the staging area: run the editorial pass (optional) + the citation link
+    pass, then persist an editable ContentDraft. `body_markdown` comes out Substack-ready — its
+    [STATE BILL_NUMBER] markers already rewritten to /?bill=<id> deep links."""
+    from app.models import ContentDraft, ResearchTurn
+    sess = await _get_session_or_404(db, body.session_id)
+    tq = select(ResearchTurn).where(ResearchTurn.session_id == sess.id)
+    if body.seq is not None:
+        tq = tq.where(ResearchTurn.seq == body.seq)
+    turn = (await db.execute(tq.order_by(ResearchTurn.seq.desc()).limit(1))).scalars().first()
+    if not turn:
+        raise HTTPException(status_code=404, detail="No such turn in that session.")
+    answer_text = (turn.answer or {}).get("text") or ""
+    if not answer_text.strip():
+        raise HTTPException(status_code=400, detail="That turn has no answer to stage.")
+
+    # Materialize everything the write needs, then release the request connection before the ~15s
+    # editorial call (same reason /ask does: don't hold an idle connection across an LLM round-trip).
+    ref_map = await _ref_map_for(db, _cited_ids(turn))
+    question, seq, sess_id = turn.question, turn.seq, sess.id
+    await db.close()
+
+    title, dek, body_src = question[:300], None, answer_text
+    if body.editorial:
+        ed = await _editorialize(question, answer_text)
+        if ed:
+            title, dek, body_src = ed["title"], ed["dek"], ed["body"]
+    body_md = link_citations(body_src, ref_map)
+
+    async with AsyncSessionLocal() as s:
+        draft = ContentDraft(
+            source_session_id=sess_id, source_seq=seq, title=title, dek=dek,
+            body_markdown=body_md, status="staged", created_by=_user.email)
+        s.add(draft)
+        await s.commit()
+        await s.refresh(draft)
+        return _draft_out(draft)
+
+
+@router.get("/drafts", response_model=ContentDraftPage)
+async def list_content_drafts(
+    status: str | None = Query(default=None, description="Filter by staged | draft | published."),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ContentDraftPage:
+    from app.models import ContentDraft
+    stmt = select(ContentDraft)
+    if status:
+        stmt = stmt.where(ContentDraft.status == status)
+    total = (await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
+    rows = (await db.execute(
+        stmt.order_by(ContentDraft.updated_at.desc()).limit(limit).offset(offset))).scalars().all()
+    return ContentDraftPage(total=total, items=[_draft_out(d) for d in rows])
+
+
+async def _get_draft_or_404(db: AsyncSession, draft_id: str):
+    from app.models import ContentDraft
+    try:
+        did = uuid.UUID(str(draft_id))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="No such draft.")
+    d = await db.get(ContentDraft, did)
+    if not d:
+        raise HTTPException(status_code=404, detail="No such draft.")
+    return d
+
+
+@router.get("/drafts/{draft_id}", response_model=ContentDraftOut)
+async def get_content_draft(
+    draft_id: str,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ContentDraftOut:
+    return _draft_out(await _get_draft_or_404(db, draft_id))
+
+
+_DRAFT_STATUSES = {"staged", "draft", "published"}
+
+
+@router.patch("/drafts/{draft_id}", response_model=ContentDraftOut)
+async def update_content_draft(
+    draft_id: str,
+    patch: ContentDraftPatch,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ContentDraftOut:
+    d = await _get_draft_or_404(db, draft_id)
+    if patch.title is not None:
+        d.title = patch.title[:300]
+    if patch.dek is not None:
+        d.dek = patch.dek or None
+    if patch.body_markdown is not None:
+        d.body_markdown = patch.body_markdown
+    if patch.status is not None:
+        if patch.status not in _DRAFT_STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of {sorted(_DRAFT_STATUSES)}.")
+        d.status = patch.status
+    await db.commit()
+    await db.refresh(d)
+    return _draft_out(d)
+
+
+@router.delete("/drafts/{draft_id}")
+async def delete_content_draft(
+    draft_id: str,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    d = await _get_draft_or_404(db, draft_id)
+    await db.delete(d)
+    await db.commit()
+    return {"deleted": True, "id": str(draft_id)}

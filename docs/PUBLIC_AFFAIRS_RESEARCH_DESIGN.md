@@ -205,9 +205,13 @@ links) is where the free/Pro/pricing question for the public-affairs line eventu
 
 1. **Snapshot vs live** — recommend snapshot + refresh (§4). Confirm.
 2. **Visibility default & levels** — recommend private default, add `link` in Phase 3, defer `public`.
+   **⚠ Revised 2026-07-14 (§10):** with the ask as the homepage, the *free/anon* default flips to
+   `public`; private becomes the Pro gate.
 3. **Shared-link auth** — unlisted token (recommend) vs truly public/indexable.
 4. ~~**Attribution**~~ — **RESOLVED (2026-07-11): always anonymous**, no byline.
 5. ~~**Anonymous asks**~~ — **RESOLVED (2026-07-11): signed-in only**; `owner_user_id` NOT NULL.
+   **⚠ Reopened 2026-07-14 (§10):** the homepage ask must serve anonymous + free users; `owner_uid`
+   goes nullable. This supersedes the 07-11 resolution.
 6. **Cost control** — every ask + every follow-up is a Sonnet call; persistence/sharing amplify usage.
    Rate limits? Per-tier quotas?
 7. **Retention/deletion** — user-initiated delete (yes); any auto-expiry of link sessions?
@@ -224,3 +228,127 @@ Phase 0 + 1: the `research_session`/`research_turn` tables and follow-up questio
 mostly plumbing on top of the retrieval layer already shipped, and it makes the product *feel* like a
 research tool immediately. Everything else (save UI, sharing, unified homepage) rides on that trunk,
 and the §8 decisions can be made just-in-time per phase.
+
+---
+
+## 10. Public homepage & the publish tier (added 2026-07-14) — revises §6 / §8
+
+**Since 2026-07-11 the tables shipped** (migration `037_research_sessions.py`; `ResearchSession` +
+`ResearchTurn` in `app/models.py`), and `POST /research/ask` now persists every answer via
+`_persist_turn` — Phase 0 is done, admin-gated. This section reframes the confidentiality model for a
+new decision: **Ask the Bills becomes the main homepage UI, exposed to anonymous + free users**, not
+just signed-in dogfooders. That inverts the 07-11 "private-by-default, signed-in-only, public-deferred"
+posture for the free tier — and the inversion is the *point*: public-by-default is what builds the
+SEO / social-proof corpus for free, while confidentiality becomes a felt Pro benefit.
+
+### 10.1 The tiered visibility model
+
+| Actor | Default visibility | Can keep private? | Rationale |
+|---|---|---|---|
+| **Anonymous** (no account) | `public` (moderated → indexable) | no | Every ask feeds the public corpus; the on-ramp. `owner_uid` nullable. |
+| **Free** (signed in) | `public` | no (upsell) | Same corpus contribution; "keep this private" is the upgrade prompt. |
+| **Pro** | `private` (their choice: private / link / public) | **yes** | Confidentiality is the paid benefit; still may opt-in to publish. |
+
+Free/anon **cannot** make a thread private — that's the paywall. Pro **can** publish (opt-in), so the
+public corpus isn't only free-tier questions. `visibility` already models `private|link|public`; this
+is a per-tier *default + permission*, not a new column.
+
+### 10.2 The keystone: publish the *generalized* question, not the raw one
+
+"Publish the answer without the question" (founder ask) is right in spirit but can't be literal — a
+page with no heading is disorienting and, worse, **un-findable** (nothing to rank or browse by). The
+practical form:
+
+> Publish the answer under a **de-identified, generalized title synthesized from the question's
+> facets**, and make it findable by those facets as tags. The **raw** question (company names, pasted
+> text, strategy) never goes public.
+
+Raw *"does my company Acme's HDPE bottle line comply with Maine's new EPR law?"* → public title *"Do
+HDPE bottles comply with Maine's EPR law?"*, tagged `jurisdiction:Maine · material:plastics ·
+dimension:recycled_content`. This single move satisfies all three founder asks at once — free-tier
+confidentiality (raw text withheld), publish-without-the-question (generalized stand-in), and
+searchability (facet tags, §10.3). The generalized title is cheap synthesis over data we **already
+compute**: `resolve_facets` runs on every ask, and the A1 shadow router already produces structured
+intent — reuse either to draft the title.
+
+New field: `public_title` (the generalized stand-in) + `slug` (SEO URL). The raw `question` stays in
+`research_turns`, owner-only, never rendered on a public page.
+
+### 10.3 Topic tagging = surfacing facets we already compute
+
+We do **not** need a new NLP tagging system. Every ask already resolves jurisdiction / material /
+instrument / product / dimension facets — that *is* the taxonomy, and it's what makes a
+question-less public answer findable (you browse it by its tags, not its text).
+
+**Gap to fix first:** `_persist_turn` currently writes only `place_labels` + `reference_labels` into
+the `facets` JSONB and **drops materials / instruments / products / dimensions** — the very fields a
+tag index needs. Step one is widening what gets persisted (JSONB, **no migration**). Then a GIN index
+on the facet JSONB (or a small `research_tag` join table) powers a browsable, filterable public index.
+
+### 10.4 Shareable pages — two flavors, both already modeled
+
+- **Public** (`visibility=public`): in the browsable/indexed corpus. The SEO + social-proof surface.
+- **Link** (`share_token`, `noindex`, unlisted): anyone-with-the-link. Works even for a *private* Pro
+  answer — the Pro user keeps it out of the public corpus but still hands a colleague a URL.
+
+`share_token` is defined but **never minted yet**. Work is: mint-on-share, public read routes, and
+OpenGraph/unfurl meta tags for social sharing — not schema.
+
+### 10.5 Moderation — the new hard requirement
+
+Public-by-default from **anonymous** users means raw free-text could reach an indexable page. Do not
+let unmediated anon input hit Google. Publishing the *generalized-title-only* form (§10.2) defuses
+most PII/abuse, but a quality/abuse gate is still required before a page is indexable. Add a
+`status` state machine — `draft → held → published` — and gate the generalized title itself: an LLM
+rewrite could misrepresent scope, so **generate then hold for review (or a confidence threshold)**
+until the rewrite is proven. This also protects against the answer-quality liability of a public
+compliance claim.
+
+### 10.6 Schema deltas (against the shipped 037 tables)
+
+Smaller than the ambition implies — all additive, one migration + one no-migration change:
+
+| Change | Where | Migration? |
+|---|---|---|
+| `owner_uid` → **nullable** (anonymous asks) | `research_sessions` | yes |
+| `public_title`, `slug`, `category`, `published_at`, `status` (`draft\|held\|published`) | `research_sessions` | yes |
+| `publish_consent` (Pro opt-in publish) | `research_sessions` | yes |
+| Widen `_persist_turn` to store material / instrument / product / dimension facets | `app/api/research.py` (JSONB) | **no** |
+| Partial index `WHERE visibility='public'` + GIN on facet JSONB | indexes | yes |
+| Mint `share_token` on share; public read routes + OG tags | `app/api/research.py` | no (routes) |
+
+Everything else the publish flow needs already exists: the self-contained markdown `answer` payload,
+the `bill_ids` snapshot for "as of <date>" citability, and the `visibility` state.
+
+### 10.7 Why this is a stepping stone (the founder's strategic frame)
+
+The free public corpus is top-of-funnel: it demonstrates depth, ranks in search, and normalizes
+asking compliance questions here. **Privacy is the first paid step**, and it opens the door to the
+tailored engagements above it — *company exposure* analysis, portfolio-scoped briefings, monitored
+watchlists — where the value is explicitly *your* confidential situation, not the public law. The
+publish tier and the confidentiality tier are the same feature seen from opposite ends of the funnel.
+
+### 10.8 Revised phasing addendum
+
+Slots into §7 after the existing Phase 3 (share):
+
+| Phase | Scope | Depends on |
+|---|---|---|
+| **3.5** | `_persist_turn` facet widening + generalized `public_title`/`slug` generation (held, not yet public) | 0 |
+| **3.6** | Moderation `status` + admin review queue; publish the first curated batch (your own admin asks) | 3.5 |
+| **3.7** | Public homepage: anon/free asks default `public`, facet-tag browse/search, per-tier default+paywall | 3.6, §10.1 |
+| **3.8** | Pro confidentiality toggle + opt-in publish + `share_token` minting + OG unfurl | 3.7 |
+
+Gating still deferred per §7, but §10.1 forces the free/Pro line for this product *at* Phase 3.7 —
+that's where pricing (see [[tier-restructure]]) finally gets decided.
+
+### 10.9 New open questions
+
+11. **Anon rate-limiting / cost** — public homepage + anonymous Sonnet asks is an open cost/abuse
+    surface (amplifies §8.6). Per-IP quota? Cheaper model for anon? Cache-and-serve popular asks?
+12. **Generalized-title fidelity** — how do we validate the rewrite doesn't misstate scope before it's
+    indexable? (Ties to §10.5 hold state.)
+13. **De-dup** — many users will ask near-identical questions; publish one canonical page per
+    facet-cluster and increment a counter, or many near-duplicates? (Canonical is better for SEO.)
+14. **Consent UX for free tier** — the "your answer will be public" disclosure at the input box; wording
+    + ToS (extends §6).

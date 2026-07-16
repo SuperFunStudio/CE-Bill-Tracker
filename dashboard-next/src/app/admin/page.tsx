@@ -106,6 +106,11 @@ function Console({ getToken, adminEmail }: { getToken: GetToken; adminEmail: str
 
   return (
     <Shell>
+      <div className="flex flex-wrap gap-3">
+        <a href="/admin/research" className="rounded-lg border border-green-accent/40 bg-green-dark/10 px-4 py-2 text-sm text-green-accent hover:bg-green-dark/20 transition-colors">
+          Research &amp; Content →
+        </a>
+      </div>
       <StatsPanel stats={stats} error={statsErr} />
       <OutcomesPanel getToken={getToken} reloadKey={reloadKey} />
       <GrantPanel getToken={getToken} onChange={bump} />

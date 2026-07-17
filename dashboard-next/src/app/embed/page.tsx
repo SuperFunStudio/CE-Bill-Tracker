@@ -131,7 +131,7 @@ export default function EmbedPage() {
       <div className="text-text-muted text-meta text-right pt-1">
         Powered by{' '}
         <a href={siteRoot} target="_blank" rel="noopener noreferrer" className="hover:underline">
-          Battle of the Bills
+          Atlas Circular
         </a>
       </div>
     </div>

@@ -51,7 +51,7 @@ export function FarewellModal() {
   const metric = outcome ? metricText(outcome) : null;
   const lawLabel = outcome ? [outcome.state, outcome.bill_number].filter(Boolean).join(' ') : '';
   const shareText = outcome
-    ? `${metric ? metric + (outcome.metric_label ? ` ${outcome.metric_label}` : '') + ' — ' : ''}${outcome.summary}${lawLabel ? ` (${lawLabel})` : ''} · via Battle of the Bills`
+    ? `${metric ? metric + (outcome.metric_label ? ` ${outcome.metric_label}` : '') + ' — ' : ''}${outcome.summary}${lawLabel ? ` (${lawLabel})` : ''} · via Atlas Circular`
     : '';
 
   async function copyShare() {

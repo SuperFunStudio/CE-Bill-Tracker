@@ -23,6 +23,15 @@
   --green-hero:     239 246 255;  /* blue-50  */
   --scrollbar-track: #e9ecef;
   --scrollbar-thumb: #ced4da;
+  /* Atlas Circular brand palette (map-inspired) — categorical accents for charts, badges, and
+     illustration. The primary accent stays blue (--green-accent). RGB channels for opacity modifiers. */
+  --atlas-green:  135 200 92;   /* #87c85c */
+  --atlas-teal:   15 102 108;   /* #0f666c */
+  --atlas-blue:   30 106 233;   /* #1e6ae9 */
+  --atlas-pink:   251 104 171;  /* #fb68ab */
+  --atlas-yellow: 252 190 14;   /* #fcbe0e */
+  --atlas-orange: 230 93 16;    /* #e65d10 */
+  --atlas-coral:  214 95 84;    /* #d65f54 */
 }
 
 /* ── Dark mode ── */
@@ -45,12 +54,14 @@
 body {
   color: var(--text-primary);
   background: var(--bg-primary);
-  font-family: var(--font-sans), Inter, system-ui, sans-serif;
+  font-family: var(--font-sans), Lexend, system-ui, sans-serif;
 }
 
-/* Editorial serif for headings/masthead (New Yorker-inspired). Apply via `font-serif`. */
+/* Display face for headings/masthead. `--font-serif` now points at Lexend (Atlas Circular rebrand);
+   the class name is kept so the many existing call sites don't have to change. */
 .font-serif {
-  font-feature-settings: 'liga' 1, 'onum' 1;
+  font-family: var(--font-serif), Lexend, system-ui, sans-serif;
+  font-feature-settings: 'liga' 1;
   letter-spacing: -0.01em;
 }
 
@@ -94,6 +105,7 @@ body {
   .text-lead  { font-size: var(--fs-lead);  line-height: 1.5; }
   .text-meta  { font-size: var(--fs-meta);  line-height: 1.45; }
   .text-label {
+    font-family: var(--font-mono), 'Roboto Mono', ui-monospace, monospace;
     font-size: var(--fs-label);
     line-height: 1.3;
     letter-spacing: 0.04em;

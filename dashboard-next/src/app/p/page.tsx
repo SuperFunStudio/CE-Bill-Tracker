@@ -6,7 +6,7 @@ import { PublishedArticle } from './PublishedArticle';
 // NOW: this client-rendered link is the shareable copy; the future build-time /articles/<slug> library
 // is the canonical, indexable one — keeping this out of the index avoids duplicate content later.
 export const metadata: Metadata = {
-  title: 'Article — Battle of the Bills',
+  title: 'Article — Atlas Circular',
   robots: { index: false, follow: false },
 };
 

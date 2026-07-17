@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 
 export const metadata: Metadata = {
-  title: 'FAQ — Battle of the Bills',
+  title: 'FAQ — Atlas Circular',
   description:
-    'Frequently asked questions about Battle of the Bills: what it tracks, where the data comes ' +
+    'Frequently asked questions about Atlas Circular: what it tracks, where the data comes ' +
     'from, how the AI classification works, what is free vs. Pro, pricing, alerts, and the API.',
 };
 
@@ -24,10 +24,10 @@ const GROUPS: Group[] = [
     title: 'The basics',
     items: [
       {
-        q: 'What is Battle of the Bills?',
+        q: 'What is Atlas Circular?',
         a: (
           <>
-            Battle of the Bills tracks circularity-aligned legislation across all 50 states and at
+            Atlas Circular tracks circularity-aligned legislation across all 50 states and at
             the federal level — Extended Producer Responsibility (EPR), right-to-repair,
             deposit-return, recycled-content, labeling, disposal bans, and related laws — in one
             place. It turns a firehose of legislative activity into the handful of bills, deadlines,
@@ -123,7 +123,7 @@ const GROUPS: Group[] = [
         q: 'Can I rely on this for legal compliance?',
         a: (
           <>
-            No. Battle of the Bills is an intelligence and research tool, not legal advice. Deadlines
+            No. Atlas Circular is an intelligence and research tool, not legal advice. Deadlines
             and obligations are surfaced to help you find what matters faster — but you (and your
             counsel) are responsible for confirming the law that applies to you. See our{' '}
             <Link href="/terms" className="text-green-accent hover:underline">
@@ -254,7 +254,7 @@ const GROUPS: Group[] = [
         ),
       },
       {
-        q: 'Who builds Battle of the Bills?',
+        q: 'Who builds Atlas Circular?',
         a: (
           <>
             It&apos;s developed by{' '}
@@ -294,7 +294,7 @@ export default function FaqPage() {
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-10">
       <GazetteHeader
         title="FAQ"
-        subtitle="What Battle of the Bills tracks, how it works, and what you get."
+        subtitle="What Atlas Circular tracks, how it works, and what you get."
       />
 
       {GROUPS.map(group => (

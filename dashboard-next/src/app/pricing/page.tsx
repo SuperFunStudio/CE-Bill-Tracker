@@ -5,124 +5,74 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { CheckIcon } from '@/components/ui/icons';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { useAuth } from '@/components/auth/AuthContext';
-import { startProCheckout } from '@/lib/billing';
-import { PRO, type BillingPeriod } from '@/lib/tiers';
+import { startCheckout } from '@/lib/billing';
+import { PRO, RESEARCH, STUDENT, type BillingPeriod } from '@/lib/tiers';
 import { track } from '@/lib/analytics';
 import type { PlanInterest } from '@/lib/api';
 
-interface Tier {
-  id: 'free' | 'pro' | 'bespoke';
-  kind: 'free' | 'checkout' | 'inquiry';
-  eyebrow?: string; // small label above the name (e.g. "Most Popular", "Kenny Arnold Design")
-  name: string;
-  price?: string; // static price (free / bespoke); Pro's price is period-dependent (rendered live)
-  cadence?: string;
-  who: string;
-  features: string[];
-  cta: string;
-  highlight?: boolean;
-  inquiryPlan?: PlanInterest; // for kind === 'inquiry' — which plan the lead-capture modal records
-}
-
-// One self-serve paid tier (Pro — monthly or annual, with the founding 90-day-free offer applied at
-// Checkout, see app/api/billing.py) plus Bespoke, a consulting engagement lead-captured via the request
-// modal. Price copy lives in @/lib/tiers. The Developers (API) strip below the grid is a separate buyer.
-const TIERS: Tier[] = [
-  {
-    id: 'free',
-    kind: 'free',
-    eyebrow: 'Open access',
-    name: 'Free',
-    price: '$0',
-    cadence: 'always',
-    who: 'For advocates, nonprofits, researchers, journalists, and students who need to see the landscape.',
-    features: [
-      'Full Bill Explorer & map — all 50 states',
-      'State snapshots — market conditions, producer obligations & pending regulations',
-      'Federal Actions tracker',
-      'Design Guide — headline imperatives',
-      'Personalize your feed + a limited alerts filter (free account)',
-    ],
-    cta: 'Get free updates',
-  },
-  {
-    id: 'pro',
-    kind: 'checkout',
-    eyebrow: 'Recommended',
-    name: PRO.name,
-    who: "For the teams that want to stay ahead of EPR across every product and state — where a missed registration means penalties, a product line you can't sell in-state, and certifications signed under penalty of perjury.",
-    features: [
-      'Every obligation date, extracted from every bill',
-      'Full timeline & deadline dashboard — all 50 states',
-      'Personal & shared watch lists for your team',
-      'Alerts across every instrument, custom filters',
-      'Complete Design Guide',
-      'CSV export (bills & deadlines)',
-    ],
-    cta: 'Claim founding access',
-    highlight: true,
-  },
-  {
-    id: 'bespoke',
-    kind: 'inquiry',
-    eyebrow: 'Kenny Arnold Design',
-    name: 'Bespoke',
-    price: 'By inquiry',
-    cadence: 'a scoped engagement, mapped to your needs + complimentary subscription',
-    who: 'For producers who need to know their own exposure, and what to redesign to reduce it.',
-    features: [
-      'A custom exposure map for your portfolio',
-      'Material- and design-level redesign strategy',
-      'Built from your volume & material data',
-      'Direct work with Kenny Arnold Design',
-      'Pro access included for your team',
-    ],
-    cta: 'Start a conversation',
-    inquiryPlan: 'bespoke',
-  },
-];
-
+// Four membership tiers, framed as access to the Atlas research tools. Student (verified-edu,
+// pay-what-you-wish) and Research (annual) are new below Pro; Enterprise is the invoiced inquiry.
+// Feature lists mirror the capability matrix in app/api/auth.py PLAN_CAPS.
 export default function PricingPage() {
-  const { isPro, user, openAuth, getToken } = useAuth();
+  const { isPro, user, openAuth, getToken, entitlement } = useAuth();
+  const plan = entitlement?.plan ?? 'free';
   const [period, setPeriod] = useState<BillingPeriod>('annual');
   const [modal, setModal] = useState<{ plan: PlanInterest; label: string } | null>(null);
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null); // which tier's CTA is mid-flight
+  const [error, setError] = useState<string | null>(null);
 
-  // The CTA click that opens the request-access modal — the step *before* request_access submit. The
-  // gap between this and request_access is your modal drop-off.
-  function openPlan(plan: PlanInterest, label: string) {
-    track('pricing_cta', { plan, plan_label: label });
-    setModal({ plan, label });
+  function openPlan(p: PlanInterest, label: string) {
+    track('pricing_cta', { plan: p, plan_label: label });
+    setModal({ plan: p, label });
   }
 
-  // Pro is self-serve: send the visitor to Stripe Checkout for the chosen period (the founding offer is
-  // applied server-side). Checkout needs an authenticated user (the backend keys the Stripe customer
-  // off the verified email), so prompt sign-in first if needed.
-  async function startPro() {
-    track('pricing_cta', { plan: 'pro', plan_label: 'Pro', period });
-    setCheckoutError(null);
-    if (!user) {
-      openAuth();
-      return;
-    }
-    setCheckoutBusy(true);
+  // Self-serve checkout for pro/research. Needs a signed-in user (Stripe customer keys off the
+  // verified email), so prompt sign-in first if needed.
+  async function startPlan(p: 'pro' | 'research', label: string) {
+    track('pricing_cta', { plan: p, plan_label: label, ...(p === 'pro' ? { period } : {}) });
+    setError(null);
+    if (!user) { openAuth(); return; }
+    setBusy(p);
     try {
-      await startProCheckout(getToken, period);
+      await startCheckout(getToken, { plan: p, ...(p === 'pro' ? { period } : {}) });
     } catch (e) {
-      setCheckoutError(e instanceof Error ? e.message : 'Could not start checkout.');
-      setCheckoutBusy(false);
+      setError(e instanceof Error ? e.message : 'Could not start checkout.');
+      setBusy(null);
     }
   }
+
+  // Student — pay-what-you-wish. amountCents 0 grants a free comp membership; any value hands off to
+  // Stripe's custom-amount screen. A 403 here means the account isn't a verified educational email.
+  async function startStudent(amountCents: number | null, label: string) {
+    track('pricing_cta', { plan: 'student', plan_label: label });
+    setError(null);
+    if (!user) { openAuth(); return; }
+    setBusy('student');
+    try {
+      await startCheckout(getToken, { plan: 'student', amountCents });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
+      setError(
+        /educational|edu/i.test(msg)
+          ? 'The Student membership needs a verified educational email (.edu, .ac.uk, …). Sign in with your school address and verify it, then try again.'
+          : msg || 'Could not start checkout.',
+      );
+      setBusy(null);
+    }
+  }
+
+  const card = 'flex flex-col rounded-xl border p-5';
+  const primaryBtn = 'w-full rounded-lg bg-green-accent text-bg-primary px-4 py-2 font-medium text-sm transition-opacity hover:opacity-90 disabled:opacity-50';
+  const secondaryBtn = 'block w-full text-center rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-serif font-medium text-green-accent transition-opacity hover:opacity-90';
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <GazetteHeader
-        title="Pricing"
-        subtitle="Start free. We read every bill and pull out the dates, so the day a deadline would have slipped past you is the day this pays for itself."
+        title="Membership"
+        subtitle="Join the atlas. Every membership includes the Bill Explorer and jurisdiction data; higher tiers unlock Ask the Atlas, deadlines, alerts, and the Packaging Studio."
       />
 
-      {/* Billing-period toggle — annual is the default (cheaper per month). */}
+      {/* Billing-period toggle applies to Pro (annual is the default, cheaper per month). */}
       <div className="flex items-center justify-center gap-3">
         <div className="inline-flex rounded-lg border border-border-default bg-bg-secondary p-1">
           {(['annual', 'monthly'] as BillingPeriod[]).map(p => (
@@ -137,126 +87,157 @@ export default function PricingPage() {
             </button>
           ))}
         </div>
-        <span className="text-meta text-green-accent">{PRO.annual.save}</span>
+        <span className="text-meta text-green-accent">Pro · {PRO.annual.save}</span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
-        {TIERS.map(tier => (
-          <div
-            key={tier.id}
-            className={`flex flex-col rounded-xl border p-5 ${
-              tier.highlight
-                ? 'border-green-accent bg-green-dark/20'
-                : 'border-border-default bg-bg-secondary'
-            }`}
-          >
-            {tier.eyebrow && (
-              <span className="self-start mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
-                {tier.eyebrow}
-              </span>
-            )}
-            <h2 className="font-serif text-xl text-text-primary">{tier.name}</h2>
-            <div className="mt-1 mb-3">
-              {tier.id === 'pro' ? (
-                period === 'annual' ? (
-                  <>
-                    <span className="text-2xl font-bold text-text-primary">{PRO.annual.price}</span>
-                    <span className="text-text-muted text-sm"> {PRO.annual.cadence}</span>
-                    <p className="text-text-muted text-meta mt-0.5">
-                      {PRO.annual.perMonth} · {PRO.seatsNote}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-2xl font-bold text-text-primary">{PRO.monthly.price}</span>
-                    <span className="text-text-muted text-sm"> {PRO.monthly.cadence}</span>
-                    <p className="text-text-muted text-meta mt-0.5">{PRO.seatsNote}</p>
-                  </>
-                )
-              ) : (
-                <>
-                  <span className="text-2xl font-bold text-text-primary">{tier.price}</span>
-                  {tier.cadence && <span className="text-text-muted text-sm"> {tier.cadence}</span>}
-                </>
-              )}
-            </div>
-            {tier.id === 'pro' && (
-              <p className="mb-3 rounded-lg border border-green-accent/40 bg-green-dark/30 px-3 py-2 text-meta leading-relaxed text-green-accent">
-                {PRO.foundingNote}
-              </p>
-            )}
-            <p className="text-text-muted text-meta mb-4">{tier.who}</p>
-            <ul className="space-y-2 mb-5 flex-1">
-              {tier.features.map(f => (
-                <li key={f} className="flex items-start gap-2 text-sm text-text-secondary">
-                  <CheckIcon className="text-green-accent text-xs mt-1 shrink-0" />
-                  <span>{f}</span>
-                </li>
-              ))}
-            </ul>
-            {tier.kind === 'free' ? (
-              <Link
-                href="/#get-updates"
-                onClick={() => track('pricing_cta', { plan: 'free', plan_label: 'Free' })}
-                className="block text-center rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity"
-              >
-                {tier.cta} →
-              </Link>
-            ) : tier.kind === 'checkout' ? (
-              isPro ? (
-                // Already subscribed — route to account management instead of checkout.
-                <Link
-                  href="/account"
-                  className="flex items-center justify-center gap-2 rounded-lg bg-green-accent text-bg-primary px-4 py-2 font-medium text-sm hover:opacity-90 transition-opacity"
-                >
-                  <CheckIcon className="text-xs" />
-                  Manage plan
-                </Link>
-              ) : (
-                <div className="space-y-2">
-                  {/* Self-serve: 90-day trial checkout, cancel anytime. The single primary action. */}
-                  <button
-                    onClick={startPro}
-                    disabled={checkoutBusy}
-                    className="w-full rounded-lg bg-green-accent text-bg-primary px-4 py-2 font-medium text-sm transition-opacity hover:opacity-90 disabled:opacity-50"
-                  >
-                    {checkoutBusy ? 'Starting…' : `${tier.cta} →`}
-                  </button>
-                  <p className="text-meta text-text-muted text-center">90-day free trial · cancel anytime</p>
-                  {/* Assisted path demoted to a text link so the self-serve CTA clearly wins. */}
-                  <p className="text-meta text-text-muted text-center">
-                    Prefer a guided setup?{' '}
-                    <button
-                      onClick={() => openPlan('pro', 'Pro — walkthrough')}
-                      className="text-green-accent hover:underline"
-                    >
-                      Book a walkthrough →
-                    </button>
-                  </p>
-                </div>
-              )
-            ) : (
-              <button
-                onClick={() => openPlan(tier.inquiryPlan ?? 'enterprise', tier.name)}
-                className="block w-full text-center rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-serif font-medium text-green-accent transition-opacity hover:opacity-90"
-              >
-                {tier.cta} →
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
+        {/* ── Student — verified-edu, pay-what-you-wish ── */}
+        <div className={`${card} border-border-default bg-bg-secondary`}>
+          <span className="self-start mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+            Students
+          </span>
+          <h2 className="font-serif text-xl text-text-primary">{STUDENT.name}</h2>
+          <div className="mt-1 mb-3">
+            <span className="text-2xl font-bold text-text-primary">{STUDENT.price}</span>
+            <p className="text-text-muted text-meta mt-0.5">{STUDENT.suggested}</p>
+          </div>
+          <p className="text-text-muted text-meta mb-4">{STUDENT.who} {STUDENT.eduNote}.</p>
+          <ul className="space-y-2 mb-5 flex-1">
+            {['Ask the Atlas', 'Bill Explorer & jurisdiction data', 'Design Guide'].map(f => (
+              <li key={f} className="flex items-start gap-2 text-sm text-text-secondary">
+                <CheckIcon className="text-green-accent text-xs mt-1 shrink-0" /><span>{f}</span>
+              </li>
+            ))}
+          </ul>
+          {plan === 'student' ? (
+            <Link href="/account" className={secondaryBtn}>Manage membership</Link>
+          ) : (
+            <div className="space-y-2">
+              <button onClick={() => startStudent(1500, 'Student — pay what you wish')} disabled={busy === 'student'} className={primaryBtn}>
+                {busy === 'student' ? 'Starting…' : 'Pay what you wish →'}
               </button>
+              <button
+                onClick={() => startStudent(0, 'Student — free')}
+                disabled={busy === 'student'}
+                className="w-full text-center text-meta text-text-muted hover:text-text-primary"
+              >
+                or join free ($0)
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Founding Supporter / Research — annual ── */}
+        <div className={`${card} border-border-default bg-bg-secondary`}>
+          <span className="self-start mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+            Research
+          </span>
+          <h2 className="font-serif text-xl text-text-primary">{RESEARCH.name}</h2>
+          <div className="mt-1 mb-3">
+            <span className="text-2xl font-bold text-text-primary">{RESEARCH.price}</span>
+            <span className="text-text-muted text-sm"> {RESEARCH.cadence}</span>
+            <p className="text-text-muted text-meta mt-0.5">{RESEARCH.perYear}</p>
+          </div>
+          <p className="text-text-muted text-meta mb-4">{RESEARCH.who}</p>
+          <ul className="space-y-2 mb-5 flex-1">
+            {['Ask the Atlas', 'Bill Explorer & jurisdiction data', 'Design Guide', 'Insights: impact + bills over time'].map(f => (
+              <li key={f} className="flex items-start gap-2 text-sm text-text-secondary">
+                <CheckIcon className="text-green-accent text-xs mt-1 shrink-0" /><span>{f}</span>
+              </li>
+            ))}
+          </ul>
+          {plan === 'research' ? (
+            <Link href="/account" className={secondaryBtn}>Manage membership</Link>
+          ) : (
+            <button onClick={() => startPlan('research', 'Founding Supporter')} disabled={busy === 'research'} className={primaryBtn}>
+              {busy === 'research' ? 'Starting…' : 'Become a supporter →'}
+            </button>
+          )}
+        </div>
+
+        {/* ── Pro — self-serve, founding offer ── */}
+        <div className={`${card} border-green-accent bg-green-dark/20`}>
+          <span className="self-start mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+            Recommended
+          </span>
+          <h2 className="font-serif text-xl text-text-primary">{PRO.name}</h2>
+          <div className="mt-1 mb-3">
+            {period === 'annual' ? (
+              <>
+                <span className="text-2xl font-bold text-text-primary">{PRO.annual.price}</span>
+                <span className="text-text-muted text-sm"> {PRO.annual.cadence}</span>
+                <p className="text-text-muted text-meta mt-0.5">{PRO.annual.perMonth}</p>
+              </>
+            ) : (
+              <>
+                <span className="text-2xl font-bold text-text-primary">{PRO.monthly.price}</span>
+                <span className="text-text-muted text-sm"> {PRO.monthly.cadence}</span>
+                <p className="text-text-muted text-meta mt-0.5">{PRO.seatsNote}</p>
+              </>
             )}
           </div>
-        ))}
+          <p className="mb-3 rounded-lg border border-green-accent/40 bg-green-dark/30 px-3 py-2 text-meta leading-relaxed text-green-accent">
+            {PRO.foundingNote}
+          </p>
+          <ul className="space-y-2 mb-5 flex-1">
+            {['Everything in Research', 'Upcoming Deadlines — all jurisdictions', 'Alerts & watch lists', 'Packaging Studio', 'Federal Actions (US)', 'CSV export'].map(f => (
+              <li key={f} className="flex items-start gap-2 text-sm text-text-secondary">
+                <CheckIcon className="text-green-accent text-xs mt-1 shrink-0" /><span>{f}</span>
+              </li>
+            ))}
+          </ul>
+          {isPro ? (
+            <Link href="/account" className="flex items-center justify-center gap-2 rounded-lg bg-green-accent text-bg-primary px-4 py-2 font-medium text-sm hover:opacity-90">
+              <CheckIcon className="text-xs" /> Manage plan
+            </Link>
+          ) : (
+            <div className="space-y-2">
+              <button onClick={() => startPlan('pro', 'Pro')} disabled={busy === 'pro'} className={primaryBtn}>
+                {busy === 'pro' ? 'Starting…' : 'Claim founding access →'}
+              </button>
+              <p className="text-meta text-text-muted text-center">90-day free trial · cancel anytime</p>
+              <p className="text-meta text-text-muted text-center">
+                Prefer a guided setup?{' '}
+                <button onClick={() => openPlan('pro', 'Pro — walkthrough')} className="text-green-accent hover:underline">
+                  Book a walkthrough →
+                </button>
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Enterprise — invoiced inquiry ── */}
+        <div className={`${card} border-border-default bg-bg-secondary`}>
+          <span className="self-start mb-2 text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
+            Teams
+          </span>
+          <h2 className="font-serif text-xl text-text-primary">Enterprise</h2>
+          <div className="mt-1 mb-3">
+            <span className="text-2xl font-bold text-text-primary">Custom</span>
+            <p className="text-text-muted text-meta mt-0.5">Invoiced · seats + support</p>
+          </div>
+          <p className="text-text-muted text-meta mb-4">Firms, ESG &amp; legal services teams.</p>
+          <ul className="space-y-2 mb-5 flex-1">
+            {['Everything in Pro', 'Seats for your whole team', 'Priority support', 'Onboarding & bespoke exposure mapping'].map(f => (
+              <li key={f} className="flex items-start gap-2 text-sm text-text-secondary">
+                <CheckIcon className="text-green-accent text-xs mt-1 shrink-0" /><span>{f}</span>
+              </li>
+            ))}
+          </ul>
+          <button onClick={() => openPlan('enterprise', 'Enterprise')} className={secondaryBtn}>Start a conversation →</button>
+        </div>
       </div>
 
-      {checkoutError && <p className="text-red-400 text-sm text-center">{checkoutError}</p>}
+      {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
       {/* Developers strip — its own section below the grid (different buyer, usage-based metric) */}
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="max-w-2xl">
           <h3 className="font-serif text-lg text-text-primary mb-1">Developers — build on the data.</h3>
           <p className="text-text-secondary text-sm leading-relaxed">
-            Tap the circularity-legislation dataset directly: bills, statuses, deadlines, and
-            classifications across all 50 states, kept current. Free developer tier (rate-limited) ·
-            paid plans by usage.
+            Tap the circular-economy legislation dataset directly: bills, statuses, deadlines, and
+            classifications across every tracked jurisdiction, kept current. Free developer tier
+            (rate-limited) · paid plans by usage.
           </p>
         </div>
         <Link

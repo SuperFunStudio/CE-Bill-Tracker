@@ -11,6 +11,7 @@ import { DemoBanner } from '@/components/ui/DemoBanner';
 import { StarIcon } from '@/components/ui/icons';
 import { WatchListSection } from '@/components/watchlist/WatchListSection';
 import { SavedPackagesSection } from '@/components/studio/SavedPackages';
+import { AskHistorySection } from '@/components/research/AskHistorySection';
 import { useAuth } from '@/components/auth/AuthContext';
 import { formatCost, fixEncoding, formatDate, daysUntil, STATE_NAMES } from '@/lib/utils';
 import type { CompanyObligation, CompanyObligationsResponse, FinancialStakes } from '@/lib/types';
@@ -696,10 +697,15 @@ export default function MyPortfolioPage() {
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
-      <GazetteHeader title="My Portfolio" subtitle="Your tracked bills and compliance exposure, in one place." />
+      <GazetteHeader title="My Library" subtitle="Your research, alerts, and saved packaging — in one place." />
 
-      {/* ── Watch list — the self-serve Pro content; gates itself for anon/non-Pro ── */}
+      {/* ── Ask the Atlas history — private to the member; self-gates for anon/free ── */}
       <section>
+        <AskHistorySection />
+      </section>
+
+      {/* ── Watch list & alerts — the self-serve Pro content; gates itself for anon/non-Pro ── */}
+      <section className="border-t border-border-default pt-8">
         <WatchListSection />
       </section>
 

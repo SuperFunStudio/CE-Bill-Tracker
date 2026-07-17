@@ -156,10 +156,10 @@ def render_new_bill_alert_html(sub: AlertSubscription, content: NewBillAlertCont
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · New Legislation
+      Atlas Circular · New Legislation
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
       Something moved on the topics &amp; states you follow</p>
   </div>

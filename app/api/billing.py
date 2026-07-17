@@ -23,7 +23,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
-from app.api.auth import AuthedUser, get_current_user, get_entitlement, grant_comp_days, is_pro
+from app.api.auth import (
+    AuthedUser,
+    effective_capabilities,
+    get_current_user,
+    get_entitlement,
+    grant_comp_days,
+    is_edu_email,
+    is_pro,
+    resolve_plan,
+)
 from app.config import settings
 from app.database import get_db
 from app.models import Entitlement
@@ -57,9 +66,14 @@ async def billing_me(
     ent = await get_entitlement(db, user)
     return {
         "email": user.email,
-        "plan": ent.plan if ent else "free",
+        # The *resolved* plan (collapses to "free" when a paid plan isn't live), so the frontend and
+        # the capabilities below always agree.
+        "plan": resolve_plan(ent),
         "status": ent.status if ent else None,
         "is_pro": is_pro(ent),
+        # The per-feature gate the frontend reads (mirrors app/api/auth.py PLAN_CAPS + any active
+        # temporary Pro preview). Sorted for a stable payload.
+        "capabilities": sorted(effective_capabilities(ent)),
         "is_trial": bool(ent and is_pro(ent) and (ent.status == "trialing" or ent.comp)),
         "is_founding": bool(ent and ent.founding),
         "current_period_end": (
@@ -118,9 +132,78 @@ async def _get_or_create_entitlement(
 
 
 class CheckoutRequest(BaseModel):
-    # Which billing period to subscribe to. Defaults to "annual" — the cheaper-per-month option we
-    # nudge toward (and what older clients posting an empty body get).
+    # Which membership to buy: "pro" (default) | "student" | "research".
+    plan: str = "pro"
+    # Pro only — billing period. Defaults to "annual" (the cheaper-per-month option we nudge toward,
+    # and what older clients posting an empty body get).
     period: str = "annual"
+    # Student only — the pay-what-you-wish choice. 0 (or negative) => a free comp membership, no Stripe.
+    # >0 or None => hand off to Stripe, where the exact custom amount is entered (suggested $15).
+    amount_cents: int | None = None
+
+
+async def _ensure_customer(db: AsyncSession, ent: Entitlement, user: AuthedUser) -> None:
+    """Make sure the entitlement has a Stripe customer, creating one on first checkout."""
+    if not ent.stripe_customer_id:
+        customer = await run_in_threadpool(
+            stripe.Customer.create, email=user.email, metadata={"firebase_uid": user.uid}
+        )
+        ent.stripe_customer_id = customer.id
+    await db.commit()
+
+
+async def _student_checkout(payload: CheckoutRequest, user: AuthedUser, db: AsyncSession) -> dict:
+    """Student tier — pay-what-you-wish, gated to a verified educational email. A $0 choice grants a
+    free comp membership on the spot (no Stripe); any amount routes to Stripe's custom-amount Checkout."""
+    if not (user.email_verified and is_edu_email(user.email)):
+        # 403 with a clear reason so the frontend can prompt for a verified .edu address.
+        raise HTTPException(status_code=403, detail="student tier requires a verified educational email")
+    ent = await _get_or_create_entitlement(db, user.email, user.uid)
+    amount = payload.amount_cents
+    if amount is not None and amount <= 0:
+        # Free student membership: indefinite comp on the student plan (no Stripe subscription). Left as
+        # comp so an admin could later expire it; NULL period_end = no expiry.
+        ent.plan = "student"
+        ent.status = "active"
+        ent.comp = True
+        ent.current_period_end = None
+        await db.commit()
+        return {"url": f"{settings.app_base_url}/ask?welcome=student", "comp": True}
+    if not settings.stripe_secret_key or not settings.stripe_student_price_id:
+        raise HTTPException(status_code=503, detail="billing not configured")
+    await _ensure_customer(db, ent, user)
+    # The student price is configured in Stripe with custom_unit_amount enabled (floor $1, preset $15),
+    # so the exact pay-what-you-wish amount is entered on Stripe's hosted screen.
+    session = await run_in_threadpool(
+        stripe.checkout.Session.create,
+        mode="subscription",
+        customer=ent.stripe_customer_id,
+        line_items=[{"price": settings.stripe_student_price_id, "quantity": 1}],
+        success_url=f"{settings.app_base_url}/ask?checkout=success",
+        cancel_url=f"{settings.app_base_url}/pricing?checkout=cancel",
+        client_reference_id=user.uid,
+        metadata={"email": user.email, "firebase_uid": user.uid, "tier": "student"},
+    )
+    return {"url": session.url}
+
+
+async def _research_checkout(user: AuthedUser, db: AsyncSession) -> dict:
+    """Research (Founding Supporter) tier — a fixed annual subscription, no founding coupon/trial."""
+    if not settings.stripe_secret_key or not settings.stripe_research_price_id:
+        raise HTTPException(status_code=503, detail="billing not configured")
+    ent = await _get_or_create_entitlement(db, user.email, user.uid)
+    await _ensure_customer(db, ent, user)
+    session = await run_in_threadpool(
+        stripe.checkout.Session.create,
+        mode="subscription",
+        customer=ent.stripe_customer_id,
+        line_items=[{"price": settings.stripe_research_price_id, "quantity": 1}],
+        success_url=f"{settings.app_base_url}/ask?checkout=success",
+        cancel_url=f"{settings.app_base_url}/pricing?checkout=cancel",
+        client_reference_id=user.uid,
+        metadata={"email": user.email, "firebase_uid": user.uid, "tier": "research"},
+    )
+    return {"url": session.url}
 
 
 @router.post("/checkout")
@@ -131,25 +214,27 @@ async def create_checkout(
     user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Open a Stripe Checkout Session for the Pro subscription (monthly|annual); return its hosted URL.
+    """Open a Checkout Session for the requested membership and return its hosted URL (or, for a $0
+    student membership, grant it directly and return a success URL).
 
-    Everyone gets the 90-day free trial. The founding coupon (50% off for life) is applied while the
-    founding window is open; once it closes, the coupon's Stripe redeem-by lapses, so we catch the
+    Pro: everyone gets the 90-day free trial. The founding coupon (50% off for life) is applied while
+    the founding window is open; once it closes, the coupon's Stripe redeem-by lapses, so we catch the
     rejection and retry at full price rather than hard-break checkout. `founding` metadata records
     whether the coupon actually went on, which the webhook reads to stamp the seat.
     """
+    plan = (payload.plan if payload else "pro").lower().strip()
+    if plan == "student":
+        return await _student_checkout(payload or CheckoutRequest(), user, db)
+    if plan == "research":
+        return await _research_checkout(user, db)
+
+    # Pro (default).
     period = (payload.period if payload else "annual").lower().strip()
     price_id = _price_for_period(period)
     if not settings.stripe_secret_key or not price_id:
         raise HTTPException(status_code=503, detail="billing not configured")
     ent = await _get_or_create_entitlement(db, user.email, user.uid)
-
-    if not ent.stripe_customer_id:
-        customer = await run_in_threadpool(
-            stripe.Customer.create, email=user.email, metadata={"firebase_uid": user.uid}
-        )
-        ent.stripe_customer_id = customer.id
-    await db.commit()
+    await _ensure_customer(db, ent, user)
 
     base_args: dict = dict(
         mode="subscription",
@@ -217,6 +302,26 @@ def _period_end(sub) -> datetime | None:
     return datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None
 
 
+def _plan_for_price(price_id: str | None) -> str:
+    """Map a Stripe price id to the membership plan it grants. Unknown/blank ids fall back to "pro"
+    (the historical default — no regression for the pre-tiers Pro price)."""
+    mapping = {
+        settings.stripe_pro_monthly_price_id: "pro",
+        settings.stripe_pro_annual_price_id: "pro",
+        settings.stripe_student_price_id: "student",
+        settings.stripe_research_price_id: "research",
+    }
+    return mapping.get(price_id or "", "pro") if price_id else "pro"
+
+
+def _sub_price_id(sub: dict) -> str | None:
+    """The price id of a subscription's first line item, defensively across Stripe's shapes."""
+    try:
+        return sub["items"]["data"][0]["price"]["id"]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
 async def _apply_subscription(db: AsyncSession, customer_id: str | None, sub: dict) -> None:
     """Sync an Entitlement to a Stripe subscription object (status + period + plan)."""
     if not customer_id:
@@ -231,8 +336,9 @@ async def _apply_subscription(db: AsyncSession, customer_id: str | None, sub: di
     ent.status = status
     ent.stripe_subscription_id = sub.get("id") or ent.stripe_subscription_id
     ent.current_period_end = _period_end(sub)
-    # "trialing" is full Pro access (the founding 90-day trial); only a dead sub drops to free.
-    ent.plan = "pro" if status in ("active", "trialing") else "free"
+    # Plan comes from which price the sub is on (student/research/pro). "trialing" is live access (the
+    # founding 90-day Pro trial); only a dead sub drops to free.
+    ent.plan = _plan_for_price(_sub_price_id(sub)) if status in ("active", "trialing") else "free"
     # This seat is now Stripe-backed; clear any comp marker so its period_end isn't read as a comp expiry.
     ent.comp = False
     await db.commit()
@@ -279,16 +385,18 @@ async def stripe_webhook(
             ent = await _get_or_create_entitlement(db, email, uid)
             ent.stripe_customer_id = obj.get("customer") or ent.stripe_customer_id
             ent.stripe_subscription_id = obj.get("subscription") or ent.stripe_subscription_id
-            ent.plan = "pro"
+            # Which membership this checkout bought — from the metadata we stamped at session creation.
+            tier = (meta.get("tier") or "pro").lower().strip()
+            ent.plan = tier if tier in ("pro", "student", "research") else "pro"
             # A founding sub lands as status "trialing" during the 90-day trial; the retrieved
             # subscription below corrects this. Default to active for the rare no-subscription case.
             ent.status = "active"
             # A real paid conversion supersedes any complimentary grant — drop the comp marker so
             # the gate stops applying a comp/trial expiry to what is now a Stripe-backed seat.
             ent.comp = False
-            # Stamp founding only if the coupon actually went on at checkout (metadata reflects the
-            # resilient fallback above). Kept for the badge; never un-stamped on renewal.
-            if meta.get("founding") == "true":
+            # Stamp founding only for a Pro seat where the coupon actually went on at checkout (metadata
+            # reflects the resilient fallback above). Kept for the badge; never un-stamped on renewal.
+            if tier == "pro" and meta.get("founding") == "true":
                 ent.founding = True
             sub_id = obj.get("subscription")
             if sub_id:
@@ -303,14 +411,17 @@ async def stripe_webhook(
             # Confirm the purchase / welcome them to Pro (best-effort, after we ACK Stripe). Fired
             # only here, on checkout.session.completed, so renewals via subscription.* don't re-send.
             # A founding seat lands as "trialing" (billed after the 90-day trial) — flex the copy.
-            from app.alerts.welcome_email import send_pro_welcome
+            # Only Pro gets the Pro-welcome copy; student/research conversions skip it (the dashboard
+            # toasts their welcome) until dedicated tier emails exist.
+            if tier == "pro":
+                from app.alerts.welcome_email import send_pro_welcome
 
-            background_tasks.add_task(
-                send_pro_welcome,
-                email,
-                is_trial=(ent.status == "trialing"),
-                founding=bool(ent.founding),
-            )
+                background_tasks.add_task(
+                    send_pro_welcome,
+                    email,
+                    is_trial=(ent.status == "trialing"),
+                    founding=bool(ent.founding),
+                )
 
     elif etype in ("customer.subscription.updated", "customer.subscription.created"):
         await _apply_subscription(db, obj.get("customer"), obj)

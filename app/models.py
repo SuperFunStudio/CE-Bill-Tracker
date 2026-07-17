@@ -808,9 +808,10 @@ class Entitlement(Base):
     Auth (who the user is) and Stripe (whether they paid).
 
     Firebase Auth proves identity (firebase_uid/email); Stripe proves payment. The billing webhook
-    upserts this row on checkout + subscription changes. Premium routes treat the account as Pro when
-    plan == "pro" AND status is active/trialing. Distinct from AccessRequest, which only records
-    willingness-to-pay interest (no entitlement). See gating-and-monetization-plan.
+    upserts this row on checkout + subscription changes. Feature access is a per-capability check over
+    the plan (see app/api/auth.py PLAN_CAPS): plan is one of "free" | "student" | "research" | "pro" |
+    "enterprise", live only while status is active/trialing. Distinct from AccessRequest, which only
+    records willingness-to-pay interest (no entitlement). See gating-and-monetization-plan.
     """
 
     __tablename__ = "entitlements"
@@ -820,7 +821,8 @@ class Entitlement(Base):
     )
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     firebase_uid: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
-    # "free" until a subscription activates; "pro" while a Pro subscription is live.
+    # Membership tier: "free" | "student" | "research" | "pro" | "enterprise". "free" until a
+    # subscription activates. Capabilities are derived from this (app/api/auth.py PLAN_CAPS).
     plan: Mapped[str] = mapped_column(String(30), nullable=False, default="free", server_default="free")
     # Stripe subscription status: active | trialing | past_due | canceled | incomplete | unpaid.
     status: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -853,6 +855,12 @@ class Entitlement(Base):
     # reminded, so the daily cycle sends once per trial; a re-granted/extended trial (new period_end)
     # re-qualifies. See app/alerts/trial_reminders.py.
     trial_reminder_sent_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Temporary Pro *preview* window for a Student/Research member: while this is in the future, the
+    # account carries the full Pro capability set without changing its underlying plan. Set by
+    # grant_pro_preview(); unioned in effective_capabilities(). NULL = no preview. See app/api/auth.py.
+    preview_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(

@@ -80,7 +80,7 @@ function UsStandings() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <GazetteHeader title="State Standings" subtitle="Who’s winning the Battle of the Bills" />
+      <GazetteHeader title="State Standings" subtitle="Who’s winning the Atlas Circular" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>

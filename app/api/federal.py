@@ -9,6 +9,10 @@ from app.database import get_db
 from app.models import FederalAction, LitigationCase, LitigationEvent
 from app.schemas import FederalActionSummary, LitigationCaseDetail, LitigationCaseSummary
 
+# Federal Actions + the litigation tracker are a Pro feature, gated on the FRONTEND (the /federal page
+# shows a Pro lock). The data is served to the client via a static CDN snapshot for resilience, so
+# these endpoints stay open — a backend gate would both break the unauthenticated snapshot build and be
+# bypassed by the snapshot fallback. See dashboard-next/src/app/federal/page.tsx + useFederal.ts.
 router = APIRouter(prefix="/federal-actions", tags=["federal"])
 
 

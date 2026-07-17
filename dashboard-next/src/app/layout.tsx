@@ -1,24 +1,22 @@
 import type { Metadata } from 'next';
-import { Inter, Spectral } from 'next/font/google';
+import { Lexend, Roboto_Mono } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
 import { Providers } from '@/components/layout/Providers';
 import { AppShell } from '@/components/layout/AppShell';
 import { RouteAnalytics } from '@/components/layout/RouteAnalytics';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
-const spectral = Spectral({
-  weight: ['400', '500', '600', '700'],
-  style: ['normal', 'italic'],
-  subsets: ['latin'],
-  variable: '--font-serif',
-  display: 'swap',
-});
+// Atlas Circular brand type: Lexend for body + headings (the `--font-serif` token is kept for the many
+// existing masthead call sites, but now points at Lexend), Roboto Mono for labels/mono. Two Lexend
+// instances so headings can lean bolder; next/font/google dedupes the underlying face requests.
+const lexend = Lexend({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-sans', display: 'swap' });
+const lexendHeading = Lexend({ subsets: ['latin'], weight: ['600', '700', '800'], variable: '--font-serif', display: 'swap' });
+const robotoMono = Roboto_Mono({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-mono', display: 'swap' });
 
-const SITE_URL = 'https://ce-bill-tracker.web.app';
-const TITLE = 'Battle of the Bills — Circularity Legislation Tracker (Beta)';
+const SITE_URL = 'https://www.atlascircular.com';
+const TITLE = 'Atlas Circular — A Circular-Economy Law Atlas';
 const DESCRIPTION =
-  'A real-time tracker for circularity-aligned legislation across all 50 US states.';
+  'Track sustainability and circular-economy law across the globe — bills, deadlines, and analysis, by jurisdiction.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -27,7 +25,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     url: SITE_URL,
-    siteName: 'Battle of the Bills',
+    siteName: 'Atlas Circular',
     title: TITLE,
     description: DESCRIPTION,
     images: [
@@ -35,7 +33,7 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'Battle of the Bills — Circularity Legislation Tracker',
+        alt: 'Atlas Circular — A Circular-Economy Law Atlas',
       },
     ],
   },
@@ -49,7 +47,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${spectral.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${lexend.variable} ${lexendHeading.variable} ${robotoMono.variable}`}>
       <body className="bg-bg-primary text-text-primary antialiased">
         <Providers>
           <AppShell>{children}</AppShell>

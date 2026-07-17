@@ -11,7 +11,7 @@ router = APIRouter(prefix="/access-requests", tags=["access"])
 
 # Tiers a visitor can express interest in — the willingness-to-pay experiment. Kept permissive
 # (validated, not enumerated in the DB) so we can add tiers without a migration.
-_VALID_PLANS = {"pro", "team", "enterprise", "api", "company_impact"}
+_VALID_PLANS = {"pro", "team", "enterprise", "api", "company_impact", "research", "student", "bespoke"}
 
 
 @router.post("", response_model=AccessRequestResponse, status_code=201)

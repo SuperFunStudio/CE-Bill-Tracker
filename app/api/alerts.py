@@ -18,14 +18,14 @@ def _unsubscribe_page(message: str) -> str:
     POSTed by the mail client (one-click), so it returns HTML rather than JSON."""
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SignalScout — Unsubscribe</title></head>
+<title>Atlas Circular — Unsubscribe</title></head>
 <body style="margin:0;background:#f4f1ea;font-family:Georgia,'Times New Roman',serif;color:#1a1a2e;">
   <div style="max-width:520px;margin:64px auto;background:#fff;border:1px solid #e3ddd0;
        border-top:4px double #1a1a2e;padding:36px 32px;text-align:center;">
     <div style="font:11px Georgia;letter-spacing:0.18em;text-transform:uppercase;color:#6b6b6b;">
-      SignalScout · Battle of the Bills</div>
+      Atlas Circular</div>
     <p style="font-size:17px;line-height:1.6;margin:22px 0 0;">{message}</p>
-    <a href="https://battleofbills.com" style="display:inline-block;margin-top:24px;color:#1a4d2e;
+    <a href="https://www.atlascircular.com" style="display:inline-block;margin-top:24px;color:#1e6ae9;
        text-decoration:none;font-weight:bold;">Back to the dashboard →</a>
   </div>
 </body></html>"""
@@ -53,7 +53,7 @@ async def unsubscribe(token: str = "", db: AsyncSession = Depends(get_db)):
         await db.commit()
     return HTMLResponse(
         _unsubscribe_page(
-            "You've been unsubscribed. You won't receive further SignalScout updates at this address. "
+            "You've been unsubscribed. You won't receive further Atlas Circular updates at this address. "
             "Changed your mind? You can re-subscribe any time from the dashboard."
         )
     )

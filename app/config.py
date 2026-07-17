@@ -221,10 +221,30 @@ class Settings(BaseSettings):
     stripe_pro_annual_price_id: str = ""
     stripe_founding_coupon_id: str = ""
     stripe_founding_trial_days: int = 90
+    # Atlas Circular membership tiers below Pro. Student is a pay-what-you-wish monthly price with a
+    # custom-amount box (Stripe custom_unit_amount, floor $0, suggested $15) — gated to verified
+    # educational emails (see edu_email_suffixes). Research (Founding Supporter) is a fixed annual price
+    # ($25/mo billed annually). Both stamp the matching plan via the webhook's price→plan map.
+    stripe_student_price_id: str = ""
+    stripe_research_price_id: str = ""
     stripe_webhook_secret: str = ""
     # Non-secret, baked into the frontend build — not used server-side. Declared only so a shared
     # .env carrying STRIPE_PUBLISHABLE_KEY doesn't trip extra='forbid' and crash the backend.
     stripe_publishable_key: str = ""
+    # Email suffixes that qualify for the edu-gated Student tier. Checked (case-insensitive, endswith)
+    # against the caller's VERIFIED Firebase email at Student checkout. Override via EDU_EMAIL_SUFFIXES
+    # (comma-separated or JSON array) to add institutions without a code change.
+    edu_email_suffixes: list[str] = [
+        ".edu", ".ac.uk", ".edu.au", ".ac.nz", ".edu.ca", ".ac.jp", ".edu.sg", ".ac.za", ".edu.mx",
+    ]
+
+    @field_validator("edu_email_suffixes", mode="before")
+    @classmethod
+    def split_edu_suffixes(cls, v):
+        if isinstance(v, str) and not v.strip().startswith("["):
+            return [s.strip().lower() for s in v.split(",") if s.strip()]
+        return v
+
     # Firebase project whose ID tokens we verify on premium routes (firebase-admin).
     firebase_project_id: str = "ce-bill-tracker"
     # Emails allowed into the hidden /admin console (manage sign-ups, grant complimentary Pro, …).
@@ -240,8 +260,9 @@ class Settings(BaseSettings):
         if isinstance(v, str) and not v.strip().startswith("["):
             return [e.strip() for e in v.split(",") if e.strip()]
         return v
-    # Dashboard origin Stripe Checkout returns to (success/cancel) and that we allow for auth.
-    app_base_url: str = "https://ce-bill-tracker.web.app"
+    # Dashboard origin Stripe Checkout returns to (success/cancel + billing-portal return). The Atlas
+    # Circular public domain; override via APP_BASE_URL per environment (e.g. the dev Firebase site).
+    app_base_url: str = "https://www.atlascircular.com"
     # Public origin of THIS API (Cloud Run), used to build absolute links into the backend from emails
     # — e.g. the one-click unsubscribe endpoint. The frontend is a static SPA, so it can't proxy these.
     api_base_url: str = "https://signalscout-api-pes3nxocda-uc.a.run.app"

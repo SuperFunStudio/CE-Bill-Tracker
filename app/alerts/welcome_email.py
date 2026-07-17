@@ -10,7 +10,7 @@ Two layers:
   - Structured standings (build_state_of_play): deterministic counts pulled straight from the DB —
     enacted vs. active bills, broken out by jurisdiction, plus the landmark laws and what's live now.
   - An optional one-paragraph recap (render_recap_paragraph): Claude writing the standings up in a
-    championship-recap voice, on-brand with the "Battle of the Bills" masthead. Flag-gated
+    championship-recap voice, on-brand with the "Atlas Circular" masthead. Flag-gated
     (enable_welcome_recap) and best-effort — the email renders fine without it. The prose is anchored
     to the structured counts so it can't drift far from the numbers (classifier noise can still leak
     a mis-tagged bill into the list, same caveat as the digest).
@@ -49,7 +49,7 @@ from app.models import AlertSubscription, Bill
 
 log = structlog.get_logger()
 
-_DASHBOARD_URL = "https://battleofbills.com"
+_DASHBOARD_URL = "https://www.atlascircular.com"
 
 # Status buckets for the cumulative snapshot. "Enacted" = signed into law; "dead" = no longer moving;
 # everything else in between is "active". Mirrors the enacted/pending split in /bills/map-summary.
@@ -164,7 +164,7 @@ async def build_state_of_play(db: AsyncSession, sub: AlertSubscription) -> State
 RECAP_MODEL = "claude-sonnet-4-6"
 
 _RECAP_SYSTEM = """\
-You are the ringside correspondent for "Battle of the Bills", a newsletter covering U.S. \
+You are the ringside correspondent for "Atlas Circular", a newsletter covering U.S. \
 circular-economy and Extended Producer Responsibility (EPR) legislation. Keep the fight-night \
 voice — but the fight has a point. In this ring the states are fighting FOR their citizens' future \
 against corporate interests that profit from waste and disposability: every EPR law, every \
@@ -254,8 +254,8 @@ async def render_recap_paragraph(sub: AlertSubscription, sop: StateOfPlay) -> st
 
 def render_welcome_subject(sub: AlertSubscription) -> str:
     # Deliberately NOT "Welcome to…" — the account-signup email owns that, and two near-identical
-    # "Welcome to Battle of the Bills" subjects in one inbox read as a confusing duplicate.
-    return "Your Battle of the Bills alerts are live — opening state of play"
+    # "Welcome to Atlas Circular" subjects in one inbox read as a confusing duplicate.
+    return "Your Atlas Circular alerts are live — opening state of play"
 
 
 def _bill_line(b: Bill, badge: str = "") -> str:
@@ -382,12 +382,12 @@ def render_welcome_html(
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Battle of the Bills · EPR Legislative Intelligence
+      Atlas Circular · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking circularity-aligned legislation across the USA</p>
+      Tracking sustainability across the globe</p>
   </div>
   <!-- Dateline -->
   <div style="padding:9px 28px;font:italic 13px {_SERIF};color:{_MUTED};text-align:center;
@@ -414,7 +414,7 @@ def render_welcome_html(
   <!-- Colophon -->
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you just subscribed to Battle of the Bills updates.<br>
+    You're receiving this because you just subscribed to Atlas Circular updates.<br>
     <a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">Unsubscribe</a>
     · or reply to this email.
   </div>
@@ -491,8 +491,8 @@ async def send_welcome_for_subscription(subscription_id: int) -> None:
 
 
 def render_account_welcome_subject() -> str:
-    # Public brand is "Battle of the Bills" — never the internal "SignalScout" codename in a subject.
-    return "Welcome to Battle of the Bills — your 7-day Pro trial is live"
+    # Public brand is "Atlas Circular" — never the internal "Atlas Circular" codename in a subject.
+    return "Welcome to Atlas Circular — your 7-day Pro trial is live"
 
 
 def render_account_welcome_html() -> str:
@@ -502,17 +502,17 @@ def render_account_welcome_html() -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Battle of the Bills · EPR Legislative Intelligence
+      Atlas Circular · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking circularity-aligned legislation across the USA</p>
+      Tracking sustainability across the globe</p>
   </div>
   <div style="padding:18px 28px 24px;">
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to the ring.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 14px;">
-      You've just created a free Battle of the Bills account — and the next <strong>7 days are on us</strong>.
+      You've just created a free Atlas Circular account — and the next <strong>7 days are on us</strong>.
       Your Pro trial is live right now, no card required:</p>
     <ul style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 16px;padding-left:20px;">
       <li>The full <strong>Upcoming Deadlines</strong> timeline — every EPR compliance date, all 50 states</li>
@@ -530,7 +530,7 @@ def render_account_welcome_html() -> str:
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you just created a Battle of the Bills account.
+    You're receiving this because you just created a Atlas Circular account.
   </div>
  </div>
 </body></html>
@@ -576,7 +576,7 @@ def _comp_duration_label(days: int | None) -> str:
 
 
 def render_comp_grant_subject() -> str:
-    return "Your complimentary access to Battle of the Bills"
+    return "Your complimentary access to Atlas Circular"
 
 
 def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
@@ -587,17 +587,17 @@ def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Battle of the Bills · EPR Legislative Intelligence
+      Atlas Circular · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking circularity-aligned legislation across the USA</p>
+      Tracking sustainability across the globe</p>
   </div>
   <div style="padding:18px 28px 24px;">
     <p style="font:16px {_SERIF};color:{_INK};margin:6px 0 14px;font-weight:bold;">{greeting}</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
-      Thank you for being an early user of <strong>Battle of the Bills</strong>. You've been granted
+      Thank you for being an early user of <strong>Atlas Circular</strong>. You've been granted
       complimentary access for <strong>{duration_label}</strong>. Enjoy all of the features as we
       continue to develop this product.</p>
     <a href="{_DASHBOARD_URL}/compliance" style="display:inline-block;background:{_ACCENT};color:#fff;
@@ -605,11 +605,11 @@ def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
       Open your dashboard →</a>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:22px 0 0;">
       Kind regards,<br>
-      The Battle of the Bills Team</p>
+      The Atlas Circular Team</p>
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you were granted complimentary access to Battle of the Bills.
+    You're receiving this because you were granted complimentary access to Atlas Circular.
   </div>
  </div>
 </body></html>
@@ -646,9 +646,9 @@ async def send_comp_grant_welcome(email: str, days: int | None = None, name: str
 
 def render_pro_welcome_subject(is_trial: bool = False) -> str:
     return (
-        "Your Battle of the Bills Pro trial is live"
+        "Your Atlas Circular Pro trial is live"
         if is_trial
-        else "You're in — your Battle of the Bills Pro plan is active"
+        else "You're in — your Atlas Circular Pro plan is active"
     )
 
 
@@ -676,18 +676,18 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Battle of the Bills · EPR Legislative Intelligence
+      Atlas Circular · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking circularity-aligned legislation across the USA</p>
+      Tracking sustainability across the globe</p>
   </div>
   <div style="padding:18px 28px 24px;">
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to Pro.</p>
     {founding_badge}
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
-      Thank you for subscribing to <strong>Battle of the Bills Pro</strong>. {confirm}</p>
+      Thank you for subscribing to <strong>Atlas Circular Pro</strong>. {confirm}</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 10px;">
       You now have the full toolkit:</p>
     <ul style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 16px;padding-left:20px;">
@@ -704,11 +704,11 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
       <a href="{_DASHBOARD_URL}/account" style="color:{_ACCENT};">your account</a>.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
       Kind regards,<br>
-      The Battle of the Bills Team</p>
+      The Atlas Circular Team</p>
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you subscribed to Battle of the Bills Pro.
+    You're receiving this because you subscribed to Atlas Circular Pro.
   </div>
  </div>
 </body></html>
@@ -754,10 +754,10 @@ def _lifecycle_shell(title_line: str, body_inner: str, colophon: str) -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Battle of the Bills · EPR Legislative Intelligence
+      Atlas Circular · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">{title_line}</p>
   </div>
   <div style="padding:18px 28px 24px;">
@@ -786,7 +786,7 @@ def _cta_button(href: str, label: str) -> str:
 
 
 def render_payment_failed_subject() -> str:
-    return "Action needed — your Battle of the Bills Pro payment didn't go through"
+    return "Action needed — your Atlas Circular Pro payment didn't go through"
 
 
 def render_payment_failed_html() -> str:
@@ -794,7 +794,7 @@ def render_payment_failed_html() -> str:
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
       A quick heads-up about your subscription.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
-      We tried to process the payment for your <strong>Battle of the Bills Pro</strong> subscription, but it
+      We tried to process the payment for your <strong>Atlas Circular Pro</strong> subscription, but it
       didn't go through. This is most often an expired or replaced card — nothing's lost yet.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 16px;">
       Update your payment details to keep your Pro access uninterrupted. If the payment isn't resolved,
@@ -804,11 +804,11 @@ def render_payment_failed_html() -> str:
       Already fixed it, or want to check your status? Manage everything from
       <a href="{_DASHBOARD_URL}/account" style="color:{_ACCENT};">your account</a>.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
-      Kind regards,<br>The Battle of the Bills Team</p>"""
+      Kind regards,<br>The Atlas Circular Team</p>"""
     return _lifecycle_shell(
-        "Tracking circularity-aligned legislation across the USA",
+        "Tracking sustainability across the globe",
         body,
-        "You're receiving this because a payment on your Battle of the Bills Pro subscription needs attention.",
+        "You're receiving this because a payment on your Atlas Circular Pro subscription needs attention.",
     )
 
 
@@ -839,7 +839,7 @@ async def send_payment_failed(email: str) -> bool:
 
 
 def render_subscription_canceled_subject() -> str:
-    return "Your Battle of the Bills Pro subscription has been canceled"
+    return "Your Atlas Circular Pro subscription has been canceled"
 
 
 def render_subscription_canceled_html() -> str:
@@ -847,7 +847,7 @@ def render_subscription_canceled_html() -> str:
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
       Your Pro subscription has ended.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
-      We've canceled your <strong>Battle of the Bills Pro</strong> subscription and your account is back on the
+      We've canceled your <strong>Atlas Circular Pro</strong> subscription and your account is back on the
       free plan. You won't be billed again. You'll keep free access to the bill explorer and public
       pages — the Pro tools (full deadlines timeline, watch-list alerts, the Design Guide and CSV
       export) are paused.</p>
@@ -857,11 +857,11 @@ def render_subscription_canceled_html() -> str:
     <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
       We'd genuinely value a line on what we could have done better — just reply to this email.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
-      Kind regards,<br>The Battle of the Bills Team</p>"""
+      Kind regards,<br>The Atlas Circular Team</p>"""
     return _lifecycle_shell(
-        "Tracking circularity-aligned legislation across the USA",
+        "Tracking sustainability across the globe",
         body,
-        "You're receiving this because your Battle of the Bills Pro subscription was canceled.",
+        "You're receiving this because your Atlas Circular Pro subscription was canceled.",
     )
 
 
@@ -893,7 +893,7 @@ async def send_subscription_canceled(email: str) -> bool:
 
 
 def render_referral_reward_subject(days: int) -> str:
-    return f"You just earned {days} free days of Battle of the Bills Pro"
+    return f"You just earned {days} free days of Atlas Circular Pro"
 
 
 def render_referral_reward_html(days: int) -> str:
@@ -901,18 +901,18 @@ def render_referral_reward_html(days: int) -> str:
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
       Your referral paid off.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
-      Someone just signed up for <strong>Battle of the Bills</strong> using your referral link — so
+      Someone just signed up for <strong>Atlas Circular</strong> using your referral link — so
       we've added <strong>{days} days of Pro</strong> to your account. It's live right now; nothing to
       claim.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 16px;">
       Thanks for spreading the word. Keep sharing your link and the free days keep stacking up.</p>
     {_cta_button(f"{_DASHBOARD_URL}/compliance", "Open your dashboard →")}
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
-      Kind regards,<br>The Battle of the Bills Team</p>"""
+      Kind regards,<br>The Atlas Circular Team</p>"""
     return _lifecycle_shell(
-        "Tracking circularity-aligned legislation across the USA",
+        "Tracking sustainability across the globe",
         body,
-        "You're receiving this because a friend signed up using your Battle of the Bills referral link.",
+        "You're receiving this because a friend signed up using your Atlas Circular referral link.",
     )
 
 

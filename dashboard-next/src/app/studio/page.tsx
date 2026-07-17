@@ -28,6 +28,7 @@
  * file is presentation and stage choreography only.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { BillModal } from '@/components/ui/BillModal';
@@ -196,7 +197,7 @@ export default function PackagingStudioPage() {
   const [openingBillId, setOpeningBillId] = useState<number | null>(null);
 
   const { isUsView } = useRegion();
-  const { showToast } = useAuth();
+  const { showToast, isPro, isAdmin, user, openAuth } = useAuth();
   const { betaEnabled } = useBeta();
   const saved = useSavedPackages();
   /** True when the URL opened with a spec in it (share link / reload) — that spec always wins
@@ -498,6 +499,40 @@ export default function PackagingStudioPage() {
 
   const t = quote.totals;
   const ob = quote.obligations;
+
+  // Packaging Studio is a Pro membership feature. Non-members get a lock (all hooks above already ran,
+  // so this early return is rules-of-hooks safe).
+  if (!isPro && !isAdmin) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <GazetteHeader
+          title="Packaging Studio"
+          subtitle="Build a package one decision at a time — see what every material pick costs, then get the punch list of what it owes."
+        />
+        <div className="surface-card p-6 mt-6 space-y-3 text-center">
+          <h2 className="font-serif text-xl text-text-primary">A Pro membership feature</h2>
+          <p className="text-text-secondary max-w-xl mx-auto">
+            The Packaging Studio prices your package against live producer-fee schedules and hands you
+            the exact compliance punch list. It&apos;s included with a Pro membership.
+          </p>
+          <div className="flex justify-center gap-2 pt-1">
+            {!user && (
+              <button
+                type="button"
+                onClick={openAuth}
+                className="rounded-full border border-border-default px-5 py-2 text-sm text-text-secondary hover:text-text-primary"
+              >
+                Sign in
+              </button>
+            )}
+            <Link href="/pricing" className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary hover:opacity-90">
+              See memberships
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <FmtCtx.Provider value={fmt}>

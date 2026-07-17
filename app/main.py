@@ -23,8 +23,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="SignalScout — Compliance Scout API",
-    description="Monitor US state-level EPR legislation and regulatory instruments",
+    # Internal service name (SignalScout) stays in infra identifiers; the public brand is Atlas Circular.
+    title="Atlas Circular API",
+    description="Track circular-economy legislation and regulatory instruments across jurisdictions",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -32,6 +33,10 @@ app = FastAPI(
 ALLOWED_ORIGINS = [
     "https://ce-bill-tracker.web.app",
     "https://ce-bill-tracker.firebaseapp.com",
+    # Atlas Circular public domain (primary going forward).
+    "https://atlascircular.com",
+    "https://www.atlascircular.com",
+    # Legacy domain — kept through the 301-redirect window so existing links keep working.
     "https://battleofbills.com",
     "https://www.battleofbills.com",
     # Dev lane frontend (Firebase hosting site ce-bill-tracker-dev) — the dev API shares this image,

@@ -1,15 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { useAuth } from '@/components/auth/AuthContext';
-import { askResearch, fetchResearchBills } from '@/lib/api';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { CAP, useAuth } from '@/components/auth/AuthContext';
+import { ApiError, askResearch, fetchResearchBills } from '@/lib/api';
 import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchCitation } from '@/lib/types';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillModal } from '@/components/ui/BillModal';
 
-// "Ask the Bills" (Pro) — a natural-language question over the extracted corpus. The answer is
-// grounded in retrieved bills + SQL aggregates server-side (numbers are exact, claims are cited);
-// this page just drives the prompt and renders the result. Upload-and-compare is a later mode.
+// "Ask the Atlas" — a natural-language question over the extracted corpus. The answer is grounded in
+// retrieved bills + SQL aggregates server-side (numbers are exact, claims are cited); this page just
+// drives the prompt and renders the result. Access: an anonymous visitor gets one free question, then
+// the sign-in/upgrade wall; members (Student+) get full, threaded, saved asks. Upload-and-compare
+// (formerly Evaluate a Bill) folds in here in a fast follow.
+
+// Local marker that an anonymous visitor has spent their one free question (server enforces the real
+// per-IP/day limit; this just avoids a wasted round-trip and shows the wall immediately).
+const FREE_ASK_KEY = 'atlas_free_ask_used';
 
 const EXAMPLES = [
   'Do bills measure collection targets by weight or by value recovered?',
@@ -141,9 +148,15 @@ function CitedBills({ citations, onOpen }: { citations: ResearchCitation[]; onOp
 }
 
 export default function AskPage() {
-  // Admin-gated for now (dogfooding in prod before it opens to Pro). To graduate to a Pro feature,
-  // swap isAdmin→isPro here, flip the endpoint's require_admin→require_pro, and drop the nav adminOnly.
-  const { isAdmin, getToken, loading: authLoading } = useAuth();
+  // Open to everyone: members (Student+ carry the `ask` capability, or admins) get full threaded asks;
+  // an anonymous visitor gets one free question, then the wall. A signed-in FREE account has no ask
+  // capability and is walled toward an upgrade. The backend enforces all of this — see /research/ask.
+  const { user, hasCapability, openAuth, getToken, loading: authLoading } = useAuth();
+  const canAsk = hasCapability(CAP.ASK);
+  // Which wall to show, if any: 'signin' after an anonymous visitor spends their free question,
+  // 'upgrade' for a signed-in free account.
+  const [wall, setWall] = useState<null | 'signin' | 'upgrade'>(null);
+  const [freeAskUsed, setFreeAskUsed] = useState(false);
   const [question, setQuestion] = useState('');
   // The conversation: each turn is a question + its grounded answer. A follow-up is asked with the
   // current sessionId so the server condenses it against the thread before retrieving.
@@ -156,10 +169,21 @@ export default function AskPage() {
   const [error, setError] = useState<string | null>(null);
   const [modalBill, setModalBill] = useState<BillSummary | null>(null);  // opened from a citation
 
+  // Anonymous visitors: remember once they've spent their free question so the wall shows immediately.
+  useEffect(() => {
+    if (!user && typeof window !== 'undefined') {
+      try { setFreeAskUsed(localStorage.getItem(FREE_ASK_KEY) === '1'); } catch { /* ignore */ }
+    }
+  }, [user]);
+
   async function ask(q: string) {
     const trimmed = q.trim();
-    if (trimmed.length < 3 || busy || !isAdmin) return;
-    setBusy(true); setError(null);
+    if (trimmed.length < 3 || busy) return;
+    // Wall the right people before spending a request: a signed-in free account (no ask capability)
+    // gets the upgrade wall; an anonymous visitor who already used their free question gets sign-in.
+    if (user && !canAsk) { setWall('upgrade'); return; }
+    if (!user && freeAskUsed) { setWall('signin'); return; }
+    setBusy(true); setError(null); setWall(null);
     try {
       const token = await getToken();
       const a = await askResearch(trimmed, token, sessionId);   // sessionId null on the first turn
@@ -168,8 +192,19 @@ export default function AskPage() {
       setBillPage(a.bills ?? null);
       setLastQuery(a.retrieval_query ?? trimmed);
       setQuestion('');
+      // Mark the anonymous free question as spent — the next ask hits the sign-in wall.
+      if (!user && typeof window !== 'undefined') {
+        try { localStorage.setItem(FREE_ASK_KEY, '1'); } catch { /* ignore */ }
+        setFreeAskUsed(true);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      // Translate the server's gate 403s into the matching wall; other errors show inline.
+      if (e instanceof ApiError && e.status === 403) {
+        setWall(e.detail === 'ask_upgrade_required' ? 'upgrade' : 'signin');
+        if (!user) { try { localStorage.setItem(FREE_ASK_KEY, '1'); } catch { /* ignore */ } setFreeAskUsed(true); }
+      } else {
+        setError(e instanceof Error ? e.message : 'Something went wrong.');
+      }
     } finally {
       setBusy(false);
     }
@@ -194,25 +229,53 @@ export default function AskPage() {
   }
 
   if (authLoading) return null;
-  if (!isAdmin) {
-    return (
-      <div className="mx-auto max-w-3xl px-6 py-16 text-center">
-        <p className="text-text-secondary">This feature isn&apos;t available yet.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10 space-y-6">
       <div>
-        <p className="text-[rgb(var(--green-accent))] text-xs font-semibold uppercase tracking-wider">Ask the Bills</p>
+        <p className="text-[rgb(var(--green-accent))] text-xs font-semibold uppercase tracking-wider">Ask the Atlas</p>
         <h1 className="font-serif text-2xl text-text-primary mt-1">Question the whole corpus</h1>
         <p className="text-text-secondary text-body mt-2 leading-relaxed">
-          Ask an analytical question across every tracked bill. Answers are grounded in the bills&apos;
-          extracted compliance data and cite the specific measures behind each claim — and where the
-          question is a counting question, the numbers come straight from the database.
+          Ask an analytical question across every tracked measure in the atlas. Answers are grounded in
+          the bills&apos; extracted compliance data and cite the specific measures behind each claim — and
+          where the question is a counting question, the numbers come straight from the database.
         </p>
+        {!user && !freeAskUsed && (
+          <p className="text-text-muted text-xs mt-2">
+            Your first question is free — sign in for unlimited, threaded, saved research.
+          </p>
+        )}
       </div>
+
+      {wall && (
+        <div className="rounded-lg border border-green-accent/40 bg-green-dark/40 p-5 space-y-3">
+          <h2 className="font-serif text-lg text-text-primary">
+            {wall === 'signin' ? 'That was your free question' : 'Ask the Atlas is a member feature'}
+          </h2>
+          <p className="text-body text-text-secondary">
+            {wall === 'signin'
+              ? 'Create a free account and choose a membership to keep asking — Students pay what they wish with a verified .edu email.'
+              : 'Your plan includes the Bill Explorer. Upgrade to a Student, Research, or Pro membership to ask the Atlas.'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {wall === 'signin' ? (
+              <button
+                type="button"
+                onClick={openAuth}
+                className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary hover:opacity-90"
+              >
+                Sign in / sign up
+              </button>
+            ) : null}
+            <Link
+              href="/pricing"
+              className="rounded-full border border-border-default px-5 py-2 text-sm text-text-secondary hover:text-text-primary"
+            >
+              See memberships
+            </Link>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={e => { e.preventDefault(); ask(question); }} className="space-y-3">
         <textarea
@@ -227,7 +290,9 @@ export default function AskPage() {
         />
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-text-muted">
-            {turns.length > 0 ? 'Follow-up · keeps the thread’s context' : 'Admin preview'} · ⌘/Ctrl+Enter to ask
+            {turns.length > 0
+              ? 'Follow-up · keeps the thread’s context'
+              : (!user ? 'One free question' : 'Ask the Atlas')} · ⌘/Ctrl+Enter to ask
           </span>
           <div className="flex items-center gap-2">
             {turns.length > 0 && (

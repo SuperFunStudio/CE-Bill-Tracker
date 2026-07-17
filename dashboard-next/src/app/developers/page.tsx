@@ -98,7 +98,7 @@ export default function DevelopersPage() {
       />
 
       <p className="text-text-secondary leading-relaxed">
-        Every bill, status, deadline, fee, and AI classification behind Battle of the Bills is available
+        Every bill, status, deadline, fee, and AI classification behind Atlas Circular is available
         over a plain REST/JSON API. <strong className="text-text-primary">Read endpoints are open and
         rate-limited</strong> — no key needed to start. For production volume, commercial terms, bulk
         exports, or webhooks, <button onClick={requestAccess} className="text-green-accent hover:underline">request

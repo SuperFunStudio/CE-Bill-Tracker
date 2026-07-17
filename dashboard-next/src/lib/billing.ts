@@ -37,14 +37,34 @@ export function billingErrorMessage(e: unknown): string {
   return 'We couldn’t start checkout just now — please try again in a moment.';
 }
 
-/** Begin the Pro subscription for a billing period (default annual). Opens Checkout — the founding
- *  offer (90-day trial + first-year coupon) is applied server-side — and sends the browser to Stripe. */
+/** The self-serve membership tiers that go through Stripe Checkout. Enterprise is invoiced (lead
+ *  capture), not a checkout plan. */
+export type MembershipPlan = 'pro' | 'student' | 'research';
+
+/** Begin a membership checkout and send the browser to Stripe.
+ *  - pro: 90-day trial + founding coupon applied server-side (period monthly|annual).
+ *  - research: fixed annual subscription.
+ *  - student: verified-edu, pay-what-you-wish. `amountCents: 0` grants a free comp membership on the
+ *    spot (server returns a success URL, no Stripe); any other value hands off to Stripe's custom-amount
+ *    screen. A 403 here means the account isn't a verified educational email. */
+export async function startCheckout(
+  getToken: () => Promise<string | null>,
+  opts: { plan?: MembershipPlan; period?: 'monthly' | 'annual'; amountCents?: number | null } = {},
+): Promise<void> {
+  const body: Record<string, unknown> = { plan: opts.plan ?? 'pro' };
+  if (opts.period) body.period = opts.period;
+  if (opts.amountCents !== undefined && opts.amountCents !== null) body.amount_cents = opts.amountCents;
+  const url = await postWithToken('/billing/checkout', await getToken(), body);
+  window.location.href = url;
+}
+
+/** Begin the Pro subscription for a billing period (default annual). Thin wrapper over startCheckout,
+ *  kept for the many existing Pro-gate call sites (useProGate, account page, …). */
 export async function startProCheckout(
   getToken: () => Promise<string | null>,
   period: 'monthly' | 'annual' = 'annual',
 ): Promise<void> {
-  const url = await postWithToken('/billing/checkout', await getToken(), { period });
-  window.location.href = url;
+  return startCheckout(getToken, { plan: 'pro', period });
 }
 
 /** Grant the one-time 7-day signup trial (full Pro, no card). Best-effort; the backend is idempotent

@@ -16,13 +16,13 @@ import {
 // shown in the Bill Explorer), and company impact scoring is US-only. See RegionContext.
 const NAV_ITEMS = [
   { href: '/', label: 'Bill Explorer', Icon: HomeIcon },
+  // Ask the Atlas is the headline research tool: open to everyone (an anonymous visitor gets one free
+  // question, then the in-page sign-in/upgrade wall — see /ask). Members get full, threaded, saved asks.
+  { href: '/ask', label: 'Ask the Atlas', Icon: AskIcon },
   { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon },
   { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon, usOnly: true },
-  { href: '/company', label: 'My Portfolio', Icon: FactoryIcon, usOnly: true },
+  { href: '/company', label: 'My Library', Icon: FactoryIcon, usOnly: true },
   { href: '/design-guide', label: 'Design Guide', Icon: CompassIcon },
-  // Admin-only while dogfooding in prod; graduates to a Pro feature once validated (drop adminOnly,
-  // flip the /ask guard + endpoint to Pro). Mirrors the Regulation Facts rollout above.
-  { href: '/ask', label: 'Ask the Bills', Icon: AskIcon, adminOnly: true },
   // Prototype — dogfooding in prod, admin-only; graduates to Pro alongside /ask (drop adminOnly, the
   // page + endpoint already gate on isPro / require_pro).
   { href: '/evaluate', label: 'Evaluate a Bill', Icon: ScaleIcon, adminOnly: true },
@@ -39,7 +39,7 @@ const NAV_ITEMS = [
 const ACCOUNT_ITEM = { href: '/account', label: 'Account', Icon: UserIcon };
 
 /**
- * Top nav with the "BATTLE OF THE BILLS" masthead centered, theme toggle pinned right.
+ * Top nav with the "ATLAS CIRCULAR" masthead centered, theme toggle pinned right.
  * At sm+ an inline section bar (newspaper-style) shows every destination; on mobile that
  * collapses behind the left hamburger into a dropdown. On scroll the brand shrinks.
  */
@@ -118,14 +118,14 @@ export function TopNav() {
               scrolled ? 'text-lg sm:text-xl' : 'text-3xl sm:text-5xl'
             }`}
           >
-            Battle of the Bills
+            Atlas Circular
           </h1>
           <p
-            className={`font-serif italic text-text-secondary overflow-hidden transition-all duration-300 ${
+            className={`font-serif text-text-secondary overflow-hidden transition-all duration-300 ${
               scrolled ? 'max-h-0 opacity-0' : 'mt-2 max-h-10 opacity-100 text-sm sm:text-base'
             }`}
           >
-            Tracking circularity legislation across the world
+            Tracking sustainability across the globe
           </p>
         </Link>
 
@@ -161,7 +161,7 @@ export function TopNav() {
               <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />
             </div>
             <div className="text-text-muted text-xs text-center pt-2">
-              Circularity legislation tracker · Beta
+              Circular-economy law atlas · Beta
             </div>
           </div>
         </nav>

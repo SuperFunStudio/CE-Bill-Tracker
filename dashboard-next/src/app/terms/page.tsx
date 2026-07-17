@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service — Battle of the Bills',
+  title: 'Terms of Service — Atlas Circular',
   description:
-    'The terms governing use of Battle of the Bills — the circularity-legislation intelligence ' +
+    'The terms governing use of Atlas Circular — the circularity-legislation intelligence ' +
     'service: accounts, subscriptions, acceptable use, data, disclaimers, and liability.',
 };
 
@@ -31,7 +31,7 @@ export default function TermsPage() {
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-8">
       <GazetteHeader
         title="Terms of Service"
-        subtitle="The agreement between you and Battle of the Bills."
+        subtitle="The agreement between you and Atlas Circular."
       />
 
       <p className="text-text-muted text-sm">Effective date: {EFFECTIVE_DATE}</p>
@@ -46,7 +46,7 @@ export default function TermsPage() {
 
       <Section n={1} title="The Service">
         <p>
-          Battle of the Bills is an intelligence and research tool that aggregates, classifies, and
+          Atlas Circular is an intelligence and research tool that aggregates, classifies, and
           summarizes legislation and regulatory actions related to the circular economy — including
           Extended Producer Responsibility, right-to-repair, recycled-content, deposit-return,
           labeling, and federal preemption — across U.S. jurisdictions. We may add, change, or remove

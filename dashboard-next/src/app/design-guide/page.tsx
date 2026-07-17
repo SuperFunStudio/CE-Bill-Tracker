@@ -2,12 +2,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { CompassIcon, LockIcon } from '@/components/ui/icons';
-import { useAuth } from '@/components/auth/AuthContext';
+import { CAP, useAuth } from '@/components/auth/AuthContext';
 import { useBills } from '@/hooks/useBills';
 import { BillModal } from '@/components/ui/BillModal';
 import { PrincipleCard } from '@/components/design-guide/PrincipleCard';
-import { startProCheckout, openFullGuide, billingErrorMessage } from '@/lib/billing';
-import { upgradeLabel } from '@/lib/tiers';
+import { openFullGuide, billingErrorMessage } from '@/lib/billing';
 import { track } from '@/lib/analytics';
 import { TEASER_LEVERS, GUIDE_COVERAGE, type TeaserLever } from '@/data/designGuideTeaser';
 
@@ -57,7 +56,10 @@ const LEVER_DISPLAY_NAME: Record<string, string> = {
 const LEVER_BY_KEY = new Map<string, TeaserLever>(TEASER_LEVERS.map(l => [l.lever, l]));
 
 export default function DesignGuidePage() {
-  const { user, isPro, loading, openAuth, getToken, refreshEntitlement } = useAuth();
+  const { user, hasCapability, loading, openAuth, getToken, refreshEntitlement } = useAuth();
+  // The Design Guide is a member feature from the Student tier up (not Pro-only) — gate on the
+  // capability, and route a free account to /pricing (Student is the cheapest way to unlock it).
+  const canGuide = hasCapability(CAP.DESIGN_GUIDE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -85,15 +87,19 @@ export default function DesignGuidePage() {
     setError('');
     // The Pro-gate CTA: which action it resolves to is the conversion intent on this page —
     // sign_in (anon), upgrade (free user), or open_guide (already Pro).
-    track('design_guide_cta', { action: !user ? 'sign_in' : isPro ? 'open_guide' : 'upgrade' });
+    track('design_guide_cta', { action: !user ? 'sign_in' : canGuide ? 'open_guide' : 'upgrade' });
     if (!user) {
       openAuth();
       return;
     }
+    if (!canGuide) {
+      // A signed-in account without the capability picks a membership on the pricing page.
+      window.location.href = '/pricing';
+      return;
+    }
     setBusy(true);
     try {
-      if (isPro) await openFullGuide(getToken);
-      else await startProCheckout(getToken);
+      await openFullGuide(getToken);
     } catch (e) {
       // Never surface a raw transport error ("Request failed (503): {…}") — map to a friendly line.
       setError(billingErrorMessage(e));
@@ -104,9 +110,9 @@ export default function DesignGuidePage() {
 
   const ctaLabel = !user
     ? 'Sign in to unlock →'
-    : isPro
+    : canGuide
       ? 'Open the full guide →'
-      : upgradeLabel();
+      : 'See memberships →';
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
@@ -172,10 +178,10 @@ export default function DesignGuidePage() {
             disabled={busy || loading}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-green-accent text-bg-primary px-5 py-2.5 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-60"
           >
-            {isPro ? <CompassIcon className="text-sm" /> : <LockIcon className="text-sm" />}
+            {canGuide ? <CompassIcon className="text-sm" /> : <LockIcon className="text-sm" />}
             {busy ? 'Working…' : ctaLabel}
           </button>
-          {isPro && <span className="text-green-accent text-xs text-center">✓ Pro — full access</span>}
+          {canGuide && <span className="text-green-accent text-xs text-center">✓ Member — full access</span>}
           {error && <span className="text-urgency-high text-xs text-center max-w-[14rem]">{error}</span>}
         </div>
       </section>

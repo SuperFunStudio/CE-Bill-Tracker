@@ -203,7 +203,7 @@ def _state_chip(code: str) -> str:
 def render_onboarding_text(content: OnboardingContent) -> str:
     """Plain-text counterpart (deliverability — a multipart/alternative scores better than HTML-only)."""
     lines = [
-        "Welcome to your Battle of the Bills watch list.",
+        "Welcome to your Atlas Circular watch list.",
         "",
         "You're now tracking these bills — we'll email you only when one of them moves:",
     ]
@@ -255,10 +255,10 @@ def render_onboarding_html(content: OnboardingContent) -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Battle of the Bills · EPR Legislative Intelligence
+      Atlas Circular · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 38px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">Your watch list is live</p>
   </div>
   <div style="padding:20px 28px 24px;">
@@ -284,7 +284,7 @@ def render_onboarding_html(content: OnboardingContent) -> str:
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you started a watch list on Battle of the Bills.
+    You're receiving this because you started a watch list on Atlas Circular.
     <br><a href="{unsubscribe_url(content.sub.id)}" style="color:{_MUTED};text-decoration:underline;">
       Unsubscribe from these alerts</a>
   </div>

@@ -19,19 +19,35 @@ import { attributeReferral, PENDING_REF_KEY } from '@/lib/referrals';
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 export interface Entitlement {
-  plan: string; // live tier: "free" | "pro"
+  plan: string; // resolved tier: "free" | "student" | "research" | "pro" | "enterprise"
   status: string | null;
-  is_pro: boolean; // the single paid gate — timeline, watchlists, full Design Guide, CSV
+  is_pro: boolean; // Pro-level access (Pro/Enterprise or an active temporary Pro preview)
+  capabilities?: string[]; // the per-feature gate — mirrors app/api/auth.py PLAN_CAPS (+ any preview)
   is_trial?: boolean; // mid-trial (founding 90-day Stripe trial or a comp grant); shows a trial badge
   is_founding?: boolean; // founding member (founding coupon applied at checkout); shows a badge
   current_period_end: string | null;
 }
+
+// Capability constants — keep in sync with app/api/auth.py PLAN_CAPS keys.
+export const CAP = {
+  EXPLORE: 'explore',
+  ASK: 'ask',
+  DESIGN_GUIDE: 'design_guide',
+  INSIGHTS_IMPACT: 'insights_impact',
+  DEADLINES: 'deadlines',
+  ALERTS: 'alerts',
+  STUDIO: 'studio',
+  FEDERAL: 'federal',
+} as const;
 
 interface AuthState {
   user: User | null;
   loading: boolean;
   entitlement: Entitlement | null;
   isPro: boolean;
+  /** True if the signed-in account's plan carries `capability` (admins always true). Drives
+   *  conditional rendering of tier-gated UI. See app/api/auth.py PLAN_CAPS. */
+  hasCapability: (capability: string) => boolean;
   isAdmin: boolean;
   authModalOpen: boolean;
   openAuth: () => void;
@@ -258,6 +274,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     entitlement,
     isPro: !!entitlement?.is_pro,
+    // Admins see everything; otherwise read the plan's capability list from /billing/me.
+    hasCapability: (capability: string) =>
+      isAdmin || !!entitlement?.capabilities?.includes(capability),
     isAdmin,
     authModalOpen,
     openAuth: () => setAuthModalOpen(true),
@@ -316,5 +335,36 @@ export function useProGate(): (action: () => void, feature?: string) => boolean 
       return true;
     },
     [user, isPro, openAuth, getToken, showToast],
+  );
+}
+
+/**
+ * Generalized gate for any capability (Student/Research tiers, not just Pro). Routes an anonymous
+ * visitor to sign-in, a signed-in account whose plan lacks the capability to the pricing page (where
+ * they pick the right tier — Student edu-PWYW, Research, or Pro), and a holder runs the action.
+ * Returns true only when the action ran. For strictly-Pro features, useProGate is the more direct path
+ * (it opens Pro Checkout inline); use this for features a lower tier can also unlock.
+ */
+export function useCapabilityGate(
+  capability: string,
+): (action: () => void, feature?: string) => boolean {
+  const { user, hasCapability, openAuth } = useAuth();
+  return useCallback(
+    (action: () => void, feature?: string) => {
+      if (!user) {
+        track('gate_hit', { gate: capability, outcome: 'sign_in', feature });
+        openAuth();
+        return false;
+      }
+      if (!hasCapability(capability)) {
+        track('gate_hit', { gate: capability, outcome: 'pricing', feature });
+        if (typeof window !== 'undefined') window.location.href = '/pricing';
+        return false;
+      }
+      track('gate_hit', { gate: capability, outcome: 'allowed', feature });
+      action();
+      return true;
+    },
+    [user, hasCapability, capability, openAuth],
   );
 }

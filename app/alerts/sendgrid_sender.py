@@ -46,8 +46,8 @@ def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context:
 
     return f"""
 <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background: #1a4d2e; padding: 16px 24px;">
-    <h1 style="color: white; margin: 0; font-size: 20px;">Battle of the Bills</h1>
+  <div style="background: #1e6ae9; padding: 16px 24px;">
+    <h1 style="color: white; margin: 0; font-size: 20px;">Atlas Circular</h1>
     <p style="color: #a8d5b5; margin: 4px 0 0;">EPR Legislative Update</p>
   </div>
   <div style="padding: 24px; background: #f9fafb; border: 1px solid #e5e7eb;">
@@ -67,12 +67,12 @@ def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context:
     {'<p style="background:#fef9c3;padding:10px;border-radius:4px;font-size:13px;">' + (bill.ai_summary or '') + '</p>' if bill.ai_summary else ''}
     {('<div style="background:#1f1a1a;border:1px solid #7f1d1d;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:13px;color:#fca5a5;white-space:pre-line;">' + litigation_context + '</div>') if litigation_context else ''}
     <a href="{source_url}" style="display:inline-block;margin-top:16px;padding:10px 20px;
-       background:#1a4d2e;color:white;text-decoration:none;border-radius:4px;font-size:14px;">
+       background:#1e6ae9;color:white;text-decoration:none;border-radius:4px;font-size:14px;">
       View Bill →
     </a>
   </div>
   <div style="padding: 12px 24px; font-size: 12px; color: #9ca3af; text-align: center;">
-    Battle of the Bills — EPR Legislative Intelligence
+    Atlas Circular — EPR Legislative Intelligence
   </div>
 </body></html>
 """
@@ -122,15 +122,15 @@ class SendGridSender:
         """Send a plain-text/HTML alert not tied to a Bill object (e.g., litigation events)."""
         html = f"""
 <html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background: #1a4d2e; padding: 16px 24px;">
-    <h1 style="color: white; margin: 0; font-size: 20px;">Battle of the Bills</h1>
+  <div style="background: #1e6ae9; padding: 16px 24px;">
+    <h1 style="color: white; margin: 0; font-size: 20px;">Atlas Circular</h1>
     <p style="color: #a8d5b5; margin: 4px 0 0;">EPR Litigation Update</p>
   </div>
   <div style="padding: 24px; background: #f9fafb; border: 1px solid #e5e7eb; white-space: pre-line;">
     {body_text}
   </div>
   <div style="padding: 12px 24px; font-size: 12px; color: #9ca3af; text-align: center;">
-    Battle of the Bills — EPR Legislative Intelligence
+    Atlas Circular — EPR Legislative Intelligence
   </div>
 </body></html>"""
         message = Mail(
@@ -155,7 +155,7 @@ class SendGridSender:
         litigation_context: str = "",
     ) -> bool:
         bill_num = bill.bill_number or "Bill"
-        subject = f"[Battle of the Bills] {bill.state} {bill_num} — Legislative Update"
+        subject = f"[Atlas Circular] {bill.state} {bill_num} — Legislative Update"
         html_content = _build_email_html(bill, changes, litigation_context=litigation_context)
 
         message = Mail(

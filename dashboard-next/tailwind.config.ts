@@ -10,8 +10,10 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
-        serif: ['var(--font-serif)', 'Georgia', 'Cambria', 'serif'],
+        // Atlas Circular: Lexend for body + display (serif token repurposed), Roboto Mono for labels.
+        sans: ['var(--font-sans)', 'Lexend', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-serif)', 'Lexend', 'system-ui', 'sans-serif'],
+        mono: ['var(--font-mono)', 'Roboto Mono', 'ui-monospace', 'monospace'],
       },
       colors: {
         'bg-primary':     'var(--bg-primary)',
@@ -27,6 +29,14 @@ const config: Config = {
         'green-light':    'rgb(var(--green-light) / <alpha-value>)',
         'green-dark':     'rgb(var(--green-dark) / <alpha-value>)',
         'green-hero':     'rgb(var(--green-hero) / <alpha-value>)',
+        // Atlas Circular brand palette (map-inspired categorical accents — see globals.css).
+        'atlas-green':  'rgb(var(--atlas-green) / <alpha-value>)',
+        'atlas-teal':   'rgb(var(--atlas-teal) / <alpha-value>)',
+        'atlas-blue':   'rgb(var(--atlas-blue) / <alpha-value>)',
+        'atlas-pink':   'rgb(var(--atlas-pink) / <alpha-value>)',
+        'atlas-yellow': 'rgb(var(--atlas-yellow) / <alpha-value>)',
+        'atlas-orange': 'rgb(var(--atlas-orange) / <alpha-value>)',
+        'atlas-coral':  'rgb(var(--atlas-coral) / <alpha-value>)',
         'urgency-high':   '#ef4444',
         'urgency-medium': '#f59e0b',
         'urgency-low':    '#6b7280',

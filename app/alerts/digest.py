@@ -473,12 +473,12 @@ _INK_SOFT = "#495057"   # --text-secondary
 _MUTED = "#6b7280"      # --text-muted
 _PAPER = "#f8f9fa"      # --bg-primary
 _RULE = "#dee2e6"       # --border-default
-_ACCENT = "#1e6ae9"     # --green-accent (blue in light mode)
-_DASHBOARD_URL = "https://battleofbills.com"
+_ACCENT = "#1e6ae9"     # --green-accent (Atlas blue)
+_DASHBOARD_URL = "https://www.atlascircular.com"
 
 
 def render_digest_subject(content: DigestContent, period_label: str) -> str:
-    return f"Battle of the Bills — your {period_label} EPR digest ({content.total} updates)"
+    return f"Atlas Circular — your {period_label} EPR digest ({content.total} updates)"
 
 
 def _byline(b: Bill, extra: str = "") -> str:
@@ -558,12 +558,12 @@ def render_digest_html(
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · EPR Legislative Intelligence
+      Atlas Circular · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
-    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking circularity-aligned legislation across the USA</p>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};margin:0;">
+      Tracking sustainability across the globe</p>
   </div>
   <!-- Dateline -->
   <div style="padding:9px 28px;font:italic 13px {_SERIF};color:{_MUTED};text-align:center;
@@ -575,7 +575,7 @@ def render_digest_html(
   <!-- Colophon -->
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you subscribed to SignalScout updates.<br>
+    You're receiving this because you subscribed to Atlas Circular updates.<br>
     <a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">Unsubscribe</a>
     · or reply to this email.
   </div>

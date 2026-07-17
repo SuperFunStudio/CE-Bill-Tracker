@@ -5,7 +5,7 @@ import { SharedResearch } from './SharedResearch';
 // (/r/?token=…) because the dashboard is a static export — a single static route reads it client-side,
 // the same way bill deep links use /?bill=<id>. noindex: share links are unlisted, not public content.
 export const metadata: Metadata = {
-  title: 'Shared research — Battle of the Bills',
+  title: 'Shared research — Atlas Circular',
   robots: { index: false, follow: false },
 };
 

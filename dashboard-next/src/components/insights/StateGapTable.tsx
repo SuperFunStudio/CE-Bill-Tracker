@@ -8,7 +8,7 @@ import type { StateGapRow, BillParams } from '@/lib/types';
 import { BillDrilldownPanel } from './BillDrilldownPanel';
 
 /**
- * "Battle of the Bills" gap table: each state's advancing-CE passage rate next to its all-bills
+ * "Atlas Circular" gap table: each state's advancing-CE passage rate next to its all-bills
  * baseline. The gap is the signal — a state can pass CE bills ABOVE its general rate (a priority) or
  * far below (contested-policy drag). Clicking a state opens the bill drill-down (its advancing CE
  * bills, each linked to source) — attribution lives on the card and in the modal.

@@ -23,13 +23,23 @@ from datetime import datetime, timezone
 
 import anthropic
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import func, literal_column, or_, select, true
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.applinks import DASHBOARD_URL, bill_url
-from app.api.auth import AuthedUser, require_admin
+from app.api.auth import (
+    AuthedUser,
+    CAP_ASK,
+    get_current_user,
+    get_entitlement,
+    has_capability,
+    is_admin,
+    require_admin,
+    require_capability,
+)
+from app.ratelimit import _client_ip
 from app.api.research_facets import resolve_facets
 from app.config import settings
 from app.database import AsyncSessionLocal, get_db
@@ -753,25 +763,82 @@ async def _shadow_route(question: str, det, det_total: int, det_top_ids: list) -
         return None
 
 
+# ---------------------------------------------------------------------------
+# Ask the Atlas access policy
+#
+# Members (Student+ carry the `ask` capability, plus admins) get full, persisted, threaded asks. A
+# signed-in FREE account is walled — they get Bill Explorer, not Ask. An anonymous visitor is allowed a
+# single stateless teaser ask (one per UTC day per IP), then the frontend shows the sign-in/upgrade wall.
+# ---------------------------------------------------------------------------
+class _AskAccess:
+    __slots__ = ("uid", "is_member")
+
+    def __init__(self, uid: str | None, is_member: bool):
+        self.uid = uid            # None for an anonymous teaser ask (no session/persistence)
+        self.is_member = is_member
+
+
+async def _ask_access(
+    authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> _AskAccess:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return _AskAccess(uid=None, is_member=False)
+    try:
+        user = await get_current_user(authorization)
+    except HTTPException:
+        # Malformed/expired token → treat as anonymous rather than hard-failing the teaser.
+        return _AskAccess(uid=None, is_member=False)
+    if is_admin(user):
+        return _AskAccess(uid=user.uid, is_member=True)
+    ent = await get_entitlement(db, user)
+    if has_capability(ent, CAP_ASK):
+        return _AskAccess(uid=user.uid, is_member=True)
+    # Signed in but no Ask capability (free plan) — wall them (frontend routes to upgrade).
+    raise HTTPException(status_code=403, detail="ask_upgrade_required")
+
+
+# One anonymous teaser ask per IP per UTC day. In-memory + per-instance — the same approximate ceiling
+# model as app/ratelimit (good enough as a soft teaser gate; the real conversion happens client-side too).
+_FREE_ASK_PER_DAY = 1
+_free_ask_hits: dict[str, tuple[str, int]] = {}
+
+
+def _consume_free_ask(ip: str) -> bool:
+    """Record an anonymous ask against the daily allowance; return False once it's spent for today."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day, count = _free_ask_hits.get(ip, (today, 0))
+    if day != today:
+        day, count = today, 0
+    if count >= _FREE_ASK_PER_DAY:
+        return False
+    _free_ask_hits[ip] = (day, count + 1)
+    return True
+
+
 @router.post("/ask", response_model=ResearchAnswer)
-async def ask_the_bills(
+async def ask_the_atlas(
+    request: Request,
     body: ResearchAskRequest,
-    # Admin-gated for now: shipping to prod for internal dogfooding before it opens to Pro. Flip this
-    # dependency to require_pro to graduate it (and the /ask page guard + nav item's adminOnly flag).
-    _user: AuthedUser = Depends(require_admin),
+    access: _AskAccess = Depends(_ask_access),
     db: AsyncSession = Depends(get_db),
 ) -> ResearchAnswer:
     question = (body.question or "").strip()
     if len(question) < 3:
         return ResearchAnswer(answer="Please ask a fuller question.", citations=[], coverage_note=None)
 
-    # Thread continuity: if a valid owned session was passed, this is a FOLLOW-UP. Load its prior turns
-    # and condense (thread + this question) into a standalone retrieval query, so the deterministic
-    # retrieval path below is unchanged — it just runs on the rewritten query. First turns are untouched
-    # (history empty → retrieval_q == question → no extra LLM call).
+    # Anonymous teaser: allow a single ask per day/IP, then send them to the sign-in/upgrade wall.
+    if not access.is_member and not _consume_free_ask(_client_ip(request)):
+        raise HTTPException(status_code=403, detail="ask_free_limit")
+
+    # Thread continuity: if a valid owned session was passed by a MEMBER, this is a FOLLOW-UP. Load its
+    # prior turns and condense (thread + this question) into a standalone retrieval query, so the
+    # deterministic retrieval path below is unchanged — it just runs on the rewritten query. First turns
+    # are untouched (history empty → retrieval_q == question → no extra LLM call). Anonymous asks are
+    # always stateless (no uid → no session).
     history, seq, session_id = [], 1, None
-    if body.session_id:
-        history, seq, session_id = await _load_history(db, _user.uid, body.session_id)
+    if body.session_id and access.uid:
+        history, seq, session_id = await _load_history(db, access.uid, body.session_id)
     retrieval_q = await _rewrite_followup(history, question) if history else question
 
     facets = await resolve_facets(db, retrieval_q)
@@ -846,14 +913,16 @@ async def ask_the_bills(
     coverage = (f"Synthesized from the {len(packed)} most relevant of {total} matched bills."
                 if total > len(packed) else f"Synthesized from all {total} matched bills.")
 
-    # Persist the answer (analysis layer / future Layer-1 cache). Best-effort — never break the answer.
+    # Persist the answer (analysis layer / future Layer-1 cache) — for MEMBERS only; an anonymous teaser
+    # ask stays stateless (nothing enters the atlas, no session). Best-effort — never break the answer.
     # Appends to the existing session on a follow-up, else mints one; returns the id for threading.
-    try:
-        session_id = await _persist_turn(
-            _user.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids,
-            shadow=shadow, session_id=session_id, seq=seq, retrieval_query=retrieval_q)
-    except Exception as e:  # noqa: BLE001
-        log.warning("research_persist_failed", error=str(e))
+    if access.uid:
+        try:
+            session_id = await _persist_turn(
+                access.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids,
+                shadow=shadow, session_id=session_id, seq=seq, retrieval_query=retrieval_q)
+        except Exception as e:  # noqa: BLE001
+            log.warning("research_persist_failed", error=str(e))
 
     bills = ResearchBillPage(
         total=total, page=1, page_size=_PAGE_SIZE, strategy=strategy,
@@ -875,7 +944,7 @@ async def research_bills(
     question: str = Query(..., min_length=3, description="The same question asked at /research/ask."),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=_PAGE_SIZE, ge=1, le=_MAX_PAGE_SIZE),
-    _user: AuthedUser = Depends(require_admin),
+    _user: AuthedUser = Depends(require_capability(CAP_ASK)),
     db: AsyncSession = Depends(get_db),
 ) -> ResearchBillPage:
     """SQL-only pagination over the FULL relevant-bill set for a question — no LLM call. The Ask page's
@@ -888,10 +957,47 @@ async def research_bills(
     )
 
 
+@router.get("/my-sessions")
+async def my_research_sessions(
+    limit: int = Query(default=50, ge=1, le=200),
+    _user: AuthedUser = Depends(require_capability(CAP_ASK)),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """The signed-in member's own Ask-the-Atlas history — the list backing My Library. Returns each
+    owned thread newest-first with its title, last-question snippet, turn count and timestamp. Private:
+    scoped to the caller's uid (never cross-user); nothing here is published to the atlas."""
+    from app.models import ResearchSession, ResearchTurn
+
+    sessions = (await db.execute(
+        select(ResearchSession)
+        .where(ResearchSession.owner_uid == _user.uid)
+        .order_by(ResearchSession.updated_at.desc())
+        .limit(limit))).scalars().all()
+    out: list[dict] = []
+    for s in sessions:
+        # The most recent question in the thread, as a preview line.
+        last_q = (await db.execute(
+            select(ResearchTurn.question)
+            .where(ResearchTurn.session_id == s.id)
+            .order_by(ResearchTurn.seq.desc()).limit(1))).scalar_one_or_none()
+        turn_count = (await db.execute(
+            select(func.count()).select_from(ResearchTurn)
+            .where(ResearchTurn.session_id == s.id))).scalar_one()
+        out.append({
+            "session_id": str(s.id),
+            "title": s.title or (last_q or "Untitled research")[:120],
+            "preview": (last_q or "")[:160],
+            "turns": int(turn_count or 0),
+            "shared": bool(s.share_token),
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+        })
+    return out
+
+
 @router.get("/session/{session_id}", response_model=ResearchSessionOut)
 async def research_session(
     session_id: str,
-    _user: AuthedUser = Depends(require_admin),
+    _user: AuthedUser = Depends(require_capability(CAP_ASK)),
     db: AsyncSession = Depends(get_db),
 ) -> ResearchSessionOut:
     """Load an owned research thread with its turns in order — so the Ask page can restore/continue a

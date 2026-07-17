@@ -7,9 +7,10 @@ profile route. Centralised here so the URL scheme lives in one place across all 
 """
 from __future__ import annotations
 
-# The deployed dashboard origin. Mirrors _DASHBOARD_URL in digest.py; kept here so non-digest emails
-# can build links without importing the digest module.
-DASHBOARD_URL = "https://battleofbills.com"
+# The deployed dashboard origin (Atlas Circular). Mirrors _DASHBOARD_URL in digest.py; kept here so
+# non-digest emails can build links without importing the digest module. battleofbills.com 301-redirects
+# here, so old links in already-sent emails keep resolving.
+DASHBOARD_URL = "https://www.atlascircular.com"
 
 
 def bill_url(bill_id: int) -> str:

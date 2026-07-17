@@ -50,7 +50,7 @@ export function SharedResearch() {
       <div className="mx-auto max-w-3xl px-6 py-16 text-center space-y-3">
         <p className="text-text-secondary">{error}</p>
         <Link href="/" className="text-green-accent hover:underline text-sm">
-          Go to Battle of the Bills →
+          Go to Atlas Circular →
         </Link>
       </div>
     );
@@ -61,7 +61,7 @@ export function SharedResearch() {
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-6">
       <div>
         <p className="text-[rgb(var(--green-accent))] text-xs font-semibold uppercase tracking-wider">
-          Shared research · Battle of the Bills
+          Shared research · Atlas Circular
         </p>
         <h1 className="font-serif text-2xl text-text-primary mt-1">{session.title || 'Research thread'}</h1>
         {session.created_at && <p className="text-text-muted text-xs mt-1">{fmtDate(session.created_at)}</p>}
@@ -106,7 +106,7 @@ export function SharedResearch() {
         <p className="text-text-secondary text-sm">
           Grounded in the circular-economy legislation corpus at{' '}
           <Link href="/" className="text-green-accent hover:underline">
-            Battle of the Bills
+            Atlas Circular
           </Link>
           .
         </p>

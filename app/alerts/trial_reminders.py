@@ -73,7 +73,7 @@ def _when(days_until: int) -> str:
 
 
 def render_trial_reminder_subject(item: TrialReminderItem) -> str:
-    return f"Your SignalScout Pro trial ends {_when(item.days_until)}"
+    return f"Your Atlas Circular Pro trial ends {_when(item.days_until)}"
 
 
 def render_trial_reminder_html(item: TrialReminderItem) -> str:
@@ -94,16 +94,16 @@ def render_trial_reminder_html(item: TrialReminderItem) -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · Your Pro Trial
+      Atlas Circular · Your Pro Trial
     </div>
     <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
       Your Pro access ends {_when(item.days_until)}</p>
   </div>
   <div style="padding:20px 28px 24px;">
     <p style="font:16px {_SERIF};color:{_INK};margin:0 0 14px;">
-      Your SignalScout <strong>Pro trial ends {_when(item.days_until)}</strong> ({end_str}). Subscribe
+      Your Atlas Circular <strong>Pro trial ends {_when(item.days_until)}</strong> ({end_str}). Subscribe
       now to keep:</p>
     <ul style="font:15px {_SERIF};color:{_INK_SOFT};margin:0 0 16px;padding-left:20px;">
       {bullets}
@@ -116,7 +116,7 @@ def render_trial_reminder_html(item: TrialReminderItem) -> str:
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're getting this because your SignalScout Pro trial is about to end.
+    You're getting this because your Atlas Circular Pro trial is about to end.
     <a href="{_DASHBOARD_URL}/pricing" style="color:{_ACCENT};">See plans →</a>
   </div>
  </div>

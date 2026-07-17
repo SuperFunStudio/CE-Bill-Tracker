@@ -1,5 +1,7 @@
 'use client';
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
+import { useAuth } from '@/components/auth/AuthContext';
 import { useFederalActions, useLitigationCases, useLitigationCase } from '@/hooks/useFederal';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
@@ -172,6 +174,7 @@ function LitigationCaseDetail({ caseId }: { caseId: number }) {
 }
 
 export default function FederalPage() {
+  const { isPro, isAdmin, user, openAuth } = useAuth();
   const [instrumentFilter, setInstrumentFilter] = useState('');
   const [materialFilter, setMaterialFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
@@ -202,6 +205,36 @@ export default function FederalPage() {
   // Only surface facet options actually present in the data, so empty dropdowns don't appear.
   const instrumentOptions = Array.from(new Set(actions.map(a => a.instrument_type).filter((t): t is string => !!t && t !== 'other'))).sort();
   const materialOptions = MATERIAL_CATEGORIES.filter(m => m !== 'other' && actions.some(a => a.material_categories?.includes(m)));
+
+  // Federal Actions is a Pro feature (US-only via the nav's usOnly flag). Non-members get a lock.
+  if (!isPro && !isAdmin) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto">
+        <GazetteHeader title="Federal Actions" subtitle="Federal Register actions, preemption risk, and EPR litigation" />
+        <div className="surface-card p-6 mt-6 space-y-3 text-center">
+          <h2 className="font-serif text-xl text-text-primary">A Pro membership feature</h2>
+          <p className="text-text-secondary max-w-xl mx-auto">
+            Track Federal Register actions, preemption risk, and EPR litigation as they move. Federal
+            Actions is included with a Pro membership.
+          </p>
+          <div className="flex justify-center gap-2 pt-1">
+            {!user && (
+              <button
+                type="button"
+                onClick={openAuth}
+                className="rounded-full border border-border-default px-5 py-2 text-sm text-text-secondary hover:text-text-primary"
+              >
+                Sign in
+              </button>
+            )}
+            <Link href="/pricing" className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary hover:opacity-90">
+              See memberships
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">

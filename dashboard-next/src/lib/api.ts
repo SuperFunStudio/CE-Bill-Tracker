@@ -83,7 +83,7 @@ export async function subscribe(payload: SubscribePayload): Promise<void> {
 }
 
 /** Which paid tier a visitor expressed interest in — the willingness-to-pay experiment. */
-export type PlanInterest = 'pro' | 'team' | 'enterprise' | 'api' | 'company_impact' | 'bespoke';
+export type PlanInterest = 'pro' | 'team' | 'enterprise' | 'api' | 'company_impact' | 'bespoke' | 'research';
 
 export interface AccessRequestPayload {
   email: string;
@@ -115,6 +115,20 @@ export async function fetchBills(params?: BillParams): Promise<BillSummary[]> {
 /** "Ask the Bills" (Pro) — POST a natural-language question, get a cited answer + optional chart. */
 /** Ask a question. Pass `sessionId` to continue an existing thread — the server treats the question as
  *  a follow-up (condensed against the thread) and appends it as the next turn. Omit it to start fresh. */
+/** An API error that preserves the HTTP status + server `detail` so callers can branch on it — Ask the
+ *  Atlas uses this to tell the anonymous free-limit wall ("ask_free_limit") from the free-account
+ *  upgrade wall ("ask_upgrade_required"). */
+export class ApiError extends Error {
+  status: number;
+  detail: string;
+  constructor(status: number, detail: string) {
+    super(detail || `API error ${status}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 export async function askResearch(
   question: string, token?: string | null, sessionId?: string | null,
 ): Promise<ResearchAnswer> {
@@ -123,8 +137,26 @@ export async function askResearch(
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ question, ...(sessionId ? { session_id: sessionId } : {}) }),
   });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try { detail = (await res.json())?.detail ?? ''; } catch { /* non-JSON body */ }
+    throw new ApiError(res.status, detail);
+  }
   return res.json();
+}
+
+export interface ResearchSessionListItem {
+  session_id: string;
+  title: string;
+  preview: string;
+  turns: number;
+  shared: boolean;
+  updated_at: string | null;
+}
+
+/** The signed-in member's own Ask-the-Atlas history (My Library). Private to the caller. */
+export async function fetchMyResearchSessions(token?: string | null): Promise<ResearchSessionListItem[]> {
+  return apiFetch<ResearchSessionListItem[]>(buildUrl('/research/my-sessions'), token);
 }
 
 /** Pages 2+ of the full relevant-bill set for an asked question (SQL-only, no LLM). Prev/Next on the
@@ -236,7 +268,7 @@ export async function fetchLawsInForce(params?: { regions?: string }): Promise<L
   );
 }
 
-/** Per-state CE-vs-baseline passage gap — the Insights "Battle of the Bills" table. */
+/** Per-state CE-vs-baseline passage gap — the Insights "Atlas Circular" table. */
 export async function fetchStateGap(): Promise<StateGapRow[]> {
   return apiFetch<StateGapRow[]>(buildUrl('/insights/state-gap'));
 }

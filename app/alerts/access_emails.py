@@ -34,10 +34,10 @@ def _shell(title: str, body: str) -> str:
   <div style="background:{_PAPER};padding:24px 28px 16px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      SignalScout · {title}
+      Atlas Circular · {title}
     </div>
     <h1 style="font:bold 34px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:14px 0 4px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:14px 0 4px;line-height:1.05;">Atlas Circular</h1>
   </div>
   <div style="padding:22px 28px;font:16px {_SERIF};color:{_INK};line-height:1.55;">
     {body}
@@ -48,7 +48,7 @@ def _shell(title: str, body: str) -> str:
 
 
 def render_confirmation_subject(plan: str | None) -> str:
-    return f"Thanks — your Battle of the Bills {plan_label(plan)} request is in"
+    return f"Thanks — your Atlas Circular {plan_label(plan)} request is in"
 
 
 def render_confirmation_html(name: str | None, plan: str | None) -> str:
@@ -56,13 +56,13 @@ def render_confirmation_html(name: str | None, plan: str | None) -> str:
     body = f"""
     <p style="margin:0 0 14px;">{greeting}</p>
     <p style="margin:0 0 14px;">
-      Thanks for your interest in <strong>{plan_label(plan)}</strong> on Battle of the Bills. We've
+      Thanks for your interest in <strong>{plan_label(plan)}</strong> on Atlas Circular. We've
       got your request and we'll be in touch shortly to get you set up — we're onboarding early users
       and finalizing pricing right now.</p>
     <p style="margin:0 0 14px;color:{_INK_SOFT};">
       In the meantime, the full bill explorer, map, deadline dashboard, and free email alerts are
-      open to you at <a href="https://battleofbills.com" style="color:{_ACCENT};">the dashboard</a>.</p>
-    <p style="margin:0;color:{_MUTED};">— The Battle of the Bills team</p>"""
+      open to you at <a href="https://www.atlascircular.com" style="color:{_ACCENT};">the dashboard</a>.</p>
+    <p style="margin:0;color:{_MUTED};">— The Atlas Circular team</p>"""
     return _shell("Request received", body)
 
 

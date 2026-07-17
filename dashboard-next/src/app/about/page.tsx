@@ -4,9 +4,9 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
 
 export const metadata: Metadata = {
-  title: 'About — Battle of the Bills',
+  title: 'About — Atlas Circular',
   description:
-    'Battle of the Bills tracks circularity-aligned legislation across all 50 states — Extended ' +
+    'Atlas Circular tracks circularity-aligned legislation across all 50 states — Extended ' +
     'Producer Responsibility, right-to-repair, deposit-return, recycled-content, and labeling — so ' +
     'producers and advocates can see where policy and market opportunity are building.',
 };
@@ -22,14 +22,14 @@ export default function AboutPage() {
     <div className="mx-auto max-w-3xl px-6 py-10 space-y-10">
       <GazetteHeader
         title="About"
-        subtitle="Who's behind Battle of the Bills, and how it's built."
+        subtitle="Who's behind Atlas Circular, and how it's built."
       />
 
       {/* Mission — product voice */}
       <section>
         <SectionTitle>Why this exists</SectionTitle>
         <p className="text-text-secondary leading-relaxed">
-          Battle of the Bills tracks circularity-aligned legislation across all 50 states. By
+          Atlas Circular tracks circularity-aligned legislation across all 50 states. By
           following Extended Producer Responsibility, right-to-repair, deposit-return,
           recycled-content, labeling, and related laws in one place, it makes visible where the
           policy momentum — and the market opportunity for a{' '}

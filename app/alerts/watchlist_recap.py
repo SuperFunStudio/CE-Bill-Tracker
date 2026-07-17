@@ -177,10 +177,10 @@ def render_recap_html(content: RecapContent) -> str:
   <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
     <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
          font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Battle of the Bills · EPR Legislative Intelligence
+      Atlas Circular · EPR Legislative Intelligence
     </div>
     <h1 style="font:bold 38px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Battle of the Bills</h1>
+        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
     <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">Added to your watch list</p>
   </div>
   <div style="padding:20px 28px 24px;">
@@ -201,7 +201,7 @@ def render_recap_html(content: RecapContent) -> str:
   </div>
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
-    You're receiving this because you follow bills on Battle of the Bills.
+    You're receiving this because you follow bills on Atlas Circular.
     <br><a href="{unsubscribe_url(content.sub.id)}" style="color:{_MUTED};text-decoration:underline;">
       Unsubscribe from these alerts</a>
   </div>

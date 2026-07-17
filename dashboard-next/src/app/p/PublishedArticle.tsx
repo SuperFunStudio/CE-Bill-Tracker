@@ -43,7 +43,7 @@ export function PublishedArticle() {
     return (
       <div className="mx-auto max-w-3xl px-6 py-16 text-center space-y-3">
         <p className="text-text-secondary">{error}</p>
-        <Link href="/" className="text-green-accent hover:underline text-sm">Go to Battle of the Bills →</Link>
+        <Link href="/" className="text-green-accent hover:underline text-sm">Go to Atlas Circular →</Link>
       </div>
     );
   }
@@ -52,7 +52,7 @@ export function PublishedArticle() {
     <article className="mx-auto max-w-3xl px-6 py-10 space-y-6">
       <header className="space-y-2">
         <p className="text-[rgb(var(--green-accent))] text-xs font-semibold uppercase tracking-wider">
-          Battle of the Bills
+          Atlas Circular
         </p>
         <h1 className="font-serif text-3xl text-text-primary leading-tight">{article.title}</h1>
         {article.dek && <p className="text-text-secondary text-lg leading-relaxed">{article.dek}</p>}
@@ -66,7 +66,7 @@ export function PublishedArticle() {
       <footer className="border-t border-border-default pt-6 text-center">
         <p className="text-text-secondary text-sm">
           Grounded in the circular-economy legislation corpus at{' '}
-          <Link href="/" className="text-green-accent hover:underline">Battle of the Bills</Link>.
+          <Link href="/" className="text-green-accent hover:underline">Atlas Circular</Link>.
         </p>
       </footer>
     </article>

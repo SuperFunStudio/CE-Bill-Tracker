@@ -1,8 +1,26 @@
-// Single source of truth for paid-tier copy. One self-serve tier (Pro) with two billing periods —
-// monthly and annual. Annual is the cheaper-per-month option we nudge toward. The founding launch
-// offer (50% off the first year + a 90-day free trial) is applied automatically at Checkout for
-// either period (see app/api/billing.py). Centralised so price copy lives in ONE place.
+// Single source of truth for membership copy (Atlas Circular). Four tiers, framed as membership +
+// access to our research tools: Student (pay-what-you-wish, verified-edu), Founding Supporter /
+// Research (annual), Pro (self-serve monthly/annual with the founding offer), Enterprise (invoiced).
+// Centralised so price copy lives in ONE place. See app/api/billing.py + app/api/auth.py PLAN_CAPS.
 export type BillingPeriod = 'monthly' | 'annual';
+
+// Student — pay-what-you-wish, gated to a verified educational email. Free floor, suggested $15/mo.
+export const STUDENT = {
+  name: 'Student',
+  price: 'Pay what you wish',
+  suggested: 'Suggested $15/mo · $0 floor',
+  eduNote: 'Verified .edu / .ac.uk (or similar) email required',
+  who: 'Students exploring the circular economy.',
+};
+
+// Founding Supporter / Research — a fixed annual membership for researchers, institutions, non-profits.
+export const RESEARCH = {
+  name: 'Founding Supporter',
+  price: '$25',
+  cadence: '/mo',
+  perYear: 'billed annually ($300/yr)',
+  who: 'Researchers, institutions, and non-profits.',
+};
 
 export const PRO = {
   name: 'Pro',

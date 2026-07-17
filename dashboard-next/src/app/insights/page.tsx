@@ -16,10 +16,28 @@ import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
 import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
 import { useRegion } from '@/components/layout/RegionContext';
+import { CAP, useAuth } from '@/components/auth/AuthContext';
+import Link from 'next/link';
 import { fetchBillTimeline } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
 import type { BillTimelinePoint } from '@/lib/types';
+
+/** Gate for the two membership-gated Insights views (Bills-over-time chart + Real-World Impact table):
+ *  available to Research and Pro members (and admins). Everyone else sees an upgrade card. The data
+ *  is served via public snapshots, so this is a visibility gate, not a security boundary. */
+function ImpactGate({ label, children }: { label: string; children: React.ReactNode }) {
+  const { hasCapability } = useAuth();
+  if (hasCapability(CAP.INSIGHTS_IMPACT)) return <>{children}</>;
+  return (
+    <div className="surface-card p-6 text-center space-y-2">
+      <p className="text-text-secondary">{label} is available with a Research or Pro membership.</p>
+      <Link href="/pricing" className="inline-block text-green-accent hover:underline text-sm">
+        See memberships →
+      </Link>
+    </div>
+  );
+}
 
 // In-scope circular-economy instruments, canonical list mirrors INSTRUMENT_TYPES in
 // components/bills/BillFilters.tsx. `undefined` is the "All instruments" view (the running total).
@@ -266,7 +284,9 @@ export default function InsightsPage() {
             ) : !points ? (
               <div className="h-[360px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
             ) : (
-              <BillTimelineChart points={points} instrument={instrument} />
+              <ImpactGate label="The bills-over-time chart">
+                <BillTimelineChart points={points} instrument={instrument} />
+              </ImpactGate>
             )}
           </Section>
 
@@ -381,7 +401,9 @@ export default function InsightsPage() {
             documented to <em>produce</em> — measured outcomes, positive and negative, each anchored to
             a citation. Measured impacts are rare and uneven, so the list grows as evidence surfaces.
           </p>
-          <RealWorldImpact />
+          <ImpactGate label="The Real-World Impact table">
+            <RealWorldImpact />
+          </ImpactGate>
         </Section>
       )}
     </div>

@@ -130,22 +130,22 @@ function ResearchLog({ getToken }: { getToken: GetToken }) {
 
   useEffect(() => { load(''); }, [load]);
 
-  // Share state is per-session; when a turn's session is (un)shared, patch every turn in that session.
+  // Share state is per-session; when a session is (un)shared, patch every turn in that session.
   function patchSession(sessionId: string, patch: Partial<ResearchTurnAdminItem>) {
     setItems(prev => prev.map(t => (t.session_id === sessionId ? { ...t, ...patch } : t)));
   }
 
-  async function toggleShare(t: ResearchTurnAdminItem) {
+  async function toggleShare(thread: Thread) {
     if (busy) return;
     setBusy(true); setNotice(null); setError(null);
     try {
-      if (t.visibility === 'link') {
-        await unshareSession(getToken, t.session_id);
-        patchSession(t.session_id, { visibility: 'private', share_token: null });
+      if (thread.visibility === 'link') {
+        await unshareSession(getToken, thread.session_id);
+        patchSession(thread.session_id, { visibility: 'private', share_token: null });
         setNotice('Share link turned off.');
       } else {
-        const res = await shareSession(getToken, t.session_id);
-        patchSession(t.session_id, { visibility: 'link', share_token: res.share_token });
+        const res = await shareSession(getToken, thread.session_id);
+        patchSession(thread.session_id, { visibility: 'link', share_token: res.share_token });
         if (res.share_url) navigator.clipboard?.writeText(res.share_url).catch(() => {});
         setNotice('Share link created and copied to clipboard.');
       }
@@ -156,18 +156,22 @@ function ResearchLog({ getToken }: { getToken: GetToken }) {
     }
   }
 
-  async function stage(t: ResearchTurnAdminItem, editorial: boolean) {
-    if (busy) return;
+  async function stage(thread: Thread, seqs: number[], editorial: boolean) {
+    if (busy || seqs.length === 0) return;
     setBusy(true); setNotice(null); setError(null);
     try {
-      await createDraft(getToken, { session_id: t.session_id, seq: t.seq, editorial });
-      setNotice(editorial ? 'Drafted → see the Staging tab.' : 'Staged (verbatim) → see the Staging tab.');
+      await createDraft(getToken, { session_id: thread.session_id, seqs, editorial });
+      const n = seqs.length;
+      const what = n > 1 ? `${n} questions` : 'answer';
+      setNotice(`${editorial ? 'Drafted' : 'Staged verbatim'} from ${what} → see the Staging tab.`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not stage this answer.');
+      setError(e instanceof Error ? e.message : 'Could not stage.');
     } finally {
       setBusy(false);
     }
   }
+
+  const threads = groupThreads(items);
 
   return (
     <div className="space-y-4">
@@ -187,59 +191,106 @@ function ResearchLog({ getToken }: { getToken: GetToken }) {
       </form>
 
       <div className="flex items-center justify-between">
-        <p className="text-text-muted text-xs">{total} turn(s)</p>
+        <p className="text-text-muted text-xs">{threads.length} thread(s) · {total} turn(s)</p>
         {busy && <p className="text-text-muted text-xs">Working…</p>}
       </div>
       {notice && <p className="text-green-accent text-xs">{notice}</p>}
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
       <div className="space-y-3">
-        {items.map(t => (
-          <TurnCard key={t.turn_id} turn={t} busy={busy} onToggleShare={() => toggleShare(t)} onStage={ed => stage(t, ed)} />
+        {threads.map(th => (
+          <ThreadCard
+            key={th.session_id}
+            thread={th}
+            busy={busy}
+            onToggleShare={() => toggleShare(th)}
+            onStage={(seqs, ed) => stage(th, seqs, ed)}
+          />
         ))}
-        {items.length === 0 && !error && <p className="text-text-muted text-sm">No research turns yet.</p>}
+        {threads.length === 0 && !error && <p className="text-text-muted text-sm">No research threads yet.</p>}
       </div>
     </div>
   );
 }
 
-function TurnCard({
-  turn: t, busy, onToggleShare, onStage,
+// A research thread = all turns of one session, in ask order. Turns arrive newest-first and flat; group
+// by session, sort each thread by seq, and order threads by their most recent turn.
+interface Thread {
+  session_id: string;
+  title: string;
+  visibility: string;
+  share_token: string | null;
+  turns: ResearchTurnAdminItem[];
+}
+
+function groupThreads(items: ResearchTurnAdminItem[]): Thread[] {
+  const map = new Map<string, ResearchTurnAdminItem[]>();
+  for (const t of items) {
+    const arr = map.get(t.session_id);
+    if (arr) arr.push(t);
+    else map.set(t.session_id, [t]);
+  }
+  const threads: Thread[] = [];
+  for (const [session_id, turns] of map) {
+    turns.sort((a, b) => a.seq - b.seq);
+    const first = turns[0];
+    threads.push({
+      session_id,
+      title: first.session_title || first.question,
+      visibility: first.visibility,
+      share_token: first.share_token,
+      turns,
+    });
+  }
+  threads.sort((a, b) =>
+    (b.turns[b.turns.length - 1].created_at ?? '').localeCompare(a.turns[a.turns.length - 1].created_at ?? ''),
+  );
+  return threads;
+}
+
+function ThreadCard({
+  thread, busy, onToggleShare, onStage,
 }: {
-  turn: ResearchTurnAdminItem;
+  thread: Thread;
   busy: boolean;
   onToggleShare: () => void;
-  onStage: (editorial: boolean) => void;
+  onStage: (seqs: number[], editorial: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  // Every turn selected by default; untick a follow-up to leave it out of the draft.
+  const [selected, setSelected] = useState<Set<number>>(() => new Set(thread.turns.map(t => t.seq)));
   const [copied, copy] = useCopy();
-  const shared = t.visibility === 'link' && !!t.share_token;
-  const shareUrl = t.share_token
-    ? (typeof window !== 'undefined' ? `${window.location.origin}/r/?token=${t.share_token}` : `${API}/r/?token=${t.share_token}`)
+  const multi = thread.turns.length > 1;
+  const shared = thread.visibility === 'link' && !!thread.share_token;
+  const shareUrl = thread.share_token
+    ? (typeof window !== 'undefined' ? `${window.location.origin}/r/?token=${thread.share_token}` : `${API}/r/?token=${thread.share_token}`)
     : null;
+
+  const selectedSeqs = thread.turns.map(t => t.seq).filter(s => selected.has(s));
+  function toggle(seq: number) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(seq)) next.delete(seq); else next.add(seq);
+      return next;
+    });
+  }
 
   return (
     <div className="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-3">
+      {/* Thread header — title + share (session-level) */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-text-primary text-sm font-medium">{t.question}</p>
-          <p className="text-text-muted text-meta mt-1">
-            {t.seq > 1 ? `follow-up #${t.seq} · ` : ''}{t.strategy || '—'} · {t.bill_total} bills · {t.cited_count} cited · {fmtDateTime(t.created_at)}
+          <p className="text-text-primary text-base font-serif truncate">{thread.title}</p>
+          <p className="text-text-muted text-meta mt-0.5">
+            {thread.turns.length} question{thread.turns.length > 1 ? 's' : ''} · {fmtDateTime(thread.turns[thread.turns.length - 1].created_at)}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {shared && <span className="text-meta uppercase tracking-wider border rounded-full px-1.5 py-0.5 text-green-accent border-green-accent/40">Shared</span>}
-          <button onClick={() => setOpen(o => !o)} className="text-xs text-text-secondary hover:text-text-primary transition-colors">
-            {open ? 'Hide' : 'View'}
+          <button onClick={onToggleShare} disabled={busy} className="text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50">
+            {shared ? 'Unshare' : 'Share thread'}
           </button>
         </div>
       </div>
-
-      {open && t.answer && (
-        <div className="rounded-lg border border-border-default bg-bg-primary p-3 max-h-96 overflow-auto">
-          <MarkdownLite text={t.answer} />
-        </div>
-      )}
 
       {shared && shareUrl && (
         <div className="flex items-center gap-2 text-xs">
@@ -248,30 +299,76 @@ function TurnCard({
         </div>
       )}
 
+      {/* Turns — each with an include checkbox */}
+      <div className="divide-y divide-border-default/60 border-y border-border-default/60">
+        {thread.turns.map(t => (
+          <TurnRow key={t.turn_id} turn={t} multi={multi} checked={selected.has(t.seq)} onToggle={() => toggle(t.seq)} />
+        ))}
+      </div>
+
+      {/* Thread-level staging over the ticked questions */}
       <div className="flex flex-wrap items-center gap-3 pt-1">
+        <span className="text-text-muted text-xs">
+          {selectedSeqs.length} of {thread.turns.length} selected
+        </span>
         <button
-          onClick={onToggleShare}
-          disabled={busy}
-          className="text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
-        >
-          {shared ? 'Turn off share link' : 'Create share link'}
-        </button>
-        <span className="text-border-default">·</span>
-        <button
-          onClick={() => onStage(true)}
-          disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-green-accent text-bg-primary px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+          onClick={() => onStage(selectedSeqs, true)}
+          disabled={busy || selectedSeqs.length === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-green-accent text-bg-primary px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
         >
           Draft article →
         </button>
         <button
-          onClick={() => onStage(false)}
-          disabled={busy}
-          className="text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
-          title="Stage the linked answer verbatim, without the editorial LLM pass"
+          onClick={() => onStage(selectedSeqs, false)}
+          disabled={busy || selectedSeqs.length === 0}
+          className="text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+          title="Stage the selected answers verbatim, without the editorial LLM pass"
         >
           Stage verbatim
         </button>
+      </div>
+    </div>
+  );
+}
+
+function TurnRow({
+  turn: t, multi, checked, onToggle,
+}: {
+  turn: ResearchTurnAdminItem;
+  multi: boolean;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="py-2.5">
+      <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          className="mt-1 accent-green-accent shrink-0"
+          title="Include this question in the draft"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-text-primary text-sm">
+              {multi && <span className="text-green-accent font-mono mr-1.5">Q{t.seq}.</span>}
+              {t.question}
+            </p>
+            <button onClick={() => setOpen(o => !o)} className="text-xs text-text-secondary hover:text-text-primary transition-colors shrink-0">
+              {open ? 'Hide' : 'View'}
+            </button>
+          </div>
+          <p className="text-text-muted text-meta mt-1">
+            {t.strategy || '—'} · {t.bill_total} bills · {t.cited_count} cited
+          </p>
+          {open && t.answer && (
+            <div className="mt-2 rounded-lg border border-border-default bg-bg-primary p-3 max-h-96 overflow-auto">
+              <MarkdownLite text={t.answer} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1118,32 +1118,36 @@ async def shared_session(token: str, db: AsyncSession = Depends(get_db)) -> Shar
     return SharedSessionOut(title=sess.title, created_at=sess.created_at, turns=turns_out)
 
 
-# --- Content staging: distill a turn into an editable, linkable article draft ---------------------
+# --- Content staging: distill one or more thread turns into an editable, linkable article ---------
 _EDITORIAL_SYSTEM = """\
-You are an editor turning an internal policy-research Q&A into a short, publishable article for a
+You are an editor turning internal policy-research Q&A into a short, publishable article for a
 circular-economy / EPR policy newsletter — a sharp Substack post read by producers, compliance teams,
-and policy staff. You are given the QUESTION and the grounded ANSWER (markdown, with inline
-[STATE BILL_NUMBER] citation markers).
+and policy staff. You are given one or more QUESTION/ANSWER pairs from a single research thread (a
+question and any follow-ups), each answer in markdown with inline [STATE BILL_NUMBER] citation markers.
+Weave them into ONE cohesive article — not a transcript. Merge overlapping points, order for a reader
+who wasn't in the thread, and let the follow-ups deepen the piece rather than repeat it.
 Return a JSON object with EXACTLY these keys:
 - "title": a specific, non-clickbait headline (<= 90 chars) — concrete about the finding, not "A look at…".
 - "dek": one-sentence standfirst saying what the reader will learn (<= 160 chars).
 - "body": the article body in markdown. Open with a 1-2 sentence lede on why this matters, then present
-  the answer's substance. You MAY lightly restructure and tighten and add connective prose, but DO NOT
-  invent facts, numbers, or bills beyond the ANSWER. PRESERVE every [STATE BILL_NUMBER] citation marker
-  EXACTLY as written and keep it beside the claim it supports (they become links downstream). Use "## "
-  subheads and "- " bullets. Do not repeat the title inside the body.
+  the substance. You MAY restructure, tighten, and add connective prose, but DO NOT invent facts,
+  numbers, or bills beyond the ANSWERS. PRESERVE every [STATE BILL_NUMBER] citation marker EXACTLY as
+  written and keep it beside the claim it supports (they become links downstream). Use "## " subheads
+  and "- " bullets. Do not repeat the title inside the body.
 Output ONLY the JSON object — no preamble, no code fence.
 """
 
 
-async def _editorialize(question: str, answer_text: str) -> dict | None:
-    """One best-effort LLM pass: raw answer -> {title, dek, body} shaped like an article, citation
-    markers preserved for the downstream link pass. None on any failure (caller falls back to verbatim)."""
+async def _editorialize(pairs: list[tuple[str, str]]) -> dict | None:
+    """One best-effort LLM pass over a thread's (question, answer) pairs -> {title, dek, body} shaped as
+    a single article, citation markers preserved for the downstream link pass. None on any failure (the
+    caller falls back to the verbatim combine)."""
+    convo = "\n\n".join(f"QUESTION {i + 1}: {q}\n\nANSWER {i + 1}:\n{a}" for i, (q, a) in enumerate(pairs))
     try:
         resp = await _client.messages.create(
-            model=RESEARCH_MODEL, max_tokens=2200, temperature=0.3,
+            model=RESEARCH_MODEL, max_tokens=3000, temperature=0.3,
             system=_EDITORIAL_SYSTEM,
-            messages=[{"role": "user", "content": f"QUESTION: {question}\n\nANSWER:\n{answer_text}"}])
+            messages=[{"role": "user", "content": convo}])
         raw = "".join(getattr(b, "text", "") for b in resp.content).strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[-1]
@@ -1151,12 +1155,20 @@ async def _editorialize(question: str, answer_text: str) -> dict | None:
                 raw = raw.rstrip()[:-3]
         data = json.loads(raw)
         if isinstance(data, dict) and data.get("body"):
-            return {"title": str(data.get("title") or question)[:300],
+            return {"title": str(data.get("title") or pairs[0][0])[:300],
                     "dek": (str(data["dek"]) if data.get("dek") else None),
                     "body": str(data["body"])}
     except Exception as e:  # noqa: BLE001 — editorial is optional polish, never block staging
         log.warning("content_editorial_failed", error=str(e))
     return None
+
+
+def _combine_verbatim(pairs: list[tuple[str, str]]) -> str:
+    """No-LLM fallback / 'stage verbatim': stitch the selected turns into one markdown doc, each answer
+    under its question as a section (a lone turn stays header-less, as before)."""
+    if len(pairs) == 1:
+        return pairs[0][1]
+    return "\n\n".join(f"## {q}\n\n{a}" for q, a in pairs)
 
 
 def _draft_out(d) -> ContentDraftOut:
@@ -1173,37 +1185,47 @@ async def create_content_draft(
     _user: AuthedUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> ContentDraftOut:
-    """Send a research turn to the staging area: run the editorial pass (optional) + the citation link
-    pass, then persist an editable ContentDraft. `body_markdown` comes out Substack-ready — its
-    [STATE BILL_NUMBER] markers already rewritten to /?bill=<id> deep links."""
+    """Send one or more turns of a research thread to the staging area: combine the selected turns (in
+    seq order) → editorial pass (optional) + citation link pass → an editable ContentDraft. `seqs` picks
+    the turns (tick the questions to keep); `seq` is the legacy single-turn form; neither → the latest
+    turn. `body_markdown` comes out Substack-ready, [STATE BILL_NUMBER] markers already deep-linked."""
     from app.models import ContentDraft, ResearchTurn
     sess = await _get_session_or_404(db, body.session_id)
     tq = select(ResearchTurn).where(ResearchTurn.session_id == sess.id)
-    if body.seq is not None:
-        tq = tq.where(ResearchTurn.seq == body.seq)
-    turn = (await db.execute(tq.order_by(ResearchTurn.seq.desc()).limit(1))).scalars().first()
-    if not turn:
-        raise HTTPException(status_code=404, detail="No such turn in that session.")
-    answer_text = (turn.answer or {}).get("text") or ""
-    if not answer_text.strip():
-        raise HTTPException(status_code=400, detail="That turn has no answer to stage.")
+    # Which turns: explicit multi-select (seqs) → legacy single (seq) → latest only.
+    wanted = body.seqs if body.seqs else ([body.seq] if body.seq is not None else None)
+    if wanted:
+        tq = tq.where(ResearchTurn.seq.in_(wanted))
+        turns = (await db.execute(tq.order_by(ResearchTurn.seq))).scalars().all()
+    else:
+        latest = (await db.execute(tq.order_by(ResearchTurn.seq.desc()).limit(1))).scalars().first()
+        turns = [latest] if latest else []
+    turns = [t for t in turns if t]
+    if not turns:
+        raise HTTPException(status_code=404, detail="No matching turns in that session.")
+
+    pairs = [(t.question, (t.answer or {}).get("text") or "") for t in turns]
+    pairs = [(q, a) for q, a in pairs if a.strip()]
+    if not pairs:
+        raise HTTPException(status_code=400, detail="The selected turns have no answers to stage.")
 
     # Materialize everything the write needs, then release the request connection before the ~15s
     # editorial call (same reason /ask does: don't hold an idle connection across an LLM round-trip).
-    ref_map = await _ref_map_for(db, _cited_ids(turn))
-    question, seq, sess_id = turn.question, turn.seq, sess.id
+    # Union the cited bills across every selected turn so one link pass covers the whole combined body.
+    ref_map = await _ref_map_for(db, [i for t in turns for i in _cited_ids(t)])
+    first_seq, sess_id, sess_title = turns[0].seq, sess.id, sess.title
     await db.close()
 
-    title, dek, body_src = question[:300], None, answer_text
+    title, dek, body_src = (sess_title or pairs[0][0])[:300], None, _combine_verbatim(pairs)
     if body.editorial:
-        ed = await _editorialize(question, answer_text)
+        ed = await _editorialize(pairs)
         if ed:
             title, dek, body_src = ed["title"], ed["dek"], ed["body"]
     body_md = link_citations(body_src, ref_map)
 
     async with AsyncSessionLocal() as s:
         draft = ContentDraft(
-            source_session_id=sess_id, source_seq=seq, title=title, dek=dek,
+            source_session_id=sess_id, source_seq=first_seq, title=title, dek=dek,
             body_markdown=body_md, status="staged", created_by=_user.email)
         s.add(draft)
         await s.commit()

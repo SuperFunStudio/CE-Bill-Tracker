@@ -94,7 +94,7 @@ export interface ContentDraftPage {
 
 export const createDraft = (
   getToken: GetToken,
-  body: { session_id: string; seq?: number | null; editorial?: boolean },
+  body: { session_id: string; seqs?: number[]; seq?: number | null; editorial?: boolean },
 ) =>
   authedFetch<ContentDraft>('/research/drafts', getToken, {
     method: 'POST',

@@ -282,10 +282,12 @@ class SharedSessionOut(BaseModel):
 
 
 class ContentDraftCreate(BaseModel):
-    """Send a research turn to the staging area. `seq` picks the turn within the session (defaults to
-    the latest). `editorial` runs a light LLM pass for a headline + dek + reshaped lede; off = the
-    linked answer verbatim with the question as the title."""
+    """Send one or more turns of a research thread to the staging area. `seqs` selects which turns to
+    include (in a follow-up thread, tick the questions you want) — combined into a single article in seq
+    order. `seq` is the legacy single-turn form; if neither is given, the latest turn is used. `editorial`
+    runs a light LLM pass for a headline + dek + reshaped lede; off = the linked answers verbatim."""
     session_id: str
+    seqs: list[int] | None = None
     seq: int | None = None
     editorial: bool = True
 

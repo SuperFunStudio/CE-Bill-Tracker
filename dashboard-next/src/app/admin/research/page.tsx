@@ -14,6 +14,8 @@ import {
   fetchDrafts,
   updateDraft,
   deleteDraft,
+  publishDraft,
+  unpublishDraft,
   type ResearchTurnAdminItem,
   type ContentDraft,
 } from '@/lib/research-admin';
@@ -456,15 +458,30 @@ function DraftCard({ draft, getToken, onChanged }: { draft: ContentDraft; getTok
     }
   }
 
-  async function setStatus(status: string) {
+  async function publish() {
     if (busy) return;
     setBusy(true); setError(null);
     try {
-      const saved = await updateDraft(getToken, d.id, { status });
+      const saved = await publishDraft(getToken, d.id);
+      setD(saved);
+      if (saved.public_url) navigator.clipboard?.writeText(saved.public_url).catch(() => {});
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not publish.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unpublish() {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      const saved = await unpublishDraft(getToken, d.id);
       setD(saved);
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update status.');
+      setError(e instanceof Error ? e.message : 'Could not unpublish.');
     } finally {
       setBusy(false);
     }
@@ -530,6 +547,15 @@ function DraftCard({ draft, getToken, onChanged }: { draft: ContentDraft; getTok
         </div>
       )}
 
+      {/* Live self-hosted article link (own domain, independent of Substack) */}
+      {d.status === 'published' && d.public_url && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-green-accent shrink-0">● Live</span>
+          <a href={d.public_url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate rounded bg-bg-primary border border-border-default px-2 py-1 text-text-secondary hover:text-text-primary">{d.public_url}</a>
+          <button onClick={() => copy(d.public_url!)} className="text-green-accent hover:underline shrink-0">{copied ? 'Copied' : 'Copy link'}</button>
+        </div>
+      )}
+
       {error && <p className="text-red-400 text-xs">{error}</p>}
 
       <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
@@ -546,11 +572,12 @@ function DraftCard({ draft, getToken, onChanged }: { draft: ContentDraft; getTok
             <button onClick={() => setPreview(p => !p)} className="text-text-secondary hover:text-text-primary transition-colors">{preview ? 'Hide preview' : 'Preview'}</button>
             <button onClick={() => copy(draftMarkdown(d))} className="text-green-accent hover:underline">{copied ? 'Copied for Substack' : 'Copy markdown'}</button>
             <span className="text-border-default">·</span>
-            {d.status !== 'published' && (
-              <button onClick={() => setStatus('published')} disabled={busy} className="text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50">Mark published</button>
-            )}
-            {d.status !== 'staged' && (
-              <button onClick={() => setStatus('staged')} disabled={busy} className="text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50">Back to staged</button>
+            {d.status !== 'published' ? (
+              <button onClick={publish} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-green-accent text-bg-primary px-3 py-1.5 font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                {busy ? 'Publishing…' : 'Publish link →'}
+              </button>
+            ) : (
+              <button onClick={unpublish} disabled={busy} className="text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-50">Unpublish</button>
             )}
             {confirmDel ? (
               <span className="inline-flex items-center gap-2">

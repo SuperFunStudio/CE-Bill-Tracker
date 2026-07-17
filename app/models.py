@@ -1182,6 +1182,12 @@ class ContentDraft(Base):
     dek: Mapped[str | None] = mapped_column(Text, nullable=True)  # subtitle / standfirst
     body_markdown: Mapped[str] = mapped_column(Text, nullable=False)  # linked + edited article body
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="staged")  # staged|draft|published
+    # Publishing (migration 039): share_token backs the instant /p/?token= reader page (minted on
+    # publish, nulled to revoke); slug + published_at are seeded now for the future SEO /articles/<slug>
+    # library so it needs no migration. Public visibility is gated on status == "published".
+    share_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    slug: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(200), nullable=True)  # admin email
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

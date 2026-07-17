@@ -19,6 +19,7 @@ import json
 import re
 import secrets
 import uuid
+from datetime import datetime, timezone
 
 import anthropic
 import structlog
@@ -49,6 +50,7 @@ from app.schemas import (
     ResearchTurnAdminItem,
     ResearchTurnAdminPage,
     ResearchTurnOut,
+    PublishedArticleOut,
     SharedCitationOut,
     SharedSessionOut,
     SharedTurnOut,
@@ -1171,12 +1173,28 @@ def _combine_verbatim(pairs: list[tuple[str, str]]) -> str:
     return "\n\n".join(f"## {q}\n\n{a}" for q, a in pairs)
 
 
+def _article_url(token: str) -> str:
+    # Instant self-hosted article link (query param, not a path — static export, same as /r/ and ?bill=).
+    return f"{DASHBOARD_URL}/p/?token={token}"
+
+
+def _slugify(title: str) -> str:
+    """A URL slug for the future SEO /articles/<slug> library — seeded at publish time. Not the instant
+    link (that keys on share_token), so uniqueness isn't enforced yet."""
+    s = re.sub(r"[^a-z0-9]+", "-", (title or "").lower()).strip("-")
+    return s[:80] or "article"
+
+
 def _draft_out(d) -> ContentDraftOut:
+    published = d.status == "published" and d.share_token
     return ContentDraftOut(
         id=str(d.id),
         source_session_id=str(d.source_session_id) if d.source_session_id else None,
         source_seq=d.source_seq, title=d.title, dek=d.dek, body_markdown=d.body_markdown,
-        status=d.status, created_by=d.created_by, created_at=d.created_at, updated_at=d.updated_at)
+        status=d.status, share_token=d.share_token, slug=d.slug,
+        public_url=_article_url(d.share_token) if published else None,
+        published_at=d.published_at, created_by=d.created_by,
+        created_at=d.created_at, updated_at=d.updated_at)
 
 
 @router.post("/drafts", response_model=ContentDraftOut)
@@ -1308,3 +1326,62 @@ async def delete_content_draft(
     await db.delete(d)
     await db.commit()
     return {"deleted": True, "id": str(draft_id)}
+
+
+# --- Publishing: give the edited ARTICLE its own self-hosted link (off-Substack) ------------------
+@router.post("/drafts/{draft_id}/publish", response_model=ContentDraftOut)
+async def publish_content_draft(
+    draft_id: str,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ContentDraftOut:
+    """Take a staged draft live at an instant, self-hosted /p/?token= permalink — independent of any
+    external platform. Mints the token on first publish (stable across republish, so the link never
+    breaks), seeds the slug/published_at for the future SEO library, and flips status to 'published'."""
+    d = await _get_draft_or_404(db, draft_id)
+    if not (d.body_markdown or "").strip():
+        raise HTTPException(status_code=400, detail="Nothing to publish — the draft is empty.")
+    if not d.share_token:
+        d.share_token = secrets.token_urlsafe(16)
+    if not d.slug:
+        d.slug = _slugify(d.title)
+    if not d.published_at:
+        d.published_at = datetime.now(timezone.utc)
+    d.status = "published"
+    await db.commit()
+    await db.refresh(d)
+    return _draft_out(d)
+
+
+@router.post("/drafts/{draft_id}/unpublish", response_model=ContentDraftOut)
+async def unpublish_content_draft(
+    draft_id: str,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ContentDraftOut:
+    """Take a published article back down: status → 'staged' so the public /p/ read 404s. The token is
+    KEPT (public read gates on status), so re-publishing restores the very same permalink."""
+    d = await _get_draft_or_404(db, draft_id)
+    d.status = "staged"
+    await db.commit()
+    await db.refresh(d)
+    return _draft_out(d)
+
+
+@router.get("/published/{token}", response_model=PublishedArticleOut)
+async def published_article(token: str, db: AsyncSession = Depends(get_db)) -> PublishedArticleOut:
+    """PUBLIC read of a published article — no auth. Resolves only a draft that is currently 'published'
+    with a matching token (an unpublished/never-published draft 404s, so a taken-down link goes dark).
+    Returns the edited article, whose citations are already deep-linked."""
+    from app.models import ContentDraft
+    tok = (token or "").strip()
+    if len(tok) < 8:
+        raise HTTPException(status_code=404, detail="Not found.")
+    d = (await db.execute(
+        select(ContentDraft).where(ContentDraft.share_token == tok,
+                                   ContentDraft.status == "published"))).scalar_one_or_none()
+    if not d:
+        raise HTTPException(status_code=404, detail="Not found.")
+    return PublishedArticleOut(
+        title=d.title, dek=d.dek, body_markdown=d.body_markdown,
+        published_at=d.published_at, updated_at=d.updated_at)

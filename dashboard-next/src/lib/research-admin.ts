@@ -82,6 +82,10 @@ export interface ContentDraft {
   dek: string | null;
   body_markdown: string;
   status: string; // staged | draft | published
+  share_token: string | null;
+  slug: string | null;
+  public_url: string | null; // set while published
+  published_at: string | null;
   created_by: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -125,6 +129,14 @@ export const deleteDraft = (getToken: GetToken, id: string) =>
     method: 'DELETE',
   });
 
+/** Take a draft live at its instant self-hosted /p/?token= permalink (mints a stable token). */
+export const publishDraft = (getToken: GetToken, id: string) =>
+  authedFetch<ContentDraft>(`/research/drafts/${id}/publish`, getToken, { method: 'POST' });
+
+/** Take a published article back down (keeps the token so re-publishing restores the same link). */
+export const unpublishDraft = (getToken: GetToken, id: string) =>
+  authedFetch<ContentDraft>(`/research/drafts/${id}/unpublish`, getToken, { method: 'POST' });
+
 // ── Public shared session (no auth) ──────────────────────────────────────────
 
 export interface SharedCitation {
@@ -152,5 +164,20 @@ export interface SharedSession {
 export async function fetchSharedSession(token: string): Promise<SharedSession> {
   const res = await fetch(`${API}/research/shared/${encodeURIComponent(token)}`, { cache: 'no-store' });
   if (!res.ok) throw new Error(res.status === 404 ? 'This link is invalid or has been turned off.' : `Error ${res.status}`);
+  return res.json();
+}
+
+export interface PublishedArticle {
+  title: string;
+  dek: string | null;
+  body_markdown: string; // citations already deep-linked
+  published_at: string | null;
+  updated_at: string | null;
+}
+
+/** PUBLIC read of a published article (the edited post, not the raw thread). 404 when taken down. */
+export async function fetchPublishedArticle(token: string): Promise<PublishedArticle> {
+  const res = await fetch(`${API}/research/published/${encodeURIComponent(token)}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(res.status === 404 ? 'This article is unavailable or has been unpublished.' : `Error ${res.status}`);
   return res.json();
 }

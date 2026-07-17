@@ -307,6 +307,12 @@ class ContentDraftOut(BaseModel):
     dek: str | None = None
     body_markdown: str
     status: str
+    # Publishing: share_token backs the instant /p/?token= link; public_url is the ready-built link
+    # (present only while published). slug/published_at are for the future SEO /articles library.
+    share_token: str | None = None
+    slug: str | None = None
+    public_url: str | None = None
+    published_at: datetime | None = None
     created_by: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -315,6 +321,16 @@ class ContentDraftOut(BaseModel):
 class ContentDraftPage(BaseModel):
     total: int
     items: list[ContentDraftOut]
+
+
+class PublishedArticleOut(BaseModel):
+    """A published content draft as the public /p/?token= reader page sees it — the edited article, not
+    the raw research thread. body_markdown already has its citations deep-linked."""
+    title: str
+    dek: str | None = None
+    body_markdown: str
+    published_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 # --- Bill-strength evaluation (POST /evaluate/bill) — see app/evaluation/strength.py ----------------

@@ -221,11 +221,14 @@ class Settings(BaseSettings):
     stripe_pro_annual_price_id: str = ""
     stripe_founding_coupon_id: str = ""
     stripe_founding_trial_days: int = 90
-    # Atlas Circular membership tiers below Pro. Student is a pay-what-you-wish monthly price with a
-    # custom-amount box (Stripe custom_unit_amount, floor $0, suggested $15) — gated to verified
-    # educational emails (see edu_email_suffixes). Research (Founding Supporter) is a fixed annual price
-    # ($25/mo billed annually). Both stamp the matching plan via the webhook's price→plan map.
-    stripe_student_price_id: str = ""
+    # Atlas Circular membership tiers below Pro.
+    # Student is pay-what-you-wish MONTHLY — but Stripe's "customer chooses price" (custom_unit_amount)
+    # only works for one-off prices, NOT subscriptions. So we don't use a fixed Price: our UI collects
+    # the amount and we mint the monthly price at checkout via `price_data` against this PRODUCT id
+    # (prod_…). $0 grants a free comp membership without touching Stripe. Gated to verified educational
+    # emails (edu_email_suffixes). The webhook maps this product → the "student" plan.
+    stripe_student_product_id: str = ""
+    # Research (Founding Supporter) — a fixed annual PRICE ($25/mo billed annually = $300/yr).
     stripe_research_price_id: str = ""
     stripe_webhook_secret: str = ""
     # Non-secret, baked into the frontend build — not used server-side. Declared only so a shared

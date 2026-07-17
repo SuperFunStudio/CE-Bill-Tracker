@@ -169,16 +169,26 @@ async def _student_checkout(payload: CheckoutRequest, user: AuthedUser, db: Asyn
         ent.current_period_end = None
         await db.commit()
         return {"url": f"{settings.app_base_url}/ask?welcome=student", "comp": True}
-    if not settings.stripe_secret_key or not settings.stripe_student_price_id:
+    if not settings.stripe_secret_key or not settings.stripe_student_product_id:
         raise HTTPException(status_code=503, detail="billing not configured")
+    # Stripe won't let the customer choose a recurring amount on its hosted screen (custom_unit_amount
+    # is one-off only), so we take the pay-what-you-wish amount from our UI and mint the monthly price
+    # inline via price_data against the Student product. Floor at $1 (Stripe's min charge is ~$0.50).
+    amount = max(int(amount), 100)
     await _ensure_customer(db, ent, user)
-    # The student price is configured in Stripe with custom_unit_amount enabled (floor $1, preset $15),
-    # so the exact pay-what-you-wish amount is entered on Stripe's hosted screen.
     session = await run_in_threadpool(
         stripe.checkout.Session.create,
         mode="subscription",
         customer=ent.stripe_customer_id,
-        line_items=[{"price": settings.stripe_student_price_id, "quantity": 1}],
+        line_items=[{
+            "price_data": {
+                "currency": "usd",
+                "product": settings.stripe_student_product_id,
+                "unit_amount": amount,
+                "recurring": {"interval": "month"},
+            },
+            "quantity": 1,
+        }],
         success_url=f"{settings.app_base_url}/ask?checkout=success",
         cancel_url=f"{settings.app_base_url}/pricing?checkout=cancel",
         client_reference_id=user.uid,
@@ -302,24 +312,32 @@ def _period_end(sub) -> datetime | None:
     return datetime.fromtimestamp(ts, tz=timezone.utc) if ts else None
 
 
-def _plan_for_price(price_id: str | None) -> str:
-    """Map a Stripe price id to the membership plan it grants. Unknown/blank ids fall back to "pro"
-    (the historical default — no regression for the pre-tiers Pro price)."""
-    mapping = {
+def _plan_for_line(price_id: str | None, product_id: str | None) -> str:
+    """Map a subscription line to the membership plan it grants. Pro/Research use fixed Prices, so match
+    on price id first. Student uses an inline price_data price (ad-hoc id), so fall back to the line's
+    PRODUCT id. Unknown → "pro" (historical default; no regression for the pre-tiers Pro price)."""
+    by_price = {
         settings.stripe_pro_monthly_price_id: "pro",
         settings.stripe_pro_annual_price_id: "pro",
-        settings.stripe_student_price_id: "student",
         settings.stripe_research_price_id: "research",
     }
-    return mapping.get(price_id or "", "pro") if price_id else "pro"
+    if price_id and price_id in by_price:
+        return by_price[price_id]
+    if product_id and product_id == settings.stripe_student_product_id:
+        return "student"
+    return "pro"
 
 
-def _sub_price_id(sub: dict) -> str | None:
-    """The price id of a subscription's first line item, defensively across Stripe's shapes."""
+def _sub_line(sub: dict) -> tuple[str | None, str | None]:
+    """(price_id, product_id) of a subscription's first line item, defensively across Stripe's shapes."""
     try:
-        return sub["items"]["data"][0]["price"]["id"]
-    except (KeyError, IndexError, TypeError):
-        return None
+        price = sub["items"]["data"][0]["price"]
+        product = price.get("product")
+        # `product` is a bare id string when unexpanded, or an object when expanded.
+        product_id = product.get("id") if isinstance(product, dict) else product
+        return price.get("id"), product_id
+    except (KeyError, IndexError, TypeError, AttributeError):
+        return None, None
 
 
 async def _apply_subscription(db: AsyncSession, customer_id: str | None, sub: dict) -> None:
@@ -336,9 +354,10 @@ async def _apply_subscription(db: AsyncSession, customer_id: str | None, sub: di
     ent.status = status
     ent.stripe_subscription_id = sub.get("id") or ent.stripe_subscription_id
     ent.current_period_end = _period_end(sub)
-    # Plan comes from which price the sub is on (student/research/pro). "trialing" is live access (the
-    # founding 90-day Pro trial); only a dead sub drops to free.
-    ent.plan = _plan_for_price(_sub_price_id(sub)) if status in ("active", "trialing") else "free"
+    # Plan comes from which price/product the sub is on (student/research/pro). "trialing" is live
+    # access (the founding 90-day Pro trial); only a dead sub drops to free.
+    price_id, product_id = _sub_line(sub)
+    ent.plan = _plan_for_line(price_id, product_id) if status in ("active", "trialing") else "free"
     # This seat is now Stripe-backed; clear any comp marker so its period_end isn't read as a comp expiry.
     ent.comp = False
     await db.commit()

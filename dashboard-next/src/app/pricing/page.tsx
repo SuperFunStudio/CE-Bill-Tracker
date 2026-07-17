@@ -20,6 +20,9 @@ export default function PricingPage() {
   const [modal, setModal] = useState<{ plan: PlanInterest; label: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // which tier's CTA is mid-flight
   const [error, setError] = useState<string | null>(null);
+  // Student pay-what-you-wish amount (cents), collected here because Stripe can't take a customer-chosen
+  // amount for a subscription. Suggested $15/mo; presets + a custom field. 0 => free comp membership.
+  const [studentAmount, setStudentAmount] = useState(1500);
 
   function openPlan(p: PlanInterest, label: string) {
     track('pricing_cta', { plan: p, plan_label: label });
@@ -113,8 +116,35 @@ export default function PricingPage() {
             <Link href="/account" className={secondaryBtn}>Manage membership</Link>
           ) : (
             <div className="space-y-2">
-              <button onClick={() => startStudent(1500, 'Student — pay what you wish')} disabled={busy === 'student'} className={primaryBtn}>
-                {busy === 'student' ? 'Starting…' : 'Pay what you wish →'}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[500, 1500, 3000].map(a => (
+                  <button
+                    key={a}
+                    type="button"
+                    onClick={() => setStudentAmount(a)}
+                    className={`rounded-full px-3 py-1 text-xs border transition-colors ${
+                      studentAmount === a
+                        ? 'border-green-accent bg-green-dark text-green-accent'
+                        : 'border-border-default text-text-secondary hover:text-text-primary'
+                    }`}
+                  >
+                    ${a / 100}/mo
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  min={1}
+                  aria-label="Custom monthly amount (USD)"
+                  placeholder="Custom $"
+                  onChange={e => {
+                    const v = Math.round(parseFloat(e.target.value || '0') * 100);
+                    if (v > 0) setStudentAmount(v);
+                  }}
+                  className="w-20 rounded-md border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary"
+                />
+              </div>
+              <button onClick={() => startStudent(studentAmount, 'Student — pay what you wish')} disabled={busy === 'student'} className={primaryBtn}>
+                {busy === 'student' ? 'Starting…' : `Join for $${(studentAmount / 100).toFixed(0)}/mo →`}
               </button>
               <button
                 onClick={() => startStudent(0, 'Student — free')}

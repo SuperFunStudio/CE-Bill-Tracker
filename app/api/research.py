@@ -820,6 +820,13 @@ async def ask_the_bills(
     )
     answer_text = answer_text or "I couldn't find enough in the corpus to answer that."
 
+    # Normalize combined citation markers ([JP a; JP b] -> [JP a] [JP b]) BEFORE citation recovery and
+    # persistence, so the live answer, the stored turn, and every downstream linker (frontend inline,
+    # link_citations for drafts/shares) all see one ref per bracket — else a multi-cite marker renders
+    # as plain text everywhere. Valid refs = the bills actually read into this answer.
+    valid_refs = {f"{r.Bill.state} {r.Bill.bill_number}" for r in read_rows if r.Bill.bill_number}
+    answer_text = _split_citation_markers(answer_text, valid_refs)
+
     # Citations: bills from the read set whose ref (e.g. "MD HB331") appears in the answer. Recovered
     # from the markdown rather than a JSON field, so a long/truncated answer still yields citations.
     citations, cited_ids = [], []
@@ -920,6 +927,33 @@ async def research_session(
 _CITE_TOKEN = re.compile(r"\[([^\[\]]+)\]")
 
 
+def _split_citation_markers(text: str | None, valid_refs) -> str:
+    """Normalize the model's citation markers so every ref sits in its OWN [..] bracket. The synthesis
+    prompt invites "cite several", so the model routinely emits combined markers — real examples:
+    `[JP 508M60001000009; JP 508M60000740002]`, `[CN …; CN …; CN …]`. A single-ref renderer looks up
+    the whole joined string, misses, and the citation silently degrades to plain text (the name looks
+    right, but it never links). This rewraps each KNOWN ref inside a bracket as its own `[ref]` and
+    drops the outer bracket, so `[JP a; JP b]` -> `[JP a]; [JP b]` — for ANY separator (;, comma, "and")
+    and preserving any non-ref text (an unknown ref, a "§5") verbatim. Brackets holding no known ref
+    (footnotes like [1]) are left untouched; a lone clean `[ref]` is unchanged."""
+    if not text or not valid_refs:
+        return text or ""
+    # Longest-first so a longer ref wins over one that's a prefix of it (e.g. CA AB1080 over CA AB1).
+    alt = re.compile("|".join(re.escape(r) for r in sorted(valid_refs, key=len, reverse=True)))
+
+    def unbold(m: "re.Match[str]") -> str:  # a bolded citation (**[ref]**) also can't link — unwrap it
+        return m.group(1) if alt.search(m.group(1)) else m.group(0)
+
+    def wrap(m: "re.Match[str]") -> str:
+        inner = m.group(1)
+        if not alt.search(inner):
+            return m.group(0)  # not a citation bracket — leave it alone
+        return alt.sub(lambda mm: f"[{mm.group(0)}]", inner)  # bracket each ref; drop the outer []
+
+    text = re.sub(r"\*\*\s*(\[[^\[\]]+\])\s*\*\*", unbold, text)
+    return _CITE_TOKEN.sub(wrap, text)
+
+
 async def _ref_map_for(db: AsyncSession, bill_ids: list[int]) -> dict[str, int]:
     """{'MD HB331': 4021, ...} for the given bills — the table that turns a citation marker into a deep
     link. Keyed on the same 'STATE BILL_NUMBER' ref the synthesis prompt emits verbatim."""
@@ -933,8 +967,10 @@ async def _ref_map_for(db: AsyncSession, bill_ids: list[int]) -> dict[str, int]:
 
 def link_citations(text: str | None, ref_to_id: dict[str, int]) -> str:
     """Rewrite inline [STATE BILL_NUMBER] markers to markdown deep links [STATE BILL_NUMBER](url) so a
-    cited answer stays clickable outside the app. Markers with no matching bill are left verbatim; the
-    stored answer carries no links yet, so this never double-links."""
+    cited answer stays clickable outside the app. First splits any combined markers ([JP a; JP b]) into
+    one bracket per ref, so multi-cite markers link too (and older turns stored before that normalization
+    are repaired on the fly). Markers with no matching bill are left verbatim; the stored answer carries
+    no links yet, so this never double-links."""
     if not text or not ref_to_id:
         return text or ""
 
@@ -942,7 +978,7 @@ def link_citations(text: str | None, ref_to_id: dict[str, int]) -> str:
         bid = ref_to_id.get(m.group(1).strip())
         return f"[{m.group(1)}]({bill_url(bid)})" if bid is not None else m.group(0)
 
-    return _CITE_TOKEN.sub(repl, text)
+    return _CITE_TOKEN.sub(repl, _split_citation_markers(text, ref_to_id.keys()))
 
 
 def _cited_ids(turn) -> list[int]:

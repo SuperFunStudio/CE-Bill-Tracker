@@ -13,12 +13,17 @@ export const STUDENT = {
   who: 'Students exploring the circular economy.',
 };
 
-// Founding Supporter / Research — a fixed annual membership for researchers, institutions, non-profits.
+// Founding Supporter / Research — monthly or annual (annual discounted), for researchers, institutions,
+// and non-profits. Mirrors PRO's two-period shape so the pricing toggle drives both cards.
 export const RESEARCH = {
   name: 'Founding Supporter',
-  price: '$25',
-  cadence: '/mo',
-  perYear: 'billed annually ($300/yr)',
+  monthly: { price: '$30', cadence: '/mo' },
+  annual: {
+    price: '$240',
+    cadence: '/yr',
+    perMonth: '$20/mo, billed annually',
+    save: 'Save $120/yr vs monthly',
+  },
   who: 'Researchers, institutions, and non-profits.',
 };
 

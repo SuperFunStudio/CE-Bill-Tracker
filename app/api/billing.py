@@ -45,10 +45,18 @@ stripe.api_key = settings.stripe_secret_key
 
 
 def _price_for_period(period: str) -> str:
-    """The configured Stripe price id for a billing period ("annual" | "monthly"); "" if unconfigured."""
+    """The configured Pro Stripe price id for a billing period ("annual" | "monthly"); "" if unconfigured."""
     return {
         "annual": settings.stripe_pro_annual_price_id,
         "monthly": settings.stripe_pro_monthly_price_id,
+    }.get(period, "")
+
+
+def _research_price_for_period(period: str) -> str:
+    """The configured Research price id for a billing period ("annual" | "monthly"); "" if unconfigured."""
+    return {
+        "annual": settings.stripe_research_annual_price_id,
+        "monthly": settings.stripe_research_monthly_price_id,
     }.get(period, "")
 
 
@@ -197,9 +205,10 @@ async def _student_checkout(payload: CheckoutRequest, user: AuthedUser, db: Asyn
     return {"url": session.url}
 
 
-async def _research_checkout(user: AuthedUser, db: AsyncSession) -> dict:
-    """Research (Founding Supporter) tier — a fixed annual subscription, no founding coupon/trial."""
-    if not settings.stripe_secret_key or not settings.stripe_research_price_id:
+async def _research_checkout(user: AuthedUser, db: AsyncSession, period: str) -> dict:
+    """Research (Founding Supporter) tier — monthly or annual subscription, no founding coupon/trial."""
+    price_id = _research_price_for_period(period)
+    if not settings.stripe_secret_key or not price_id:
         raise HTTPException(status_code=503, detail="billing not configured")
     ent = await _get_or_create_entitlement(db, user.email, user.uid)
     await _ensure_customer(db, ent, user)
@@ -207,11 +216,11 @@ async def _research_checkout(user: AuthedUser, db: AsyncSession) -> dict:
         stripe.checkout.Session.create,
         mode="subscription",
         customer=ent.stripe_customer_id,
-        line_items=[{"price": settings.stripe_research_price_id, "quantity": 1}],
+        line_items=[{"price": price_id, "quantity": 1}],
         success_url=f"{settings.app_base_url}/ask?checkout=success",
         cancel_url=f"{settings.app_base_url}/pricing?checkout=cancel",
         client_reference_id=user.uid,
-        metadata={"email": user.email, "firebase_uid": user.uid, "tier": "research"},
+        metadata={"email": user.email, "firebase_uid": user.uid, "tier": "research", "period": period},
     )
     return {"url": session.url}
 
@@ -233,13 +242,13 @@ async def create_checkout(
     whether the coupon actually went on, which the webhook reads to stamp the seat.
     """
     plan = (payload.plan if payload else "pro").lower().strip()
+    period = (payload.period if payload else "annual").lower().strip()
     if plan == "student":
         return await _student_checkout(payload or CheckoutRequest(), user, db)
     if plan == "research":
-        return await _research_checkout(user, db)
+        return await _research_checkout(user, db, period)
 
     # Pro (default).
-    period = (payload.period if payload else "annual").lower().strip()
     price_id = _price_for_period(period)
     if not settings.stripe_secret_key or not price_id:
         raise HTTPException(status_code=503, detail="billing not configured")
@@ -319,7 +328,8 @@ def _plan_for_line(price_id: str | None, product_id: str | None) -> str:
     by_price = {
         settings.stripe_pro_monthly_price_id: "pro",
         settings.stripe_pro_annual_price_id: "pro",
-        settings.stripe_research_price_id: "research",
+        settings.stripe_research_monthly_price_id: "research",
+        settings.stripe_research_annual_price_id: "research",
     }
     if price_id and price_id in by_price:
         return by_price[price_id]

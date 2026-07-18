@@ -228,8 +228,10 @@ class Settings(BaseSettings):
     # (prod_…). $0 grants a free comp membership without touching Stripe. Gated to verified educational
     # emails (edu_email_suffixes). The webhook maps this product → the "student" plan.
     stripe_student_product_id: str = ""
-    # Research (Founding Supporter) — a fixed annual PRICE ($25/mo billed annually = $300/yr).
-    stripe_research_price_id: str = ""
+    # Research (Founding Supporter) — monthly ($30/mo) or annual ($240/yr, the discounted option we
+    # nudge toward), mirroring Pro's two-period model. Both stamp the "research" plan via the webhook.
+    stripe_research_monthly_price_id: str = ""
+    stripe_research_annual_price_id: str = ""
     stripe_webhook_secret: str = ""
     # Non-secret, baked into the frontend build — not used server-side. Declared only so a shared
     # .env carrying STRIPE_PUBLISHABLE_KEY doesn't trip extra='forbid' and crash the backend.

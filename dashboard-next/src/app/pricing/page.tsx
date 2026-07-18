@@ -29,15 +29,16 @@ export default function PricingPage() {
     setModal({ plan: p, label });
   }
 
-  // Self-serve checkout for pro/research. Needs a signed-in user (Stripe customer keys off the
-  // verified email), so prompt sign-in first if needed.
+  // Self-serve checkout for pro/research — both bill monthly or annual, so the period toggle applies
+  // to each. Needs a signed-in user (Stripe customer keys off the verified email), so prompt sign-in
+  // first if needed.
   async function startPlan(p: 'pro' | 'research', label: string) {
-    track('pricing_cta', { plan: p, plan_label: label, ...(p === 'pro' ? { period } : {}) });
+    track('pricing_cta', { plan: p, plan_label: label, period });
     setError(null);
     if (!user) { openAuth(); return; }
     setBusy(p);
     try {
-      await startCheckout(getToken, { plan: p, ...(p === 'pro' ? { period } : {}) });
+      await startCheckout(getToken, { plan: p, period });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start checkout.');
       setBusy(null);
@@ -164,9 +165,19 @@ export default function PricingPage() {
           </span>
           <h2 className="font-serif text-xl text-text-primary">{RESEARCH.name}</h2>
           <div className="mt-1 mb-3">
-            <span className="text-2xl font-bold text-text-primary">{RESEARCH.price}</span>
-            <span className="text-text-muted text-sm"> {RESEARCH.cadence}</span>
-            <p className="text-text-muted text-meta mt-0.5">{RESEARCH.perYear}</p>
+            {period === 'annual' ? (
+              <>
+                <span className="text-2xl font-bold text-text-primary">{RESEARCH.annual.price}</span>
+                <span className="text-text-muted text-sm"> {RESEARCH.annual.cadence}</span>
+                <p className="text-text-muted text-meta mt-0.5">{RESEARCH.annual.perMonth}</p>
+              </>
+            ) : (
+              <>
+                <span className="text-2xl font-bold text-text-primary">{RESEARCH.monthly.price}</span>
+                <span className="text-text-muted text-sm"> {RESEARCH.monthly.cadence}</span>
+                <p className="text-text-muted text-meta mt-0.5">{RESEARCH.annual.save}</p>
+              </>
+            )}
           </div>
           <p className="text-text-muted text-meta mb-4">{RESEARCH.who}</p>
           <ul className="space-y-2 mb-5 flex-1">

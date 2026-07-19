@@ -58,8 +58,6 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
     title: 'Analysis (AI)',
     blurb: 'Structured judgment over the corpus. These accept a request body and are Pro-gated (Bearer token).',
     endpoints: [
-      { method: 'GET', path: '/evaluate/material-map', desc: 'The material-position map: each material’s value / dispersion / channel axes + intervention regime.' },
-      { method: 'POST', path: '/evaluate/bill', desc: 'Score a measure’s strength — positions its material into a regime and scores its mechanisms against the strong baseline, with a corpus cross-check.', auth: 'pro' },
       { method: 'POST', path: '/research/ask', desc: 'Ask a natural-language question over the corpus; returns a cited answer + optional SQL-backed chart.', auth: 'pro' },
     ],
   },

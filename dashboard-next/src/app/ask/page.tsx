@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CAP, useAuth } from '@/components/auth/AuthContext';
-import { ApiError, askResearch, fetchResearchBills } from '@/lib/api';
+import { ApiError, askResearch, fetchResearchBills, fetchResearchSession } from '@/lib/api';
 import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchCitation } from '@/lib/types';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillModal } from '@/components/ui/BillModal';
@@ -168,6 +168,39 @@ export default function AskPage() {
   const [pageBusy, setPageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalBill, setModalBill] = useState<BillSummary | null>(null);  // opened from a citation
+  const [restoring, setRestoring] = useState(false);  // loading a saved thread from ?session=
+  const [restored, setRestored] = useState(false);    // this thread was reopened from My Library
+
+  // Reopen a saved thread from My Library: ?session=<id> loads the owned conversation and threads any
+  // follow-up onto it. Restored turns show the persisted answer markdown (rich citations/charts aren't
+  // stored per turn — asking a follow-up produces a fresh cited turn). Read from the URL directly (not
+  // useSearchParams) so this client page needs no Suspense boundary; runs once auth is ready.
+  useEffect(() => {
+    if (authLoading || typeof window === 'undefined') return;
+    const sid = new URLSearchParams(window.location.search).get('session');
+    if (!sid) return;
+    let cancelled = false;
+    setRestoring(true); setError(null);
+    (async () => {
+      try {
+        const s = await fetchResearchSession(sid, await getToken());
+        if (cancelled) return;
+        setTurns(s.turns.map(t => ({
+          q: t.question,
+          answer: { answer: t.answer ?? '', citations: [] } as ResearchAnswer,
+        })));
+        setSessionId(s.session_id);
+        setRestored(true);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not open that research thread.');
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // Run once on mount after auth resolves; getToken is stable enough for a one-shot restore.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading]);
 
   // Anonymous visitors: remember once they've spent their free question so the wall shows immediately.
   useEffect(() => {
@@ -212,7 +245,11 @@ export default function AskPage() {
 
   function newThread() {
     setTurns([]); setSessionId(null); setBillPage(null); setLastQuery('');
-    setQuestion(''); setError(null);
+    setQuestion(''); setError(null); setRestored(false);
+    // Drop ?session= so a fresh thread isn't tied to the reopened one (and a reload starts clean).
+    if (typeof window !== 'undefined' && window.location.search.includes('session=')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
   }
 
   async function goToPage(page: number) {
@@ -245,7 +282,19 @@ export default function AskPage() {
             Your first question is free — sign in for unlimited, threaded, saved research.
           </p>
         )}
+        {(restoring || (restored && turns.length > 0)) && (
+          <p className="text-text-muted text-xs mt-2">
+            {restoring ? 'Opening your saved research…' : 'Continuing a saved thread from My Library — ask a follow-up below.'}
+          </p>
+        )}
       </div>
+
+      {restoring && (
+        <div className="space-y-2 border-t border-border-default pt-6">
+          <div className="h-6 w-2/3 animate-pulse rounded bg-bg-tertiary" />
+          <div className="h-24 w-full animate-pulse rounded-lg bg-bg-tertiary" />
+        </div>
+      )}
 
       {wall && (
         <div className="rounded-lg border border-green-accent/40 bg-green-dark/40 p-5 space-y-3">

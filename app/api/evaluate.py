@@ -1,4 +1,4 @@
-"""'Evaluate a Bill' (Pro) — score a pasted/uploaded measure by whether it carries the mechanisms its
+"""'Evaluate a Bill' (admin-only) — score a pasted/uploaded measure by whether it carries the mechanisms its
 target material's economics require (see app/evaluation/strength.py for the load-bearing idea).
 
 Flow: the SAME SonnetExtractor that analyzes the corpus reads the pasted text into the eight compliance
@@ -12,7 +12,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import AuthedUser, require_pro
+from app.api.auth import AuthedUser, require_admin
 from app.classification.sonnet_extractor import SonnetExtractor
 from app.database import get_db
 from app.evaluation.axis_estimator import estimate_positioning
@@ -37,7 +37,7 @@ MAX_CHARS = 200_000    # hard cap before the extractor's own keyword-windowing; 
 async def evaluate_bill(
     request: Request,
     body: EvaluateRequest,
-    _user: AuthedUser = Depends(require_pro),
+    _user: AuthedUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> EvaluateResponse:
     text = (body.text or "").strip()

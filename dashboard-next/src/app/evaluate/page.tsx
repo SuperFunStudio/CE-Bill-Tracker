@@ -256,7 +256,7 @@ function Result({ data, mapPoints }: { data: EvaluateResponse; mapPoints: Materi
 }
 
 export default function EvaluatePage() {
-  const { isPro, getToken, openAuth, loading: authLoading } = useAuth();
+  const { isAdmin, getToken, openAuth, loading: authLoading } = useAuth();
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
   const [jurisdiction, setJurisdiction] = useState('');
@@ -270,7 +270,7 @@ export default function EvaluatePage() {
 
   async function run() {
     if (text.trim().length < 200 || busy) return;
-    if (!isPro) { openAuth(); return; }
+    if (!isAdmin) { openAuth(); return; }
     setBusy(true); setError(null); setResult(null);
     try {
       const token = await getToken();
@@ -287,6 +287,18 @@ export default function EvaluatePage() {
 
   function loadSample() {
     setTitle(SAMPLE_TITLE); setJurisdiction('CA'); setText(SAMPLE_TEXT);
+  }
+
+  // Hidden internal tool: gated to admins while we watch for demand before folding it into Ask.
+  // A signed-in non-admin gets a plain not-available message, not a hint that this exists.
+  if (authLoading || !isAdmin) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <p className="mt-20 text-center text-text-muted text-sm italic">
+          {authLoading ? 'Checking access…' : 'This page is not available.'}
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -330,17 +342,10 @@ export default function EvaluatePage() {
             disabled={busy || text.trim().length < 200}
             className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
           >
-            {busy ? 'Analyzing…' : isPro ? 'Evaluate' : 'Evaluate (Pro)'}
+            {busy ? 'Analyzing…' : 'Evaluate'}
           </button>
         </div>
       </div>
-
-      {authLoading ? null : !isPro && (
-        <p className="rounded-lg border border-border-default bg-bg-primary px-4 py-3 text-sm text-text-secondary">
-          <span className="font-semibold text-text-primary">Pro feature.</span> Sign in with a Pro plan to
-          evaluate a measure against the strong-bill baseline for its material class.
-        </p>
-      )}
 
       {error && <p className="text-sm text-error">{error}</p>}
       {busy && <div className="h-40 w-full animate-pulse rounded-lg bg-bg-tertiary" />}

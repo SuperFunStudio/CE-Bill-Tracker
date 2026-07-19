@@ -159,6 +159,30 @@ export async function fetchMyResearchSessions(token?: string | null): Promise<Re
   return apiFetch<ResearchSessionListItem[]>(buildUrl('/research/my-sessions'), token);
 }
 
+/** One persisted turn of an owned thread — the question and the stored answer markdown. Rich
+ *  citations/charts aren't persisted per turn, so a restored turn shows the answer text (inline
+ *  [STATE BILL_NUMBER] markers render as plain text); asking a follow-up produces a fresh, cited turn. */
+export interface ResearchTurnOut {
+  seq: number;
+  question: string;
+  retrieval_query: string | null;
+  answer: string | null;
+  bill_total: number;
+}
+export interface ResearchSessionOut {
+  session_id: string;
+  title: string | null;
+  turns: ResearchTurnOut[];
+}
+
+/** Load one owned research thread with its turns in order, so the Ask page can reopen and continue a
+ *  saved conversation. 404 if the session isn't owned by the caller. */
+export async function fetchResearchSession(
+  sessionId: string, token?: string | null,
+): Promise<ResearchSessionOut> {
+  return apiFetch<ResearchSessionOut>(buildUrl(`/research/session/${sessionId}`), token);
+}
+
 /** Pages 2+ of the full relevant-bill set for an asked question (SQL-only, no LLM). Prev/Next on the
  *  Ask page call this; the cascade is deterministic so pages align with the answer's page 1. */
 export async function fetchResearchBills(

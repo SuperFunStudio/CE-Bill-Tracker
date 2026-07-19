@@ -67,9 +67,12 @@ export function AskHistorySection() {
         <ul className="space-y-2">
           {sessions.map(s => (
             <li key={s.session_id}>
-              <div className="border-l-2 border-green-accent/40 pl-3 py-1">
+              <Link
+                href={`/ask?session=${s.session_id}`}
+                className="block border-l-2 border-green-accent/40 pl-3 py-1 rounded-sm hover:bg-bg-secondary focus:outline-none focus:bg-bg-secondary transition-colors group"
+              >
                 <div className="flex items-center gap-2">
-                  <span className="text-body text-text-primary font-medium">{s.title}</span>
+                  <span className="text-body text-text-primary font-medium group-hover:text-green-accent transition-colors">{s.title}</span>
                   {s.shared && (
                     <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5">
                       Shared
@@ -80,8 +83,9 @@ export function AskHistorySection() {
                 <p className="text-xs text-text-muted mt-0.5">
                   {s.turns} question{s.turns === 1 ? '' : 's'}
                   {s.updated_at ? ` · ${new Date(s.updated_at).toLocaleDateString()}` : ''}
+                  <span className="text-green-accent ml-2 opacity-0 group-hover:opacity-100 transition-opacity">Open →</span>
                 </p>
-              </div>
+              </Link>
             </li>
           ))}
         </ul>

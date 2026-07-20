@@ -162,8 +162,16 @@ export interface BillStancePoint {
 
 // "Ask the Bills" (POST /research/ask) — a cited answer, an optional SQL-backed chart, and a
 // coverage note so an answer never implies whole-corpus completeness it doesn't have.
-export interface ResearchChartBar { label: string; value: number; }
-export interface ResearchChart { title: string; bars: ResearchChartBar[]; }
+export interface ResearchChartBar { label: string; value: number; value2?: number | null; note?: string | null; }
+export interface ResearchChart {
+  title: string;
+  bars: ResearchChartBar[];
+  /** "bar" = single series (bills-by-year); "grouped" = value + value2 per bar (jurisdiction ranking). */
+  kind?: 'bar' | 'grouped';
+  /** Legend labels for [value, value2] when kind === "grouped". */
+  series?: string[] | null;
+  footnote?: string | null;
+}
 export interface ResearchCitation {
   bill_id: number;
   region?: string | null;

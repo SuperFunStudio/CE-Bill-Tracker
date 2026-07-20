@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy import func, literal_column, or_, select, true
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.alerts.applinks import DASHBOARD_URL, bill_url
 from app.api.auth import (
@@ -207,6 +208,63 @@ def _year_chart(question: str, agg_scoped: dict, scope_labels: list[str]) -> Res
             for b in sorted(by_year, key=lambda b: b["year"])]
     suffix = f" — {', '.join(scope_labels)}" if scope_labels else ""
     return ResearchChart(title=f"Bills by year{suffix}", bars=bars)
+
+
+# A "which places lead / rank jurisdictions" question wants the by_jurisdiction ranking shown as a
+# grouped bar (enacted vs all-tracked). Deterministic trigger, same pattern as the year chart; the
+# numbers come from the SQL rollup so they're exact.
+_JURISDICTION_CHART_TRIGGERS = (
+    "which state", "which states", "which countr", "which region", "which jurisdiction",
+    "what state", "what countr", "top state", "top countr", "top region", "leading",
+    "leaderboard", "rank", "ranking", "most bills", "most laws", "most active", "who leads",
+    "who has the most", "by state", "by country", "by jurisdiction", "by region",
+    "across states", "across countries", "states with the most", "countries with the most",
+    "compare.*(states|countries|regions|jurisdictions)",
+)
+# Sub-national tier is wanted when the question is explicitly about STATES/PROVINCES rather than
+# countries — that's where the US competes fairly (state-vs-state) instead of being rolled up.
+_SUB_GRANULARITY_TRIGGERS = ("state", "states", "province", "provinces", "us states", "which state")
+
+
+def _wants_jurisdiction_chart(question: str) -> bool:
+    q = question.lower()
+    return any(re.search(t, q) if "." in t else t in q for t in _JURISDICTION_CHART_TRIGGERS)
+
+
+def _jurisdiction_granularity(question: str) -> str:
+    """'sub' (state/province tier) when the question is explicitly about states; else 'country' (rolled
+    up). Keeps the US as one bar for a country comparison, but ranks US states against each other — and
+    against other sub-national units — when that's what was asked."""
+    q = question.lower()
+    if "countr" in q or "nation" in q:  # an explicit country/national frame overrides
+        return "country"
+    return "sub" if any(t in q for t in _SUB_GRANULARITY_TRIGGERS) else "country"
+
+
+def _jurisdiction_chart(question: str, agg_scoped: dict) -> ResearchChart | None:
+    """A grouped enacted-vs-all-tracked bar from the by_jurisdiction rollup, when the question ranks
+    places and the set spans ≥2 jurisdictions. Enacted is the primary (honest) metric; all-tracked rides
+    along as context, and the per-bar note carries the 'across N states' rollup footnote. None otherwise."""
+    if not _wants_jurisdiction_chart(question):
+        return None
+    bj = (agg_scoped or {}).get("by_jurisdiction") or {}
+    rows = bj.get("jurisdictions") or []
+    if len(rows) < 2:
+        return None
+    bars = []
+    for j in rows[:12]:  # cap for legibility; SQL already ordered enacted-first
+        sub = j.get("subunit_count")
+        note = f"across {sub} states" if sub and sub > 1 else None
+        bars.append(ResearchChartBar(label=j["name"], value=j["enacted_count"],
+                                     value2=j["activity_count"], note=note))
+    is_sub = bj.get("granularity") == "sub"
+    title = "Enacted laws by " + ("state / province" if is_sub else "country")
+    return ResearchChart(
+        title=title, kind="grouped", bars=bars,
+        series=["Enacted (in force)", "All tracked bills"],
+        footnote=("Ranked by enacted laws — the only axis comparable across borders (foreign law is "
+                  "tracked enacted-only). 'All tracked bills' includes drafts and isn't comparable "
+                  "country-to-country."))
 
 
 def _lit_subquery():
@@ -436,10 +494,14 @@ def _row_to_summary(row) -> BillSummary:
     return s
 
 
-async def _aggregates(db: AsyncSession, extra=()) -> dict:
+async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str = "country") -> dict:
     """Exact aggregates (ground truth, not LLM). `extra` scopes them to the question's facet set (e.g.
     a jurisdiction), so numbers reflect the question instead of always being whole-corpus. Called with
-    no extra for the corpus-wide baseline; a comparison answer gets both ('122 in France of 146 total')."""
+    no extra for the corpus-wide baseline; a comparison answer gets both ('122 in France of 146 total').
+
+    `jurisdiction_granularity` controls the by_jurisdiction ranking: "country" (default) rolls US states
+    up to the United States so a federal system is compared like-for-like against a single-legislature
+    country; "sub" ranks the leaf jurisdictions (US states, provinces, Länder) against each other."""
     # Collection-target basis distribution (unnest targets; the founding-question axis).
     targets = func.jsonb_array_elements(
         Bill.compliance_details["collection_targets"]["targets"]
@@ -499,6 +561,40 @@ async def _aggregates(db: AsyncSession, extra=()) -> dict:
     for c in extra:
         undated_q = undated_q.where(c)
     undated = (await db.scalar(undated_q)) or 0
+    # By-jurisdiction ranking — the fair-comparison aggregate. `activity` = all relevant bills
+    # (legislative MOTION, where the US legitimately leads on sheer volume); `enacted` = status='enacted'
+    # only (what's actually IN FORCE — the honest stringency proxy that doesn't reward a federal system
+    # for filing the same bill in 50 statehouses). At "country" granularity the leaf jurisdiction's path
+    # ('world.us.us_ca') is rolled up to its country node ('world.us' -> United States) so the US is one
+    # bar next to France's one bar — the granularity skew _plain_page's interleave already had to dodge;
+    # `subunits` = distinct sub-jurisdictions feeding the rollup, so the UI can footnote "across N states"
+    # instead of letting a 50-state sum masquerade as a single national law. At "sub" granularity the leaf
+    # nodes rank against each other (state-vs-state), where the US genuinely competes.
+    leaf = aliased(Jurisdiction)
+    activity = func.count().label("activity")
+    enacted = func.count().filter(Bill.status == "enacted").label("enacted")
+    if jurisdiction_granularity == "sub":
+        # Rank genuine SUB-NATIONAL units only (level='state': US states, Länder, provinces). A
+        # country that happens to be a leaf node (France, Japan — no sub-nodes) is NOT a state and must
+        # not pollute a "which states" ranking; that's the category error the level filter prevents.
+        jur_q = (select(leaf.code.label("code"), leaf.name.label("name"), activity, enacted)
+                 .select_from(Bill).join(leaf, leaf.id == Bill.jurisdiction_id)
+                 .where(Bill.ce_relevant.is_(True)).where(leaf.level == "state")
+                 .group_by(leaf.code, leaf.name))
+    else:
+        country = aliased(Jurisdiction)
+        country_path = func.concat("world.", func.split_part(leaf.path, ".", 2))
+        subunits = func.count(func.distinct(Bill.jurisdiction_id)).label("subunits")
+        jur_q = (select(country.code.label("code"), country.name.label("name"),
+                        activity, enacted, subunits)
+                 .select_from(Bill).join(leaf, leaf.id == Bill.jurisdiction_id)
+                 .join(country, country.path == country_path)
+                 .where(Bill.ce_relevant.is_(True)).group_by(country.code, country.name))
+    for c in extra:
+        jur_q = jur_q.where(c)
+    # enacted-first ordering: the honest default surfaces "what's in force", not "who files most".
+    jur_q = jur_q.order_by(enacted.desc(), activity.desc()).limit(30)
+    jur_rows = (await db.execute(jur_q)).all()
     agg = {
         "collection_target_basis": [{"basis": r.basis or "unspecified", "count": r.n} for r in basis_rows],
         "dimension_prevalence": {d: getattr(prevalence_row, d) for d in DIMENSION_KEYS},
@@ -510,6 +606,27 @@ async def _aggregates(db: AsyncSession, extra=()) -> dict:
         agg["product_coverage"] = {
             "note": "covered-product counts (electronics/batteries/textiles EPR bills only)",
             "products": [{"product": r.product, "count": r.n} for r in pc_rows],
+        }
+    # Self-gate like product_coverage: only a set that spans ≥2 jurisdictions can be RANKED. A question
+    # already scoped to one place (extra pins the jurisdiction) collapses to a single row and is suppressed.
+    if len(jur_rows) >= 2:
+        agg["by_jurisdiction"] = {
+            "granularity": jurisdiction_granularity,
+            "note": ("enacted_count = enacted laws only (in force) — the ONLY axis comparable across "
+                     "countries, because foreign law is ingested enacted-only (no introduced-but-failed "
+                     "drafts), while the US corpus carries the full introduced->enacted funnel. "
+                     "activity_count = all tracked relevant bills; for the US it includes drafts, so a high "
+                     "US activity_count reflects fragmented state-by-state motion (see subunit_count) AND "
+                     "fuller draft coverage — do NOT compare activity_count across countries or claim the US "
+                     "is 'more active' than a foreign country from it. At country granularity US states are "
+                     "rolled up to the United States; subunit_count = distinct sub-jurisdictions in the "
+                     "rollup. Rank on enacted_count; use activity_count only within the US or as momentum context."),
+            "jurisdictions": [
+                {"code": r.code, "name": r.name, "activity_count": r.activity,
+                 "enacted_count": r.enacted,
+                 **({"subunit_count": r.subunits} if jurisdiction_granularity != "sub" else {})}
+                for r in jur_rows
+            ],
         }
     return agg
 
@@ -529,6 +646,14 @@ Rules:
 - Cite each supported point inline with the bill(s), EXACTLY as [STATE BILL_NUMBER] using the `ref`
   field from the BILL MATERIAL verbatim (e.g. [MD HB331], [FR JORFTEXT000041553759]). Cite only bills
   present in the BILL MATERIAL.
+- LEGAL STATUS — match your verb tense to each bill's `status`/`in_force` field; NEVER present a
+  proposed bill as settled law. `in_force: true` (status `enacted`) = law in force → state obligations
+  in the indicative ("producers must", "producers will face"). Any non-enacted status (`introduced`,
+  `in_committee`, `passed`, `passed_chamber`, `unknown`, …) = a PROPOSAL not yet in effect → use
+  conditional voice and name the stage ("SB54, introduced and in committee, WOULD require… IF enacted";
+  "producers MAY face…"). `vetoed`/`failed` = did NOT become law → say so ("would have required…, but
+  was vetoed"). When one claim spans bills of mixed status, separate the enacted from the pending rather
+  than lumping them; do not let an enacted example make neighboring proposals read as law.
 - Where a requirement/finding recurs across bills, say so and cite several; flag single-bill outliers.
 - You MAY state exact numbers from AGGREGATES. If both a scoped and corpus-wide count are given, reason
   about coverage from them ("122 of the 146 corpus-wide sit in France; the rest are elsewhere").
@@ -571,9 +696,14 @@ def _pack_material(rows, passages: dict[int, str]) -> list[dict]:
         cd = b.compliance_details or {}
         present = [d for d in DIMENSION_KEYS if isinstance(cd.get(d), dict) and cd[d].get("status") == "present"]
         excerpt = passages.get(b.id) or (b.ai_summary or "")
+        status = (b.status or "unknown")
         packed.append({
             "id": b.id, "ref": f"{b.state} {b.bill_number or '?'}", "region": b.region,
             "year": b.status_date.year if b.status_date else None,
+            # Legal status drives the answer's verb tense (see _DEEP_SYSTEM): `enacted` = law in force,
+            # anything else = a proposal that is NOT yet law. `in_force` is the pre-chewed flag so the
+            # model never has to remember which status strings mean "enacted".
+            "status": status, "in_force": status == "enacted",
             "title": (b.title or "")[:140], "dimensions": present,
             "excerpt": (excerpt or "").strip()[:800],
         })
@@ -856,8 +986,9 @@ async def ask_the_atlas(
 
     # Scoped aggregates (numbers that reflect the question) + the corpus-wide baseline when scoped, so
     # a comparison answer can reason "N of M corpus-wide sit in <place>".
-    agg_scoped = await _aggregates(db, geo_extra)
-    agg_corpus = await _aggregates(db) if geo_extra else None
+    jur_gran = _jurisdiction_granularity(retrieval_q)
+    agg_scoped = await _aggregates(db, geo_extra, jurisdiction_granularity=jur_gran)
+    agg_corpus = await _aggregates(db, jurisdiction_granularity=jur_gran) if geo_extra else None
 
     scope: dict = {"total": total, "strategy": strategy, "read": len(packed)}
     if facets.place_labels:
@@ -932,7 +1063,10 @@ async def ask_the_atlas(
     # Triggered on the rewritten query so a follow-up like "show that over time" still fires.
     scope_labels = (facets.place_labels + facets.material_labels + facets.instrument_labels
                     + facets.product_labels)
-    chart = _year_chart(retrieval_q, agg_scoped, scope_labels)
+    # A jurisdiction ranking chart takes precedence over the year chart when the question ranks places;
+    # both share the single chart slot.
+    chart = (_jurisdiction_chart(retrieval_q, agg_scoped)
+             or _year_chart(retrieval_q, agg_scoped, scope_labels))
     return ResearchAnswer(answer=answer_text, citations=citations, chart=chart,
                           coverage_note=coverage, bills=bills,
                           session_id=str(session_id) if session_id else None, seq=seq,
@@ -1239,9 +1373,13 @@ Return a JSON object with EXACTLY these keys:
 - "dek": one-sentence standfirst saying what the reader will learn (<= 160 chars).
 - "body": the article body in markdown. Open with a 1-2 sentence lede on why this matters, then present
   the substance. You MAY restructure, tighten, and add connective prose, but DO NOT invent facts,
-  numbers, or bills beyond the ANSWERS. PRESERVE every [STATE BILL_NUMBER] citation marker EXACTLY as
-  written and keep it beside the claim it supports (they become links downstream). Use "## " subheads
-  and "- " bullets. Do not repeat the title inside the body.
+  numbers, or bills beyond the ANSWERS. PRESERVE the legal-status framing of every claim: where an
+  answer uses conditional voice for a proposed/introduced/pending bill ("would require… if enacted",
+  "producers may face…"), KEEP it conditional — never upgrade it into settled law ("requires",
+  "producers must"). Only bills the answers present as enacted may be stated as law in force. PRESERVE
+  every [STATE BILL_NUMBER] citation marker EXACTLY as written and keep it beside the claim it supports
+  (they become links downstream). Use "## " subheads and "- " bullets. Do not repeat the title inside
+  the body.
 Output ONLY the JSON object — no preamble, no code fence.
 """
 

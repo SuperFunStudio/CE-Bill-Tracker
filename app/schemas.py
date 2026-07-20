@@ -154,6 +154,11 @@ class ResearchAskRequest(BaseModel):
 class ResearchChartBar(BaseModel):
     label: str
     value: int
+    # Optional SECOND metric for a grouped bar (e.g. enacted vs all-tracked per jurisdiction). None for
+    # single-series charts (the bills-by-year chart leaves it unset, so it renders exactly as before).
+    value2: int | None = None
+    # Optional per-bar footnote, e.g. "across 49 states" — the honest granularity annotation on a rollup.
+    note: str | None = None
 
 
 class ResearchChart(BaseModel):
@@ -161,6 +166,11 @@ class ResearchChart(BaseModel):
     LLM), so the numbers are exact; the model only picks WHICH aggregate is relevant."""
     title: str
     bars: list[ResearchChartBar]
+    # "bar" = single-series (bills-by-year); "grouped" = two metrics per bar (value + value2), with
+    # `series` naming them for the legend, e.g. ["Enacted (in force)", "All tracked bills"].
+    kind: str = "bar"
+    series: list[str] | None = None
+    footnote: str | None = None
 
 
 class ResearchCitation(BaseModel):

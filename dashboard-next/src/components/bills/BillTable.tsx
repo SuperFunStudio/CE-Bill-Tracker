@@ -6,16 +6,27 @@ import { BillModal } from '@/components/ui/BillModal';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { WatchStar } from '@/components/watchlist/WatchStar';
 import { track } from '@/lib/analytics';
+import { useSelectedBill } from '@/hooks/useSelectedBill';
+import { useBill } from '@/hooks/useBills';
 
 interface BillTableProps {
   bills: BillSummary[];
   maxRows?: number;
   /** When set, show this many rows per page with manual Prev/Next paging. */
   autoPageSize?: number;
+  /**
+   * Drive the open bill through the ?bill= URL param instead of local state, so the address bar
+   * reflects the open bill (shareable link, Back closes it, refresh restores it) and inbound deep
+   * links open through the same path. Opt-in — left off for embeds and surfaces that manage their
+   * own bill modal. See useSelectedBill.
+   */
+  urlSync?: boolean;
 }
 
-export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: BillTableProps) {
+  const [localSelectedId, setLocalSelectedId] = useState<number | null>(null);
+  const urlSel = useSelectedBill();
+  const selectedId = urlSync ? urlSel.selectedId : localSelectedId;
   const [page, setPage] = useState(0);
 
   const pageCount = autoPageSize ? Math.max(1, Math.ceil(bills.length / autoPageSize)) : 1;
@@ -27,7 +38,18 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
   const displayBills = autoPageSize
     ? bills.slice(safePage * autoPageSize, safePage * autoPageSize + autoPageSize)
     : maxRows ? bills.slice(0, maxRows) : bills;
-  const selectedBill = bills.find(b => b.id === selectedId) ?? null;
+  // Resolve the open bill: prefer the currently-loaded set, but when it isn't there (an inbound link
+  // to a bill outside the active filter/region, or beyond the fetch cap — e.g. a non-US bill) fetch
+  // it by id so the modal still opens. The fetch only fires in urlSync mode and only on a miss.
+  const localBill = bills.find(b => b.id === selectedId) ?? null;
+  const needFetch = urlSync && selectedId !== null && !localBill;
+  const { data: fetchedBill } = useBill(needFetch ? selectedId : null);
+  const selectedBill = localBill ?? (needFetch ? fetchedBill ?? null : null);
+
+  function closeBill() {
+    if (urlSync) urlSel.closeBill();
+    else setLocalSelectedId(null);
+  }
 
   // Mid-funnel engagement: which bills people actually open. State/type tell us what content pulls.
   function openBill(bill: BillSummary) {
@@ -36,7 +58,8 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
       state: bill.state,
       instrument_type: bill.instrument_type,
     });
-    setSelectedId(bill.id);
+    if (urlSync) urlSel.openBill(bill.id);
+    else setLocalSelectedId(bill.id);
   }
 
   function LitigationBadge({ bill }: { bill: BillSummary }) {
@@ -224,7 +247,7 @@ export function BillTable({ bills, maxRows, autoPageSize }: BillTableProps) {
         </div>
       ) : null}
 
-      <BillModal bill={selectedBill} onClose={() => setSelectedId(null)} />
+      <BillModal bill={selectedBill} onClose={closeBill} />
     </div>
   );
 }

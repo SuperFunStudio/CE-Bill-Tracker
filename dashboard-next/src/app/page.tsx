@@ -1,8 +1,7 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useBills, useBillTextSearch } from '@/hooks/useBills';
-import { BillModal } from '@/components/ui/BillModal';
 import { useFederalActions } from '@/hooks/useFederal';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
 import { AlertBanner } from '@/components/ui/AlertBanner';
@@ -51,24 +50,6 @@ export default function HomePage() {
   const dimensionsCsv = billFilters.dimensions.length ? billFilters.dimensions.join(',') : undefined;
   const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, regions: regionsParam ?? 'all', dimensions: dimensionsCsv });
   const { data: federal = [] } = useFederalActions({ limit: 50 });
-
-  // Deep link from emails: /?bill=123 opens that bill's detail panel. Resolved against the FULL bill
-  // set (not the filtered table) so an active scope/filter can't hide a directly-linked bill.
-  const [deepLinkId, setDeepLinkId] = useState<number | null>(null);
-  useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get('bill');
-    const id = raw ? parseInt(raw, 10) : NaN;
-    if (Number.isFinite(id)) setDeepLinkId(id);
-  }, []);
-  const deepLinkedBill = useMemo(
-    () => (deepLinkId == null ? null : bills.find(b => b.id === deepLinkId) ?? null),
-    [bills, deepLinkId],
-  );
-  function closeDeepLink() {
-    setDeepLinkId(null);
-    // Drop the ?bill param so a refresh/back doesn't reopen it.
-    window.history.replaceState(null, '', window.location.pathname + window.location.hash);
-  }
 
   const { scope } = useScope();
   const scopeActive = useScopeActive();
@@ -321,7 +302,7 @@ export default function HomePage() {
         {billsLoading ? (
           <SkeletonList rows={5} />
         ) : (
-          <BillTable bills={tableBills} autoPageSize={5} />
+          <BillTable bills={tableBills} autoPageSize={5} urlSync />
         )}
       </section>
 
@@ -369,9 +350,6 @@ export default function HomePage() {
           View Federal Actions &rarr;
         </Link>
       </section>
-
-      {/* Deep-linked bill from an email (/?bill=123) — opens over the page, independent of the table. */}
-      <BillModal bill={deepLinkedBill} onClose={closeDeepLink} />
 
       {/* Footer */}
       <footer className="border-t border-border-default pt-6 pb-2 text-center">

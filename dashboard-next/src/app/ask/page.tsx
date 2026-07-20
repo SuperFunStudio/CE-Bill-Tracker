@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CAP, useAuth } from '@/components/auth/AuthContext';
 import { ApiError, askResearch, fetchResearchBills, fetchResearchSession } from '@/lib/api';
-import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchCitation } from '@/lib/types';
+import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchChart, ResearchCitation } from '@/lib/types';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillModal } from '@/components/ui/BillModal';
 
@@ -88,22 +88,43 @@ function AnswerText({ text, cites, onCite }: {
   );
 }
 
-function AnswerChart({ title, bars }: { title: string; bars: { label: string; value: number }[] }) {
-  const max = Math.max(1, ...bars.map(b => b.value));
+function AnswerChart({ chart }: { chart: ResearchChart }) {
+  const { title, bars, kind, series, footnote } = chart;
+  const grouped = kind === 'grouped';
+  // Grouped scales to the larger (all-tracked) metric so the solid enacted bar reads as the fraction
+  // in force; single-series scales to its own value as before.
+  const max = Math.max(1, ...bars.map(b => (grouped ? (b.value2 ?? b.value) : b.value)));
   return (
     <div className="rounded-lg border border-border-default bg-bg-primary p-4 space-y-3">
       <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">{title}</div>
+      {grouped && series && series.length === 2 && (
+        <div className="flex items-center gap-4 text-[11px] text-text-secondary">
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-green-accent" />{series[0]}</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-green-accent/25" />{series[1]}</span>
+        </div>
+      )}
       <div className="space-y-2">
         {bars.map(b => (
           <div key={b.label} className="flex items-center gap-3">
-            <div className="w-48 shrink-0 text-xs text-text-secondary text-right">{b.label}</div>
-            <div className="flex-1 h-4 rounded bg-bg-tertiary overflow-hidden">
-              <div className="h-full rounded bg-green-accent/70" style={{ width: `${(b.value / max) * 100}%` }} />
+            <div className="w-48 shrink-0 text-right">
+              <div className="text-xs text-text-secondary truncate">{b.label}</div>
+              {b.note && <div className="text-[10px] text-text-muted">{b.note}</div>}
             </div>
-            <div className="w-10 shrink-0 text-xs text-text-primary font-mono">{b.value}</div>
+            <div className="relative flex-1 h-4 rounded bg-bg-tertiary overflow-hidden">
+              {grouped && b.value2 != null && (
+                // Faint full bar = all tracked; solid overlay = enacted (a subset), so the fill shows
+                // the in-force share of total activity.
+                <div className="absolute inset-y-0 left-0 rounded bg-green-accent/25" style={{ width: `${(b.value2 / max) * 100}%` }} />
+              )}
+              <div className="absolute inset-y-0 left-0 rounded bg-green-accent/80" style={{ width: `${(b.value / max) * 100}%` }} />
+            </div>
+            <div className="w-16 shrink-0 text-xs text-text-primary font-mono text-right">
+              {b.value}{grouped && b.value2 != null && <span className="text-text-muted"> / {b.value2}</span>}
+            </div>
           </div>
         ))}
       </div>
+      {footnote && <div className="text-[10px] text-text-muted leading-snug pt-1">{footnote}</div>}
     </div>
   );
 }
@@ -397,7 +418,7 @@ export default function AskPage() {
             <AnswerText text={t.answer.answer} cites={cites} onCite={c => c.bill && setModalBill(c.bill)} />
 
             {t.answer.chart && t.answer.chart.bars.length > 0 && (
-              <AnswerChart title={t.answer.chart.title} bars={t.answer.chart.bars} />
+              <AnswerChart chart={t.answer.chart} />
             )}
 
             {t.answer.citations.length > 0 && (

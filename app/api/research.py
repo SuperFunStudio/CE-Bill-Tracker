@@ -72,7 +72,10 @@ router = APIRouter(prefix="/research", tags=["research"])
 log = structlog.get_logger()
 
 RESEARCH_MODEL = "claude-sonnet-4-6"
-_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=90.0, max_retries=1)
+# timeout is generous (180s, up from 90s) because deep synthesis at max_tokens=8000 can legitimately
+# generate for well over the old 90s budget; too tight a timeout turns a long-but-fine answer into a
+# failure. Synthesis failures are caught (_safe_deep_answer) so they degrade instead of 500-ing.
+_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, timeout=180.0, max_retries=1)
 
 DIMENSION_KEYS = [
     "collection_targets", "recycled_content", "eco_modulation", "fee_amounts",
@@ -742,9 +745,24 @@ async def _deep_answer(question: str, scope: dict, agg_scoped: dict, agg_corpus,
         f"{json.dumps(packed, ensure_ascii=False)}"
     )
     resp = await _client.messages.create(
-        model=RESEARCH_MODEL, max_tokens=4096, temperature=0,
+        # 8000 (up from 4096): at _DEEP_READ=100 the richest broad answers were reaching ~4k tokens and
+        # getting clipped mid-section. Output is billed per token GENERATED, so the higher ceiling only
+        # costs more when an answer actually needs the room. Paired with the 180s client timeout above.
+        model=RESEARCH_MODEL, max_tokens=8000, temperature=0,
         system=_DEEP_SYSTEM, messages=[{"role": "user", "content": user_msg}])
     return resp.content[0].text.strip()
+
+
+async def _safe_deep_answer(*args, **kwargs) -> str | None:
+    """Synthesis must NEVER 500 the ask. On a timeout or API error (more likely now that _DEEP_READ=100
+    + max_tokens=8000 push generation longer), return None so the caller degrades to a retry message +
+    the bills table and skips persisting a junk turn — rather than the exception propagating out of the
+    asyncio.gather and failing the whole request."""
+    try:
+        return await _deep_answer(*args, **kwargs)
+    except Exception as e:  # noqa: BLE001
+        log.warning("research_synthesis_failed", error=str(e))
+        return None
 
 
 _REWRITE_SYSTEM = (
@@ -1020,10 +1038,18 @@ async def ask_the_atlas(
     # Synthesis (Sonnet, DB-free) and the shadow router (Haiku, own session) run concurrently — the
     # router finishes within the synthesis window, so shadow mode costs ~no added latency.
     answer_text, shadow = await asyncio.gather(
-        _deep_answer(question, scope, agg_scoped, agg_corpus, packed, history=history),
+        _safe_deep_answer(question, scope, agg_scoped, agg_corpus, packed, history=history),
         _shadow_route(retrieval_q, facets, total, [r.Bill.id for r in page_rows]),
     )
-    answer_text = answer_text or "I couldn't find enough in the corpus to answer that."
+    # None = synthesis errored/timed out (see _safe_deep_answer): degrade to a retry message, still
+    # return the bills table below, and DON'T persist a junk turn. "" = model returned empty (rare) →
+    # the older not-enough message. A real answer flows through unchanged.
+    synth_ok = bool(answer_text and answer_text.strip())
+    if answer_text is None:
+        answer_text = ("The analysis step didn't finish just now — it may have timed out. The matched "
+                       "bills are listed below; please try asking again in a moment.")
+    elif not answer_text:
+        answer_text = "I couldn't find enough in the corpus to answer that."
 
     # Normalize combined citation markers ([JP a; JP b] -> [JP a] [JP b]) BEFORE citation recovery and
     # persistence, so the live answer, the stored turn, and every downstream linker (frontend inline,
@@ -1046,13 +1072,16 @@ async def ask_the_atlas(
                 snippet=(passages.get(b.id) or "").strip()[:280] or None,
                 bill=_row_to_summary(r)))
 
-    coverage = (f"Synthesized from the {len(packed)} most relevant of {total} matched bills."
-                if total > len(packed) else f"Synthesized from all {total} matched bills.")
+    coverage = None if not synth_ok else (
+        f"Synthesized from the {len(packed)} most relevant of {total} matched bills."
+        if total > len(packed) else f"Synthesized from all {total} matched bills.")
 
     # Persist the answer (analysis layer / future Layer-1 cache) — for MEMBERS only; an anonymous teaser
     # ask stays stateless (nothing enters the atlas, no session). Best-effort — never break the answer.
     # Appends to the existing session on a follow-up, else mints one; returns the id for threading.
-    if access.uid:
+    # Skip on a synthesis failure (synth_ok False) so a timed-out ask never lands a junk turn in the
+    # atlas / My Library — the user gets the retry message + bills table and can simply ask again.
+    if access.uid and synth_ok:
         try:
             session_id = await _persist_turn(
                 access.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids,

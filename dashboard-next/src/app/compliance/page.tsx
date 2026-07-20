@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useDeadlines, useDeadlineStats } from '@/hooks/useDeadlines';
 import { useBill } from '@/hooks/useBills';
 import { MetricCard } from '@/components/ui/MetricCard';
@@ -59,6 +59,9 @@ function DeadlineRow({ deadline, onSelect }: { deadline: DeadlineSummary; onSele
 // Past "include past deadlines" view is capped to the last 5 years (the historical EPR
 // backfill carries laws back to the 1990s; their compliance dates are not actionable).
 const PAST_DEADLINE_CUTOFF_DAYS = 5 * 365;
+
+// The full Pro calendar can run to hundreds of rows; page it rather than scroll forever.
+const DEADLINES_PER_PAGE = 20;
 
 export default function CompliancePage() {
   const [daysAhead, setDaysAhead] = useState(1095);
@@ -131,6 +134,22 @@ export default function CompliancePage() {
   const totalUpcoming = stats?.total_upcoming ?? 0;
   const lockedRemaining = Math.max(0, totalUpcoming - allDeadlines.length);
 
+  // Pagination for the list. Reset to page 1 whenever the filtered set changes (filter toggle, scope,
+  // refetch) so the reader never lands on a now-empty page.
+  const listRef = useRef<HTMLDivElement>(null);
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [allDeadlines]);
+  const totalPages = Math.max(1, Math.ceil(allDeadlines.length / DEADLINES_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedDeadlines = useMemo(
+    () => allDeadlines.slice((currentPage - 1) * DEADLINES_PER_PAGE, currentPage * DEADLINES_PER_PAGE),
+    [allDeadlines, currentPage],
+  );
+  function goToPage(p: number) {
+    setPage(Math.min(totalPages, Math.max(1, p)));
+    listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   // CSV export is a Pro feature: gatePro routes anon → sign-in, Free → checkout, Pro → the download.
   function handleExport() {
     gatePro(() => downloadCsv('signalscout_deadlines.csv', allDeadlines.map(d => ({
@@ -148,35 +167,15 @@ export default function CompliancePage() {
       <div className="p-6 space-y-6 max-w-5xl mx-auto">
       <GazetteHeader title="Compliance" subtitle="Which laws apply to you, and your upcoming deadlines" />
 
-      {/* Self-serve: pick your products → see applicable laws + next steps (region-aware, free). */}
-      <ComplianceChecker />
-
-      {scopeActive && (
-        <p className="text-xs text-text-muted -mt-2">
-          Filtered to your scope
-          {scope.materials.length > 0 && (
-            <> · <span className="text-text-secondary">{scope.materials.map(formatMaterial).join(', ')}</span></>
-          )}
-          {scope.states.length > 0 && (
-            <> · <span className="text-text-secondary">{scope.states.join(', ')}</span></>
-          )}
-          . Use “Show everything” above to see all deadlines.
-        </p>
+      {/* Timeline leads the page — the at-a-glance calendar is the hero (Pro only; the full view). */}
+      {proView && timelineDeadlines.length > 0 && (
+        <div>
+          <SectionHeader title={`Timeline — next 3 years (${timelineDeadlines.length})`} />
+          <DeadlineTimeline deadlines={timelineDeadlines} onSelect={setSelected} />
+        </div>
       )}
 
-      {/* Metrics — true aggregate counts (ungated), so free visitors see exactly what they're missing */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard label="Total Deadlines" value={totalUpcoming} accent />
-        <MetricCard label="Within 30 Days" value={stats?.within_30 ?? 0} sublabel={(stats?.within_30 ?? 0) > 0 ? 'Action required' : 'None urgent'} />
-        <MetricCard label="Within 90 Days" value={stats?.within_90 ?? 0} />
-        <MetricCard label="Next Deadline" value={stats?.next_date ? formatDate(stats.next_date) : 'None'} />
-      </div>
-
-      {(stats?.within_30 ?? 0) > 0 && (
-        <AlertBanner variant="red" message={`${stats?.within_30} deadline(s) within the next 30 days require immediate attention.`} />
-      )}
-
-      {/* Filters */}
+      {/* Filters — sit directly beneath the timeline they drive (they also filter the list below). */}
       <div className="bg-bg-secondary border border-border-default rounded-lg p-4 flex flex-wrap gap-4">
         <div className="flex flex-col gap-1">
           <label className="text-text-muted text-xs uppercase">Horizon</label>
@@ -235,16 +234,36 @@ export default function CompliancePage() {
         </div>
       </div>
 
-      {/* Timeline — Pro only (the full-calendar view) */}
-      {proView && timelineDeadlines.length > 0 && (
-        <div>
-          <SectionHeader title={`Timeline — next 3 years (${timelineDeadlines.length})`} />
-          <DeadlineTimeline deadlines={timelineDeadlines} onSelect={setSelected} />
-        </div>
+      {/* Self-serve: pick your products → see applicable laws + next steps (region-aware, free). */}
+      <ComplianceChecker />
+
+      {scopeActive && (
+        <p className="text-xs text-text-muted -mt-2">
+          Filtered to your scope
+          {scope.materials.length > 0 && (
+            <> · <span className="text-text-secondary">{scope.materials.map(formatMaterial).join(', ')}</span></>
+          )}
+          {scope.states.length > 0 && (
+            <> · <span className="text-text-secondary">{scope.states.join(', ')}</span></>
+          )}
+          . Use “Show everything” above to see all deadlines.
+        </p>
+      )}
+
+      {/* Metrics — true aggregate counts (ungated), so free visitors see exactly what they're missing */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <MetricCard label="Total Deadlines" value={totalUpcoming} accent />
+        <MetricCard label="Within 30 Days" value={stats?.within_30 ?? 0} sublabel={(stats?.within_30 ?? 0) > 0 ? 'Action required' : 'None urgent'} />
+        <MetricCard label="Within 90 Days" value={stats?.within_90 ?? 0} />
+        <MetricCard label="Next Deadline" value={stats?.next_date ? formatDate(stats.next_date) : 'None'} />
+      </div>
+
+      {(stats?.within_30 ?? 0) > 0 && (
+        <AlertBanner variant="red" message={`${stats?.within_30} deadline(s) within the next 30 days require immediate attention.`} />
       )}
 
       {/* Deadline list — brief headlines; tap any to open its detail */}
-      <div>
+      <div ref={listRef}>
         <SectionHeader
           title={
             proView || totalUpcoming <= allDeadlines.length
@@ -257,9 +276,36 @@ export default function CompliancePage() {
         ) : allDeadlines.length === 0 ? (
           <EmptyState title="No deadlines found for the selected filters." />
         ) : (
-          <div className="space-y-2">
-            {allDeadlines.map((d, i) => <DeadlineRow key={`${d.id}-${i}`} deadline={d} onSelect={setSelected} />)}
-          </div>
+          <>
+            <div className="space-y-2">
+              {pagedDeadlines.map((d, i) => <DeadlineRow key={`${d.id}-${i}`} deadline={d} onSelect={setSelected} />)}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between gap-4 mt-4">
+                <span className="text-text-muted text-xs">
+                  Showing {(currentPage - 1) * DEADLINES_PER_PAGE + 1}–{Math.min(currentPage * DEADLINES_PER_PAGE, allDeadlines.length)} of {allDeadlines.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage <= 1}
+                    className="px-3 py-1.5 rounded border border-border-default text-sm text-text-secondary hover:bg-bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    ← Prev
+                  </button>
+                  <span className="text-text-muted font-mono text-xs whitespace-nowrap">Page {currentPage} of {totalPages}</span>
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage >= totalPages}
+                    className="px-3 py-1.5 rounded border border-border-default text-sm text-text-secondary hover:bg-bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

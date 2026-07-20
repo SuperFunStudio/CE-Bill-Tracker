@@ -634,8 +634,13 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
 # --- Deep synthesis: the DEFAULT answer mode. Read full-text passages from the matched set (not 15
 # summaries) and synthesize a cited briefing. Proven on prod ("stewardship plan recommendations").
 # See docs/ATLAS_CIRCULAR_ROADMAP.md + memory atlas-circular-rebrand. -------------------------------
-_DEEP_READ = 50          # max bills whose full-text passages we read into one synthesis call (v1);
-                         # batched map-reduce beyond this is the documented scale-up.
+_DEEP_READ = 100         # max bills whose full-text passages we read into one synthesis call. A 50->100
+                         # A/B on broad questions (2026-07-19) lifted distinct citations +28-116% (the
+                         # diversity/outlier ask gained most) and answers ran longer, so 50 was leaving
+                         # relevant tail on the table. 100 is ~the sweet spot for the current 4096-token
+                         # output cap (the recycled-content answer neared it); pushing higher wants a
+                         # max_tokens bump too. Narrow sets (<100 matched) read everything, so no change
+                         # there. Batched map-reduce beyond this is the documented scale-up.
 
 _DEEP_SYSTEM = """\
 You are a policy-research analyst for a circular-economy / EPR legislation database. You are given the

@@ -326,6 +326,10 @@ class ContentDraftOut(BaseModel):
     created_by: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # Transient (not persisted): set only on the create response. True/False when the editorial pass was
+    # requested (did it produce the article, or did we fall back to the verbatim separate-sections combine?);
+    # None when verbatim was requested outright. Lets the admin UI flag a silent editorial failure.
+    editorial_applied: bool | None = None
 
 
 class ContentDraftPage(BaseModel):

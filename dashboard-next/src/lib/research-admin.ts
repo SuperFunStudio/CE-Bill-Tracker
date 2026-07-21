@@ -89,6 +89,9 @@ export interface ContentDraft {
   created_by: string | null;
   created_at: string | null;
   updated_at: string | null;
+  // Only on the create response: true/false when an editorial pass was requested (did it produce the
+  // article, or did the server fall back to the verbatim combine?); null/absent when staged verbatim.
+  editorial_applied?: boolean | null;
 }
 
 export interface ContentDraftPage {

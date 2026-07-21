@@ -14,7 +14,12 @@ CANONICAL_MATERIALS: frozenset[str] = frozenset({
     "plastic_packaging", "paper_packaging", "glass", "metals", "electronics", "batteries",
     "paint", "carpet", "mattresses", "tires", "vehicles", "construction", "furniture",
     "used_oil", "pharmaceuticals", "solar_panels", "textiles", "organics", "biobased",
-    "agriculture", "hazardous_materials", "other",
+    "agriculture", "hazardous_materials",
+    # Adjacent subjects: "water" = material leakage/recovery in waterways (microplastics, marine
+    # litter, biosolids/water reuse) — cross-cycle; "biodiversity" = the biological cycle's
+    # regenerative outcome (material/sourcing-driven). See app/classification/cycles.py for wing.
+    "water", "biodiversity",
+    "other",
 })
 
 # Non-canonical slug -> canonical. Folds synonyms (paper→paper_packaging) and niche streams into the
@@ -36,6 +41,9 @@ MATERIAL_ALIASES: dict[str, str] = {
     "mercury": "hazardous_materials",
     "household_hazardous_waste": "hazardous_materials",
     "auto_switches": "hazardous_materials",
+    "waterways": "water",
+    "marine": "water",
+    "nature": "biodiversity",
 }
 
 # Roll-up groupings for the cross-region comparison / UI. The per-bill material tags stay granular

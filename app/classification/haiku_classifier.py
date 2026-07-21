@@ -96,7 +96,11 @@ that preempt or override such laws. \
 Circular economy scope includes both the technical cycle (the above) and the biological cycle: \
 bio-based / biomanufactured materials (biopolymers, bioplastics, compostable materials), regenerative \
 agriculture & soil health (healthy soils, cover crops, carbon farming, biochar), and organics recycling / \
-composting infrastructure (source-separated organics, anaerobic digestion, compost market development).\
+composting infrastructure (source-separated organics, anaerobic digestion, compost market development). \
+Two adjacent subjects are in scope ONLY through their circular-economy tie: material LEAKAGE into or \
+RECOVERY from waterways (microplastics, marine litter, biosolids / water reuse) and BIODIVERSITY as an \
+outcome of material or sourcing choices (deforestation-free sourcing, regenerative / nature-positive \
+outcomes) — never general water-quality or species-conservation law.\
 """
 
 USER_TEMPLATE = """\
@@ -113,7 +117,7 @@ Return this exact JSON structure:
 {{
   "is_ce_relevant": <true or false>,
   "confidence": <float 0.0-1.0>,
-  "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","vehicles","construction","furniture","used_oil","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","hazardous_materials","other"]>,
+  "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","vehicles","construction","furniture","used_oil","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","hazardous_materials","water","biodiversity","other"]>,
   "instrument_types": <list of one or more from: "epr","right_to_repair","recycled_content","deposit_return","incentives","labeling","chemical_restriction","preemption","budget","other"; put the primary/most-central instrument FIRST. A law is often several at once (e.g. an EPR law with recycled-content + labeling mandates)>,
   "stance": <one of: "advances","weakens","neutral">,
   "urgency": <one of: "high","medium","low">,
@@ -152,9 +156,24 @@ circular-economy or biological-cycle outcome (recycling, reuse, repair, composti
 health, bio-based materials, an EPR/stewardship program), include "incentives" in instrument_types
 and set is_ce_relevant=true. A generic appropriation NOT tied to a circular-economy outcome is "budget".
 
+Water & biodiversity: two cross-cutting subjects, in scope ONLY through their circular-economy tie —
+NOT as general environmental law. Tag "water" for material LEAKAGE into or RECOVERY from waterways —
+microplastics / microfibers, marine litter & plastic pollution in waterways, biosolids / sewage-sludge
+reuse, water reuse / reclaimed water, nutrient recovery — NOT drinking-water standards, water rights,
+dams, flooding, or general water quality. Tag "biodiversity" when a measure targets biodiversity as an
+OUTCOME of material or sourcing choices — deforestation-/conversion-free supply chains, regenerative /
+pollinator outcomes, nature-positive procurement — NOT endangered-species protection, habitat / land
+conservation, or hunting / fishing. If a bill is purely conservation or water-quality with no material
+or circular angle, set is_ce_relevant=false. Include the actual policy lever in instrument_types (a
+standard/ban → its type; a financial lever → "incentives"; else "other").
+
 Material notes: "vehicles" = end-of-life vehicles / automotive recycling (ELV). "construction" =
 construction & demolition materials (concrete, aggregate, lumber, gypsum). "furniture" = furniture
 and mattresses-adjacent furnishings EPR. "used_oil" = used lubricating/motor oil stewardship.
+"water" = material leakage/recovery in waterways (microplastics, marine litter, biosolids / water
+reuse, nutrient recovery) — NOT general water quality. "biodiversity" = biodiversity as an outcome of
+material/sourcing choices (deforestation-free sourcing, pollinator / regenerative outcomes) — NOT
+species conservation.
 """
 
 

@@ -65,6 +65,18 @@ MATERIAL_HINT_MAP = {
     "soil": "agriculture",
     "regenerative": "agriculture",
     "cover crop": "agriculture",
+    # Water (cross-cycle leakage) + biodiversity (biological-cycle regenerative outcome).
+    "microplastic": "water",
+    "microfiber": "water",
+    "marine debris": "water",
+    "marine litter": "water",
+    "biosolids": "water",
+    "water reuse": "water",
+    "reclaimed water": "water",
+    "biodiversity": "biodiversity",
+    "deforestation-free": "biodiversity",
+    "pollinator": "biodiversity",
+    "nature-positive": "biodiversity",
 }
 
 
@@ -86,6 +98,12 @@ class KeywordFilter:
             "material_keywords",
             "biomaterials_keywords",
             "soil_health_and_regenerative_ag_keywords",
+            # Water is a cross-cycle LEAKAGE subject; its terms (microplastics, marine litter,
+            # water reuse, biosolids) are specific + circular by nature, so a single match clears
+            # the threshold like the material/bio-cycle terms. General water-quality / drinking-water
+            # / water-rights terms are deliberately absent — see the tight boundary in the classifier
+            # prompt (haiku_classifier "Water & biodiversity" paragraph).
+            "water_and_waterways_keywords",
             "recycled_content_keywords",
             "deposit_return_keywords",
             "right_to_repair_keywords",
@@ -103,6 +121,12 @@ class KeywordFilter:
             "remanufacturing_keywords",
             "procurement_and_incentives_keywords",
             "policy_mechanism_keywords",
+            # Biodiversity is the hardest subject to bound (general conservation law dwarfs the
+            # circular slice), so it sits at tier 3: a match alone (0.4) does NOT clear the 0.6
+            # threshold — it needs a co-signal (a material/procurement/circular term), which is
+            # exactly the "biodiversity as a material/sourcing OUTCOME" boundary. Bump to tier 2 to
+            # widen. The classifier prompt makes the final keep/reject call.
+            "biodiversity_keywords",
         ]
         self._tier3 = self._compile([term for k in tier3_keys for term in kw[k]])
 

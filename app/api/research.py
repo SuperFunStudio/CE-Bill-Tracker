@@ -42,6 +42,7 @@ from app.api.auth import (
 )
 from app.ratelimit import _client_ip
 from app.api.research_facets import resolve_facets
+from app.classification.cycles import materials_for_wing
 from app.config import settings
 from app.database import AsyncSessionLocal, get_db
 from app.models import Bill, BillProductCoverage, BillText, Jurisdiction, LitigationCase
@@ -361,7 +362,7 @@ async def _relevant_bills(
     facets = facets or await resolve_facets(db, question)
     geo = facets.place_ids
     scoped = bool(facets.place_ids or facets.material_slugs or facets.instrument_slugs
-                  or facets.product_slugs)
+                  or facets.cycle_slugs or facets.product_slugs)
     extra = _scope_extra(facets)
 
     def _cols():
@@ -515,6 +516,13 @@ def _scope_extra(facets) -> list:
         # Match the primary instrument_type OR the full instrument_types set (mirrors GET /bills).
         extra.append(or_(Bill.instrument_type.in_(facets.instrument_slugs),
                          Bill.instrument_types.op("?|")(array(facets.instrument_slugs))))
+    if facets.cycle_slugs:
+        # Derived circular-economy wing filter: expand each wing to its inclusive material set (a
+        # cross-wing material like textiles/water appears under both) and OR the wings together.
+        extra.append(or_(*[
+            Bill.material_categories.op("?|")(array(materials_for_wing(w)))
+            for w in facets.cycle_slugs
+        ]))
     if facets.product_slugs:
         # Bills that actually cover the named product (exclude explicit exemptions).
         covered = (select(BillProductCoverage.bill_id)
@@ -1446,34 +1454,68 @@ Return a JSON object with EXACTLY these keys:
   "producers may face…"), KEEP it conditional — never upgrade it into settled law ("requires",
   "producers must"). Only bills the answers present as enacted may be stated as law in force. PRESERVE
   every [STATE BILL_NUMBER] citation marker EXACTLY as written and keep it beside the claim it supports
-  (they become links downstream). Use "## " subheads and "- " bullets. Do not repeat the title inside
-  the body.
+  (they become links downstream). Use "## " subheads; use "- " bullets where a list genuinely helps and
+  prose otherwise. Do not repeat the title inside the body.
 Output ONLY the JSON object — no preamble, no code fence.
+"""
+
+# House voice — the SUPERFUN / Kenny Arnold style guide, distilled to the rules that govern article prose
+# (the game-glossary and worked-example sections of the guide don't apply here). Kept as its own block so
+# it's easy to resync when the copy-editor skill's style guide changes. Appended to _EDITORIAL_SYSTEM.
+_HOUSE_VOICE = """
+HOUSE VOICE — write in this register:
+- Short sentences, one idea each. Vary length deliberately: a short declarative next to a longer sentence
+  that carries real structure. Do not normalize everything to the same rhythm.
+- Active voice, concrete verbs. "The bill locks producers into a PRO," not "producers are required by the
+  bill to join a PRO."
+- Plain words first. Define a term of art on first use; don't assume the reader was in the thread.
+- Confidence without hype. Banned words: unlock, supercharge, game-changing, cutting-edge, revolutionize,
+  leverage (as a verb), seamless. Say what the finding shows; don't sell it as a revelation.
+- No corporate throat-clearing. Cut "In today's fast-paced world," "Now more than ever," "At the end of
+  the day." Any dry humor must come from an honest observation, never a pun or an exclamation point.
+- Numbers and dates are load-bearing. Never smooth over a real figure with vague language; if something is
+  uncertain, flag it as "directional," don't hide it.
+Cut fluff on sight:
+- No restated points. If a sentence mainly repeats something already said, delete it — don't soften it
+  into a "reminder."
+- No templated per-section openers ("This shows…," "Here you'll see…," "It's worth noting that…"). Vary
+  the construction or start with the content.
+- No doubled qualifiers or redundant pairs ("each and every," "completely eliminate," "very unique"). Pick
+  one word. No empty hedges ("essentially," "basically," "the fact that"); "in order to" → "to."
+- Keep rhetorical devices: "X, not Y" antithesis and rule-of-three triads are emphasis, not redundancy.
+Mechanics: Oxford comma. Em dashes for asides, not to join two independent clauses that should be two
+sentences. Sentence case for the title and any subheads.
 """
 
 
 async def _editorialize(pairs: list[tuple[str, str]]) -> dict | None:
     """One best-effort LLM pass over a thread's (question, answer) pairs -> {title, dek, body} shaped as
-    a single article, citation markers preserved for the downstream link pass. None on any failure (the
-    caller falls back to the verbatim combine)."""
+    a single article, citation markers preserved for the downstream link pass. Retries once, then returns
+    None so the caller falls back to the verbatim combine. max_tokens=8000 (was 3000): multi-turn threads
+    were truncating the JSON mid-body, which failed the parse and silently degraded every longer thread to
+    the separate-sections verbatim fallback even when the editorial pass was requested."""
     convo = "\n\n".join(f"QUESTION {i + 1}: {q}\n\nANSWER {i + 1}:\n{a}" for i, (q, a) in enumerate(pairs))
-    try:
-        resp = await _client.messages.create(
-            model=RESEARCH_MODEL, max_tokens=3000, temperature=0.3,
-            system=_EDITORIAL_SYSTEM,
-            messages=[{"role": "user", "content": convo}])
-        raw = "".join(getattr(b, "text", "") for b in resp.content).strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[-1]
-            if raw.rstrip().endswith("```"):
-                raw = raw.rstrip()[:-3]
-        data = json.loads(raw)
-        if isinstance(data, dict) and data.get("body"):
-            return {"title": str(data.get("title") or pairs[0][0])[:300],
-                    "dek": (str(data["dek"]) if data.get("dek") else None),
-                    "body": str(data["body"])}
-    except Exception as e:  # noqa: BLE001 — editorial is optional polish, never block staging
-        log.warning("content_editorial_failed", error=str(e))
+    for attempt in (1, 2):
+        try:
+            resp = await _client.messages.create(
+                model=RESEARCH_MODEL, max_tokens=8000, temperature=0.3,
+                system=_EDITORIAL_SYSTEM + _HOUSE_VOICE,
+                messages=[{"role": "user", "content": convo}])
+            if getattr(resp, "stop_reason", None) == "max_tokens":
+                raise ValueError("editorial output hit max_tokens (JSON truncated)")
+            raw = "".join(getattr(b, "text", "") for b in resp.content).strip()
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[-1]
+                if raw.rstrip().endswith("```"):
+                    raw = raw.rstrip()[:-3]
+            data = json.loads(raw)
+            if isinstance(data, dict) and data.get("body"):
+                return {"title": str(data.get("title") or pairs[0][0])[:300],
+                        "dek": (str(data["dek"]) if data.get("dek") else None),
+                        "body": str(data["body"])}
+            raise ValueError("editorial JSON missing 'body'")
+        except Exception as e:  # noqa: BLE001 — editorial is optional polish, never block staging
+            log.warning("content_editorial_failed", attempt=attempt, error=str(e))
     return None
 
 
@@ -1546,11 +1588,13 @@ async def create_content_draft(
     first_seq, sess_id, sess_title = turns[0].seq, sess.id, sess.title
     await db.close()
 
+    editorial_applied = False
     title, dek, body_src = (sess_title or pairs[0][0])[:300], None, _combine_verbatim(pairs)
     if body.editorial:
         ed = await _editorialize(pairs)
         if ed:
             title, dek, body_src = ed["title"], ed["dek"], ed["body"]
+            editorial_applied = True
     body_md = link_citations(body_src, ref_map)
 
     async with AsyncSessionLocal() as s:
@@ -1560,7 +1604,11 @@ async def create_content_draft(
         s.add(draft)
         await s.commit()
         await s.refresh(draft)
-        return _draft_out(draft)
+        out = _draft_out(draft)
+        # Tell the caller whether the requested editorial pass actually produced the article, so the admin
+        # UI can flag a silent fall-back to the verbatim separate-sections combine instead of claiming a draft.
+        out.editorial_applied = editorial_applied if body.editorial else None
+        return out
 
 
 @router.get("/drafts", response_model=ContentDraftPage)

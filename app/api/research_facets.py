@@ -13,7 +13,7 @@ An LLM router for messy phrasing / follow-ups is a later add (A2) — determinis
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -190,6 +190,33 @@ def _match_products(question: str, stripped: str) -> tuple[list[str], list[str],
     return slugs, labels, stripped
 
 
+# Natural-language → circular-economy CYCLE wing (see app/classification/cycles.py). "biological
+# cycle" / "technical (artificial) cycle" is the butterfly-diagram split; it resolves to a wing slug
+# that _scope_extra expands to the wing's inclusive material set. Kept to unambiguous multiword cues.
+_CYCLE_ALIASES: dict[str, list[str]] = {
+    "biological": ["biological cycle", "biological loop", "biological wing", "biosphere"],
+    "technical": ["technical cycle", "technical loop", "technical wing", "technosphere",
+                  "artificial cycle", "artificial loop"],
+}
+_CYCLE_LABELS: dict[str, str] = {"biological": "biological cycle", "technical": "technical cycle"}
+
+
+def _match_cycles(question: str, stripped: str) -> tuple[list[str], list[str], str]:
+    """Scan for cycle-wing mentions ("biological cycle", "technical/artificial cycle") → wing slugs."""
+    lower_q = f" {question.lower()} "
+    slugs: list[str] = []
+    pairs = sorted(
+        [(a, slug) for slug, aliases in _CYCLE_ALIASES.items() for a in aliases],
+        key=lambda p: -len(p[0]))
+    for alias, slug in pairs:
+        pat = re.compile(r"\b" + re.escape(alias) + r"\b", re.IGNORECASE)
+        if pat.search(lower_q) and slug not in slugs:
+            slugs.append(slug)
+            stripped = pat.sub(" ", stripped)
+    labels = sorted({_CYCLE_LABELS[s] for s in slugs})
+    return slugs, labels, stripped
+
+
 def _match_materials(question: str, stripped: str) -> tuple[list[str], list[str], str]:
     """Scan for material/product mentions → canonical slugs (+ group expansion). Returns
     (slugs, labels, stripped_text_with_material_words_removed)."""
@@ -244,6 +271,10 @@ class Facets:
     product_labels: list[str]
     free_text: str            # the question with matched place/material/instrument/product aliases removed
     raw_question: str
+    # Derived circular-economy wing filter (biological/technical). Defaulted so other Facets
+    # constructors (e.g. the shadow router) keep working without supplying it.
+    cycle_slugs: list[str] = field(default_factory=list)   # "biological" / "technical"
+    cycle_labels: list[str] = field(default_factory=list)
 
     def meaningful_terms(self) -> list[str]:
         return [w for w in re.findall(r"[a-z0-9]{3,}", self.free_text.lower()) if w not in _STOPWORDS]
@@ -281,11 +312,13 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
     place_labels = sorted({n.name for n in matched.values()})
     material_slugs, material_labels, stripped = _match_materials(question, stripped)
     instrument_slugs, instrument_labels, stripped = _match_instruments(question, stripped)
+    cycle_slugs, cycle_labels, stripped = _match_cycles(question, stripped)
     product_slugs, product_labels, stripped = _match_products(question, stripped)
     free_text = re.sub(r"\s+", " ", stripped).strip()
 
     common = dict(material_slugs=material_slugs, material_labels=material_labels,
                   instrument_slugs=instrument_slugs, instrument_labels=instrument_labels,
+                  cycle_slugs=cycle_slugs, cycle_labels=cycle_labels,
                   product_slugs=product_slugs, product_labels=product_labels,
                   free_text=free_text, raw_question=question)
 

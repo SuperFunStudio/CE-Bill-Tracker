@@ -74,7 +74,8 @@ const INSTRUMENT_TYPES = ['epr', 'deposit_return', 'right_to_repair', 'recycled_
 // Exported so the personalization onboarding (src/components/scope) shares one canonical list.
 export const MATERIAL_CATEGORIES = ['plastic_packaging', 'paper_packaging', 'glass', 'metals',
   'electronics', 'batteries', 'paint', 'carpet', 'mattresses', 'tires',
-  'pharmaceuticals', 'solar_panels', 'textiles', 'organics', 'biobased', 'agriculture', 'other'];
+  'pharmaceuticals', 'solar_panels', 'textiles', 'organics', 'biobased', 'agriculture',
+  'water', 'biodiversity', 'other'];
 const URGENCY_LEVELS = ['high', 'medium', 'low'];
 // Resin code → display name. Mirrors the controlled vocabulary in app/classification/polymers.py;
 // codes are written to bills.polymers by scripts/scan_bill_polymers.py. The filter only offers the

@@ -71,6 +71,10 @@ def _build_openstates_queries() -> list[str]:
         # to make good legislative search terms (e.g. "regenerative agriculture", "biopolymer").
         "biomaterials_keywords",
         "soil_health_and_regenerative_ag_keywords",
+        # Adjacent subjects (water leakage / biodiversity) — multi-word phrases only ("marine
+        # debris", "water reuse", "ecosystem restoration") make good legislative search terms.
+        "water_and_waterways_keywords",
+        "biodiversity_keywords",
     ]
 
     seen: set[str] = set()

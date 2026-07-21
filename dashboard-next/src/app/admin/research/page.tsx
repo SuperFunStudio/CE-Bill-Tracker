@@ -162,10 +162,16 @@ function ResearchLog({ getToken }: { getToken: GetToken }) {
     if (busy || seqs.length === 0) return;
     setBusy(true); setNotice(null); setError(null);
     try {
-      await createDraft(getToken, { session_id: thread.session_id, seqs, editorial });
+      const draft = await createDraft(getToken, { session_id: thread.session_id, seqs, editorial });
       const n = seqs.length;
       const what = n > 1 ? `${n} questions` : 'answer';
-      setNotice(`${editorial ? 'Drafted' : 'Staged verbatim'} from ${what} → see the Staging tab.`);
+      if (editorial && draft.editorial_applied === false) {
+        // The editorial pass failed and the server fell back to the verbatim separate-sections combine —
+        // don't claim a drafted article. Say what actually happened so it can be re-run or edited.
+        setError(`Editorial pass failed — staged the ${what} verbatim (separate sections) instead. Re-run "Draft article", or edit in Staging.`);
+      } else {
+        setNotice(`${editorial ? 'Drafted' : 'Staged verbatim'} from ${what} → see the Staging tab.`);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not stage.');
     } finally {

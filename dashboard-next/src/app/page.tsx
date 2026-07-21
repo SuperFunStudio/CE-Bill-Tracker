@@ -22,6 +22,7 @@ import { inScope } from '@/lib/scope';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
 import { STATE_NAMES, formatDate, downloadCsv } from '@/lib/utils';
+import { useResearch, ResearchThread, ResearchWall, RESEARCH_EXAMPLES } from '@/components/research/ResearchThread';
 import Link from 'next/link';
 
 const StateMap = dynamic(
@@ -56,6 +57,23 @@ export default function HomePage() {
 
   const { isPro, user, openAuth } = useAuth();
   const gatePro = useProGate();
+
+  // The unified surface: one adaptive bar. Typing filters the table live (Explorer); submitting a
+  // question routes to the grounded, cited research answer over the same corpus (Ask the Atlas).
+  const research = useResearch();
+  const [query, setQuery] = useState('');
+  const submitQuery = () => {
+    const q = query.trim();
+    if (q.length < 3) return;
+    research.ask(q);
+    setQuery('');
+    setBillFilters(prev => ({ ...prev, search: '' }));
+  };
+  const backToBrowsing = () => {
+    research.newThread();
+    setQuery('');
+    setBillFilters(prev => ({ ...prev, search: '' }));
+  };
 
   const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
 
@@ -210,31 +228,74 @@ export default function HomePage() {
         />
       )}
 
-      {/* Bill Explorer: search + filters sit above the map */}
+      {/* Explore: one adaptive search/ask bar + facets, above the map */}
       <section>
         <div className="flex items-baseline justify-between mb-3 gap-3">
           <div className="flex items-baseline gap-3 flex-wrap">
-            <h2 className="font-serif text-2xl text-text-primary">Bill Explorer</h2>
+            <h2 className="font-serif text-2xl text-text-primary">Explore</h2>
             <span className="text-text-muted text-sm">{tableBills.length} bills</span>
             <FreshnessNote />
           </div>
-          <button
-            onClick={handleExport}
-            disabled={tableBills.length === 0}
-            title={isPro ? undefined : 'CSV export is a Pro feature'}
-            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0 inline-flex items-center gap-1.5"
-          >
-            {!isPro && <LockIcon className="text-xs" />}
-            ↓ Export CSV
-            {!isPro && (
-              <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
-                Pro
-              </span>
-            )}
-          </button>
+          {!research.active && (
+            <button
+              onClick={handleExport}
+              disabled={tableBills.length === 0}
+              title={isPro ? undefined : 'CSV export is a Pro feature'}
+              className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0 inline-flex items-center gap-1.5"
+            >
+              {!isPro && <LockIcon className="text-xs" />}
+              ↓ Export CSV
+              {!isPro && (
+                <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
+                  Pro
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
-        <BillFilters filters={billFilters} onChange={setBillFilters} resinOptions={resinOptions} />
+        {/* The adaptive bar — keywords filter the table instantly; a full question gets a cited answer. */}
+        <form onSubmit={e => { e.preventDefault(); submitQuery(); }} className="mb-3">
+          <div className="flex items-center gap-2 rounded-xl border-2 border-green-accent/60 bg-bg-secondary px-3 py-2 focus-within:border-green-accent transition-colors">
+            <span aria-hidden className="text-text-muted text-lg leading-none">⌕</span>
+            <input
+              value={query}
+              onChange={e => { setQuery(e.target.value); setBillFilters(prev => ({ ...prev, search: e.target.value })); }}
+              placeholder={research.hasAsked ? 'Ask a follow-up — or type keywords to browse' : 'Search bills, or ask a question…'}
+              aria-label="Search bills or ask a question"
+              className="flex-1 min-w-0 bg-transparent text-body text-text-primary placeholder-text-muted focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={research.busy || query.trim().length < 3}
+              className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-medium text-sm px-4 py-1.5 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {research.busy ? 'Thinking…' : research.hasAsked ? 'Ask follow-up' : 'Ask →'}
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs text-text-muted">
+            <b className="text-text-secondary font-medium">Type keywords</b> to filter the bills instantly ·{' '}
+            <b className="text-text-secondary font-medium">ask a full question</b> for a grounded, cited answer over the same corpus.
+          </p>
+        </form>
+
+        {/* Example questions — only before the first ask */}
+        {!research.active && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {RESEARCH_EXAMPLES.map(ex => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => { setQuery(''); research.ask(ex); }}
+                className="rounded-full border border-border-default px-3 py-1.5 text-xs text-text-secondary hover:border-text-primary/40 hover:text-text-primary text-left"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch resinOptions={resinOptions} />
 
         {region === 'US' && billFilters.state && (
           <div className="mt-2 text-sm text-text-muted">
@@ -248,6 +309,26 @@ export default function HomePage() {
 
       </section>
 
+      {/* When the reader asks a question, the grounded answer + its cited evidence take over from the
+          browse view (map + full table); "back to browsing" returns here. Otherwise: Explorer as usual. */}
+      {research.active ? (
+        <section className="space-y-5">
+          {research.wall && <ResearchWall wall={research.wall} onSignIn={openAuth} />}
+          {research.restoring && (
+            <div className="space-y-2 border-t border-border-default pt-6">
+              <div className="h-6 w-2/3 animate-pulse rounded bg-bg-tertiary" />
+              <div className="h-24 w-full animate-pulse rounded-lg bg-bg-tertiary" />
+            </div>
+          )}
+          <ResearchThread research={research} />
+          {(research.hasAsked || research.wall) && (
+            <button type="button" onClick={backToBrowsing} className="text-sm text-green-accent hover:underline">
+              ← Back to browsing all bills
+            </button>
+          )}
+        </section>
+      ) : (
+        <>
       {/* Map — the Regions dropdown is the primary selector; this shows a *view of that selection*.
           All regions → a ranked coverage readout. US → the states choropleth. EU → the bloc, cropped
           to Europe. A single country → a cropped locator. A code with no geometry → a text panel. */}
@@ -305,6 +386,8 @@ export default function HomePage() {
           <BillTable bills={tableBills} autoPageSize={5} urlSync />
         )}
       </section>
+        </>
+      )}
 
       {/* Alerts, bundled below the table (out of the way of the bills, which are what visitors came
           for). The scoped deadline count is here rather than at the top so it informs without leading

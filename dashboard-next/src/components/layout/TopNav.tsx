@@ -9,7 +9,7 @@ import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
 import {
   HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
-  LabelIcon, AskIcon, ScaleIcon,
+  LabelIcon, ScaleIcon,
 } from '@/components/ui/icons';
 
 // `usOnly` items are hidden outside the US: Federal Actions has no EU analog yet (EU-central law is
@@ -25,10 +25,10 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Bill Explorer', Icon: HomeIcon },
-  // Ask the Atlas is the headline research tool: open to everyone (an anonymous visitor gets one free
-  // question, then the in-page sign-in/upgrade wall — see /ask). Members get full, threaded, saved asks.
-  { href: '/ask', label: 'Ask the Atlas', Icon: AskIcon },
+  // Explore is the unified surface: the faceted bill browse AND "Ask the Atlas" share one adaptive
+  // bar (keywords filter; a question gets a grounded, cited answer over the same corpus). /ask
+  // redirects here, preserving ?session= so saved research threads still open.
+  { href: '/', label: 'Explore', Icon: HomeIcon },
   { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon },
   { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon, usOnly: true },
   { href: '/company', label: 'My Library', Icon: FactoryIcon, usOnly: true },

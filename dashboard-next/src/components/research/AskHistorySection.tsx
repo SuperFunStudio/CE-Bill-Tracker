@@ -41,7 +41,7 @@ export function AskHistorySection() {
 
       {!user && (
         <p className="text-text-secondary text-body">
-          <Link href="/ask" className="text-green-accent hover:underline">Ask the Atlas</Link> a question to
+          <Link href="/" className="text-green-accent hover:underline">Ask the Atlas</Link> a question to
           start building your research history.
         </p>
       )}
@@ -59,7 +59,7 @@ export function AskHistorySection() {
       {user && canAsk && sessions !== null && sessions.length === 0 && (
         <p className="text-text-secondary text-body">
           No saved threads yet.{' '}
-          <Link href="/ask" className="text-green-accent hover:underline">Ask your first question →</Link>
+          <Link href="/" className="text-green-accent hover:underline">Ask your first question →</Link>
         </p>
       )}
 
@@ -68,7 +68,7 @@ export function AskHistorySection() {
           {sessions.map(s => (
             <li key={s.session_id}>
               <Link
-                href={`/ask?session=${s.session_id}`}
+                href={`/?session=${s.session_id}`}
                 className="block border-l-2 border-green-accent/40 pl-3 py-1 rounded-sm hover:bg-bg-secondary focus:outline-none focus:bg-bg-secondary transition-colors group"
               >
                 <div className="flex items-center gap-2">

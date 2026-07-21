@@ -100,6 +100,9 @@ interface BillFiltersProps {
   onChange: (f: BillFilterState) => void;
   /** Omit the State select — for contexts where the state is already fixed (e.g. a state profile). */
   hideState?: boolean;
+  /** Omit the Search input — for the unified Explore surface, which owns a prominent adaptive
+   *  search/ask bar above the facets and drives `filters.search` itself. */
+  hideSearch?: boolean;
   /** Resin codes present in the current bill set. When non-empty, a "Resin / polymer" filter appears;
       derive with `resinOptionsFromBills(bills)`. Omitted/empty → the filter is hidden (e.g. before the
       polymer scan has populated any data), so no surface shows a dead control. */
@@ -221,7 +224,7 @@ function MultiSelect({
   );
 }
 
-export function BillFilters({ filters, onChange, hideState, resinOptions }: BillFiltersProps) {
+export function BillFilters({ filters, onChange, hideState, hideSearch, resinOptions }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
 
   // EU-central law is EU-wide (no sub-jurisdiction yet), so the State select is hidden in EU mode —
@@ -260,28 +263,30 @@ export function BillFilters({ filters, onChange, hideState, resinOptions }: Bill
 
   return (
     <div className="space-y-4 border-y border-text-primary/15 py-4">
-      {/* Search */}
-      <div className="flex flex-col gap-1">
-        <label className="font-serif text-text-muted text-meta uppercase tracking-wider">Search</label>
-        <div className="relative">
-          <input
-            type="text"
-            value={filters.search}
-            onChange={e => set({ search: e.target.value })}
-            placeholder={`Search e.g. ${SEARCH_EXAMPLES[exampleIdx]}`}
-            className="w-full rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent pr-8"
-          />
-          {filters.search && (
-            <button
-              onClick={() => set({ search: '' })}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary text-sm leading-none"
-              aria-label="Clear search"
-            >
-              <CloseIcon />
-            </button>
-          )}
+      {/* Search — omitted on the unified Explore surface, which hosts the adaptive search/ask bar. */}
+      {!hideSearch && (
+        <div className="flex flex-col gap-1">
+          <label className="font-serif text-text-muted text-meta uppercase tracking-wider">Search</label>
+          <div className="relative">
+            <input
+              type="text"
+              value={filters.search}
+              onChange={e => set({ search: e.target.value })}
+              placeholder={`Search e.g. ${SEARCH_EXAMPLES[exampleIdx]}`}
+              className="w-full rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent pr-8"
+            />
+            {filters.search && (
+              <button
+                onClick={() => set({ search: '' })}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary text-sm leading-none"
+                aria-label="Clear search"
+              >
+                <CloseIcon />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Filter row. Column count tracks how many controls render: State (US only) + Status +
           Instrument + Materials, plus Resin when the polymer scan has data. */}

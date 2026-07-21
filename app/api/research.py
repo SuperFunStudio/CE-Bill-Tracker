@@ -88,9 +88,14 @@ _ENGLISH = literal_column("'english'")
 # Plain single-fragment headline for the LLM sample + citation snippets (no <mark>, unlike the
 # search UI which does highlight). Only text tiers produce a snippet; the structured tier has none.
 _HEADLINE_PLAIN = "MaxFragments=1,MaxWords=30,MinWords=12,StartSel=,StopSel="
-# Below this many precise full-text hits we escalate (structured, then OR) rather than answer off a
-# near-empty sample. 3 keeps genuinely-matched questions on the precise tier; only near-misses fall.
-_MIN_TEXT_HITS = 3
+# When a question is squarely ABOUT a compliance dimension (e.g. "remanufacturing"), a THIN precise
+# full-text match below this floor is escalated to that dimension's curated set (RULE 2) rather than
+# answered off a handful of bills that merely also contain a stray framing word. This finally wires the
+# escalation the code always described but never performed: a stray noun ("...on the TOPIC of X") that
+# survives the stopword filter can AND the precise match down to 1-4 bills; the dimension envelope is the
+# honest, phrasing-independent answer. A healthy text match (e.g. "remanufacturing" -> 69) still wins, so
+# specific questions stay on the precise tier; only near-empty matches with a bigger dimension defer.
+_MIN_TEXT_HITS = 5
 _PAGE_SIZE = 25          # default page of the relevant-bill table
 _MAX_PAGE_SIZE = 100     # ceiling per request (paging reaches the whole set across pages)
 
@@ -145,6 +150,25 @@ def _map_dimension(question: str) -> tuple[str | None, str | None]:
             if t in q:
                 return dim, t
     return None, None
+
+
+def _dim_is_dominant(substantive: list[str], trigger: str | None) -> bool:
+    """True when the substantive search terms are essentially JUST the dimension topic — a bare "what
+    does the corpus have on <X>" ask — so escalating a thin text match to the whole dimension set is the
+    right, phrasing-independent answer. False when the query carries OTHER real terms (a specific ask like
+    "civil penalty of $10,000 per day"): there the precise — even thin — text match must stand rather than
+    being swallowed by the entire dimension. Guards RULE 1's defer_to_dim so escalation can't over-fire on
+    a narrow question that merely contains a dimension keyword."""
+    if not trigger:
+        return False
+    trig_toks = re.findall(r"[a-z0-9]{3,}", trigger.lower())
+    if not trig_toks:
+        return False
+    # A term is "the topic" if it shares a stem with the trigger (handles 'remanufacturing' vs the
+    # 'remanufactur' prefix trigger). Anything else is an additional, narrowing term.
+    remaining = [t for t in substantive
+                 if not any(tok in t or t in tok for tok in trig_toks)]
+    return len(remaining) == 0
 
 
 def _trigger_is_illustrative(question: str, trigger: str | None) -> bool:
@@ -419,27 +443,37 @@ async def _relevant_bills(
     # question `substantive` == `terms` (no diversity words present), so nothing changes.
     substantive = [t for t in terms if t not in _DIVERSITY_WORDS] if diversity else terms
 
+    # RULE 2 candidacy is resolved up front so RULE 1 can defer a thin match to it: the question must map
+    # to a compliance dimension, the user must NOT have scoped (a place/material means "list what's
+    # there"), it must NOT be a diversity ask (which wants a spread, not one dimension), and the dimension
+    # keyword must be a real topic — not merely a word inside an illustrative aside ("...like France's
+    # repairability index"), which must never hijack the whole retrieval.
+    dim, trig = _map_dimension(question)
+    dim_ok = bool(dim and not scoped and not diversity and not _trigger_is_illustrative(question, trig))
+    # Size the dimension set once (reused by RULE 2), so RULE 1 can compare against it instead of guessing.
+    dim_total = await _count_plain([Bill.compliance_details[dim]["status"].astext == "present"]) if dim_ok else 0
+
     # RULE 1 — free-text (text OR title/summary metadata) within the resolved scope. Build the query
     # from stopword-filtered terms so meta-words in the question ("which bills law…", rare in statute
-    # text) can't poison the AND-match and drop an otherwise-good hit.
+    # text) can't poison the AND-match and drop an otherwise-good hit. A precise match STANDS unless it's
+    # thin (below _MIN_TEXT_HITS) AND the question is squarely about a populated dimension whose curated
+    # set is larger — then we defer to that set (RULE 2) so a stray framing word can't collapse the answer.
     if substantive:
         tsq = func.websearch_to_tsquery(_ENGLISH, " ".join(substantive))
         n = await _count_match(db, tsq, extra)
-        if n > 0:
+        # Escalate a THIN match to the dimension set ONLY for a bare topic ask — never swallow a specific
+        # query (extra terms present) into the whole dimension. See _dim_is_dominant.
+        defer_to_dim = (dim_ok and n < _MIN_TEXT_HITS and dim_total > n
+                        and _dim_is_dominant(substantive, trig))
+        if n > 0 and not defer_to_dim:
             rows = (await db.execute(_match_page(tsq))).all()
             return rows, n, _place_strategy("text")
 
-    # RULE 2 — structured-by-dimension, only when the user did NOT scope (place/material means "list
-    # what's there"), it is NOT a diversity ask (which wants a spread, not one dimension), and the
-    # dimension keyword is a real topic — not merely a word inside an illustrative aside ("...like
-    # France's repairability index"), which must never hijack the whole retrieval.
-    dim, trig = _map_dimension(question)
-    if dim and not scoped and not diversity and not _trigger_is_illustrative(question, trig):
+    # RULE 2 — structured-by-dimension (candidacy computed above; the set is non-empty).
+    if dim_ok and dim_total > 0:
         where_dim = [Bill.compliance_details[dim]["status"].astext == "present"]
-        d_total = await _count_plain(where_dim)
-        if d_total > 0:
-            rows = (await db.execute(_plain_page(where_dim))).all()
-            return rows, d_total, f"dimension:{dim}"
+        rows = (await db.execute(_plain_page(where_dim))).all()
+        return rows, dim_total, f"dimension:{dim}"
 
     # RULE 2.5 — diversity/outlier spread: "what are the most unique TYPES of bills?" wants a broad
     # sample across the corpus's distinct policy types, not a narrowing filter. Fires even when scoped

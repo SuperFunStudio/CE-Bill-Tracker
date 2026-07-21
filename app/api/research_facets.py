@@ -31,6 +31,13 @@ _STOPWORDS = frozenset({
     # "corpus"/"incentives" whose presence/absence affects dimension routing — that's LLM-router work).
     "database", "have", "has", "please", "can", "you", "your", "like", "such", "including",
     "cover", "covers", "covered", "covering",  # "which bills COVER laptops" — chrome, not a search term
+    # Query-framing NOUNS — "what does the corpus have on the TOPIC of remanufacturing?" / "any
+    # REFERENCES to X across the WHOLE CORPUS". These describe the question, not the subject, but survived
+    # the filter and got AND-ed into websearch_to_tsquery, where each one intersects the real topic word:
+    # 'whole' & 'topic' & 'remanufactur' matched only 3 bills (vs 69 for the topic alone), collapsing the
+    # answer purely on phrasing. Stripping them keeps the tsquery on the actual subject.
+    "topic", "topics", "whole", "reference", "references", "corpus", "corpora", "overall", "generally",
+    "across", "throughout", "within",  # "ACROSS the corpus / regions" — framing preposition, never a subject
     # Comparative-framing chrome — "what can the rest of the regions LEARN from the US bills?". With a
     # place scoped, these survived into the tsquery and AND-poisoned Rule 1: US (8443 bills) had 8 that
     # happened to contain rest+regions+learn, starving the answer to 8, while foreign regions' non-

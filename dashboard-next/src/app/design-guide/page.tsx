@@ -6,6 +6,7 @@ import { CAP, useAuth } from '@/components/auth/AuthContext';
 import { useBills } from '@/hooks/useBills';
 import { BillModal } from '@/components/ui/BillModal';
 import { PrincipleCard } from '@/components/design-guide/PrincipleCard';
+import { GuidesTabs } from '@/components/guides/GuidesTabs';
 import { openFullGuide, billingErrorMessage } from '@/lib/billing';
 import { track } from '@/lib/analytics';
 import { TEASER_LEVERS, GUIDE_COVERAGE, type TeaserLever } from '@/data/designGuideTeaser';
@@ -117,9 +118,11 @@ export default function DesignGuidePage() {
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
       <GazetteHeader
-        title="Design Guide"
+        title="Guides"
         subtitle="What circular-economy law already requires you to design for — and what ignoring it will cost."
       />
+
+      <GuidesTabs />
 
       <p className="text-text-secondary text-body leading-relaxed max-w-3xl">
         Every principle here is sourced from enacted and proposed bills &mdash;{' '}

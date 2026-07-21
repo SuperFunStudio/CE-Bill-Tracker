@@ -1,39 +1,25 @@
 'use client';
 /**
- * Packaging Studio — a scrolling decision-consequence walkthrough.
+ * Packaging Studio — one workbench, not a three-act walkthrough.
  *
- * One page, three full-height scroll-snap sections:
+ *   LEFT  · The package. Each component drawn as the form it actually is (bottle,
+ *           pouch, carton, can …), editable in place: name, material, weight, and a
+ *           form picker. The drawing is the representation the old studio never had.
+ *   RIGHT · What it costs, and what you owe. One headline number, the single cheapest
+ *           honest swap (not a rainbow of every format), and the compliance punch list.
  *
- *   1. Build it       — name/markets/units live in the sticky spec bar; then one
- *                       component at a time: pick a material, see the consequence
- *                       immediately (annual-fee delta vs best-in-family, the
- *                       eco-modulation why, and the obligations it attaches).
- *   2. The punch list — what this package owes, and by when. Plain-language
- *                       action sentences over the guard verdict (the guard.ts
- *                       rules are unchanged — this is presentation only).
- *   3. The Studio     — the full workbench (cost curves, obligations, the
- *                       "for your engineering team" CI export).
- *
- * The progress track is a scrollspy (IntersectionObserver); clicking a track
- * item smooth-scrolls to that section (instant under prefers-reduced-motion).
- * Returning users: if the URL hash already encodes a spec (share link /
- * reload), the page opens scrolled to the Studio. The spec is kept in sync
- * with the hash at all times so any stage is shareable.
- *
- * Law rows behave like bills everywhere else on the site: clicking opens the
- * Bill Explorer's detail modal (BillModal + fetchBill), and each row carries a
- * WatchStar keyed on the pathways feed's numeric bill_id.
- *
- * All quote/guard logic lives in src/lib/studio.ts + src/lib/guard.ts; this
- * file is presentation and stage choreography only.
+ * The quote + guard engine (lib/studio.ts + lib/guard.ts) is untouched — it was never
+ * the problem. All spec state is kept in sync with the URL hash so any package is a
+ * shareable link; law rows open the Bill Explorer's detail modal.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
-import { AlertBanner } from '@/components/ui/AlertBanner';
 import { BillModal } from '@/components/ui/BillModal';
 import { WatchStar } from '@/components/watchlist/WatchStar';
 import { SubscribeForm } from '@/components/about/SubscribeForm';
+import { GuidesTabs } from '@/components/guides/GuidesTabs';
+import { PackageGlyph, PACKAGE_FORMS, formForCategory } from '@/components/studio/PackageForm';
 import { useRegion } from '@/components/layout/RegionContext';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useBeta } from '@/components/settings/BetaContext';
@@ -45,22 +31,19 @@ import {
   GITHUB_ACTIONS_SNIPPET,
   MARKETS,
   buildQuote,
-  centsPerPackage,
   decodeSpecFromHash,
   encodeSpecToHash,
-  familyConsequence,
   feeScheduleFromSchedule,
   fetchFeeSchedule,
   fetchPathwaysForMarkets,
   groupPaletteByFamily,
   makeFmt,
   pruneAttrs,
-  ratePerTonne,
   remapComponentsToSchedule,
   specToYaml,
+  type CurvePoint,
   type FeeSchedule,
   type Fmt,
-  type MaterialCategory,
   type PaletteFamily,
   type Quote,
   type QuoteComponent,
@@ -68,7 +51,7 @@ import {
   type StudioSpec,
 } from '@/lib/studio';
 import { getSchedule, type AttributeInput, type PackageAttributes } from '@/lib/feeSchedule';
-import { evaluate, type Finding, type GuardPathway } from '@/lib/guard';
+import { evaluate, type Finding } from '@/lib/guard';
 import {
   SavedPackagesPanel,
   useSavedPackages,
@@ -80,7 +63,6 @@ import { track } from '@/lib/analytics';
 // ---------------------------------------------------------------------------
 // Currency-aware formatting — the active schedule's Fmt, supplied via context so
 // every sub-component renders in that schedule's currency ($/¢, £/p, ¥…).
-//   fmt.money(minorUnits) · rate(perTonne) · amount(major) · compact(major)
 // ---------------------------------------------------------------------------
 const FmtCtx = createContext<Fmt>(makeFmt('USD'));
 const useFmt = () => useContext(FmtCtx);
@@ -93,22 +75,10 @@ const SCHEDULE_OPTIONS: { id: string; label: string; jurisdiction: string | null
   { id: 'JP', label: 'Japan JCPRA', jurisdiction: 'JP' },
 ];
 
-function daysTo(d: string | null): number | null {
-  if (!d) return null;
-  return Math.round((new Date(d).getTime() - Date.now()) / 864e5);
-}
-
-/** Bar color on the cheapest→dearest rank (0 = cheapest, 1 = dearest). */
-function rateColor(rank: number): string {
-  if (rank < 0.2) return '#22c55e';
-  if (rank < 0.55) return '#f59e0b';
-  return '#ef4444';
-}
-
 const DEFAULT_COMPONENTS: SpecComponent[] = [
-  { key: 'c0', name: 'Bottle', material: 'pet_clear', grams: 22 },
-  { key: 'c1', name: 'Cap', material: 'pp_ps', grams: 3 },
-  { key: 'c2', name: 'Label', material: 'paperboard', grams: 2 },
+  { key: 'c0', name: 'Bottle', material: 'pet_clear', grams: 22, form: 'bottle' },
+  { key: 'c1', name: 'Cap', material: 'pp_ps', grams: 3, form: 'cap' },
+  { key: 'c2', name: 'Label', material: 'paperboard', grams: 2, form: 'film' },
 ];
 const DEFAULT_MARKETS = ['CA', 'OR'];
 
@@ -122,9 +92,8 @@ const PRISTINE_HASH = encodeSpecToHash({
   acknowledged: [],
 });
 
-/** Studio material family → the subscription flow's material_category slug
- *  (the MATERIAL_CATEGORIES vocabulary in BillFilters / the alerts backend). */
-const SUBSCRIBE_MATERIAL: Record<MaterialCategory, string> = {
+/** Studio material family → the subscription flow's material_category slug. */
+const SUBSCRIBE_MATERIAL: Record<string, string> = {
   plastic_packaging: 'plastic_packaging',
   plastic_film: 'plastic_packaging',
   paper_packaging: 'paper_packaging',
@@ -132,41 +101,13 @@ const SUBSCRIBE_MATERIAL: Record<MaterialCategory, string> = {
   aluminum_packaging: 'metals',
 };
 
-// ---------------------------------------------------------------------------
-// Stage choreography — three scroll-snap sections + a scrollspy track
-// ---------------------------------------------------------------------------
-const STAGES = [
-  { id: 'build', label: 'Build', title: 'Build it' },
-  { id: 'punch-list', label: 'Punch list', title: 'The punch list' },
-  { id: 'studio', label: 'Studio', title: 'The Studio' },
-] as const;
-
 const PRIMARY_BTN =
-  'inline-flex items-center justify-center gap-2 rounded-lg bg-green-accent text-bg-primary px-5 py-2.5 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60';
-const SECONDARY_BTN =
-  'inline-flex items-center justify-center rounded-lg border border-border-default bg-bg-tertiary px-4 py-2 text-sm text-text-secondary hover:border-green-accent hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60';
+  'inline-flex items-center justify-center gap-2 rounded-lg bg-green-accent text-bg-primary px-4 py-2 font-medium text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60';
 
-/** Page-scoped CSS: consequence reveal (motion-safe) + scroll-snap. Snap is
- *  `proximity`, not `mandatory`, so the page never fights the reader; sections
- *  stay in normal document flow, so tab order and keyboard reachability are
- *  untouched. The <style> unmounts with the page, so the html rule can't leak
- *  into other routes. */
-const STUDIO_CSS = `
-@keyframes studio-consequence-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: none; }
-}
-.studio-consequence-in { animation: studio-consequence-in 340ms cubic-bezier(0.22, 1, 0.36, 1); }
-@media (prefers-reduced-motion: reduce) {
-  .studio-consequence-in { animation: none; }
-}
-html { scroll-snap-type: y proximity; }
-.studio-section { scroll-snap-align: start; scroll-margin-top: 10.5rem; }
-@media (max-width: 640px) { .studio-section { scroll-margin-top: 8rem; } }
-`;
+const LBL = 'text-meta uppercase tracking-wider text-text-muted';
 
 export default function PackagingStudioPage() {
-  // ---- the spec (persists across all stages) ----
+  // ---- the spec ----
   const [product, setProduct] = useState('Untitled package');
   const [components, setComponents] = useState<SpecComponent[]>(DEFAULT_COMPONENTS);
   const [markets, setMarkets] = useState<string[]>(DEFAULT_MARKETS);
@@ -175,20 +116,13 @@ export default function PackagingStudioPage() {
   const [ackDraft, setAckDraft] = useState('');
   const uid = useRef(DEFAULT_COMPONENTS.length);
   const hydrated = useRef(false);
-  /** True once the hash spec (if any) has been restored — gates spec-dependent
-   *  one-shot children like the subscribe form's prefill. */
   const [booted, setBooted] = useState(false);
-
-  // ---- stage state ----
-  const [stage, setStage] = useState(0); // scrollspy: which section is in view
-  const [activeIdx, setActiveIdx] = useState(0); // Build-stage component cursor
-  const sectionRefs = useRef<(HTMLElement | null)[]>([]);
 
   // ---- data layers ----
   const [schedule, setSchedule] = useState<FeeSchedule>(FALLBACK_SCHEDULE); // the CA fetch
-  const [scheduleId, setScheduleId] = useState<string>('ca'); // which fee schedule is active
+  const [scheduleId, setScheduleId] = useState<string>('ca');
   const [scheduleReady, setScheduleReady] = useState(false);
-  const [pathways, setPathways] = useState<Record<string, GuardPathway[]>>({});
+  const [pathways, setPathways] = useState<Record<string, Awaited<ReturnType<typeof fetchPathwaysForMarkets>>[string]>>({});
   const [pathwaysLoading, setPathwaysLoading] = useState(false);
   const [copied, setCopied] = useState<'snippet' | 'link' | null>(null);
 
@@ -200,20 +134,16 @@ export default function PackagingStudioPage() {
   const { showToast, isPro, isAdmin, user, openAuth } = useAuth();
   const { betaEnabled } = useBeta();
   const saved = useSavedPackages();
-  /** True when the URL opened with a spec in it (share link / reload) — that spec always wins
-   *  over the auto-loaded last save. */
   const hadHashSpec = useRef(false);
   const autoLoaded = useRef(false);
 
-  // Restore a shared spec from the URL hash. A hash spec means a returning user
-  // or a share link — skip the walkthrough and open scrolled to the Studio.
+  // Restore a shared/returning spec from the URL hash.
   useEffect(() => {
     const fromHash = decodeSpecFromHash(window.location.hash);
     if (fromHash) {
       hadHashSpec.current = true;
       if (fromHash.product) setProduct(fromHash.product);
-      // Restore the schedule BEFORE components so their material ids resolve against the right palette.
-      if (fromHash.scheduleId) setScheduleId(fromHash.scheduleId);
+      if (fromHash.scheduleId) setScheduleId(fromHash.scheduleId); // before components, so materials resolve
       if (fromHash.components.length) {
         setComponents(fromHash.components);
         uid.current = fromHash.components.length;
@@ -221,33 +151,9 @@ export default function PackagingStudioPage() {
       setMarkets(fromHash.markets);
       if (fromHash.unitsPerYear) setUnits(String(fromHash.unitsPerYear));
       if (fromHash.acknowledged?.length) setAcknowledged(fromHash.acknowledged);
-      setStage(2);
-      // Jump (instant, not smooth) straight to the Studio section for share links.
-      requestAnimationFrame(() => {
-        sectionRefs.current[2]?.scrollIntoView({ behavior: 'auto', block: 'start' });
-      });
     }
     hydrated.current = true;
     setBooted(true);
-  }, []);
-
-  // Scrollspy: the progress track follows whichever section is in the middle
-  // band of the viewport.
-  useEffect(() => {
-    const els = sectionRefs.current.filter(Boolean) as HTMLElement[];
-    if (els.length === 0 || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          const idx = sectionRefs.current.indexOf(e.target as HTMLElement);
-          if (idx >= 0) setStage(idx);
-        }
-      },
-      { rootMargin: '-40% 0px -55% 0px' },
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
   }, []);
 
   // Live fee schedule (bundled draft table until / unless the endpoint responds).
@@ -298,18 +204,15 @@ export default function PackagingStudioPage() {
   }, [spec]);
 
   // The active fee schedule: 'ca' is the live/bundled CA fetch; any other id is a
-  // registered engine Schedule adapted to the studio's UI shape. Falls back to CA if
-  // a registry lookup misses (so the studio always prices).
+  // registered engine Schedule adapted to the studio's UI shape.
   const activeSchedule: FeeSchedule = useMemo(() => {
     if (scheduleId === 'ca') return schedule;
     const reg = getSchedule(scheduleId);
     return reg ? feeScheduleFromSchedule(reg) : schedule;
   }, [scheduleId, schedule]);
 
-  // Formatter bound to the active schedule's currency — provided to the whole tree.
   const fmt = useMemo(() => makeFmt(activeSchedule.engine.currency), [activeSchedule]);
 
-  // ---- derived: the quote + the punch-list verdict, recomputed live ----
   const quote: Quote = useMemo(
     () => buildQuote(spec, pathways, activeSchedule),
     [spec, pathways, activeSchedule],
@@ -321,18 +224,12 @@ export default function PackagingStudioPage() {
   );
 
   const guardReport = useMemo(
-    () =>
-      evaluate(
-        { product, markets, materials: specMaterials, acknowledged },
-        pathways,
-      ),
+    () => evaluate({ product, markets, materials: specMaterials, acknowledged }, pathways),
     [product, markets, specMaterials, acknowledged, pathways],
   );
 
   const families = useMemo(() => groupPaletteByFamily(activeSchedule.palette), [activeSchedule]);
 
-  // Source links for EVERY priceable schedule (not just the active one) — so the claim "we price on
-  // the CA SB-54 / UK pEPR / JP JCPRA schedule" is one click from the actual published table.
   const scheduleSources = useMemo(
     () =>
       SCHEDULE_OPTIONS.map((o) => {
@@ -345,8 +242,6 @@ export default function PackagingStudioPage() {
     [schedule],
   );
 
-  // Switch fee schedule, remapping the package's components onto the new palette so
-  // the structure survives (a plastic component stays plastic). Weights are kept.
   const switchSchedule = useCallback(
     (id: string) => {
       if (id === scheduleId) return;
@@ -356,38 +251,25 @@ export default function PackagingStudioPage() {
       })();
       setComponents((cs) => remapComponentsToSchedule(cs, activeSchedule.palette, target.palette));
       setScheduleId(id);
-      setActiveIdx(0);
       track('studio_schedule_switch', { schedule: id });
     },
     [scheduleId, schedule, activeSchedule],
   );
 
-  // Subscription prefill: the spec's material families, translated to alert slugs.
   const subscribeMaterials = useMemo(
     () => [...new Set(specMaterials.map((c) => SUBSCRIBE_MATERIAL[c] ?? 'plastic_packaging'))],
     [specMaterials],
   );
 
-  // ---- bench handlers ----
   const paletteById = useMemo(() => new Map(activeSchedule.palette.map((m) => [m.id, m])), [activeSchedule]);
 
-  const goTo = useCallback((n: number) => {
-    setStage(n);
-    const el = sectionRefs.current[n];
-    if (!el) return;
-    const reduce =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-  }, []);
-
+  // ---- bench handlers ----
   const addComponent = () => {
     const mat = paletteById.get('glass') ?? activeSchedule.palette[0];
     setComponents((cs) => [
       ...cs,
       { key: `c${uid.current++}`, name: 'New component', material: mat.id, grams: mat.default_g },
     ]);
-    setActiveIdx(components.length); // walk straight to the new component
   };
 
   const updateComponent = (key: string, patch: Partial<SpecComponent>) =>
@@ -402,6 +284,8 @@ export default function PackagingStudioPage() {
     updateComponent(key, { material: mat.id, grams: mat.default_g });
   };
 
+  const setForm = (key: string, form: string) => updateComponent(key, { form });
+
   const toggleMarket = (code: string) =>
     setMarkets((ms) => (ms.includes(code) ? ms.filter((m) => m !== code) : [...ms, code]));
 
@@ -411,7 +295,7 @@ export default function PackagingStudioPage() {
       const s = decodeSpecFromHash(pkg.hash);
       if (!s) return;
       setProduct(s.product || 'Untitled package');
-      setScheduleId(s.scheduleId || 'ca'); // before components, so materials resolve
+      setScheduleId(s.scheduleId || 'ca');
       if (s.components.length) {
         setComponents(s.components);
         uid.current = s.components.length;
@@ -419,7 +303,6 @@ export default function PackagingStudioPage() {
       setMarkets(s.markets);
       setUnits(s.unitsPerYear ? String(s.unitsPerYear) : '');
       setAcknowledged(s.acknowledged ?? []);
-      setActiveIdx(0);
       if (opts?.auto) showToast(`Picked up where you left off — loaded “${pkg.name}”.`);
       track('studio_package_load', { auto: Boolean(opts?.auto) });
     },
@@ -427,7 +310,6 @@ export default function PackagingStudioPage() {
   );
 
   // Returning signed-in user, no spec in the URL: reopen their most recently saved package.
-  // Only ever replaces a pristine studio — anything they've already touched stays put.
   useEffect(() => {
     if (!booted || !saved.ready || autoLoaded.current || hadHashSpec.current) return;
     autoLoaded.current = true;
@@ -445,8 +327,6 @@ export default function PackagingStudioPage() {
   };
   const removeAck = (value: string) => setAcknowledged((a) => a.filter((x) => x !== value));
 
-  // Open a law the way the Bill Explorer does — its detail modal; if the fetch
-  // fails, fall back to the explorer's own deep link (/?bill=<id>).
   const openBill = useCallback(async (billId: number) => {
     setOpeningBillId(billId);
     try {
@@ -458,18 +338,11 @@ export default function PackagingStudioPage() {
     }
   }, []);
 
-  // ---- export for the engineering team ----
+  // ---- export for the engineering team (demoted to a disclosure) ----
   const yaml = useMemo(
-    () =>
-      specToYaml({
-        product,
-        markets,
-        materials: specMaterials,
-        acknowledged,
-      }),
+    () => specToYaml({ product, markets, materials: specMaterials, acknowledged }),
     [product, markets, specMaterials, acknowledged],
   );
-
   const downloadYaml = () => {
     const blob = new Blob([yaml], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
@@ -479,7 +352,6 @@ export default function PackagingStudioPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
-
   const copy = async (what: 'snippet' | 'link') => {
     try {
       await navigator.clipboard.writeText(what === 'snippet' ? GITHUB_ACTIONS_SNIPPET : window.location.href);
@@ -490,25 +362,38 @@ export default function PackagingStudioPage() {
     }
   };
 
-  // ---- Build-stage cursor, clamped against removals ----
-  const safeIdx = components.length ? Math.min(activeIdx, components.length - 1) : 0;
-  const activeComp = components[safeIdx] ?? null;
-  const activeQuote = activeComp
-    ? quote.components.find((qc) => qc.key === activeComp.key) ?? null
-    : null;
-
   const t = quote.totals;
-  const ob = quote.obligations;
+  const totalGrams = components.reduce((s, c) => s + (Number(c.grams) || 0), 0);
+  const hasUnits = t.annual_fee_usd != null;
 
-  // Packaging Studio is a Pro membership feature. Non-members get a lock (all hooks above already ran,
-  // so this early return is rules-of-hooks safe).
+  // The single cheapest honest swap across the whole package — the biggest same-family saving.
+  const bestSwap = useMemo(() => {
+    let top: { key: string; name: string; to: CurvePoint; savePkg: number } | null = null;
+    for (const c of quote.components) {
+      const cheaper = c.cheapest_same_family;
+      if (!cheaper) continue;
+      const savePkg = Math.round((c.cents_per_package - cheaper.cents_per_package) * 100) / 100;
+      if (savePkg <= 0.01) continue;
+      if (!top || savePkg > top.savePkg) top = { key: c.key, name: c.name, to: cheaper, savePkg };
+    }
+    return top;
+  }, [quote]);
+  const swapAnnual =
+    bestSwap && hasUnits && t.cents_per_package > 0
+      ? Math.round((t.annual_fee_usd as number) * (bestSwap.savePkg / t.cents_per_package))
+      : null;
+
+  // Packaging Studio is a Pro membership feature (admins see it too). All hooks above already ran.
   if (!isPro && !isAdmin) {
     return (
       <div className="p-6 max-w-3xl mx-auto">
         <GazetteHeader
-          title="Packaging Studio"
+          title="Guides"
           subtitle="Build a package one decision at a time — see what every material pick costs, then get the punch list of what it owes."
         />
+        <div className="mt-6">
+          <GuidesTabs />
+        </div>
         <div className="surface-card p-6 mt-6 space-y-3 text-center">
           <h2 className="font-serif text-xl text-text-primary">A Pro membership feature</h2>
           <p className="text-text-secondary max-w-xl mx-auto">
@@ -536,277 +421,59 @@ export default function PackagingStudioPage() {
 
   return (
     <FmtCtx.Provider value={fmt}>
-    <div className="p-6 space-y-5 max-w-7xl mx-auto">
-      <style>{STUDIO_CSS}</style>
-      <GazetteHeader
-        title="Packaging Studio"
-        subtitle="Build a package one decision at a time — see what every material pick costs, then get the punch list of what it owes."
-      />
-
-      {/* Fee-schedule picker — which jurisdiction's producer-fee table to price against. */}
-      <ScheduleSwitcher active={scheduleId} onSwitch={switchSchedule} sources={scheduleSources} />
-
-      {/* Honest scoping when the global region view isn't US — don't block, just say it. */}
-      {!isUsView && scheduleId === 'ca' && (
-        <AlertBanner
-          variant="amber"
-          message="Fees here are priced on California's SB-54 schedule, US states only — switch the fee schedule above to price against another jurisdiction."
+      <div className="p-6 space-y-5 max-w-6xl mx-auto">
+        <GazetteHeader
+          title="Guides"
+          subtitle="Build a package. See what EPR law charges it — and the one thing to do about it."
         />
-      )}
+        <GuidesTabs />
 
-      {/* Foreign fee schedule active: the fee table is that jurisdiction's, but the "Sells into"
-          markets + punch-list obligations below are US-state-based only. Say so rather than imply a
-          US selection means anything under UK/JP pricing. */}
-      {scheduleId !== 'ca' && (
-        <AlertBanner
-          variant="amber"
-          message={`Pricing against ${activeSchedule.engine.program}. Obligation tracking (the punch list and "Sells into" markets below) is US-state only today — the ${activeSchedule.engine.program} fee table drives the costs, not the US markets.`}
-        />
-      )}
+        <ScheduleSwitcher active={scheduleId} onSwitch={switchSchedule} sources={scheduleSources} />
 
-      {/* Progress track — a scrollspy; click to scroll to any section */}
-      <ProgressTrack stage={stage} onGo={goTo} />
-
-      {/* Sticky spec bar — name the product, pick markets, set volume; repriced live */}
-      <SpecBar
-        product={product}
-        onProduct={setProduct}
-        markets={markets}
-        onToggleMarket={toggleMarket}
-        units={units}
-        onUnits={setUnits}
-        quote={quote}
-        loading={pathwaysLoading}
-        onSave={() => saved.save(spec)}
-        saveState={saved.saveState}
-      />
-
-      {/* ================= Section 1 · Build it ================= */}
-      <section
-        id="build"
-        ref={(el) => {
-          sectionRefs.current[0] = el;
-        }}
-        aria-labelledby="build-heading"
-        className="studio-section min-h-[calc(100dvh-12rem)] max-w-3xl mx-auto w-full space-y-4"
-      >
-        <div>
-          <h2 id="build-heading" className="font-serif text-xl text-text-primary">
-            {STAGES[0].title}
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary leading-relaxed">
-            Name it in the bar above, then walk the package one component at a time. Pick a material
-            and see the consequence immediately — what the choice costs against the best format in
-            its family, and what it obligates you to do.
+        {/* Honest, non-blocking scope note when a non-CA schedule is active — one line, not a banner stack. */}
+        {scheduleId !== 'ca' && (
+          <p className="text-meta text-text-muted">
+            Pricing against {activeSchedule.engine.program}. Obligation tracking (the punch list and
+            markets below) is US-state only today.
           </p>
-        </div>
-
-        {/* First-run coaching — a dismissible three-step walkthrough (remembered per browser). */}
-        <BuildCoach />
-
-        {/* The regulatory clock — the anchor every fee below hangs on */}
-        <div className="rounded-lg border border-border-default bg-bg-tertiary p-3.5 flex gap-3">
-          <span aria-hidden className="text-lg leading-none text-text-muted mt-0.5">◷</span>
-          <p className="text-xs text-text-secondary leading-relaxed">
-            <b className="text-text-primary">The regulatory clock:</b> every fee in this studio is
-            priced on the{' '}
-            <b className="text-text-primary">{activeSchedule.engine.program} schedule</b>{' '}
-            ({activeSchedule.engine.provenance}), in{' '}
-            <b className="text-text-primary">{fmt.currency}</b> — the best published basis today, not
-            an invoice.
-          </p>
-        </div>
-
-        {/* component cursor strip — every chip removable, add clearly labeled */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {components.map((c, i) => {
-            const qc = quote.components.find((q) => q.key === c.key);
-            const on = i === safeIdx;
-            return (
-              <span
-                key={c.key}
-                className={`inline-flex items-center gap-0.5 rounded-full border pl-3 pr-1 py-1 text-xs transition-colors ${
-                  on
-                    ? 'border-green-accent bg-green-dark/40 text-text-primary font-medium'
-                    : 'border-border-default bg-bg-tertiary text-text-secondary'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => setActiveIdx(i)}
-                  aria-pressed={on}
-                  className="inline-flex items-baseline gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60 rounded-full"
-                >
-                  {c.name || 'Component'}
-                  {qc && <span className="font-mono text-meta text-text-muted">{fmt.money(qc.cents_per_package)}</span>}
-                </button>
-                {components.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeComponent(c.key)}
-                    aria-label={`Remove ${c.name || 'component'}`}
-                    title={`Remove ${c.name || 'component'}`}
-                    className="rounded-full px-1.5 py-0.5 leading-none text-text-muted hover:text-urgency-high transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60"
-                  >
-                    ×
-                  </button>
-                )}
-              </span>
-            );
-          })}
-          <button
-            type="button"
-            onClick={addComponent}
-            className="rounded-full border border-dashed border-border-default px-3 py-1 text-xs text-text-secondary hover:border-green-accent hover:text-green-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60"
-          >
-            ＋ Add component
-          </button>
-        </div>
-
-        {activeComp ? (
-          <>
-            <div className="rounded-panel border border-border-default bg-bg-secondary p-4 space-y-4">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <span className="text-meta uppercase tracking-wider text-text-muted">
-                  Component {safeIdx + 1} of {components.length}
-                </span>
-                <input
-                  type="text"
-                  value={activeComp.name}
-                  onChange={(e) => updateComponent(activeComp.key, { name: e.target.value })}
-                  className="flex-1 min-w-[10rem] rounded-md border border-border-default bg-bg-primary px-2.5 py-1.5 text-sm font-semibold text-text-primary focus:outline-none focus:ring-2 focus:ring-green-accent/50"
-                  aria-label="Component name"
-                />
-                <label className="flex items-center gap-2 text-xs text-text-secondary" htmlFor={`bg-${activeComp.key}`}>
-                  weight
-                  <input
-                    id={`bg-${activeComp.key}`}
-                    type="number"
-                    min={0}
-                    step={1}
-                    value={activeComp.grams}
-                    onChange={(e) => updateComponent(activeComp.key, { grams: Number(e.target.value) || 0 })}
-                    className="w-20 rounded-md border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-green-accent/50"
-                  />
-                  g / unit
-                </label>
-              </div>
-
-              <MaterialPicker
-                families={families}
-                schedule={activeSchedule}
-                currentId={activeComp.material}
-                onPick={(id) => setMaterial(activeComp.key, id)}
-              />
-
-              <AttributeControls
-                inputs={activeSchedule.engine.inputs ?? []}
-                attrs={activeComp.attrs}
-                onChange={(patch) =>
-                  updateComponent(activeComp.key, { attrs: pruneAttrs({ ...activeComp.attrs, ...patch }) })
-                }
-              />
-            </div>
-
-            {/* THE CONSEQUENCE — re-mounts (and re-animates) on every pick */}
-            {activeQuote && (
-              <ConsequenceReveal
-                key={`${activeComp.key}:${activeComp.material}`}
-                qc={activeQuote}
-                unitsPerYear={spec.unitsPerYear ?? null}
-                markets={markets}
-                programName={activeSchedule.engine.program}
-                onOpenBill={openBill}
-                openingBillId={openingBillId}
-              />
-            )}
-
-            <div className="flex items-center justify-between gap-3">
-              {safeIdx > 0 ? (
-                <button type="button" className={SECONDARY_BTN} onClick={() => setActiveIdx(safeIdx - 1)}>
-                  ← Previous component
-                </button>
-              ) : (
-                <span />
-              )}
-              {safeIdx < components.length - 1 ? (
-                <button type="button" className={PRIMARY_BTN} onClick={() => setActiveIdx(safeIdx + 1)}>
-                  Next component →
-                </button>
-              ) : (
-                <button type="button" className={PRIMARY_BTN} onClick={() => goTo(1)}>
-                  To the punch list →
-                </button>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="text-text-muted italic text-sm">Add a component to price its EPR exposure.</p>
         )}
-      </section>
 
-      {/* ================= Section 2 · The punch list ================= */}
-      <section
-        id="punch-list"
-        ref={(el) => {
-          sectionRefs.current[1] = el;
-        }}
-        aria-labelledby="punch-heading"
-        className="studio-section min-h-[calc(100dvh-12rem)] max-w-3xl mx-auto w-full space-y-4"
-      >
-        <div>
-          <h2 id="punch-heading" className="font-serif text-xl text-text-primary">
-            {STAGES[1].title}
-          </h2>
-          <p className="mt-1 text-sm text-text-secondary leading-relaxed">
-            What this package owes, and by when — based on the markets you picked.
-          </p>
-        </div>
-
-        <PunchList
-          report={guardReport}
+        <SpecBar
+          product={product}
+          onProduct={setProduct}
+          markets={markets}
+          onToggleMarket={toggleMarket}
+          units={units}
+          onUnits={setUnits}
+          quote={quote}
           loading={pathwaysLoading}
-          defaultOpen
-          onMarkHandled={(f) => addAck(`${f.market}:${f.billNumber}`)}
-          onOpenBill={openBill}
-          openingBillId={openingBillId}
-          onFixInBuild={() => goTo(0)}
+          onSave={() => saved.save(spec)}
+          saveState={saved.saveState}
         />
 
-        <div className="flex items-center justify-between gap-3">
-          <button type="button" className={SECONDARY_BTN} onClick={() => goTo(0)}>
-            ← Back to the build
-          </button>
-          <button type="button" className={PRIMARY_BTN} onClick={() => goTo(2)}>
-            Open the studio →
-          </button>
-        </div>
-      </section>
+        <div className="grid gap-5 lg:grid-cols-2 items-start">
+          {/* ================= LEFT · The package ================= */}
+          <section className="rounded-panel border border-border-default bg-bg-secondary p-4 space-y-4">
+            <div className="flex items-baseline justify-between">
+              <span className={LBL}>The package</span>
+              <span className="font-mono text-meta text-text-muted">{totalGrams} g total</span>
+            </div>
 
-      {/* ================= Section 3 · The Studio (full workbench) ================= */}
-      <section
-        id="studio"
-        ref={(el) => {
-          sectionRefs.current[2] = el;
-        }}
-        aria-labelledby="studio-heading"
-        className="studio-section min-h-[calc(100dvh-12rem)] space-y-4"
-      >
-        <h2 id="studio-heading" className="font-serif text-xl text-text-primary">
-          {STAGES[2].title}
-        </h2>
+            {/* The package, drawn as the forms it's made of */}
+            <PackageShelf components={components} quote={quote} />
 
-        <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          {/* ---- LEFT: the bench ---- */}
-          {/* min-w-0: without it the CI snippet's <pre> sets the track's intrinsic
-              width and the whole page overflows horizontally on phones. */}
-          <div className="space-y-6 min-w-0">
-            <section className="rounded-panel border border-border-default bg-bg-secondary p-4">
-              <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">The package</p>
-              <div className="space-y-2.5">
-                {components.map((c) => (
-                  <div key={c.key} className="rounded-lg border border-border-default bg-bg-tertiary p-3">
-                    <div className="flex items-center gap-2 mb-2">
+            {/* Component editors — name, material, weight, and the form picker */}
+            <div className="space-y-3">
+              {components.map((c) => {
+                const qc = quote.components.find((q) => q.key === c.key);
+                const form = c.form ?? formForCategory(qc?.category);
+                return (
+                  <div key={c.key} className="rounded-lg border border-border-default bg-bg-tertiary p-3 space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <PackageGlyph
+                        form={form}
+                        className={`w-6 h-6 shrink-0 ${qc && !qc.recyclable ? 'text-urgency-medium' : 'text-text-secondary'}`}
+                      />
                       <input
                         type="text"
                         value={c.name}
@@ -814,6 +481,11 @@ export default function PackagingStudioPage() {
                         className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-text-primary focus:outline-none"
                         aria-label="Component name"
                       />
+                      {qc && (
+                        <span className="shrink-0 font-mono text-meta text-text-muted">
+                          {fmt.money(qc.cents_per_package)}/pkg
+                        </span>
+                      )}
                       {components.length > 1 && (
                         <button
                           type="button"
@@ -826,101 +498,82 @@ export default function PackagingStudioPage() {
                         </button>
                       )}
                     </div>
-                    <select
-                      value={c.material}
-                      onChange={(e) => setMaterial(c.key, e.target.value)}
-                      className="w-full rounded-md border border-border-default bg-bg-primary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-green-accent/50"
-                      aria-label="Material format"
-                    >
-                      {families.map((g) => (
-                        <optgroup key={g.category} label={g.label}>
-                          {g.options.map((m) => (
-                            <option key={m.id} value={m.id}>
-                              {m.label}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
-                    <div className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
-                      <label htmlFor={`g-${c.key}`}>weight</label>
-                      <input
-                        id={`g-${c.key}`}
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={c.grams}
-                        onChange={(e) => updateComponent(c.key, { grams: Number(e.target.value) || 0 })}
-                        className="w-20 rounded-md border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-green-accent/50"
-                      />
-                      <span>g / unit</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={addComponent}
-                className="mt-2.5 w-full rounded-lg border border-dashed border-border-default px-3 py-2 text-xs text-text-secondary hover:border-green-accent hover:text-green-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60"
-              >
-                ＋ Add component
-              </button>
-              <p className="text-meta text-text-muted mt-2.5">
-                Product name, markets and annual units live in the bar at the top of the page.
-              </p>
-            </section>
 
-            {/* Handled list — the punch list's state, managed here */}
-            <section className="rounded-panel border border-border-default bg-bg-secondary p-4">
-              <p className="text-meta uppercase tracking-wider text-text-muted mb-1">Handled obligations</p>
-              <p className="text-xs text-text-secondary leading-relaxed mb-2.5">
-                Everything you&rsquo;ve marked handled. Remove an entry and the obligation returns to
-                the punch list. Match by entity name, bill number, or a market-scoped{' '}
-                <code className="font-mono text-meta bg-bg-tertiary px-1 rounded">CA:SB-54</code>.
-              </p>
-              {acknowledged.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2.5">
-                  {acknowledged.map((a) => (
-                    <span
-                      key={a}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-xs text-text-secondary"
-                    >
-                      {a}
-                      <button
-                        type="button"
-                        onClick={() => removeAck(a)}
-                        className="text-text-muted hover:text-urgency-high leading-none"
-                        aria-label={`Un-handle ${a}`}
+                    <div className="grid grid-cols-[1fr_auto] gap-2">
+                      <select
+                        value={c.material}
+                        onChange={(e) => setMaterial(c.key, e.target.value)}
+                        className="w-full rounded-md border border-border-default bg-bg-primary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-green-accent/50"
+                        aria-label="Material format"
                       >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  addAck(ackDraft);
-                }}
-                className="flex gap-2"
-              >
-                <input
-                  type="text"
-                  value={ackDraft}
-                  onChange={(e) => setAckDraft(e.target.value)}
-                  placeholder="e.g. Circular Action Alliance"
-                  className="flex-1 min-w-0 rounded-md border border-border-default bg-bg-primary px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-green-accent/50"
-                  aria-label="Mark an obligation handled"
-                />
-                <button
-                  type="submit"
-                  className="shrink-0 rounded-md border border-border-default bg-bg-tertiary px-3 py-1.5 text-xs text-text-secondary hover:border-green-accent hover:text-text-primary transition-colors"
-                >
-                  Add
-                </button>
-              </form>
-            </section>
+                        {families.map((g) => (
+                          <optgroup key={g.category} label={g.label}>
+                            {g.options.map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      <label className="flex items-center gap-1.5 text-xs text-text-secondary" htmlFor={`g-${c.key}`}>
+                        <input
+                          id={`g-${c.key}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={c.grams}
+                          onChange={(e) => updateComponent(c.key, { grams: Number(e.target.value) || 0 })}
+                          className="w-16 rounded-md border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-green-accent/50"
+                        />
+                        g
+                      </label>
+                    </div>
+
+                    {/* Form picker — a bit of agency: draw this part as what it really is */}
+                    <FormPicker value={form} onPick={(f) => setForm(c.key, f)} />
+
+                    {qc && (
+                      <p className="text-meta text-text-muted">
+                        <span className={qc.recyclable ? 'text-risk-low' : 'text-urgency-medium'}>
+                          {qc.recyclable ? '♻ recyclable' : '⚠ hard to recycle'}
+                        </span>
+                        {qc.obligation_count > 0 && ` · ${qc.obligation_count} law${qc.obligation_count === 1 ? '' : 's'} to act on`}
+                      </p>
+                    )}
+
+                    {/* Compare formats — the full curve, opt-in, single-hue (no rainbow) */}
+                    {qc && qc.cost_curve.some((x) => x.same_family) && (
+                      <details className="group">
+                        <summary className="cursor-pointer text-meta text-green-accent hover:opacity-80 list-none">
+                          Compare {qc.category_label.toLowerCase()} formats →
+                        </summary>
+                        <div className="mt-2">
+                          <CostCurve c={qc} onSwap={(id) => setMaterial(c.key, id)} />
+                        </div>
+                      </details>
+                    )}
+
+                    {/* Design attributes — only for schedules that modulate on them (UK today) */}
+                    <AttributeControls
+                      inputs={activeSchedule.engine.inputs ?? []}
+                      attrs={c.attrs}
+                      onChange={(patch) =>
+                        updateComponent(c.key, { attrs: pruneAttrs({ ...c.attrs, ...patch }) })
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={addComponent}
+              className="w-full rounded-lg border border-dashed border-border-default px-3 py-2 text-xs text-text-secondary hover:border-green-accent hover:text-green-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60"
+            >
+              ＋ Add component
+            </button>
 
             {/* Saved packages — the account's, synced like the scope and watch list */}
             <SavedPackagesPanel
@@ -932,155 +585,293 @@ export default function PackagingStudioPage() {
               onSignIn={saved.openAuth}
             />
 
-            {/* CI export — a Beta feature, gated on the /account opt-in (off for new users). */}
+            {/* CI export — a Beta power feature, demoted behind a disclosure and the /account opt-in */}
             {betaEnabled && (
-            <section className="rounded-panel border border-border-default bg-bg-secondary p-4 space-y-3">
-              <p className="flex items-center gap-2 text-meta uppercase tracking-wider text-text-muted">
-                For your engineering team
-                <span className="rounded-full border border-green-accent/40 px-1.5 py-px text-[0.6rem] tracking-wider text-green-accent">
-                  Beta
-                </span>
+              <details className="rounded-lg border border-border-default bg-bg-tertiary p-3">
+                <summary className="cursor-pointer text-xs text-text-secondary">
+                  Export spec for engineering (packaging.yaml)
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <p className="text-xs text-text-secondary leading-relaxed">
+                    A robot check that re-runs on every code change and flags the build when a new law
+                    makes this spec non-compliant.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={downloadYaml}
+                      className="rounded-md bg-green-accent px-3 py-1.5 text-xs font-medium text-bg-primary hover:opacity-90 transition-opacity"
+                    >
+                      ↓ Download packaging.yaml
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => copy('link')}
+                      className="rounded-md border border-border-default bg-bg-secondary px-3 py-1.5 text-xs text-text-secondary hover:border-green-accent hover:text-text-primary transition-colors"
+                    >
+                      {copied === 'link' ? 'Link copied ✓' : 'Copy studio link'}
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <pre className="rounded-lg border border-border-default bg-bg-primary p-3 pr-16 text-[11px] leading-relaxed text-text-secondary overflow-x-auto font-mono">
+                      {GITHUB_ACTIONS_SNIPPET}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => copy('snippet')}
+                      className="absolute top-2 right-2 rounded-md border border-border-default bg-bg-secondary px-2 py-1 text-meta text-text-secondary hover:border-green-accent hover:text-text-primary transition-colors"
+                    >
+                      {copied === 'snippet' ? 'Copied ✓' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              </details>
+            )}
+          </section>
+
+          {/* ================= RIGHT · What it costs & what you owe ================= */}
+          <section className="space-y-4">
+            {/* One number */}
+            <div className="rounded-panel border border-border-default bg-bg-secondary p-5">
+              <p className={LBL}>What it costs</p>
+              <div className="mt-1 font-mono text-4xl font-bold text-text-primary leading-none">
+                {hasUnits ? fmt.amount(t.annual_fee_usd as number) : fmt.money(t.cents_per_package)}
+                <span className="text-xl text-text-secondary font-normal">{hasUnits ? '/yr' : '/pkg'}</span>
+                {pathwaysLoading && <span className="ml-2 align-middle text-meta italic text-text-muted">refreshing…</span>}
+              </div>
+              <p className="mt-2 text-xs text-text-secondary">
+                {hasUnits ? (
+                  <>
+                    {fmt.money(t.cents_per_package)}/pkg · {t.units_per_year?.toLocaleString()} units/yr ·
+                    priced on {activeSchedule.engine.program}
+                  </>
+                ) : (
+                  <>Add annual units in the bar above for the $/yr figure · priced on {activeSchedule.engine.program}</>
+                )}
               </p>
-              <p className="text-xs text-text-secondary leading-relaxed">
-                Export this spec as{' '}
-                <code className="font-mono text-meta bg-bg-tertiary px-1 rounded">packaging.yaml</code> — a
-                robot check that re-runs on every code change and flags the build when a new law makes
-                this spec non-compliant.
-              </p>
-              <div className="flex flex-wrap gap-2">
+            </div>
+
+            {/* The single cheapest honest swap — one move, not a rainbow */}
+            {bestSwap && (
+              <div className="rounded-panel border border-risk-low/40 bg-risk-low/10 p-4 flex items-center justify-between gap-3">
+                <p className="text-sm text-text-secondary leading-relaxed">
+                  Switch the <b className="text-text-primary">{bestSwap.name}</b> to{' '}
+                  <b className="text-text-primary">{bestSwap.to.label.split(' — ')[0]}</b>
+                  {bestSwap.to.recyclable && ' (recyclable)'} and save{' '}
+                  <b className="text-risk-low">
+                    {swapAnnual != null ? `${fmt.amount(swapAnnual)}/yr` : `${fmt.money(bestSwap.savePkg)}/pkg`}
+                  </b>
+                  .
+                </p>
                 <button
                   type="button"
-                  onClick={downloadYaml}
-                  className="rounded-md bg-green-accent px-3 py-1.5 text-xs font-medium text-bg-primary hover:opacity-90 transition-opacity"
+                  onClick={() => setMaterial(bestSwap.key, bestSwap.to.material_id)}
+                  className="shrink-0 rounded-md border border-risk-low px-3 py-1.5 text-xs font-medium text-risk-low hover:bg-risk-low/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60"
                 >
-                  ↓ Download packaging.yaml
-                </button>
-                <button
-                  type="button"
-                  onClick={() => copy('link')}
-                  className="rounded-md border border-border-default bg-bg-tertiary px-3 py-1.5 text-xs text-text-secondary hover:border-green-accent hover:text-text-primary transition-colors"
-                >
-                  {copied === 'link' ? 'Link copied ✓' : 'Copy studio link'}
+                  Apply
                 </button>
               </div>
-              <div className="relative">
-                <pre className="rounded-lg border border-border-default bg-bg-tertiary p-3 pr-16 text-[11px] leading-relaxed text-text-secondary overflow-x-auto font-mono">
-                  {GITHUB_ACTIONS_SNIPPET}
-                </pre>
-                <button
-                  type="button"
-                  onClick={() => copy('snippet')}
-                  className="absolute top-2 right-2 rounded-md border border-border-default bg-bg-secondary px-2 py-1 text-meta text-text-secondary hover:border-green-accent hover:text-text-primary transition-colors"
-                >
-                  {copied === 'snippet' ? 'Copied ✓' : 'Copy'}
-                </button>
-              </div>
-              <p className="text-meta text-text-muted leading-relaxed">
-                One step: <code className="font-mono">npx spec-sheet-guard --spec packaging.yaml --github</code> —
-                findings appear as inline pull-request annotations.
-              </p>
-            </section>
             )}
-          </div>
 
-          {/* ---- RIGHT: the stage ---- */}
-          <div className="space-y-4 min-w-0">
-            {quote.components.length === 0 ? (
-              <p className="text-text-muted italic text-sm">Add a component to price its EPR exposure.</p>
-            ) : (
-              <>
-                {/* Redesign headroom — the fee/package and $/yr already live in the sticky bar and the
-                    laws-to-act-on in the rollup below, so this panel keeps only what those don't show:
-                    the best-format floor and how much redesign can save. */}
-                <div className="rounded-panel border border-border-default bg-bg-secondary p-4">
-                  <div className="flex flex-wrap gap-x-8 gap-y-3">
-                    <Metric value={fmt.money(t.best_case_cents_per_package)} label="best-format floor" tone="good" />
+            {/* The punch list — what you must do, by when */}
+            <div>
+              <p className={`${LBL} mb-2`}>What you owe{markets.length ? ` in ${markets.join(' · ')}` : ''}</p>
+              <PunchList
+                report={guardReport}
+                loading={pathwaysLoading}
+                defaultOpen
+                onMarkHandled={(f) => addAck(`${f.market}:${f.billNumber}`)}
+                onOpenBill={openBill}
+                openingBillId={openingBillId}
+              />
+            </div>
+
+            {/* Handled obligations — power control, tucked into a disclosure */}
+            {acknowledged.length > 0 && (
+              <details className="rounded-lg border border-border-default bg-bg-secondary p-3">
+                <summary className="cursor-pointer text-xs text-text-secondary">
+                  Handled obligations ({acknowledged.length})
+                </summary>
+                <div className="mt-2.5 space-y-2.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {acknowledged.map((a) => (
+                      <span
+                        key={a}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-xs text-text-secondary"
+                      >
+                        {a}
+                        <button
+                          type="button"
+                          onClick={() => removeAck(a)}
+                          className="text-text-muted hover:text-urgency-high leading-none"
+                          aria-label={`Un-handle ${a}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
                   </div>
-                  {t.redesign_headroom_cents > 0.05 && (
-                    <p className="mt-3 pt-3 border-t border-border-default text-sm text-text-secondary">
-                      ↓ Redesigning each component to its best published format cuts the fee by{' '}
-                      <b className="text-text-primary">
-                        {fmt.money(t.redesign_headroom_cents)}/package (
-                        {Math.round((100 * t.redesign_headroom_cents) / t.cents_per_package)}%)
-                      </b>
-                      {t.annual_fee_usd != null && t.annual_best_case_usd != null && (
-                        <>
-                          {' '}— <b className="text-text-primary">{fmt.amount(t.annual_fee_usd - t.annual_best_case_usd)}/yr</b>
-                        </>
-                      )}
-                      . The cost curves below show every swap.
-                    </p>
-                  )}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      addAck(ackDraft);
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={ackDraft}
+                      onChange={(e) => setAckDraft(e.target.value)}
+                      placeholder="e.g. Circular Action Alliance"
+                      className="flex-1 min-w-0 rounded-md border border-border-default bg-bg-primary px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-green-accent/50"
+                      aria-label="Mark an obligation handled"
+                    />
+                    <button
+                      type="submit"
+                      className="shrink-0 rounded-md border border-border-default bg-bg-tertiary px-3 py-1.5 text-xs text-text-secondary hover:border-green-accent hover:text-text-primary transition-colors"
+                    >
+                      Add
+                    </button>
+                  </form>
                 </div>
-
-                {/* The punch list, compact */}
-                <PunchList
-                  report={guardReport}
-                  loading={pathwaysLoading}
-                  onMarkHandled={(f) => addAck(`${f.market}:${f.billNumber}`)}
-                  onOpenBill={openBill}
-                  openingBillId={openingBillId}
-                />
-
-                {/* live obligations rollup */}
-                <div className="rounded-panel border border-border-default bg-bg-secondary p-4">
-                  <div className="flex flex-wrap gap-x-8 gap-y-3">
-                    <Metric small value={String(ob.action_law_count)} label="laws to act on" />
-                    <Metric small value={String(ob.pros.length)} label={`PRO${ob.pros.length === 1 ? '' : 's'} to join`} />
-                    <Metric small value={String(ob.monitor_count)} label="watch-only" muted />
-                    <Metric small value={ob.nearest_deadline ?? '—'} label="nearest deadline" />
-                  </div>
-                  {ob.pros.length > 0 && (
-                    <p className="mt-2.5 text-xs text-text-secondary">Register with: {ob.pros.join(' · ')}</p>
-                  )}
-                </div>
-
-                {/* per-component cost curves */}
-                {quote.components.map((c) => (
-                  <ComponentCard
-                    key={c.key}
-                    c={c}
-                    onSwap={(matId) => setMaterial(c.key, matId)}
-                    onOpenBill={openBill}
-                    openingBillId={openingBillId}
-                  />
-                ))}
-              </>
+              </details>
             )}
-          </div>
+
+            <ProvenanceFooter schedule={activeSchedule} scheduleReady={scheduleReady} isCa={scheduleId === 'ca'} />
+          </section>
         </div>
-      </section>
 
-      {/* ================= Subscribe — keep watching this package's laws ================= */}
-      <section
-        aria-labelledby="watch-laws-heading"
-        className="max-w-3xl mx-auto w-full rounded-panel border border-border-default bg-bg-secondary p-5"
-      >
-        <h2 id="watch-laws-heading" className="font-serif text-xl text-text-primary">
-          Watch the laws shaping this package
-        </h2>
-        <p className="mt-1 mb-5 text-sm text-text-secondary leading-relaxed">
-          Free email alerts when legislation touching the materials in this spec moves in the markets
-          you picked — introduced, advancing, or hitting a deadline. Pre-scoped to this package below;
-          adjust anything.
-        </p>
-        {booted && (
-          <SubscribeForm prefill={{ usStates: markets, materials: subscribeMaterials }} />
+        {/* ================= Subscribe — keep watching this package's laws ================= */}
+        <section
+          aria-labelledby="watch-laws-heading"
+          className="max-w-3xl rounded-panel border border-border-default bg-bg-secondary p-5"
+        >
+          <h2 id="watch-laws-heading" className="font-serif text-xl text-text-primary">
+            Watch the laws shaping this package
+          </h2>
+          <p className="mt-1 mb-5 text-sm text-text-secondary leading-relaxed">
+            Free email alerts when legislation touching the materials in this spec moves in the markets
+            you picked. Pre-scoped to this package below; adjust anything.
+          </p>
+          {booted && <SubscribeForm prefill={{ usStates: markets, materials: subscribeMaterials }} />}
+        </section>
+
+        {/* Honest scope note kept quiet at the foot when the region view isn't US. */}
+        {!isUsView && scheduleId === 'ca' && (
+          <p className="text-meta text-text-muted">
+            Fees are priced on California&apos;s SB-54 schedule (US states); switch the fee schedule
+            above to price against another jurisdiction.
+          </p>
         )}
-      </section>
 
-      {/* The honesty footer — trimmed to the fee basis + rates-source chip */}
-      <ProvenanceFooter schedule={activeSchedule} scheduleReady={scheduleReady} isCa={scheduleId === 'ca'} />
-
-      {/* The Bill Explorer's detail modal, reused verbatim */}
-      <BillModal bill={detailBill} onClose={() => setDetailBill(null)} />
-    </div>
+        <BillModal bill={detailBill} onClose={() => setDetailBill(null)} />
+      </div>
     </FmtCtx.Provider>
   );
 }
 
-/** Fee-schedule picker — a compact button group over the supported jurisdictions, with a source
- *  link per schedule so every fee table we price against is one click from its published basis. */
+// ---------------------------------------------------------------------------
+// The drawn package — each component as the form it actually is
+// ---------------------------------------------------------------------------
+function PackageShelf({ components, quote }: { components: SpecComponent[]; quote: Quote }) {
+  if (!components.length) {
+    return <p className="text-text-muted italic text-sm">Add a component to draw the package.</p>;
+  }
+  return (
+    <div className="flex flex-wrap items-end justify-center gap-5 rounded-lg border border-border-default bg-bg-tertiary/60 px-4 py-5">
+      {components.map((c) => {
+        const qc = quote.components.find((q) => q.key === c.key);
+        const form = c.form ?? formForCategory(qc?.category);
+        const recyclable = qc?.recyclable ?? true;
+        return (
+          <div key={c.key} className="flex w-16 flex-col items-center gap-1.5">
+            <PackageGlyph
+              form={form}
+              className={`h-14 w-11 ${recyclable ? 'text-text-secondary' : 'text-urgency-medium'}`}
+            />
+            <span className="w-full truncate text-center text-meta text-text-muted" title={c.name}>
+              {c.name || 'Part'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The form picker — a compact strip of the packaging archetypes. */
+function FormPicker({ value, onPick }: { value: string; onPick: (form: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {PACKAGE_FORMS.map((f) => {
+        const on = f.id === value;
+        return (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => onPick(f.id)}
+            aria-pressed={on}
+            title={f.label}
+            className={`rounded-md border p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60 ${
+              on
+                ? 'border-green-accent bg-green-dark/40 text-green-accent'
+                : 'border-border-default bg-bg-primary text-text-muted hover:border-green-accent/60 hover:text-text-secondary'
+            }`}
+          >
+            <PackageGlyph form={f.id} className="h-5 w-5" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The same-family cost curve, single-hue (accent), current pick highlighted — the
+ *  opt-in detail behind "Compare formats". No green→amber→red ramp; the bar is one color. */
+function CostCurve({ c, onSwap }: { c: QuoteComponent; onSwap: (materialId: string) => void }) {
+  const fmt = useFmt();
+  const opts = c.cost_curve.filter((x) => x.same_family);
+  const max = Math.max(...opts.map((o) => o.rate_per_tonne), 1);
+  return (
+    <div className="space-y-0.5">
+      {opts.map((alt) => {
+        const dl = alt.delta_per_tonne;
+        const dtxt = alt.is_current ? 'current' : dl === 0 ? '=' : dl < 0 ? `−${fmt.rate(-dl).slice(1)}` : `+${fmt.rate(dl).slice(1)}`;
+        return (
+          <button
+            key={alt.material_id}
+            type="button"
+            onClick={() => onSwap(alt.material_id)}
+            disabled={alt.is_current}
+            title={alt.is_current ? 'Current material' : `Swap to ${alt.label}`}
+            className={`grid w-full grid-cols-[minmax(0,1fr)_5rem_4.5rem] items-center gap-2 rounded px-1 py-1 text-left transition-colors ${
+              alt.is_current ? 'bg-green-dark/40' : 'hover:bg-bg-secondary'
+            }`}
+          >
+            <span className="min-w-0 truncate text-xs">
+              <span className={alt.is_current ? 'font-semibold text-text-primary' : 'text-text-secondary'}>{alt.label}</span>
+            </span>
+            <span className="relative block h-2 overflow-hidden rounded bg-bg-primary">
+              <span
+                className={`absolute inset-y-0 left-0 rounded ${alt.is_current ? 'bg-green-accent' : 'bg-green-accent/45'}`}
+                style={{ width: `${(alt.rate_per_tonne / max) * 100}%` }}
+              />
+            </span>
+            <span className="text-right font-mono text-meta text-text-secondary">
+              {fmt.rate(alt.rate_per_tonne)}
+              <br />
+              <span className={dl < 0 ? 'text-risk-low' : dl > 0 ? 'text-urgency-medium' : 'text-text-muted'}>{dtxt}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fee-schedule picker — a compact button group with a source link per schedule.
+// ---------------------------------------------------------------------------
 function ScheduleSwitcher({
   active,
   onSwitch,
@@ -1094,7 +885,7 @@ function ScheduleSwitcher({
   return (
     <div className="space-y-1.5 text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-meta uppercase tracking-wider text-text-muted">Fee schedule</span>
+        <span className={LBL}>Fee schedule</span>
         {SCHEDULE_OPTIONS.map((o) => {
           const on = o.id === active;
           return (
@@ -1114,7 +905,6 @@ function ScheduleSwitcher({
           );
         })}
       </div>
-      {/* Trust line — link out to each schedule's published fee table. */}
       <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-meta text-text-muted">
         <span>Sources:</span>
         {SCHEDULE_OPTIONS.map((o, i) => {
@@ -1143,86 +933,7 @@ function ScheduleSwitcher({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Stage chrome
-// ---------------------------------------------------------------------------
-
-const COACH_KEY = 'studio_coach_dismissed';
-
-/** First-run walkthrough for the Build stage — a compact, dismissible three-step coach. Starts hidden
- *  to match SSR (no localStorage on the server), then reveals for anyone who hasn't dismissed it, so
- *  it never causes a hydration mismatch. */
-function BuildCoach() {
-  const [dismissed, setDismissed] = useState(true);
-  useEffect(() => {
-    setDismissed(localStorage.getItem(COACH_KEY) === '1');
-  }, []);
-  if (dismissed) return null;
-  const close = () => {
-    try { localStorage.setItem(COACH_KEY, '1'); } catch { /* private mode — just hide for the session */ }
-    setDismissed(true);
-    track('studio_coach_dismiss');
-  };
-  return (
-    <div className="rounded-panel border border-green-accent/40 bg-green-dark/15 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-text-primary">New here? Build a package in three moves.</p>
-          <ol className="mt-2 space-y-1.5 text-xs text-text-secondary leading-relaxed">
-            <li><b className="text-text-primary">1 ·</b> In the bar above, name your product and toggle the markets you sell into.</li>
-            <li><b className="text-text-primary">2 ·</b> For each component chip, pick a material — every tile shows its fee and whether it&rsquo;s recyclable.</li>
-            <li><b className="text-text-primary">3 ·</b> Read <b className="text-text-primary">The consequence</b> under each pick: what it costs against the best format in its family, and what it obligates.</li>
-          </ol>
-        </div>
-        <button
-          type="button"
-          onClick={close}
-          aria-label="Dismiss walkthrough"
-          className="shrink-0 -mr-1 rounded p-1 text-lg leading-none text-text-muted hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ProgressTrack({ stage, onGo }: { stage: number; onGo: (n: number) => void }) {
-  return (
-    <nav aria-label="Studio sections" className="flex flex-wrap items-center gap-1 sm:gap-1.5">
-      {STAGES.map((s, i) => {
-        const current = i === stage;
-        return (
-          <span key={s.label} className="flex items-center gap-1 sm:gap-1.5">
-            {i > 0 && (
-              <span aria-hidden className="text-text-muted text-xs">
-                →
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => onGo(i)}
-              aria-current={current ? 'true' : undefined}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60 ${
-                current
-                  ? 'border-green-accent bg-green-dark/40 text-text-primary font-medium'
-                  : 'border-border-default bg-bg-tertiary text-text-secondary hover:border-green-accent/60'
-              }`}
-            >
-              <span className={`font-mono ${i < stage ? 'text-green-accent' : ''}`} aria-hidden>
-                {i < stage ? '✓' : i + 1}
-              </span>
-              {s.label}
-            </button>
-          </span>
-        );
-      })}
-    </nav>
-  );
-}
-
-/** The sticky spec bar — the whole brief, compact and editable in place, plus
- *  the running fee score. Pinned under the top nav for all three sections. */
+/** The sticky spec bar — product name, markets, volume, and the running fee. */
 function SpecBar({
   product,
   onProduct,
@@ -1301,7 +1012,7 @@ function SpecBar({
         </button>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-meta uppercase tracking-wider text-text-muted mr-1">Sells into</span>
+        <span className={`${LBL} mr-1`}>Sells into</span>
         {MARKETS.map((m) => {
           const on = markets.includes(m.code);
           return (
@@ -1339,21 +1050,14 @@ function ProvenanceFooter({
   isCa: boolean;
 }) {
   return (
-    <footer className="border-t border-border-default pt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-meta text-text-muted">
+    <footer className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-meta text-text-muted">
       <span>
         Fee basis:{' '}
-        <a
-          href={schedule.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-green-accent hover:underline"
-        >
+        <a href={schedule.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-green-accent hover:underline">
           {schedule.engine.provenance}
         </a>{' '}
         ({schedule.engine.program}, {schedule.engine.currency})
       </span>
-      {/* The live/bundled status only describes the CA API fetch; other jurisdictions
-          are bundled reference tables. */}
       {!isCa ? (
         <span className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5">
           bundled reference table
@@ -1378,7 +1082,6 @@ function ProvenanceFooter({
 // ---------------------------------------------------------------------------
 // Shared law-row bits — a bill link that opens the explorer's modal + the star
 // ---------------------------------------------------------------------------
-
 function BillLink({
   billId,
   billNumber,
@@ -1407,66 +1110,9 @@ function BillLink({
 }
 
 // ---------------------------------------------------------------------------
-// Build-section pieces — the material picker and the consequence reveal
+// Schedule-driven design-attribute controls — only rendered for schedules that
+// modulate on attributes (UK RAM grade today; none for CA/JP).
 // ---------------------------------------------------------------------------
-
-function MaterialPicker({
-  families,
-  schedule,
-  currentId,
-  onPick,
-}: {
-  families: PaletteFamily[];
-  schedule: FeeSchedule;
-  currentId: string;
-  onPick: (materialId: string) => void;
-}) {
-  const fmt = useFmt();
-  return (
-    <div className="space-y-4">
-      {families.map((fam, famIdx) => (
-        <div key={fam.category} className={famIdx > 0 ? 'pt-3 border-t border-border-default' : ''}>
-          <p className="text-xs font-semibold text-text-secondary mb-1.5">{fam.label}</p>
-          <div className="grid gap-1.5 sm:grid-cols-2">
-            {fam.options.map((m) => {
-              const rate = ratePerTonne(schedule, m.category, m.cents);
-              const pkg = Math.round(centsPerPackage(rate, m.default_g) * 100) / 100;
-              const on = m.id === currentId;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onPick(m.id)}
-                  aria-pressed={on}
-                  className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60 ${
-                    on
-                      ? 'border-green-accent bg-green-dark/40'
-                      : 'border-border-default bg-bg-tertiary hover:border-green-accent/60'
-                  }`}
-                >
-                  <span className="block leading-tight">
-                    <span className={on ? 'font-semibold text-text-primary' : 'text-text-secondary'}>{m.label}</span>
-                  </span>
-                  <span className="mt-0.5 flex items-center gap-1.5 text-meta text-text-muted">
-                    <span className={m.recyclable ? 'text-risk-low' : 'text-urgency-medium'}>
-                      {m.recyclable ? '♻ recyclable' : '⚠ hard to recycle'}
-                    </span>
-                    <span aria-hidden>·</span>
-                    {m.tag} · {fmt.rate(rate)} · {fmt.money(pkg)}/pkg at {m.default_g}g
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Schedule-driven design-attribute controls — only rendered for schedules that
- *  actually modulate on attributes (UK RAM grade today; none for CA/JP). Changing a
- *  value reprices the component live via the active schedule's modulation rules. */
 function AttributeControls({
   inputs,
   attrs,
@@ -1478,16 +1124,16 @@ function AttributeControls({
 }) {
   if (!inputs.length) return null;
   return (
-    <div className="pt-3 border-t border-border-default space-y-2">
-      <p className="text-xs font-semibold text-text-secondary">
-        Design attributes <span className="font-normal text-text-muted">— these modulate the fee</span>
-      </p>
-      <div className="grid gap-2.5 sm:grid-cols-2">
+    <details className="pt-1">
+      <summary className="cursor-pointer text-meta text-text-secondary">
+        Design attributes <span className="text-text-muted">— these modulate the fee</span>
+      </summary>
+      <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
         {inputs.map((input) => (
           <AttributeField key={input.attr} input={input} attrs={attrs} onChange={onChange} />
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -1539,17 +1185,11 @@ function AttributeField({
     );
   }
 
-  // select
   const cur = (attrs?.[input.attr] as string | undefined) ?? input.options?.[0]?.value ?? '';
   return (
     <label htmlFor={id} className="block text-xs text-text-secondary" title={input.help}>
       <span className="block mb-1">{input.label}</span>
-      <select
-        id={id}
-        value={cur}
-        onChange={(e) => onChange({ [input.attr]: e.target.value } as PackageAttributes)}
-        className={fieldCls}
-      >
+      <select id={id} value={cur} onChange={(e) => onChange({ [input.attr]: e.target.value } as PackageAttributes)} className={fieldCls}>
         {input.options?.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
@@ -1560,171 +1200,9 @@ function AttributeField({
   );
 }
 
-/** The moment the redesign exists for: pick a material, see what it costs you
- *  against the best format in its family — and what it obligates you to do. */
-function ConsequenceReveal({
-  qc,
-  unitsPerYear,
-  markets,
-  programName,
-  onOpenBill,
-  openingBillId,
-}: {
-  qc: QuoteComponent;
-  unitsPerYear: number | null;
-  markets: string[];
-  programName: string;
-  onOpenBill: (billId: number) => void;
-  openingBillId: number | null;
-}) {
-  const fmt = useFmt();
-  const con = familyConsequence(qc, unitsPerYear);
-  const fam = qc.category_label.toLowerCase();
-  const bestShort = con.best ? con.best.label.split(' — ')[0] : null;
-
-  return (
-    <div className="studio-consequence-in rounded-panel border border-border-default bg-bg-secondary p-4 space-y-3">
-      <div>
-        <p className="text-meta uppercase tracking-wider text-text-muted mb-1">
-          The consequence · {qc.name}
-        </p>
-        {con.is_best_in_family ? (
-          <>
-            <p className="font-mono text-3xl font-bold text-risk-low">✓ best in family</p>
-            <p className="mt-1 text-sm text-text-secondary leading-relaxed">
-              {qc.material_label} is the cheapest published {fam} format — nothing left on the table
-              vs best-in-family.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="font-mono text-3xl font-bold text-urgency-high">
-              ▲ +
-              {con.delta_annual_usd != null
-                ? `${fmt.compact(con.delta_annual_usd)}/yr`
-                : `${fmt.money(con.delta_cents_per_package)}/pkg`}
-              {bestShort && (
-                <span className="ml-2 align-middle font-sans text-sm font-normal text-text-secondary">
-                  vs {bestShort}
-                </span>
-              )}
-            </p>
-            <p className="mt-1 text-sm text-text-secondary leading-relaxed">
-              Money left on the table vs best-in-family
-              {con.best && (
-                <>
-                  : the cheapest {fam} format is <b className="text-text-primary">{con.best.label}</b> at{' '}
-                  {fmt.rate(con.best.rate_per_tonne)}
-                </>
-              )}
-              .{con.delta_annual_usd != null && unitsPerYear != null && (
-                <span className="text-text-muted"> At {unitsPerYear.toLocaleString()} units/yr.</span>
-              )}
-              {con.delta_annual_usd == null && ' Set annual units in the bar above to see this as $/yr.'}
-            </p>
-          </>
-        )}
-      </div>
-
-      {/* why: the fee-tier logic, in plain words */}
-      <p className="border-t border-border-default pt-3 text-xs text-text-secondary leading-relaxed">
-        <b className="text-text-primary">Why this costs more:</b> {programName} charges different fees
-        for different {fam} formats — from {fmt.rate(qc.best_per_tonne)} (easiest to recycle) up to{' '}
-        {fmt.rate(qc.worst_per_tonne)} (hardest). This pick lands at {fmt.rate(qc.rate_per_tonne)}.
-        {qc.headroom_to_best_per_tonne > 0 ? (
-          <>
-            {' '}Switching to the best format in this family would save{' '}
-            <b className="text-text-primary">{fmt.rate(qc.headroom_to_best_per_tonne)}</b> per tonne —
-            that&rsquo;s your redesign headroom.
-          </>
-        ) : (
-          <> You&rsquo;re already at the lowest fee in this family.</>
-        )}
-      </p>
-
-      {/* what it obligates */}
-      <div className="border-t border-border-default pt-3">
-        <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">
-          What {fam} obligates in {markets.length ? markets.join(' · ') : 'your markets'}
-        </p>
-        {qc.obligations.length > 0 ? (
-          <div className="space-y-1">
-            {qc.obligations.slice(0, 4).map((o, i) => {
-              const dd = daysTo(o.next_deadline_date);
-              const over = dd !== null && dd < 0;
-              return (
-                <div
-                  key={`${o.market}-${o.bill_number}-${i}`}
-                  className="flex items-baseline gap-2 text-xs text-text-secondary"
-                >
-                  <span className="w-8 shrink-0 font-mono text-meta text-green-accent">{o.market}</span>
-                  <span className="min-w-0">
-                    <BillLink
-                      billId={o.bill_id}
-                      billNumber={o.bill_number}
-                      market={o.market}
-                      onOpen={onOpenBill}
-                      openingBillId={openingBillId}
-                    />
-                    {' — '}
-                    {o.action_summary || o.bill_title}
-                    {o.entity && <span className="text-text-muted"> · {o.entity}</span>}
-                  </span>
-                  <WatchStar billId={o.bill_id} className="shrink-0 self-center -my-1" />
-                  <span
-                    className={`shrink-0 whitespace-nowrap font-mono text-meta ${
-                      over ? 'text-urgency-high' : 'text-urgency-medium'
-                    }`}
-                  >
-                    {o.next_deadline_date ? (over ? `overdue ${-dd!}d` : `${dd}d`) : 'no fixed date'}
-                  </span>
-                </div>
-              );
-            })}
-            {qc.obligations.length > 4 && (
-              <p className="text-meta italic text-text-muted">
-                + {qc.obligations.length - 4} more law
-                {qc.obligations.length - 4 === 1 ? '' : 's'} to act on — full list in the studio
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="text-xs italic text-text-muted">
-            Nothing to act on for {fam} in the selected markets.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Presentational bits
+// The punch list — the guard verdict in plain words.
 // ---------------------------------------------------------------------------
-
-function Metric({
-  value,
-  label,
-  tone,
-  small,
-  muted,
-}: {
-  value: string;
-  label: string;
-  tone?: 'good' | 'mid' | 'bad';
-  small?: boolean;
-  muted?: boolean;
-}) {
-  const toneClass =
-    tone === 'good' ? 'text-risk-low' : tone === 'bad' ? 'text-urgency-high' : tone === 'mid' ? 'text-urgency-medium' : muted ? 'text-text-muted' : 'text-text-primary';
-  return (
-    <div>
-      <div className={`font-mono font-bold ${small ? 'text-xl' : 'text-2xl'} ${toneClass}`}>{value}</div>
-      <div className="text-meta uppercase tracking-wider text-text-muted">{label}</div>
-    </div>
-  );
-}
-
 /** Plain-words action sentence for an unmet obligation — zero engineering jargon. */
 function actionSentence(f: Finding): string {
   const entity = f.entityName;
@@ -1747,18 +1225,12 @@ function actionSentence(f: Finding): string {
   }
 }
 
-/**
- * The punch list — the guard verdict in plain words. Same evaluate() output,
- * same acknowledged-list mechanics; only the presentation changed:
- * error/warning → "to handle", acknowledged → "handled", note → "watch-only".
- */
 function PunchList({
   report,
   loading,
   onMarkHandled,
   onOpenBill,
   openingBillId,
-  onFixInBuild,
   defaultOpen = false,
 }: {
   report: ReturnType<typeof evaluate>;
@@ -1766,7 +1238,6 @@ function PunchList({
   onMarkHandled: (f: Finding) => void;
   onOpenBill: (billId: number) => void;
   openingBillId: number | null;
-  onFixInBuild?: () => void;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -1778,14 +1249,9 @@ function PunchList({
   const allClear = toHandle.length === 0;
 
   const shownToHandle = open ? toHandle : toHandle.slice(0, 4);
-  const hiddenBeyondPreview = findings.length - shownToHandle.length;
 
   return (
-    <div
-      className={`rounded-panel border bg-bg-secondary p-4 ${
-        allClear ? 'border-risk-low/50' : 'border-urgency-high/50'
-      }`}
-    >
+    <div className={`rounded-panel border bg-bg-secondary p-4 ${allClear ? 'border-risk-low/50' : 'border-urgency-high/50'}`}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span
           className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -1795,10 +1261,6 @@ function PunchList({
           {allClear ? '✓ Nothing left to handle' : `${toHandle.length} to handle`}
         </span>
         <span className="text-xs text-text-secondary">
-          <b className={toHandle.length ? 'text-urgency-high' : 'text-text-muted'}>
-            {toHandle.length} to handle
-          </b>
-          {' · '}
           <b className={handled.length ? 'text-risk-low' : 'text-text-muted'}>{handled.length} handled</b>
           {' · '}
           <b className="text-text-muted">{watchOnly.length} watch-only</b>
@@ -1814,12 +1276,7 @@ function PunchList({
           </button>
         )}
       </div>
-      <p className="text-meta text-text-muted mt-1.5">
-        Already joined or registered? Mark it handled and it drops off the list — it comes back if the
-        law changes.
-      </p>
 
-      {/* To handle — one action sentence per unmet obligation */}
       {shownToHandle.length > 0 && (
         <ul className="mt-3 space-y-1.5">
           {shownToHandle.map((f, i) => {
@@ -1834,13 +1291,10 @@ function PunchList({
                   {f.deadline ? (
                     <>
                       {' — due '}
-                      <b className={dd !== null && dd < 0 ? 'text-urgency-high' : 'text-text-primary'}>
-                        {formatDate(f.deadline)}
-                      </b>
+                      <b className={dd !== null && dd < 0 ? 'text-urgency-high' : 'text-text-primary'}>{formatDate(f.deadline)}</b>
                       {dd !== null && (
                         <span className={`text-meta ${dd < 0 ? 'text-urgency-high' : 'text-text-muted'}`}>
-                          {' '}
-                          ({dd < 0 ? `overdue ${-dd} days` : `in ${dd} days`})
+                          {' '}({dd < 0 ? `overdue ${-dd} days` : `in ${dd} days`})
                         </span>
                       )}
                     </>
@@ -1859,16 +1313,6 @@ function PunchList({
                 </span>
                 <span className="flex items-center gap-1.5 shrink-0 ml-auto">
                   <WatchStar billId={f.billId} />
-                  {onFixInBuild && (
-                    <button
-                      type="button"
-                      onClick={onFixInBuild}
-                      className="rounded-md border border-border-default px-2 py-0.5 text-meta text-text-muted hover:border-green-accent hover:text-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-accent/60"
-                      title="Go back to Build to change this component's material"
-                    >
-                      ↑ Fix in Build
-                    </button>
-                  )}
                   {f.registrationUrl && (
                     <a
                       href={f.registrationUrl}
@@ -1902,29 +1346,17 @@ function PunchList({
 
       {open && (
         <>
-          {/* Handled — kept visible so "done" stays legible */}
           {handled.length > 0 && (
             <div className="mt-4">
-              <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">Handled</p>
+              <p className={`${LBL} mb-1.5`}>Handled</p>
               <ul className="space-y-1">
                 {handled.map((f, i) => (
-                  <li
-                    key={`${f.market}-${f.billNumber}-h${i}`}
-                    className="flex items-baseline gap-2 text-xs text-text-muted"
-                  >
-                    <span className="text-risk-low" aria-hidden>
-                      ✓
-                    </span>
+                  <li key={`${f.market}-${f.billNumber}-h${i}`} className="flex items-baseline gap-2 text-xs text-text-muted">
+                    <span className="text-risk-low" aria-hidden>✓</span>
                     <span className="min-w-0">
                       {actionSentence(f)} (
-                      <BillLink
-                        billId={f.billId}
-                        billNumber={`${f.market} ${f.billNumber}`.trim()}
-                        market={f.market}
-                        onOpen={onOpenBill}
-                        openingBillId={openingBillId}
-                      />
-                      ) — handled. Un-handle it from the Studio&rsquo;s list.
+                      <BillLink billId={f.billId} billNumber={`${f.market} ${f.billNumber}`.trim()} market={f.market} onOpen={onOpenBill} openingBillId={openingBillId} />
+                      ) — handled.
                     </span>
                     <WatchStar billId={f.billId} className="shrink-0 self-center -my-1" />
                   </li>
@@ -1933,27 +1365,15 @@ function PunchList({
             </div>
           )}
 
-          {/* Watch-only — nothing to file today */}
           {watchOnly.length > 0 && (
             <div className="mt-4">
-              <p className="text-meta uppercase tracking-wider text-text-muted mb-1.5">
-                Watch-only — nothing to file today
-              </p>
+              <p className={`${LBL} mb-1.5`}>Watch-only — nothing to file today</p>
               <ul className="space-y-1">
                 {watchOnly.map((f, i) => (
-                  <li
-                    key={`${f.market}-${f.billNumber}-w${i}`}
-                    className="flex items-baseline gap-2 text-xs text-text-secondary"
-                  >
+                  <li key={`${f.market}-${f.billNumber}-w${i}`} className="flex items-baseline gap-2 text-xs text-text-secondary">
                     <span className="w-8 shrink-0 font-mono text-meta text-green-accent">{f.market}</span>
                     <span className="min-w-0">
-                      <BillLink
-                        billId={f.billId}
-                        billNumber={f.billNumber}
-                        market={f.market}
-                        onOpen={onOpenBill}
-                        openingBillId={openingBillId}
-                      />
+                      <BillLink billId={f.billId} billNumber={f.billNumber} market={f.market} onOpen={onOpenBill} openingBillId={openingBillId} />
                       {' — '}
                       {f.actionSummary || f.billTitle}
                     </span>
@@ -1964,174 +1384,6 @@ function PunchList({
             </div>
           )}
         </>
-      )}
-
-      {!open && hiddenBeyondPreview > 0 && (
-        <p className="mt-2 text-meta text-text-muted italic">
-          + {hiddenBeyondPreview} more item{hiddenBeyondPreview === 1 ? '' : 's'} (handled and
-          watch-only included)
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ComponentCard({
-  c,
-  onSwap,
-  onOpenBill,
-  openingBillId,
-}: {
-  c: QuoteComponent;
-  onSwap: (materialId: string) => void;
-  onOpenBill: (billId: number) => void;
-  openingBillId: number | null;
-}) {
-  const fmt = useFmt();
-  const rates = c.cost_curve.map((x) => x.rate_per_tonne);
-  const max = Math.max(...rates, 1);
-  const min = rates[0] ?? 0;
-  const span = (rates[rates.length - 1] ?? 0) - min || 1;
-
-  return (
-    <div className="rounded-panel border border-border-default bg-bg-secondary p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-serif text-base text-text-primary">
-          {c.name}{' '}
-          <span className="align-middle text-meta rounded-full border border-border-default bg-bg-tertiary px-2 py-0.5 text-text-muted font-sans">
-            {c.category_label}
-          </span>
-        </h3>
-        <span className="font-mono text-xs text-text-secondary">
-          {c.grams} g · {fmt.rate(c.rate_per_tonne)} · {fmt.money(c.cents_per_package)}/pkg
-        </span>
-      </div>
-      <p className="text-meta text-text-muted mt-0.5 mb-3">
-        Currently: {c.material_label}
-        {!c.recyclable && ' · ⚠ hard to recycle'}
-        {c.obligation_count > 0 && ` · ${c.obligation_count} law${c.obligation_count === 1 ? '' : 's'} to act on`}
-        {c.monitor_count > 0 && ` · ${c.monitor_count} watch-only`}
-      </p>
-
-      {/* the cost curve — click a bar to swap */}
-      <div className="space-y-0.5">
-        {c.cost_curve.map((alt) => {
-          const widthPct = (alt.rate_per_tonne / max) * 100;
-          const rank = (alt.rate_per_tonne - min) / span;
-          const dl = alt.delta_per_tonne;
-          const dtxt = alt.is_current ? 'current' : dl === 0 ? '=' : dl < 0 ? `−${fmt.rate(-dl).slice(1)}` : `+${fmt.rate(dl).slice(1)}`;
-          return (
-            <button
-              key={alt.material_id}
-              type="button"
-              onClick={() => onSwap(alt.material_id)}
-              className={`grid w-full grid-cols-[minmax(0,7.5rem)_1fr_4.75rem] items-center gap-2.5 rounded-md px-1 py-0.5 text-left transition-colors sm:grid-cols-[190px_1fr_96px] ${
-                alt.is_current ? 'bg-green-dark/40' : 'hover:bg-bg-tertiary'
-              }`}
-              title={alt.is_current ? 'Current material' : `Swap to ${alt.label}`}
-            >
-              <span className="min-w-0 truncate text-xs leading-tight">
-                <span className={alt.is_current ? 'font-semibold text-text-primary' : 'text-text-secondary'}>
-                  {alt.label}
-                </span>
-                <br />
-                <span className="text-meta text-text-muted">
-                  <span
-                    className={alt.recyclable ? 'text-risk-low' : 'text-urgency-medium'}
-                    title={alt.recyclable ? 'Recyclable' : 'Hard to recycle'}
-                  >
-                    {alt.recyclable ? '♻' : '⚠'}
-                  </span>
-                  {' '}{alt.category_label} · {alt.tag}
-                </span>
-              </span>
-              <span className="relative block h-4 overflow-hidden rounded bg-bg-tertiary">
-                <span
-                  className="absolute inset-y-0 left-0 rounded"
-                  style={{ width: `${widthPct}%`, background: rateColor(rank) }}
-                />
-              </span>
-              <span className={`text-right font-mono text-xs leading-tight ${alt.is_current ? 'text-text-primary' : 'text-text-secondary'}`}>
-                {fmt.rate(alt.rate_per_tonne)}
-                <br />
-                <span
-                  className="text-meta"
-                  style={{ color: dl < 0 ? '#22c55e' : dl > 0 ? '#ef4444' : undefined }}
-                >
-                  {dtxt}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* fee-gap footer in plain words */}
-      <p className="mt-3 border-t border-border-default pt-3 text-xs text-text-secondary">
-        Fee gap between the best and worst {c.category_label.toLowerCase()} format:{' '}
-        {fmt.rate(c.best_per_tonne)} (easiest to recycle) ↔ {fmt.rate(c.worst_per_tonne)} (hardest) —{' '}
-        <b className="text-text-primary">{fmt.rate(c.eco_mod_swing_per_tonne)} of redesign headroom</b>
-        {c.headroom_to_best_per_tonne > 0 && (
-          <>
-            , {fmt.rate(c.headroom_to_best_per_tonne)} of it above your current format
-          </>
-        )}
-        .
-        {c.cheapest_same_family && (
-          <>
-            {' '}Cheapest swap in this family: <b className="text-text-primary">{c.cheapest_same_family.label}</b> —{' '}
-            {fmt.rate(c.cheapest_same_family.rate_per_tonne)} vs {fmt.rate(c.rate_per_tonne)}
-            {c.cents_per_package - c.cheapest_same_family.cents_per_package > 0.01 && (
-              <>
-                , saving{' '}
-                <b className="text-risk-low">
-                  {fmt.money(c.cents_per_package - c.cheapest_same_family.cents_per_package)}/package
-                </b>
-              </>
-            )}
-            . Click any bar above to swap.
-          </>
-        )}
-      </p>
-
-      {/* obligations this component triggers */}
-      {c.obligations.length > 0 ? (
-        <div className="mt-2.5 space-y-1">
-          {c.obligations.slice(0, 5).map((o, i) => {
-            const dd = daysTo(o.next_deadline_date);
-            const over = dd !== null && dd < 0;
-            return (
-              <div key={`${o.market}-${o.bill_number}-${i}`} className="flex items-baseline gap-2 text-xs text-text-secondary">
-                <span className="w-8 shrink-0 font-mono text-meta text-green-accent">{o.market}</span>
-                <span className="min-w-0">
-                  <BillLink
-                    billId={o.bill_id}
-                    billNumber={o.bill_number}
-                    market={o.market}
-                    onOpen={onOpenBill}
-                    openingBillId={openingBillId}
-                  />
-                  {' — '}
-                  {o.action_summary || o.bill_title}
-                  {o.entity && <span className="text-text-muted"> · {o.entity}</span>}
-                </span>
-                <WatchStar billId={o.bill_id} className="shrink-0 self-center -my-1" />
-                <span className={`shrink-0 whitespace-nowrap font-mono text-meta ${over ? 'text-urgency-high' : 'text-urgency-medium'}`}>
-                  {o.next_deadline_date ? (over ? `overdue ${-dd!}d` : `${dd}d`) : 'no fixed date'}
-                </span>
-              </div>
-            );
-          })}
-          {c.obligations.length > 5 && (
-            <p className="text-meta italic text-text-muted">
-              + {c.obligations.length - 5} more law{c.obligations.length - 5 === 1 ? '' : 's'} to act on
-            </p>
-          )}
-        </div>
-      ) : (
-        <p className="mt-2.5 text-meta italic text-text-muted">
-          Nothing to act on for {c.category_label.toLowerCase()} in the selected markets.
-        </p>
       )}
     </div>
   );

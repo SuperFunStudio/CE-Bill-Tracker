@@ -9,12 +9,22 @@ import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
 import {
   HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
-  LabelIcon, PackageIcon, AskIcon, ScaleIcon,
+  LabelIcon, AskIcon, ScaleIcon,
 } from '@/components/ui/icons';
 
 // `usOnly` items are hidden outside the US: Federal Actions has no EU analog yet (EU-central law is
-// shown in the Bill Explorer), and company impact scoring is US-only. See RegionContext.
-const NAV_ITEMS = [
+// shown in the Bill Explorer), and company impact scoring is US-only. See RegionContext. `altPaths`
+// keeps a nav item active on sibling routes it fronts (Guides → /design-guide fronts /studio too).
+type NavItem = {
+  href: string;
+  label: string;
+  Icon: typeof HomeIcon;
+  usOnly?: boolean;
+  adminOnly?: boolean;
+  altPaths?: string[];
+};
+
+const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Bill Explorer', Icon: HomeIcon },
   // Ask the Atlas is the headline research tool: open to everyone (an anonymous visitor gets one free
   // question, then the in-page sign-in/upgrade wall — see /ask). Members get full, threaded, saved asks.
@@ -22,21 +32,23 @@ const NAV_ITEMS = [
   { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon },
   { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon, usOnly: true },
   { href: '/company', label: 'My Library', Icon: FactoryIcon, usOnly: true },
-  { href: '/design-guide', label: 'Design Guide', Icon: CompassIcon },
+  // Guides is a tabbed surface — the Design Guide (design imperatives from enacted law) and the
+  // Packaging Studio (price-a-package walkthrough) share it. Nav points at the Design Guide tab; the
+  // in-page GuidesTabs switches between them, so both /design-guide and /studio light this item up.
+  { href: '/design-guide', label: 'Guides', Icon: CompassIcon, altPaths: ['/studio'] },
   // Prototype — dogfooding in prod, admin-only; graduates to Pro alongside /ask (drop adminOnly, the
   // page + endpoint already gate on isPro / require_pro).
   { href: '/evaluate', label: 'Evaluate a Bill', Icon: ScaleIcon, adminOnly: true },
   // Regulation Facts is admin-only for now — still being validated, so it's kept off the public nav
   // (and its route guarded) until it graduates. See the /label page guard.
   { href: '/label', label: 'Regulation Facts', Icon: LabelIcon, adminOnly: true },
-  { href: '/studio', label: 'Packaging Studio', Icon: PackageIcon, usOnly: true },
   { href: '/pricing', label: 'Pricing', Icon: TagIcon },
   { href: '/about', label: 'About', Icon: InfoIcon },
 ];
 
 // Pro subscribers have already bought — surface "Account" where the "Pricing" link sits rather than
 // keep selling them the plan they own. The /pricing route stays reachable directly.
-const ACCOUNT_ITEM = { href: '/account', label: 'Account', Icon: UserIcon };
+const ACCOUNT_ITEM: NavItem = { href: '/account', label: 'Account', Icon: UserIcon };
 
 /**
  * Top nav with the "ATLAS CIRCULAR" masthead centered, theme toggle pinned right.
@@ -58,13 +70,16 @@ export function TopNav() {
     .filter(item => isAdmin || !item.adminOnly)
     .map(item => (isPro && item.href === '/pricing' ? ACCOUNT_ITEM : item));
 
-  const isActive = (href: string) =>
+  const matchPath = (href: string) =>
     pathname === href || (href !== '/' && pathname.startsWith(href));
+  // A nav item is active on its own href or any of its altPaths (e.g. Guides → /design-guide, /studio).
+  const isActive = (href: string, altPaths?: string[]) =>
+    matchPath(href) || (altPaths?.some(matchPath) ?? false);
 
   // 'bar' = horizontal desktop section strip; 'menu' = stacked mobile dropdown rows.
   const renderLinks = (variant: 'bar' | 'menu') =>
-    navItems.map(({ href, label, Icon }) => {
-      const active = isActive(href);
+    navItems.map(({ href, label, Icon, altPaths }) => {
+      const active = isActive(href, altPaths);
       const cls = variant === 'bar'
         ? `inline-flex items-center gap-1.5 px-2 py-1 font-serif text-sm tracking-wide border-b-2 transition-colors ${
             active

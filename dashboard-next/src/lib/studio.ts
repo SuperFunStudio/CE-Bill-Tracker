@@ -604,6 +604,12 @@ export interface SpecComponent {
    * matching rule (e.g. CA today) simply ignore them, so numbers are unchanged.
    */
   attrs?: PackageAttributes;
+  /**
+   * The packaging *form* the component is drawn as (bottle, pouch, carton, …). Presentation
+   * only — the fee is charged on material + weight, never on shape — so it's optional; when
+   * absent the UI infers a default from the material category. See components/studio/PackageForm.
+   */
+  form?: string;
 }
 
 export interface StudioSpec {
@@ -976,6 +982,9 @@ export function encodeSpecToHash(spec: StudioSpec): string {
           const parts = [encPart(c.name), c.material, String(c.grams)];
           const a = encodeAttrs(c.attrs);
           if (a) parts.push(a); // only appended when levers are set — legacy chunks stay 3-part
+          // Form is a tagged token (`f=…`) so it can follow the untagged attrs slot in any
+          // order without a positional collision — old 3/4-part links keep parsing unchanged.
+          if (c.form) parts.push(`f=${encodeURIComponent(c.form)}`);
           return parts.join('~');
         })
         .join('!'),
@@ -1016,13 +1025,23 @@ export function decodeSpecFromHash(hash: string): StudioSpec | null {
     .split('!')
     .filter(Boolean)
     .map((chunk, i) => {
-      const [name = '', material = '', grams = '', attrsRaw = ''] = chunk.split('~');
+      const [name = '', material = '', grams = '', ...rest] = chunk.split('~');
+      // Optional trailing tokens, order-independent: a `f=…` token is the form; any other
+      // (untagged) token is the legacy attrs blob. The encoded attrs blob never starts with
+      // `f=` (its keys are g/r/c/u/d/s), so the tag can't collide.
+      let attrsRaw = '';
+      let formRaw = '';
+      for (const part of rest) {
+        if (part.startsWith('f=')) formRaw = part.slice(2);
+        else if (!attrsRaw) attrsRaw = part;
+      }
       return {
         key: `c${i}`,
         name: decodeURIComponent(name),
         material,
         grams: Number(grams) || 0,
         attrs: decodeAttrs(attrsRaw),
+        form: formRaw ? decodeURIComponent(formRaw) : undefined,
       };
     })
     .filter((c) => c.material);

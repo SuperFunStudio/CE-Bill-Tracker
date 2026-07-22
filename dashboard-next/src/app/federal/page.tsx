@@ -7,6 +7,7 @@ import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
+import { DeadlinesTabs } from '@/components/compliance/DeadlinesTabs';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { AlertIcon } from '@/components/ui/icons';
 import { formatDate, daysUntil, fixEncoding, formatInstrumentType } from '@/lib/utils';
@@ -209,7 +210,8 @@ export default function FederalPage() {
   // Federal Actions is a Pro feature (US-only via the nav's usOnly flag). Non-members get a lock.
   if (!isPro && !isAdmin) {
     return (
-      <div className="p-6 max-w-3xl mx-auto">
+      <div className="p-6 max-w-3xl mx-auto space-y-6">
+        <DeadlinesTabs />
         <GazetteHeader title="Federal Actions" subtitle="Federal Register actions, preemption risk, and EPR litigation" />
         <div className="surface-card p-6 mt-6 space-y-3 text-center">
           <h2 className="font-serif text-xl text-text-primary">A Pro membership feature</h2>
@@ -238,6 +240,7 @@ export default function FederalPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
+      <DeadlinesTabs />
       <GazetteHeader title="Federal Actions" subtitle="Federal Register actions, preemption risk, and EPR litigation" />
 
       {/* Preemption context — a standing editorial brief, not a live alert. Kept neutral so alarm-red

@@ -46,6 +46,16 @@ export function CalendarIcon(props: IconProps) {
   );
 }
 
+/** Bar chart — stands in for the Insights analytics room. */
+export function ChartIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 20V4M4 20h16" />
+      <path d="M8 20v-6M13 20v-10M18 20v-4" />
+    </Icon>
+  );
+}
+
 /** Classical pillared building — stands in for federal / capitol actions. */
 export function CapitolIcon(props: IconProps) {
   return (

@@ -7,6 +7,7 @@ import { DeadlineModal } from '@/components/compliance/DeadlineModal';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { UpcomingDeadlinesLock } from '@/components/compliance/UpcomingDeadlinesLock';
+import { DeadlinesTabs } from '@/components/compliance/DeadlinesTabs';
 import { ComplianceChecker } from '@/components/compliance/ComplianceChecker';
 import { LockIcon } from '@/components/ui/icons';
 import { deadlineInScope } from '@/lib/scope';
@@ -162,6 +163,7 @@ export default function CompliancePage() {
 
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
+      <DeadlinesTabs />
       <GazetteHeader title="Upcoming Deadlines" subtitle="What you must do, and by when." />
 
       {/* One honest summary line — replaces the four metric tiles. */}

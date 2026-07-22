@@ -16,28 +16,12 @@ import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
 import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
 import { useRegion } from '@/components/layout/RegionContext';
-import { CAP, useAuth } from '@/components/auth/AuthContext';
+import { useAuth } from '@/components/auth/AuthContext';
 import Link from 'next/link';
 import { fetchBillTimeline } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
 import type { BillTimelinePoint } from '@/lib/types';
-
-/** Gate for the two membership-gated Insights views (Bills-over-time chart + Real-World Impact table):
- *  available to Research and Pro members (and admins). Everyone else sees an upgrade card. The data
- *  is served via public snapshots, so this is a visibility gate, not a security boundary. */
-function ImpactGate({ label, children }: { label: string; children: React.ReactNode }) {
-  const { hasCapability } = useAuth();
-  if (hasCapability(CAP.INSIGHTS_IMPACT)) return <>{children}</>;
-  return (
-    <div className="surface-card p-6 text-center space-y-2">
-      <p className="text-text-secondary">{label} is available with a Research or Pro membership.</p>
-      <Link href="/pricing" className="inline-block text-green-accent hover:underline text-sm">
-        See memberships →
-      </Link>
-    </div>
-  );
-}
 
 // In-scope circular-economy instruments, canonical list mirrors INSTRUMENT_TYPES in
 // components/bills/BillFilters.tsx. `undefined` is the "All instruments" view (the running total).
@@ -60,10 +44,11 @@ const TABS = [
 type TabId = (typeof TABS)[number]['id'];
 
 /**
- * Insights — a curated, link-shareable briefing room for legislative staffers. Hidden from the
- * main nav (reachable by URL only, like /admin) so we can hand it out deliberately. Organized into
- * tabs (Momentum / Coverage / Geography / Impact) with a region filter on the cross-jurisdiction
- * views.
+ * Insights — a curated, link-shareable briefing room for legislative staffers. A Pro membership
+ * feature: surfaced in the nav for Pro members/admins, gated with the standard sign-up-or-purchase
+ * card for everyone else (still reachable by URL, where the gate does the selling). Organized into
+ * tabs (World / Momentum / Coverage / Geography / Impact) with a region filter on the
+ * cross-jurisdiction views.
  */
 
 function Section({
@@ -103,6 +88,7 @@ export default function InsightsPage() {
   const [tab, setTab] = useState<TabId>('world');
   // The global region filter (the bar under the nav) scopes the timeline + momentum + coverage.
   const { regionsParam: regionsCsv } = useRegion();
+  const { isPro, isAdmin, user, openAuth } = useAuth();
 
   const [points, setPoints] = useState<BillTimelinePoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +124,41 @@ export default function InsightsPage() {
     const firstYear = points.reduce((m, p) => Math.min(m, p.year), Infinity);
     return { enacted, peak, firstYear: Number.isFinite(firstYear) ? firstYear : null };
   }, [points]);
+
+  // Insights is a Pro membership feature — non-members get the same sign-up-or-purchase gate as
+  // Federal Actions / Packaging Studio (see federal/page.tsx). Kept after the hooks above so the
+  // rules-of-hooks order is stable; the timeline fetch is a public snapshot, so it's harmless.
+  if (!isPro && !isAdmin) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <GazetteHeader
+          title="Insights"
+          subtitle="Field notes on the circular-economy policy landscape — for the people writing it."
+        />
+        <div className="surface-card p-6 mt-6 space-y-3 text-center">
+          <h2 className="font-serif text-xl text-text-primary">A Pro membership feature</h2>
+          <p className="text-text-secondary max-w-xl mx-auto">
+            The Insights briefing room — global coverage maps, policy momentum and stance charts,
+            state scorecards, and documented real-world outcomes — is included with a Pro membership.
+          </p>
+          <div className="flex justify-center gap-2 pt-1">
+            {!user && (
+              <button
+                type="button"
+                onClick={openAuth}
+                className="rounded-full border border-border-default px-5 py-2 text-sm text-text-secondary hover:text-text-primary"
+              >
+                Sign in
+              </button>
+            )}
+            <Link href="/pricing" className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary hover:opacity-90">
+              See memberships
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10 space-y-8">
@@ -284,9 +305,7 @@ export default function InsightsPage() {
             ) : !points ? (
               <div className="h-[360px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
             ) : (
-              <ImpactGate label="The bills-over-time chart">
-                <BillTimelineChart points={points} instrument={instrument} />
-              </ImpactGate>
+              <BillTimelineChart points={points} instrument={instrument} />
             )}
           </Section>
 
@@ -401,9 +420,7 @@ export default function InsightsPage() {
             documented to <em>produce</em> — measured outcomes, positive and negative, each anchored to
             a citation. Measured impacts are rare and uneven, so the list grows as evidence surfaces.
           </p>
-          <ImpactGate label="The Real-World Impact table">
-            <RealWorldImpact />
-          </ImpactGate>
+          <RealWorldImpact />
         </Section>
       )}
     </div>

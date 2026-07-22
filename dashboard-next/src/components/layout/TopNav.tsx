@@ -8,13 +8,14 @@ import { useScrolled } from '@/hooks/useScrolled';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
 import {
-  HomeIcon, CalendarIcon, CapitolIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
-  LabelIcon, ScaleIcon,
+  HomeIcon, CalendarIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
+  LabelIcon, ScaleIcon, ChartIcon,
 } from '@/components/ui/icons';
 
-// `usOnly` items are hidden outside the US: Federal Actions has no EU analog yet (EU-central law is
-// shown in the Bill Explorer), and company impact scoring is US-only. See RegionContext. `altPaths`
-// keeps a nav item active on sibling routes it fronts (Guides → /design-guide fronts /studio too).
+// `usOnly` items are hidden outside the US (company impact scoring is US-only; Federal Actions, now a
+// tab under Upcoming Deadlines, has no EU analog yet). See RegionContext. `altPaths` keeps a nav item
+// active on sibling routes it fronts (Upcoming Deadlines → /compliance fronts /federal; Guides →
+// /design-guide fronts /studio too).
 type NavItem = {
   href: string;
   label: string;
@@ -29,9 +30,13 @@ const NAV_ITEMS: NavItem[] = [
   // bar (keywords filter; a question gets a grounded, cited answer over the same corpus). /ask
   // redirects here, preserving ?session= so saved research threads still open.
   { href: '/', label: 'Explore', Icon: HomeIcon },
-  { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon },
-  { href: '/federal', label: 'Federal Actions', Icon: CapitolIcon, usOnly: true },
+  // Upcoming Deadlines is a tabbed surface — Federal Actions is folded in as a subpage tab (see
+  // DeadlinesTabs), so /federal lights this item up too. Federal has no top-level nav entry anymore.
+  { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon, altPaths: ['/federal'] },
   { href: '/company', label: 'My Library', Icon: FactoryIcon, usOnly: true },
+  // Insights is the analytics briefing room — shown to everyone; the page itself carries the same
+  // Pro membership gate as Federal Actions / Packaging Studio, so it does the selling on click.
+  { href: '/insights', label: 'Insights', Icon: ChartIcon },
   // Guides is a tabbed surface — the Design Guide (design imperatives from enacted law) and the
   // Packaging Studio (price-a-package walkthrough) share it. Nav points at the Design Guide tab; the
   // in-page GuidesTabs switches between them, so both /design-guide and /studio light this item up.

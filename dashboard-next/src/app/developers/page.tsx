@@ -92,7 +92,7 @@ export default function DevelopersPage() {
     <div className="p-6 space-y-8 max-w-3xl mx-auto">
       <GazetteHeader
         title="Build on the data"
-        subtitle="The SignalScout API — circular-economy legislation as structured, current data"
+        subtitle="The Atlas Circular API — circular-economy legislation as structured, current data"
       />
 
       <p className="text-text-secondary leading-relaxed">

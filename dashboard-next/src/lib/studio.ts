@@ -1086,7 +1086,7 @@ export function specToYaml(spec: {
       : null;
 
   const lines: string[] = [
-    '# packaging.yaml — exported from the SignalScout Packaging Studio.',
+    '# packaging.yaml — exported from the Atlas Circular Packaging Studio.',
     '# Spec-Sheet Guard checks it against enacted EPR law in every market,',
     '# and fails CI when an obligation is unmet.',
     '',
@@ -1096,7 +1096,7 @@ export function specToYaml(spec: {
     'markets:',
     list(spec.markets, false) ?? '  []',
     '',
-    '# SignalScout material categories your product uses.',
+    '# Atlas Circular material categories your product uses.',
     'materials:',
     list(spec.materials, false) ?? '  []',
     '',

@@ -164,7 +164,7 @@ export default function HomePage() {
 
   // CSV export is a Pro feature: gatePro routes anon → sign-in, Free → checkout, Pro → the download.
   function handleExport() {
-    gatePro(() => downloadCsv('signalscout_bills.csv', tableBills.map(b => ({
+    gatePro(() => downloadCsv('atlascircular_bills.csv', tableBills.map(b => ({
       State: b.state,
       Bill: b.bill_number ?? '',
       Title: b.title ?? '',

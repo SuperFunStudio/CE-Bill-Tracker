@@ -346,7 +346,7 @@ export default function LabelPage() {
       </div>
 
       <p className="text-xs text-text-muted max-w-3xl">
-        Figures are drawn live from the SignalScout API — enacted statutes, published fee
+        Figures are drawn live from the Atlas Circular API — enacted statutes, published fee
         schedules, and classified compliance pathways. Penalties are the statutory maximum; fees
         are volume-apportioned estimates. Live data, not legal advice.
       </p>

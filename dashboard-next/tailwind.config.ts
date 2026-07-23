@@ -10,9 +10,10 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        // Atlas Circular: Lexend for body + display (serif token repurposed), Roboto Mono for labels.
-        sans: ['var(--font-sans)', 'Lexend', 'system-ui', 'sans-serif'],
-        serif: ['var(--font-serif)', 'Lexend', 'system-ui', 'sans-serif'],
+        // Atlas Circular type system: Roboto for body/UI (--font-sans), Playfair Display for the
+        // display/masthead face (--font-serif token repurposed), Roboto Mono for labels.
+        sans: ['var(--font-sans)', 'Roboto', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-serif)', 'Playfair Display', 'Georgia', 'serif'],
         mono: ['var(--font-mono)', 'Roboto Mono', 'ui-monospace', 'monospace'],
       },
       colors: {

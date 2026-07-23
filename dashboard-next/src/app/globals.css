@@ -54,13 +54,14 @@
 body {
   color: var(--text-primary);
   background: var(--bg-primary);
-  font-family: var(--font-sans), Lexend, system-ui, sans-serif;
+  font-family: var(--font-sans), Roboto, system-ui, sans-serif;
 }
 
-/* Display face for headings/masthead. `--font-serif` now points at Lexend (Atlas Circular rebrand);
-   the class name is kept so the many existing call sites don't have to change. */
+/* Display face for headings/masthead. `--font-serif` now points at Playfair Display (Atlas Circular
+   type system); the class name is kept so the many existing call sites don't have to change. Georgia
+   is the fallback so it degrades to the same serif our gazette emails use. */
 .font-serif {
-  font-family: var(--font-serif), Lexend, system-ui, sans-serif;
+  font-family: var(--font-serif), 'Playfair Display', Georgia, 'Times New Roman', serif;
   font-feature-settings: 'liga' 1;
   letter-spacing: -0.01em;
 }

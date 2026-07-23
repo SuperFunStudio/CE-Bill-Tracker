@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     open_states_api_key: str = ""
     anthropic_api_key: str = ""
     sendgrid_api_key: str = ""
-    sendgrid_from_email: str = "alerts@signalscout.io"
+    sendgrid_from_email: str = "alerts@atlascircular.com"
     # Légifrance API via PISTE (France national law — app/ingestion/foreign.py LegifranceClient).
     # Free OAuth2 client-credentials from https://piste.gouv.fr/registration. Empty = FR ingest disabled.
     legifrance_client_id: str = ""
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     nrel_api_key: str = ""
 
     # SEC EDGAR — user-agent required by SEC fair-use policy
-    sec_user_agent: str = "SignalScout/1.0 contact@signalscout.io"
+    sec_user_agent: str = "AtlasCircular/1.0 contact@atlascircular.com"
 
     # Phase 3 feature flags — gate external data source calls
     enable_epa_frs: bool = True

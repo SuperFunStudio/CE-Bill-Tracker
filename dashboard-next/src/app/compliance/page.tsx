@@ -149,7 +149,7 @@ export default function CompliancePage() {
   const nextRel = relDays(stats?.next_date ?? null);
 
   function handleExport() {
-    gatePro(() => downloadCsv('signalscout_deadlines.csv', windowed.map(d => ({
+    gatePro(() => downloadCsv('atlascircular_deadlines.csv', windowed.map(d => ({
       State: d.state,
       Type: d.deadline_type,
       Date: d.deadline_date,

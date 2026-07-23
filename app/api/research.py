@@ -966,11 +966,12 @@ async def _shadow_route(question: str, det, det_total: int, det_top_ids: list) -
 # single stateless teaser ask (one per UTC day per IP), then the frontend shows the sign-in/upgrade wall.
 # ---------------------------------------------------------------------------
 class _AskAccess:
-    __slots__ = ("uid", "is_member")
+    __slots__ = ("uid", "is_member", "is_admin")
 
-    def __init__(self, uid: str | None, is_member: bool):
+    def __init__(self, uid: str | None, is_member: bool, is_admin: bool = False):
         self.uid = uid            # None for an anonymous teaser ask (no session/persistence)
         self.is_member = is_member
+        self.is_admin = is_admin   # admins bypass the per-account daily ask cap (corpus surveys, etc.)
 
 
 async def _ask_access(
@@ -985,7 +986,7 @@ async def _ask_access(
         # Malformed/expired token → treat as anonymous rather than hard-failing the teaser.
         return _AskAccess(uid=None, is_member=False)
     if is_admin(user):
-        return _AskAccess(uid=user.uid, is_member=True)
+        return _AskAccess(uid=user.uid, is_member=True, is_admin=True)
     ent = await get_entitlement(db, user)
     if has_capability(ent, CAP_ASK):
         return _AskAccess(uid=user.uid, is_member=True)
@@ -1011,6 +1012,28 @@ def _consume_free_ask(ip: str) -> bool:
     return True
 
 
+# Per-authenticated-account daily ceiling on /ask. Each ask fans out to Haiku (facet routing) + a
+# Sonnet deep-read of up to _DEEP_READ full bill texts (~30s, real Anthropic spend). Members were
+# previously uncapped, so a cheap seat — a $0 verified-.edu Student plan, or a signup trial — could
+# drive sustained LLM cost (the sibling /evaluate/bill is already capped 10/hr). This is keyed on the
+# stable uid, independent of the spoofable IP limiter. Generous enough for real research sessions;
+# admins are exempt. See docs/SECURITY_ASSESSMENT.md M-new-1.
+_MEMBER_ASK_PER_DAY = 60
+_member_ask_hits: dict[str, tuple[str, int]] = {}
+
+
+def _consume_member_ask(uid: str) -> bool:
+    """Record a member ask against the per-account daily allowance; False once spent for today."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day, count = _member_ask_hits.get(uid, (today, 0))
+    if day != today:
+        day, count = today, 0
+    if count >= _MEMBER_ASK_PER_DAY:
+        return False
+    _member_ask_hits[uid] = (day, count + 1)
+    return True
+
+
 @router.post("/ask", response_model=ResearchAnswer)
 async def ask_the_atlas(
     request: Request,
@@ -1025,6 +1048,10 @@ async def ask_the_atlas(
     # Anonymous teaser: allow a single ask per day/IP, then send them to the sign-in/upgrade wall.
     if not access.is_member and not _consume_free_ask(_client_ip(request)):
         raise HTTPException(status_code=403, detail="ask_free_limit")
+    # Members: per-account daily ceiling so a cheap/free seat can't drive unbounded Sonnet spend.
+    # Keyed on uid (not the spoofable IP), admins exempt. See _consume_member_ask / M-new-1.
+    if access.is_member and not access.is_admin and access.uid and not _consume_member_ask(access.uid):
+        raise HTTPException(status_code=429, detail="ask_daily_limit")
 
     # Thread continuity: if a valid owned session was passed by a MEMBER, this is a FOLLOW-UP. Load its
     # prior turns and condense (thread + this question) into a standalone retrieval query, so the

@@ -545,7 +545,11 @@ async def list_bill_outcomes(
 
 
 @router.get("/{bill_id}", response_model=BillDetail)
-async def get_bill(bill_id: int, db: AsyncSession = Depends(get_db)):
+async def get_bill(
+    bill_id: int,
+    is_pro: bool = Depends(get_optional_pro),
+    db: AsyncSession = Depends(get_db),
+):
     lit_sub = _lit_subquery()
     q = (
         select(Bill, func.coalesce(lit_sub.c.case_count, 0).label("case_count"), lit_sub.c.max_risk)
@@ -556,6 +560,12 @@ async def get_bill(bill_id: int, db: AsyncSession = Depends(get_db)):
     d = BillDetail.model_validate(row.Bill)
     d.litigation_case_count = row.case_count
     d.max_preemption_risk = row.max_risk
+    # compliance_details is the paid Sonnet extraction. The list endpoint already drops it (BillSummary)
+    # so it can't be bulk-harvested; gate the per-bill detail too, otherwise it's scrapable one id at a
+    # time (iterate 1..N) with no subscription. Non-Pro callers get the bill, minus the paid field.
+    # See docs/SECURITY_ASSESSMENT.md M-new-2.
+    if not is_pro:
+        d.compliance_details = None
     return d
 
 

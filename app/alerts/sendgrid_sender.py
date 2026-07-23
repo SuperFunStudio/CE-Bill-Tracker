@@ -4,6 +4,16 @@ import structlog
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
+from app.alerts.email_shell import (
+    _ACCENT,
+    _INK,
+    _INK_SOFT,
+    _MUTED,
+    _RULE,
+    _SERIF,
+    cta_button,
+    render_shell,
+)
 from app.config import settings
 from app.models import Bill, BillChange
 
@@ -44,38 +54,38 @@ def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context:
     categories = ", ".join(bill.material_categories or []) or "Not classified"
     confidence_pct = f"{int((bill.confidence_score or 0) * 100)}%"
 
-    return f"""
-<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background: #1e6ae9; padding: 16px 24px;">
-    <h1 style="color: white; margin: 0; font-size: 20px;">Atlas Circular</h1>
-    <p style="color: #a8d5b5; margin: 4px 0 0;">EPR Legislative Update</p>
-  </div>
-  <div style="padding: 24px; background: #f9fafb; border: 1px solid #e5e7eb;">
-    <h2 style="color: #111827; font-size: 18px; margin-top: 0;">
-      {state_name} — {bill_num}
-    </h2>
-    <p style="color: #374151; font-size: 15px;">{title}</p>
-    <ul style="background: #fff; border: 1px solid #d1fae5; border-radius: 6px; padding: 12px 24px;">
+    summary_html = (
+        f'<p style="font:14px {_SERIF};color:{_INK_SOFT};line-height:1.6;background:#fbf7e9;'
+        f'border-left:3px solid {_ACCENT};padding:10px 14px;margin:14px 0 0;">{bill.ai_summary}</p>'
+        if bill.ai_summary else ""
+    )
+    litigation_html = (
+        f'<div style="font:14px {_SERIF};color:#7f1d1d;background:#fdf1f1;border:1px solid #f3c9c9;'
+        f'border-radius:4px;padding:10px 14px;margin:14px 0 0;white-space:pre-line;">'
+        f"{litigation_context}</div>"
+        if litigation_context else ""
+    )
+    body = f"""
+    <h2 style="font:bold 18px {_SERIF};color:{_INK};margin:6px 0 4px;">{state_name} — {bill_num}</h2>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 12px;">{title}</p>
+    <ul style="font:15px {_SERIF};color:{_INK};line-height:1.7;margin:0 0 4px;padding-left:20px;">
       {change_lines}
     </ul>
-    <table style="width: 100%; font-size: 13px; color: #6b7280; margin-top: 12px;">
+    <table style="width:100%;border-collapse:collapse;font:13px {_SERIF};color:{_MUTED};margin-top:10px;
+        border-top:1px solid {_RULE};padding-top:8px;">
       <tr>
-        <td><strong>Materials:</strong> {categories}</td>
-        <td><strong>Confidence:</strong> {confidence_pct}</td>
+        <td style="padding-top:8px;"><strong>Materials:</strong> {categories}</td>
+        <td style="padding-top:8px;text-align:right;"><strong>Confidence:</strong> {confidence_pct}</td>
       </tr>
     </table>
-    {'<p style="background:#fef9c3;padding:10px;border-radius:4px;font-size:13px;">' + (bill.ai_summary or '') + '</p>' if bill.ai_summary else ''}
-    {('<div style="background:#1f1a1a;border:1px solid #7f1d1d;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:13px;color:#fca5a5;white-space:pre-line;">' + litigation_context + '</div>') if litigation_context else ''}
-    <a href="{source_url}" style="display:inline-block;margin-top:16px;padding:10px 20px;
-       background:#1e6ae9;color:white;text-decoration:none;border-radius:4px;font-size:14px;">
-      View Bill →
-    </a>
-  </div>
-  <div style="padding: 12px 24px; font-size: 12px; color: #9ca3af; text-align: center;">
-    Atlas Circular — EPR Legislative Intelligence
-  </div>
-</body></html>
-"""
+    {summary_html}
+    {litigation_html}
+    <p style="margin:18px 0 0;">{cta_button(source_url, "View bill →")}</p>"""
+    return render_shell(
+        body,
+        tagline="EPR Legislative Update",
+        colophon="You're receiving this because you subscribed to Atlas Circular bill alerts.",
+    )
 
 
 class SendGridSender:
@@ -120,19 +130,15 @@ class SendGridSender:
 
     async def send_text_alert(self, to_email: str, subject: str, body_text: str) -> bool:
         """Send a plain-text/HTML alert not tied to a Bill object (e.g., litigation events)."""
-        html = f"""
-<html><body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-  <div style="background: #1e6ae9; padding: 16px 24px;">
-    <h1 style="color: white; margin: 0; font-size: 20px;">Atlas Circular</h1>
-    <p style="color: #a8d5b5; margin: 4px 0 0;">EPR Litigation Update</p>
-  </div>
-  <div style="padding: 24px; background: #f9fafb; border: 1px solid #e5e7eb; white-space: pre-line;">
-    {body_text}
-  </div>
-  <div style="padding: 12px 24px; font-size: 12px; color: #9ca3af; text-align: center;">
-    Atlas Circular — EPR Legislative Intelligence
-  </div>
-</body></html>"""
+        body = (
+            f'<div style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;'
+            f'white-space:pre-line;">{body_text}</div>'
+        )
+        html = render_shell(
+            body,
+            tagline="EPR Litigation Update",
+            colophon="You're receiving this because you subscribed to Atlas Circular litigation alerts.",
+        )
         message = Mail(
             from_email=settings.sendgrid_from_email,
             to_emails=to_email,

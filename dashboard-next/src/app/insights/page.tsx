@@ -376,7 +376,7 @@ export default function InsightsPage() {
           </div>
 
           <Section
-            kicker="Battle of the bills"
+            kicker="State passage gap"
             title="Does each state pass circular-economy bills above or below its own average?"
           >
             <p className="text-text-secondary text-body leading-relaxed">

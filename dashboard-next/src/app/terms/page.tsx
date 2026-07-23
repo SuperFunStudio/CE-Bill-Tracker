@@ -37,8 +37,8 @@ export default function TermsPage() {
       <p className="text-text-muted text-sm">Effective date: {EFFECTIVE_DATE}</p>
 
       <p className="text-text-secondary leading-relaxed">
-        These Terms of Service (the &quot;Terms&quot;) govern your access to and use of Battle of the
-        Bills (also referred to as SignalScout / Compliance Scout), including the website,
+        These Terms of Service (the &quot;Terms&quot;) govern your access to and use of Atlas
+        Circular, including the website,
         dashboards, alerts, and API (collectively, the &quot;Service&quot;), operated by {ENTITY}. By
         accessing or using the Service, or by creating an account, you agree to be bound by these
         Terms. If you do not agree, do not use the Service.

@@ -10,7 +10,7 @@ Two layers:
   - Structured standings (build_state_of_play): deterministic counts pulled straight from the DB —
     enacted vs. active bills, broken out by jurisdiction, plus the landmark laws and what's live now.
   - An optional one-paragraph recap (render_recap_paragraph): Claude writing the standings up in a
-    championship-recap voice, on-brand with the "Atlas Circular" masthead. Flag-gated
+    momentum-aware correspondent's voice, on-brand with the "Atlas Circular" masthead. Flag-gated
     (enable_welcome_recap) and best-effort — the email renders fine without it. The prose is anchored
     to the structured counts so it can't drift far from the numbers (classifier noise can still leak
     a mis-tagged bill into the list, same caveat as the digest).
@@ -43,6 +43,7 @@ from app.alerts.digest import (
     topic_label,
 )
 from app.alerts.applinks import bill_url
+from app.alerts.email_shell import cta_button, render_shell
 from app.alerts.unsubscribe import unsubscribe_url
 from app.config import settings
 from app.models import AlertSubscription, Bill
@@ -164,29 +165,25 @@ async def build_state_of_play(db: AsyncSession, sub: AlertSubscription) -> State
 RECAP_MODEL = "claude-sonnet-4-6"
 
 _RECAP_SYSTEM = """\
-You are the ringside correspondent for "Atlas Circular", a newsletter covering U.S. \
-circular-economy and Extended Producer Responsibility (EPR) legislation. Keep the fight-night \
-voice — but the fight has a point. In this ring the states are fighting FOR their citizens' future \
-against corporate interests that profit from waste and disposability: every EPR law, every \
-right-to-repair win clawed back from big tech in the courts, is a round won for a more egalitarian \
-economy that uses materials and resources efficiently and lets a regenerative ecosystem stand — \
-because without that ecosystem there is no economy at all. States are the contenders, bills are the \
-bouts, enactment is a win on the cards, a veto or a dead bill is a loss.
+You are the correspondent for "Atlas Circular", a publication covering circular-economy and Extended \
+Producer Responsibility (EPR) legislation worldwide. The through-line: these laws are how \
+jurisdictions build an economy that uses materials and resources efficiently and lets a regenerative \
+ecosystem stand — because without that ecosystem there is no economy at all. Every EPR law and every \
+right-to-repair win is progress toward that; a veto or a dead bill is ground lost.
 
 Write a vivid, momentum-aware recap of the current state of play for a new subscriber. Be BRIEF: \
 TWO short paragraphs, roughly 90-140 words total.
 
-  1. Open on who's landing the biggest laws and where the energy is — and keep sight of why these \
-bills are brought in the first place: citizens' future over corporate wellbeing.
-  2. Name one or two live bouts worth watching, and close on the stakes — what's still undecided and \
-why this reader is ringside for it.
+  1. Open on who's enacting the biggest laws and where the momentum is — and keep sight of why these \
+bills matter: a more efficient, regenerative economy.
+  2. Name one or two live measures worth watching, and close on the stakes — what's still undecided \
+and why this reader will want to follow it.
 
-Be theatrical but DISCIPLINED: every factual claim — every state, count, bill name, or status — must \
-come straight from the standings you are given. Do NOT invent bill numbers, vote tallies, dates, \
-sponsors, or outcomes, and do not imply a bill passed or failed unless its status says so. Don't \
-overload the prose with slogans — let the framing carry through one or two sharp lines, not every \
-sentence. Separate paragraphs with a blank line. No markdown, no headings, no lists, no preamble — \
-just the prose.\
+Be evocative but DISCIPLINED: every factual claim — every jurisdiction, count, bill name, or status — \
+must come straight from the standings you are given. Do NOT invent bill numbers, vote tallies, dates, \
+sponsors, or outcomes, and do not imply a bill passed or failed unless its status says so. Let the \
+framing carry through one or two sharp lines, not every sentence. Separate paragraphs with a blank \
+line. No markdown, no headings, no lists, no preamble — just the prose.\
 """
 
 
@@ -227,7 +224,7 @@ Write the recap paragraph now."""
 
 
 async def render_recap_paragraph(sub: AlertSubscription, sop: StateOfPlay) -> str | None:
-    """Optional flourish: a one-paragraph championship-style recap of the standings. Returns None if
+    """Optional flourish: a one-paragraph momentum-aware recap of the standings. Returns None if
     disabled, unconfigured, the snapshot is empty, or the call fails — callers render without it."""
     if not settings.enable_welcome_recap or not settings.anthropic_api_key or not sop.has_content:
         return None
@@ -375,32 +372,13 @@ def render_welcome_html(
     scope_bits.append(_jurisdictions_summary(sub))
     scope_line = " · ".join(scope_bits)
 
-    return f"""
-<html><body style="margin:0;padding:0;background:{_PAPER};">
- <div style="max-width:640px;margin:0 auto;background:#fff;">
-  <!-- Masthead -->
-  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
-    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
-         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Atlas Circular · EPR Legislative Intelligence
-    </div>
-    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
-    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking sustainability across the globe</p>
-  </div>
-  <!-- Dateline -->
-  <div style="padding:9px 28px;font:italic 13px {_SERIF};color:{_MUTED};text-align:center;
-       border-bottom:1px solid {_RULE};">State of play as of {as_of_label} · {scope_line}</div>
-  <!-- Body -->
-  <div style="padding:14px 28px 24px;">
-    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 4px;font-weight:bold;">{hello} to the ring.</p>
+    inner = f"""
+    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 4px;font-weight:bold;">{hello}.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 10px;">
       You're following <strong>{_topics_summary(sub)}</strong>{mat_html} across
       <strong>{_jurisdictions_summary(sub)}</strong>. From here on you'll get a heads-up whenever a
-      bill in that scope makes a move — here's where the fight stands today.</p>
+      bill in that scope makes a move — here's where things stand today.</p>
     {body}
-    <!-- What you'll get -->
     <h2 style="font:bold 15px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;color:{_INK};
         border-bottom:1px solid rgba(26,26,46,0.25);padding-bottom:6px;margin:28px 0 8px;">
       What lands in your inbox next</h2>
@@ -409,18 +387,18 @@ def render_welcome_html(
       <strong>{_jurisdictions_summary(sub)}</strong> — a note when a matching bill is introduced or
       changes status on its way to becoming law, plus a periodic digest rounding up the month's
       movement. Explore the full picture any time at
-      <a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">the dashboard</a>.</p>
-  </div>
-  <!-- Colophon -->
-  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
-       border-top:3px double {_INK};">
-    You're receiving this because you just subscribed to Atlas Circular updates.<br>
-    <a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">Unsubscribe</a>
-    · or reply to this email.
-  </div>
- </div>
-</body></html>
-"""
+      <a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">the dashboard</a>.</p>"""
+    colophon = (
+        "You're receiving this because you just subscribed to Atlas Circular updates.<br>"
+        f'<a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">'
+        "Unsubscribe</a> · or reply to this email."
+    )
+    return render_shell(
+        inner,
+        dateline=f"State of play as of {as_of_label} · {scope_line}",
+        colophon=colophon,
+        body_padding="14px 28px 24px",
+    )
 
 
 # --- Sending -------------------------------------------------------------------------------------
@@ -496,21 +474,8 @@ def render_account_welcome_subject() -> str:
 
 
 def render_account_welcome_html() -> str:
-    return f"""
-<html><body style="margin:0;padding:0;background:{_PAPER};">
- <div style="max-width:640px;margin:0 auto;background:#fff;">
-  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
-    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
-         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Atlas Circular · EPR Legislative Intelligence
-    </div>
-    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
-    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking sustainability across the globe</p>
-  </div>
-  <div style="padding:18px 28px 24px;">
-    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to the ring.</p>
+    inner = f"""
+    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to Atlas Circular.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 14px;">
       You've just created a free Atlas Circular account — and the next <strong>7 days are on us</strong>.
       Your Pro trial is live right now, no card required:</p>
@@ -520,21 +485,15 @@ def render_account_welcome_html() -> str:
       <li>The complete dynamic <strong>Design Guide</strong></li>
       <li><strong>CSV export</strong> of bills &amp; deadlines</li>
     </ul>
-    <a href="{_DASHBOARD_URL}/compliance" style="display:inline-block;background:{_ACCENT};color:#fff;
-       text-decoration:none;font:bold 14px {_SERIF};padding:11px 24px;border-radius:4px;">
-      Open your dashboard →</a>
+    {cta_button(f"{_DASHBOARD_URL}/compliance", "Open your dashboard →")}
     <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
       When your 7 days are up, keep Pro at <strong>founding 50% off for life</strong> (closes Nov 30),
       or stay on Free. Want a heads-up when bills move?
-      <a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">Set up alerts →</a></p>
-  </div>
-  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
-       border-top:3px double {_INK};">
-    You're receiving this because you just created a Atlas Circular account.
-  </div>
- </div>
-</body></html>
-"""
+      <a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">Set up alerts →</a></p>"""
+    return render_shell(
+        inner,
+        colophon="You're receiving this because you just created an Atlas Circular account.",
+    )
 
 
 async def send_account_welcome(email: str) -> bool:
@@ -581,39 +540,20 @@ def render_comp_grant_subject() -> str:
 
 def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
     greeting = f"Dear {name}," if name else "Hello,"
-    return f"""
-<html><body style="margin:0;padding:0;background:{_PAPER};">
- <div style="max-width:640px;margin:0 auto;background:#fff;">
-  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
-    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
-         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Atlas Circular · EPR Legislative Intelligence
-    </div>
-    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
-    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking sustainability across the globe</p>
-  </div>
-  <div style="padding:18px 28px 24px;">
+    inner = f"""
     <p style="font:16px {_SERIF};color:{_INK};margin:6px 0 14px;font-weight:bold;">{greeting}</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
       Thank you for being an early user of <strong>Atlas Circular</strong>. You've been granted
       complimentary access for <strong>{duration_label}</strong>. Enjoy all of the features as we
       continue to develop this product.</p>
-    <a href="{_DASHBOARD_URL}/compliance" style="display:inline-block;background:{_ACCENT};color:#fff;
-       text-decoration:none;font:bold 14px {_SERIF};padding:11px 24px;border-radius:4px;">
-      Open your dashboard →</a>
+    {cta_button(f"{_DASHBOARD_URL}/compliance", "Open your dashboard →")}
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:22px 0 0;">
       Kind regards,<br>
-      The Atlas Circular Team</p>
-  </div>
-  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
-       border-top:3px double {_INK};">
-    You're receiving this because you were granted complimentary access to Atlas Circular.
-  </div>
- </div>
-</body></html>
-"""
+      The Atlas Circular Team</p>"""
+    return render_shell(
+        inner,
+        colophon="You're receiving this because you were granted complimentary access to Atlas Circular.",
+    )
 
 
 async def send_comp_grant_welcome(email: str, days: int | None = None, name: str | None = None) -> bool:
@@ -670,20 +610,7 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
             "Your payment went through and your <strong>Pro subscription is active</strong>. This email "
             "is your confirmation — manage your plan or grab a receipt any time from your account."
         )
-    return f"""
-<html><body style="margin:0;padding:0;background:{_PAPER};">
- <div style="max-width:640px;margin:0 auto;background:#fff;">
-  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
-    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
-         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Atlas Circular · EPR Legislative Intelligence
-    </div>
-    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
-    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking sustainability across the globe</p>
-  </div>
-  <div style="padding:18px 28px 24px;">
+    inner = f"""
     <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">Welcome to Pro.</p>
     {founding_badge}
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
@@ -696,23 +623,17 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
       <li>The complete dynamic <strong>Design Guide</strong></li>
       <li><strong>CSV export</strong> of bills &amp; deadlines</li>
     </ul>
-    <a href="{_DASHBOARD_URL}/compliance" style="display:inline-block;background:{_ACCENT};color:#fff;
-       text-decoration:none;font:bold 14px {_SERIF};padding:11px 24px;border-radius:4px;">
-      Open your dashboard →</a>
+    {cta_button(f"{_DASHBOARD_URL}/compliance", "Open your dashboard →")}
     <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
       Manage your subscription, update payment details, or download invoices any time from
       <a href="{_DASHBOARD_URL}/account" style="color:{_ACCENT};">your account</a>.</p>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
       Kind regards,<br>
-      The Atlas Circular Team</p>
-  </div>
-  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
-       border-top:3px double {_INK};">
-    You're receiving this because you subscribed to Atlas Circular Pro.
-  </div>
- </div>
-</body></html>
-"""
+      The Atlas Circular Team</p>"""
+    return render_shell(
+        inner,
+        colophon="You're receiving this because you subscribed to Atlas Circular Pro.",
+    )
 
 
 async def send_pro_welcome(email: str, is_trial: bool = False, founding: bool = False) -> bool:
@@ -746,37 +667,13 @@ async def send_pro_welcome(email: str, is_trial: bool = False, founding: bool = 
 
 
 def _lifecycle_shell(title_line: str, body_inner: str, colophon: str) -> str:
-    """The shared Gazette masthead + colophon wrapper, so the lifecycle notices stay on-brand without
-    each re-pasting the masthead. `body_inner` is the inner HTML between masthead and colophon."""
-    return f"""
-<html><body style="margin:0;padding:0;background:{_PAPER};">
- <div style="max-width:640px;margin:0 auto;background:#fff;">
-  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
-    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
-         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Atlas Circular · EPR Legislative Intelligence
-    </div>
-    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
-    <p style="font:italic 15px {_SERIF};color:{_INK_SOFT};margin:0;">{title_line}</p>
-  </div>
-  <div style="padding:18px 28px 24px;">
-    {body_inner}
-  </div>
-  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
-       border-top:3px double {_INK};">
-    {colophon}
-  </div>
- </div>
-</body></html>
-"""
+    """Thin wrapper over the shared email shell, kept so the lifecycle notices below read cleanly.
+    `title_line` becomes the masthead tagline; `body_inner` is the HTML between masthead and colophon."""
+    return render_shell(body_inner, tagline=title_line, colophon=colophon)
 
 
-def _cta_button(href: str, label: str) -> str:
-    return (
-        f'<a href="{href}" style="display:inline-block;background:{_ACCENT};color:#fff;'
-        f'text-decoration:none;font:bold 14px {_SERIF};padding:11px 24px;border-radius:4px;">{label}</a>'
-    )
+# Backwards-compatible alias — the lifecycle notices below call _cta_button; it's the shared button now.
+_cta_button = cta_button
 
 
 # --- Payment failed (dunning) --------------------------------------------------------------------

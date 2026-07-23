@@ -177,7 +177,7 @@ async def main() -> None:
     md.append("\n# Methodology & limits\n")
     md.append(
         f"- **Source.** {total_bills} bills across {len(states)} states classified and analyzed by "
-        "SignalScout; design signals extracted from each bill's compliance text and **verified to be "
+        "Atlas Circular; design signals extracted from each bill's compliance text and **verified to be "
         "verbatim** before inclusion (no paraphrased citations).\n"
         "- **Authority.** Enacted laws are current obligations; proposed bills indicate direction and "
         "may change or fail. Each principle notes how many of its backing bills are enacted.\n"

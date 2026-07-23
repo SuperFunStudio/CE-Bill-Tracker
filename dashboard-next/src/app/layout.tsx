@@ -1,16 +1,17 @@
 import type { Metadata } from 'next';
-import { Lexend, Roboto_Mono } from 'next/font/google';
+import { Playfair_Display, Roboto, Roboto_Mono } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
 import { Providers } from '@/components/layout/Providers';
 import { AppShell } from '@/components/layout/AppShell';
 import { RouteAnalytics } from '@/components/layout/RouteAnalytics';
 
-// Atlas Circular brand type: Lexend for body + headings (the `--font-serif` token is kept for the many
-// existing masthead call sites, but now points at Lexend), Roboto Mono for labels/mono. Two Lexend
-// instances so headings can lean bolder; next/font/google dedupes the underlying face requests.
-const lexend = Lexend({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-sans', display: 'swap' });
-const lexendHeading = Lexend({ subsets: ['latin'], weight: ['600', '700', '800'], variable: '--font-serif', display: 'swap' });
+// Atlas Circular brand type: Playfair Display is the display/masthead face (`--font-serif` — the token
+// name is kept so the many existing masthead call sites don't have to change), Roboto is the body/UI
+// face (`--font-sans`), Roboto Mono for labels/mono. Playfair falls back to Georgia (mirrors the email
+// gazette face) and Roboto to Arial, so web and email read as one system.
+const roboto = Roboto({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-sans', display: 'swap' });
+const playfair = Playfair_Display({ subsets: ['latin'], weight: ['500', '600', '700', '800'], variable: '--font-serif', display: 'swap' });
 const robotoMono = Roboto_Mono({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-mono', display: 'swap' });
 
 const SITE_URL = 'https://www.atlascircular.com';
@@ -47,7 +48,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${lexend.variable} ${lexendHeading.variable} ${robotoMono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${roboto.variable} ${playfair.variable} ${robotoMono.variable}`}>
       <body className="bg-bg-primary text-text-primary antialiased">
         <Providers>
           <AppShell>{children}</AppShell>

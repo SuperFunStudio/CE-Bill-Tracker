@@ -39,7 +39,7 @@ export default function MethodologyPage() {
       <GazetteHeader title="How we decide what counts" subtitle="The classification behind every relevance call" />
 
       <p className="text-text-secondary leading-relaxed">
-        This page is powered by the <strong className="text-text-primary">SignalScout</strong> bill-tracker
+        This page is powered by the <strong className="text-text-primary">Atlas Circular</strong> bill-tracker
         and analysis engine — the same pipeline behind the API. It ingests the full U.S. legislative
         universe, screens every bill against a fixed set of circularity criteria — EPR, deposit-return,
         right-to-repair, recycled-content, and labeling instruments across 15 material &amp; product streams —
@@ -139,7 +139,7 @@ export default function MethodologyPage() {
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="text-text-secondary text-body">See a miscall? Help us correct it.</p>
         <a
-          href="mailto:kenny@superfun.studio?subject=SignalScout%20classification%20flag&body=Bill%20(state%20%2B%20number):%0AWhat%20looks%20wrong:%0A"
+          href="mailto:kenny@superfun.studio?subject=Atlas%20Circular%20classification%20flag&body=Bill%20(state%20%2B%20number):%0AWhat%20looks%20wrong:%0A"
           className="shrink-0 rounded-lg border border-green-accent bg-green-dark px-5 py-2.5 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity text-center"
         >
           Flag it →

@@ -464,17 +464,20 @@ def _materials_summary(sub: AlertSubscription) -> str:
     return ", ".join(material_label(m) for m in mats)
 
 
-# Gazette palette — mirrors dashboard-next/src/app/globals.css light mode (the "Battle of the Bills"
-# masthead). Email clients can't load web fonts reliably, so we use a Georgia serif stack to carry
-# the New Yorker / newspaper feel the dashboard gets from `.font-serif`.
-_SERIF = "Georgia, 'Times New Roman', Times, serif"
-_INK = "#1a1a2e"        # --text-primary
-_INK_SOFT = "#495057"   # --text-secondary
-_MUTED = "#6b7280"      # --text-muted
-_PAPER = "#f8f9fa"      # --bg-primary
-_RULE = "#dee2e6"       # --border-default
-_ACCENT = "#1e6ae9"     # --green-accent (Atlas blue)
-_DASHBOARD_URL = "https://www.atlascircular.com"
+# Gazette palette + shell now live in app/alerts/email_shell.py (one source for every email). Re-exported
+# here because the welcome/alert/watchlist modules historically import these tokens from digest — the
+# import surface is kept stable while the definitions moved.
+from app.alerts.email_shell import (  # noqa: E402  (re-export for downstream email modules)
+    _ACCENT,
+    _INK,
+    _INK_SOFT,
+    _MUTED,
+    _PAPER,
+    _RULE,
+    _SERIF,
+    render_shell,
+)
+from app.alerts.email_shell import DASHBOARD_URL as _DASHBOARD_URL
 
 
 def render_digest_subject(content: DigestContent, period_label: str) -> str:
@@ -551,37 +554,12 @@ def render_digest_html(
         filter(None, [_topics_summary(sub), _materials_summary(sub), _jurisdictions_summary(sub)])
     )
     dateline = f"{period_label.capitalize()} edition · {content.total} updates · {scope}"
-    return f"""
-<html><body style="margin:0;padding:0;background:{_PAPER};">
- <div style="max-width:640px;margin:0 auto;background:#fff;">
-  <!-- Masthead -->
-  <div style="background:{_PAPER};padding:26px 28px 18px;text-align:center;border-bottom:3px double {_INK};">
-    <div style="border-top:1px solid {_INK};border-bottom:1px solid {_INK};padding:3px 0;
-         font:11px {_SERIF};letter-spacing:0.18em;text-transform:uppercase;color:{_MUTED};">
-      Atlas Circular · EPR Legislative Intelligence
-    </div>
-    <h1 style="font:bold 40px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;
-        color:{_INK};margin:16px 0 6px;line-height:1.05;">Atlas Circular</h1>
-    <p style="font:15px {_SERIF};color:{_INK_SOFT};margin:0;">
-      Tracking sustainability across the globe</p>
-  </div>
-  <!-- Dateline -->
-  <div style="padding:9px 28px;font:italic 13px {_SERIF};color:{_MUTED};text-align:center;
-       border-bottom:1px solid {_RULE};">{dateline}</div>
-  <!-- Body -->
-  <div style="padding:8px 28px 24px;">
-    {body}
-  </div>
-  <!-- Colophon -->
-  <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
-       border-top:3px double {_INK};">
-    You're receiving this because you subscribed to Atlas Circular updates.<br>
-    <a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">Unsubscribe</a>
-    · or reply to this email.
-  </div>
- </div>
-</body></html>
-"""
+    colophon = (
+        "You're receiving this because you subscribed to Atlas Circular updates.<br>"
+        f'<a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">'
+        "Unsubscribe</a> · or reply to this email."
+    )
+    return render_shell(body, dateline=dateline, colophon=colophon, body_padding="8px 28px 24px")
 
 
 def _section(heading: str, rows: str, overflow: int = 0) -> str:

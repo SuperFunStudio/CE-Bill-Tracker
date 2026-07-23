@@ -96,7 +96,7 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
     try {
       if (navigator.share) {
         await navigator.share({
-          title: 'SignalScout — Upcoming EPR Deadlines',
+          title: 'Atlas Circular — Upcoming EPR Deadlines',
           text: 'Track every EPR compliance deadline across all 50 states.',
           url: link,
         });

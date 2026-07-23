@@ -22,6 +22,7 @@ from __future__ import annotations
 import datetime
 import html
 import io
+import json
 import re
 import zipfile
 from abc import ABC, abstractmethod
@@ -60,6 +61,21 @@ def _strip_tags(raw: str) -> str:
     text = _WS_RE.sub(" ", text)
     text = "\n".join(line.strip() for line in text.splitlines())
     return _BLANKLINES_RE.sub("\n\n", text).strip()
+
+
+def _pdf_to_text(data: bytes, max_pages: int = 120) -> str:
+    """Extract plain text from a PDF byte string (pypdf). Caps pages so a giant consolidated law
+    (LatAm gazette PDFs run 30–120pp) doesn't blow the time budget — the Haiku excerpt only reads the
+    head anyway. Returns "" on any parse failure (the caller drops thin/empty bodies)."""
+    try:
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(data))
+        parts = [(page.extract_text() or "") for page in reader.pages[:max_pages]]
+    except Exception as e:  # pypdf raises a variety of types on malformed PDFs
+        log.warning("pdf_parse_failed", error=str(e))
+        return ""
+    return _strip_tags("\n".join(parts))
 
 
 # Postgres errors if a single string fed to to_tsvector exceeds 1048575 bytes. Large consolidated
@@ -1509,6 +1525,364 @@ class BrazilPlanaltoClient(ForeignSourceClient):
             source_id=source_id, region=self.region, source=self.source,
             title=english_label or source_id, full_text=full_text,
             source_url=f"{BR_BASE}/{source_id}", english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Brazil — Câmara dos Deputados, Dados Abertos REST API (dadosabertos.camara.leg.br/api/v2). Open, no
+# key, JSON. LIVE discovery over proposições (bills) by keyword: Brazil's producer-responsibility lever
+# is "responsabilidade compartilhada" / "logística reversa" via acordos setoriais, and those live in
+# ordinary PLs, not just the enacted Planalto statutes. Co-exists with BrazilPlanaltoClient — this one
+# carries source="camara" (foreign_id keyed on the proposição id). Proposições are bills in progress,
+# so status="active" unless the situation says it was transformed into a norm. Archetype A.
+#   discover: GET /proposicoes?keywords=<term>&ordem=DESC&ordenarPor=id&itens=N  -> {dados:[{id,ementa}]}
+#   bill text: GET /proposicoes/{id}  -> ementa + ementaDetalhada + keywords + statusProposicao
+# --------------------------------------------------------------------------------------------------
+
+BR_CAMARA_API = "https://dadosabertos.camara.leg.br/api/v2"
+BR_CAMARA_PAGE = "https://www.camara.leg.br/propostas-legislativas/{id}"
+# Portuguese discovery terms over the proposições full-text index. Lead with the high-precision
+# statutory phrases (responsabilidade compartilhada, logística reversa, acordo setorial); the broader
+# ones (economia circular, resíduos sólidos) are intentionally included and the Haiku floor sorts noise.
+BR_CAMARA_TERMS = [
+    "logística reversa",
+    "responsabilidade compartilhada",
+    "acordo setorial",
+    "responsabilidade estendida do produtor",
+    "economia circular",
+    "resíduos sólidos",
+]
+BR_CAMARA_PER_TERM = 60   # newest N proposições per term (DESC by id), deduped across terms
+BR_CAMARA_MAX = 200       # overall discovery cap — bounds the Haiku classify spend per run
+
+
+class BrazilCamaraClient(ForeignSourceClient):
+    """Câmara dos Deputados Dados Abertos adapter. Brazilian federal bills (proposições) discovered
+    live by keyword, JSON, no key. region="BR", source="camara" — co-exists with the Planalto
+    consolidated-law adapter (source="planalto")."""
+
+    region = "BR"
+    source = "camara"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        from urllib.parse import quote
+
+        out: dict[str, str] = {}  # proposição id -> "" (english label filled from detail at fetch)
+        for term in BR_CAMARA_TERMS:
+            url = (f"{BR_CAMARA_API}/proposicoes?keywords={quote(term)}"
+                   f"&ordem=DESC&ordenarPor=id&itens={BR_CAMARA_PER_TERM}")
+            try:
+                resp = await self.http.get(url, headers={"Accept": "application/json"})
+                resp.raise_for_status()
+                dados = resp.json().get("dados") or []
+            except (httpx.HTTPError, ValueError) as e:
+                log.warning("br_camara_search_failed", term=term, error=str(e))
+                continue
+            for d in dados:
+                pid = d.get("id")
+                if pid:
+                    out.setdefault(str(pid), "")
+        candidates = list(out.items())[:BR_CAMARA_MAX]
+        log.info("br_camara_discovered", total=len(candidates), terms=len(BR_CAMARA_TERMS))
+        return candidates
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            resp = await self.http.get(f"{BR_CAMARA_API}/proposicoes/{source_id}",
+                                       headers={"Accept": "application/json"})
+            resp.raise_for_status()
+            d = resp.json().get("dados") or {}
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("br_camara_fetch_failed", id=source_id, error=str(e))
+            return None
+        ementa = (d.get("ementa") or "").strip()
+        if not ementa:
+            log.warning("br_camara_no_ementa", id=source_id)
+            return None
+        tipo, numero, ano = d.get("siglaTipo") or "", d.get("numero") or "", d.get("ano") or ""
+        title = f"{tipo} {numero}/{ano}".strip()
+        st = d.get("statusProposicao") or {}
+        situacao = (st.get("descricaoSituacao") or "").strip()
+        # Body for the classifier: official summary + detail + curated index keywords (high signal).
+        parts = [
+            f"{d.get('descricaoTipo') or tipo} {numero}/{ano}",
+            ementa,
+            (d.get("ementaDetalhada") or "").strip(),
+            f"Palavras-chave: {d['keywords']}" if d.get("keywords") else "",
+            f"Situação: {situacao}" if situacao else "",
+        ]
+        full_text = "\n\n".join(p for p in parts if p)
+        status = "enacted" if "transformad" in situacao.lower() else "active"
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=title, full_text=full_text, source_url=BR_CAMARA_PAGE.format(id=source_id),
+            english_label=english_label, status=status,
+            status_date=_iso_to_date(d.get("dataApresentacao")),  # real introduction date
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Uruguay — IMPO (Centro de Información Oficial). Open, no key. Append ?json=true to any norm URL for
+# structured JSON: article-level text (articulos[] with textoArticulo) + real promulgation date. Served
+# ISO-8859-1 (charset in header, but decode latin-1 to be safe). No full-text search endpoint, so seed
+# the marquee packaging / integrated-waste / EPR instruments by base path (live discovery would come
+# from the Parlamento open-data catalog, catalogodatos.gub.uy — a Phase-2 upgrade). Archetype A.
+#   law text: GET impo.com.uy/bases/{tipo}/{num}-{año}?json=true  (JSON: nombreNorma, vistos, articulos[])
+# --------------------------------------------------------------------------------------------------
+
+UY_API = "https://www.impo.com.uy/bases/{path}?json=true"
+UY_PAGE = "https://www.impo.com.uy/bases/{path}"
+UY_SEED_LAWS: list[dict] = [
+    {"path": "leyes/17849-2004",
+     "en": "Law 17.849 (2004) — Non-returnable packaging / Packaging Recycling Law"},
+    {"path": "decretos/260-2007",
+     "en": "Decree 260/007 — regulation of Law 17.849 (packaging management, deposit-return & recovery)"},
+    {"path": "leyes/19829-2019",
+     "en": "Law 19.829 (2019) — Integrated Solid Waste Management Law (extended producer responsibility)"},
+    {"path": "leyes/17283-2000",
+     "en": "Law 17.283 (2000) — General Environmental Protection Law"},
+]
+_UY_DMY_RE = re.compile(r"\s*(\d{2})/(\d{2})/(\d{4})")
+
+
+def _uy_date(s: str | None) -> "datetime.date | None":
+    """IMPO dates are DD/MM/YYYY (slash-separated), e.g. fechaPromulgacion '18/09/2019'."""
+    m = _UY_DMY_RE.match(s or "")
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m[3]), int(m[2]), int(m[1]))
+    except ValueError:
+        return None
+
+
+class UruguayImpoClient(ForeignSourceClient):
+    """IMPO adapter. Uruguayan national law, article-level JSON (?json=true), ISO-8859-1, no key.
+    Seed-only: IMPO has no full-text search, so it's driven per-norm by base path."""
+
+    region = "UY"
+    source = "impo"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("uy_discovered", total=len(UY_SEED_LAWS), seeded=len(UY_SEED_LAWS))
+        return [(s["path"], s["en"]) for s in UY_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(UY_API.format(path=source_id))
+            r.raise_for_status()
+            data = json.loads(r.content.decode("latin-1"))  # IMPO serves ISO-8859-1
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("uy_fetch_failed", path=source_id, error=str(e))
+            return None
+        title = _strip_tags(data.get("nombreNorma") or "") or (english_label or source_id)
+        body: list[str] = []
+        for a in data.get("articulos") or []:
+            at = _strip_tags(a.get("tituloArticulo") or "")
+            ax = _strip_tags(a.get("textoArticulo") or "")
+            joined = "\n".join(p for p in (at, ax) if p)
+            if joined:
+                body.append(joined)
+        full_text = "\n\n".join(
+            x for x in [title, _strip_tags(data.get("vistos") or ""), *body] if x
+        )
+        if len(full_text) < 100:
+            log.warning("uy_thin_text", path=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=UY_PAGE.format(path=source_id), english_label=english_label,
+            status_date=_uy_date(data.get("fechaPromulgacion") or data.get("fechaPublicacion")),
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Colombia — seed adapter. The national open-data norm index (datos.gov.co Socrata fiev-nid6) is a
+# clean JSON discovery feed but carries no id/URL to dereference to text, so it can't be auto-joined
+# to a body. Instead seed the marquee circular-economy / EPR statutes and fetch consolidated full text
+# from two reliable hosts: leyes from the Secretaría del Senado "basedoc" HTML (deterministic slug),
+# and the MADS packaging-EPR resolutions (Resolución 1407/2018 & amendments) from the MinAmbiente
+# normativa page (thin — carries the authoritative title/description; the body is a linked PDF).
+#   ley text:  GET secretariasenado.gov.co/senado/basedoc/{slug}.html  (consolidated HTML)
+#   res. text: GET minambiente.gov.co/documento-normativa/{slug}/       (title + description)
+# --------------------------------------------------------------------------------------------------
+
+CO_SENADO = "http://www.secretariasenado.gov.co/senado/basedoc/{slug}.html"
+CO_MADS = "https://www.minambiente.gov.co/documento-normativa/{slug}/"
+# source_id = "<host>:<slug>" — host selects the fetcher. "senado" = full consolidated ley text;
+# "mads" = MADS resolution page (english_label carries the signal; body is a linked PDF).
+CO_SEED_LAWS: list[dict] = [
+    {"id": "senado:ley_2232_2022",
+     "en": "Law 2232 of 2022 — single-use plastics phase-out & substitution targets"},
+    {"id": "senado:ley_1672_2013",
+     "en": "Law 1672 of 2013 — WEEE / e-waste producer responsibility (RAEE)"},
+    {"id": "senado:ley_1252_2008",
+     "en": "Law 1252 of 2008 — integrated management of hazardous waste"},
+    {"id": "senado:ley_1259_2008",
+     "en": "Law 1259 of 2008 — environmental citation (comparendo ambiental) for waste"},
+    {"id": "mads:resolucion-1407-de-2018",
+     "en": "Resolution 1407 of 2018 (MADS) — packaging & container EPR (envases y empaques): "
+           "producers must file a management plan with recovery targets"},
+    {"id": "mads:resolucion-1342-de-2020",
+     "en": "Resolution 1342 of 2020 (MADS) — amends Resolution 1407/2018 packaging EPR targets"},
+]
+
+
+class ColombiaNormativaClient(ForeignSourceClient):
+    """Colombia adapter. Seed the marquee CE/EPR statutes; fetch consolidated text from the Secretaría
+    del Senado basedoc (leyes) or the MinAmbiente normativa page (MADS resolutions). No key."""
+
+    region = "CO"
+    source = "normativa"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("co_discovered", total=len(CO_SEED_LAWS), seeded=len(CO_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in CO_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        host, _, slug = source_id.partition(":")
+        url = (CO_SENADO if host == "senado" else CO_MADS).format(slug=slug)
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("co_fetch_failed", id=source_id, error=str(e))
+            return None
+        # secretariasenado serves ISO-8859-1 with no charset header (httpx guesses utf-8 and mangles the
+        # accents), so decode it latin-1; MinAmbiente correctly declares UTF-8 (use r.text). MinAmbiente
+        # is also a WordPress site heavy with inline JSON-LD/CSS/JS, so drop <script>/<style> first.
+        raw = r.content.decode("latin-1") if host == "senado" else r.text
+        full_text = _strip_tags(_SCRIPT_STYLE_RE.sub(" ", raw))
+        # MADS resolution pages are thin (title + description; body is a linked PDF) — the curated
+        # english_label carries the real signal, so accept a shorter body for that host only.
+        floor = 100 if host == "senado" else 40
+        if len(full_text) < floor:
+            log.warning("co_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or slug, full_text=full_text, source_url=url,
+            english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Mexico — Cámara de Diputados, LeyesBiblio. Open, no key. Consolidated federal law as a PDF at a
+# predictable per-law path (pdf/{ABBR}.pdf), kept current with reform dates. Mexico's producer-
+# responsibility lever is "responsabilidad compartida" + planes de manejo under the LGPGIR; there's no
+# clean bill-tracking API (SIL is HTML-only), so seed the marquee federal statutes and pypdf the text.
+#   law text: GET diputados.gob.mx/LeyesBiblio/pdf/{ABBR}.pdf  (consolidated PDF, parsed with pypdf)
+# --------------------------------------------------------------------------------------------------
+
+MX_PDF = "https://www.diputados.gob.mx/LeyesBiblio/pdf/{abbr}.pdf"
+MX_PAGE = "https://www.diputados.gob.mx/LeyesBiblio/ref/{abbr_lower}.htm"
+MX_SEED_LAWS: list[dict] = [
+    {"abbr": "LGPGIR", "date": "2003-10-08",
+     "en": "General Law for the Prevention & Integral Management of Waste (LGPGIR) — shared "
+           "responsibility & producer management plans (planes de manejo)"},
+    {"abbr": "LGEEPA", "date": "1988-01-28",
+     "en": "General Law of Ecological Balance & Environmental Protection (LGEEPA)"},
+]
+# LeyesBiblio PDFs carry no machine-readable enactment date the adapter can parse cheaply, so pin the
+# DOF publication date of each seeded law (abbr -> ISO date) rather than leave it dateless on the charts.
+MX_SEED_DATES = {s["abbr"]: s["date"] for s in MX_SEED_LAWS}
+
+
+class MexicoLeyesBiblioClient(ForeignSourceClient):
+    """Cámara de Diputados LeyesBiblio adapter. Mexican consolidated federal law as PDF (pypdf), no
+    key. Seed-only — Mexico has no clean federal bill-tracking API (SIL is HTML-only)."""
+
+    region = "MX"
+    source = "leyesbiblio"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("mx_discovered", total=len(MX_SEED_LAWS), seeded=len(MX_SEED_LAWS))
+        return [(s["abbr"], s["en"]) for s in MX_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(MX_PDF.format(abbr=source_id))
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("mx_fetch_failed", abbr=source_id, error=str(e))
+            return None
+        full_text = _pdf_to_text(r.content)
+        if len(full_text) < 100:
+            log.warning("mx_thin_text", abbr=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=MX_PAGE.format(abbr_lower=source_id.lower()), english_label=english_label,
+            status_date=_iso_to_date(MX_SEED_DATES.get(source_id)),
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Peru — gob.pe (Plataforma Digital Única del Estado). Open, no key. No law-text API (El Peruano and
+# SPIJ are SPA / login-walled), but each MINAM / Congreso norma page links a stable consolidated PDF on
+# the gob.pe CDN. Peru's EPR ("responsabilidad extendida del productor") lives in the Integral Solid
+# Waste Management Law (D.L. 1278). Seed the marquee norms by norma-page path; extract the CDN PDF + pypdf.
+#   law text: GET gob.pe/{norma-page}  -> extract cdn.www.gob.pe/.../*.pdf  -> pypdf
+# --------------------------------------------------------------------------------------------------
+
+PE_BASE = "https://www.gob.pe/{path}"
+PE_CDN_PDF_RE = re.compile(r"https://cdn\.www\.gob\.pe/uploads/document/file/\d+/[^\"'\s?<>]+\.pdf")
+# Short stable id per norm (drives bill_number/foreign_id; bills.bill_number is VARCHAR(50), so the
+# full gob.pe path can't be the id) + the norma-page path used for the fetch.
+PE_SEED_LAWS: list[dict] = [
+    {"id": "dl-1278", "path": "institucion/minam/normas-legales/3610-1278",
+     "en": "Legislative Decree 1278 (2016) — Integral Solid Waste Management Law (extended producer responsibility / REP)"},
+    {"id": "ds-014-2017-minam", "path": "institucion/minam/normas-legales/3695-014-2017-minam",
+     "en": "Supreme Decree 014-2017-MINAM — Regulation of Legislative Decree 1278"},
+    {"id": "ds-009-2019-minam", "path": "institucion/minam/normas-legales/354138-009-2019-minam",
+     "en": "Supreme Decree 009-2019-MINAM — WEEE / e-waste management (RAEE)"},
+    {"id": "ley-30884", "path": "institucion/congreso-de-la-republica/normas-legales/1122664-30884",
+     "en": "Law 30884 (2018) — regulation of single-use plastics & disposable containers"},
+    {"id": "ley-31896", "path": "institucion/minam/normas-legales/4728521-31896",
+     "en": "Law 31896 (2023) — amends the Integral Solid Waste Management Law (D.L. 1278)"},
+]
+PE_PATHS = {s["id"]: s["path"] for s in PE_SEED_LAWS}
+
+
+class PeruGobPeClient(ForeignSourceClient):
+    """gob.pe adapter. Peruvian consolidated norms via the CDN PDF linked from each norma page (pypdf),
+    no key. Seed-only — Peru has no law-text API (El Peruano / SPIJ are SPA / login-walled)."""
+
+    region = "PE"
+    source = "gobpe"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("pe_discovered", total=len(PE_SEED_LAWS), seeded=len(PE_SEED_LAWS))
+        return [(s["id"], s["en"]) for s in PE_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        path = PE_PATHS.get(source_id, source_id)
+        url = PE_BASE.format(path=path)
+        try:
+            page = await self.http.get(url)
+            page.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("pe_page_failed", id=source_id, error=str(e))
+            return None
+        m = PE_CDN_PDF_RE.search(page.text)
+        if not m:
+            log.warning("pe_no_pdf", id=source_id)
+            return None
+        try:
+            pdf = await self.http.get(m.group(0))
+            pdf.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("pe_pdf_failed", id=source_id, error=str(e))
+            return None
+        full_text = _pdf_to_text(pdf.content)
+        if len(full_text) < 100:
+            log.warning("pe_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=url, english_label=english_label,
         )
 
 
@@ -2967,10 +3341,15 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "NL": NetherlandsBwbClient,
     "ES": SpainBoeClient,
     "CL": ChileLeychileClient,
+    "UY": UruguayImpoClient,
+    "CO": ColombiaNormativaClient,
+    "PE": PeruGobPeClient,
+    "MX": MexicoLeyesBiblioClient,
     "SE": SwedenRiksdagenClient,
     "IE": IrelandEisbClient,
     "AT": AustriaRisClient,
     "BR": BrazilPlanaltoClient,
+    "BR_CAMARA": BrazilCamaraClient,   # region="BR", source="camara" — live proposições
     "CH": SwitzerlandFedlexClient,
     "PL": PolandEliClient,
     "KR": KoreaLawGoKrClient,

@@ -81,6 +81,12 @@ REGION_LABELS = {
     "CA": "Canada",
     "AU": "Australia",
     "CN": "China",
+    "MX": "Mexico",
+    "CO": "Colombia",
+    "UY": "Uruguay",
+    "PE": "Peru",
+    "CR": "Costa Rica",
+    "HN": "Honduras",
 }
 
 
@@ -93,6 +99,13 @@ You are an expert in {region} environmental policy and Extended Producer Respons
 Analyze legislative and regulatory measures and classify their relevance to EPR, product stewardship, \
 circular economy policy, right-to-repair, recycled content mandates, deposit return schemes, or measures \
 that preempt or override such laws. \
+Many jurisdictions — especially in Latin America — implement producer responsibility under DIFFERENT names; \
+treat these as in-scope forms of EPR (instrument_type "epr"): shared / co-responsibility for the product \
+life cycle (responsabilidade compartilhada, responsabilidad compartida, corresponsabilidad), extended \
+producer responsibility (responsabilidad extendida del productor / REP, responsabilidade estendida do \
+produtor), reverse logistics / take-back systems (logística reversa, logística inversa, sistema de \
+logística reversa), sectoral take-back agreements (acordo setorial), and producer/importer waste-management \
+plan obligations (plan de manejo, plano de gerenciamento de resíduos, gestión integral de residuos). \
 Circular economy scope includes both the technical cycle (the above) and the biological cycle: \
 bio-based / biomanufactured materials (biopolymers, bioplastics, compostable materials), regenerative \
 agriculture & soil health (healthy soils, cover crops, carbon farming, biochar), and organics recycling / \
@@ -141,6 +154,17 @@ return / bottle bill, single-use plastic restrictions, organics/compost diversio
 economy — is sufficient to set is_ce_relevant=true with confidence >= 0.6. Do NOT set
 is_ce_relevant=false or report low confidence MERELY because the full text is unavailable; only do so
 when the title/description themselves indicate the bill is out of scope.
+
+Producer-responsibility variants: the same policy goes by different names across jurisdictions — set
+is_ce_relevant=true and put "epr" in instrument_types when a measure establishes or strengthens any of:
+shared / co-responsibility for a product's life cycle (responsabilidade compartilhada pelo ciclo de vida,
+responsabilidad compartida, corresponsabilidad), extended producer responsibility (responsabilidad
+extendida del productor / REP), reverse logistics or take-back systems (logística reversa, logística
+inversa, sistema de logística reversa), sectoral take-back agreements (acordo setorial), or an obligation
+on producers/importers/distributors to run a waste-management plan for their products (plan de manejo,
+plano de gerenciamento de resíduos sólidos). These are EPR even when the text never says "EPR". A generic
+integrated-waste-management or recycling-targets law that assigns NO producer/importer obligation is
+circular-economy relevant but not "epr" — tag its actual lever instead.
 
 Biological cycle: bills on bio-based / biomanufactured materials (biopolymers, bioplastics,
 compostable materials), regenerative agriculture & soil health (healthy soils, cover crops,

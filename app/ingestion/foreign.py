@@ -3363,15 +3363,15 @@ IN_SEED_LAWS: list[dict] = [
      "material": "electronics", "date": "2016-03-23"},
     {"id": "227250", "en": "India E-Waste (Management) Rules, 2022 (EPR for electronics, 100+ categories)",
      "material": "electronics", "date": "2022-11-02"},
+    {"id": "227293", "en": "India Battery Waste Management Rules, 2022 (EPR for all battery types)",
+     "material": "batteries", "date": "2022-08-24"},
     {"id": "183723", "en": "India Solid Waste Management Rules, 2016",
      "material": "waste", "date": "2016-04-08"},
 ]
-# TODO(IN): add the primary Battery Waste Management Rules, 2022 (GSR 1013(E), 22 Aug 2022) — the third
-# core EPR stream. Not individually catalogued in the FAOLEX India id range scanned (2272xx is mixed-
-# topic) and the FAOLEX search UI is bot-walled from non-IN egress; the 2023 amendment (ind227248) is a
-# procedural stub the classifier correctly rejects (ce=False). Close via a durable government/SPCB mirror
-# using the seed `url` override, or an in-IN FAOLEX id lookup. Same for the Environment (Protection) Act
-# 1986 parent (ind227252/227253 are only its 2023/24 notifications).
+# TODO(IN): the Environment (Protection) Act 1986 parent is still not seeded (ind227252/227253 are only
+# its 2023/24 notifications). Not EPR-specific so low priority; add via the seed `url` override or an
+# in-IN FAOLEX id lookup if a framework-level anchor is wanted. (The three core producer-responsibility
+# streams — plastic, e-waste, battery — are now all covered.)
 
 _IN_LETTERS_RE = re.compile(r"[A-Za-z]")
 

@@ -51,7 +51,7 @@ const CODE_TO_ISO: Record<string, string> = {
   LT: '440', CZ: '203', EE: '233', SI: '705', IT: '380', PT: '620', GR: '300', RO: '642',
   BG: '100', HR: '191', CY: '196', HU: '348', BE: '056', MT: '470',
   CH: '756', NO: '578', CL: '152', BR: '076', KR: '410', CA: '124', AU: '036', MX: '484',
-  CN: '156',
+  CN: '156', IN: '356',
 };
 
 // Reverse lookup for click-to-drill: a clicked country's geo.id → its dropdown region code.

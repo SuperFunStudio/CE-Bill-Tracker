@@ -30,7 +30,7 @@ REGION_LABELS = {
     "DK": "Denmark", "CH": "Switzerland", "SI": "Slovenia", "BR": "Brazil", "AT": "Austria",
     "LU": "Luxembourg", "LV": "Latvia", "SK": "Slovakia", "LT": "Lithuania", "CZ": "Czechia",
     "EE": "Estonia", "KR": "South Korea", "NO": "Norway", "BE": "Belgium", "IT": "Italy",
-    "PT": "Portugal", "CA": "Canada", "AU": "Australia", "CN": "China",
+    "PT": "Portugal", "CA": "Canada", "AU": "Australia", "CN": "China", "IN": "India",
 }
 
 

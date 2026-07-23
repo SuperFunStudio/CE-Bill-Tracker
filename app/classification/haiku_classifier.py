@@ -87,6 +87,7 @@ REGION_LABELS = {
     "PE": "Peru",
     "CR": "Costa Rica",
     "HN": "Honduras",
+    "IN": "India",
 }
 
 

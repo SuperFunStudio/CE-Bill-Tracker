@@ -54,7 +54,7 @@ Status legend: **BUILT** (adapter live, in corpus) · **ASSESSED** (portal resea
 | Portugal | C | DRE (Angular SPA, needs headless) | LOW | strong EPR but SPA |
 | Argentina | C | InfoLEG HTML | LOW | EPR thin/subnational |
 | Colombia | C / D | SUIN-Juriscol (PDF resolutions) | LOW | |
-| India | C / D | India Code + e-Gazette PDF | LOW | EPR rules are Gazette PDFs |
+| India | **A- (via FAOLEX)** | faolex.fao.org/docs/pdf/ind{ID}.pdf | **BUILT (P1)** | IN client, 5 seed rules (PWM 2016+2024, E-Waste 2016+2022, SWM 2016), all classify epr 0.85–0.99. Native CPCB/moef/indiacode geo/UA/cert-gated; FAOLEX PDF mirror is reachable+deterministic. English-native (no prompt change). Battery 2022 + EP Act = documented gap (url-override ready). Local-verified; prod ingest+deploy pending |
 | Indonesia | D | peraturan.go.id PDF | LOW | |
 | Viet Nam | C | vbpl.vn (reCAPTCHA-gated) | LOW | |
 

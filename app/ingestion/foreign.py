@@ -3328,6 +3328,122 @@ class AustraliaTasClient(AustraliaEnActClient):
     ]
 
 
+# --------------------------------------------------------------------------------------------------
+# India — FAOLEX (faolex.fao.org). India's EPR obligations are gazette Rules under the Environment
+# (Protection) Act 1986: Plastic Waste, E-Waste, Battery Waste, Solid Waste. The official portals
+# (cpcb.gov.in, moef.gov.in, indiacode.nic.in) are geo/UA/cert-gated from non-IN egress, but the FAO's
+# FAOLEX mirror hosts each rule's full-text PDF at a deterministic, crawlable URL that IS reachable:
+#   PDF:  https://faolex.fao.org/docs/pdf/ind{ID}.pdf   (ID = the LEX-FAOC number)
+#   page: https://www.fao.org/faolex/results/details/en/c/LEX-FAOC{ID}/
+# English-native statute (no multilingual extraction needed) — the classifier already fires on "Extended
+# Producer Responsibility" here, so no Haiku-prompt change (unlike the LatAm shared-responsibility set).
+# Seed-only: the FAOLEX search UI (www.fao.org) is bot-walled, so we pin the marquee EPR rules by
+# VERIFIED LEX-FAOC id rather than live-discover. Region="IN" — India's ISO-3166 alpha-2; distinct from
+# US-state Indiana, whose bills are region="US", state="IN" (jurisdiction_code US-IN vs India's IN).
+#
+# Gazette-PDF wrinkle: notifications from ~2022 on are printed bilingually (Hindi first, English after)
+# in a custom Devanagari font that pypdf renders as "?" mojibake. The interleaved ENGLISH sections
+# extract cleanly (verified: e-waste 2022 CHAPTER III body = 0% "?"), so _india_english() drops the
+# mojibake lines — leaving clean English for both FTS and the Haiku excerpt.
+# --------------------------------------------------------------------------------------------------
+
+IN_DOC = "https://faolex.fao.org/docs/pdf/ind{id}.pdf"
+IN_PAGE = "https://www.fao.org/faolex/results/details/en/c/LEX-FAOC{id}/"
+
+# Marquee EPR / circular-economy rules, pinned by verified FAOLEX LEX-FAOC id (PDF existence + document
+# identity confirmed against faolex.fao.org). `date` = the gazette notification date where known (else a
+# year-only date is derived from the label). Covers the three core producer-responsibility streams
+# (packaging, e-waste, batteries) + the solid-waste framework. Extend by adding a verified row.
+IN_SEED_LAWS: list[dict] = [
+    {"id": "183721", "en": "India Plastic Waste Management Rules, 2016 (EPR for plastic packaging)",
+     "material": "plastics", "date": "2016-03-18"},
+    {"id": "227249", "en": "India Plastic Waste Management (Amendment) Rules, 2024 (packaging EPR)",
+     "material": "plastics", "date": "2024-03-14"},
+    {"id": "183711", "en": "India E-Waste (Management) Rules, 2016 (EPR for electronics)",
+     "material": "electronics", "date": "2016-03-23"},
+    {"id": "227250", "en": "India E-Waste (Management) Rules, 2022 (EPR for electronics, 100+ categories)",
+     "material": "electronics", "date": "2022-11-02"},
+    {"id": "183723", "en": "India Solid Waste Management Rules, 2016",
+     "material": "waste", "date": "2016-04-08"},
+]
+# TODO(IN): add the primary Battery Waste Management Rules, 2022 (GSR 1013(E), 22 Aug 2022) — the third
+# core EPR stream. Not individually catalogued in the FAOLEX India id range scanned (2272xx is mixed-
+# topic) and the FAOLEX search UI is bot-walled from non-IN egress; the 2023 amendment (ind227248) is a
+# procedural stub the classifier correctly rejects (ce=False). Close via a durable government/SPCB mirror
+# using the seed `url` override, or an in-IN FAOLEX id lookup. Same for the Environment (Protection) Act
+# 1986 parent (ind227252/227253 are only its 2023/24 notifications).
+
+_IN_LETTERS_RE = re.compile(r"[A-Za-z]")
+
+
+def _india_english(text: str) -> str:
+    """Keep the English lines of a bilingual Indian gazette PDF, dropping the Hindi lines that pypdf
+    renders as '?'/mojibake (custom Devanagari font, no ToUnicode). A line survives only if it carries a
+    real run of Latin letters AND those letters are a meaningful share of its non-space characters;
+    pure '?'/symbol runs are dropped. Cheap post-filter over _pdf_to_text's output."""
+    keep: list[str] = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        letters = len(_IN_LETTERS_RE.findall(s))
+        nonspace = len(s.replace(" ", ""))
+        if letters >= 4 and letters / max(nonspace, 1) >= 0.35:
+            keep.append(s)
+    return _BLANKLINES_RE.sub("\n\n", "\n".join(keep)).strip()
+
+
+class IndiaFaolexClient(ForeignSourceClient):
+    """FAOLEX adapter for India's gazette EPR Rules. Seed-only (deterministic ind{ID}.pdf URLs); English
+    full text via pypdf + a Hindi-mojibake line filter. No API key, no auth (FAOLEX permits crawling)."""
+
+    region = "IN"
+    source = "faolex"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        # Pure curated seed: the FAOLEX search UI (www.fao.org) is bot-walled, so no live discovery.
+        out = [(s["id"], s["en"]) for s in IN_SEED_LAWS]
+        log.info("in_discovered", total=len(out), seeded=len(out))
+        return out
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        seed = next((s for s in IN_SEED_LAWS if s["id"] == source_id), None)
+        # Most rules resolve to the deterministic FAOLEX PDF; a seed may override `url` to pull from a
+        # government/SPCB mirror instead (e.g. rules FAOLEX hasn't individually catalogued yet).
+        url = (seed or {}).get("url") or IN_DOC.format(id=source_id)
+        try:
+            resp = await self.http.get(url)
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("in_fetch_failed", faolex_id=source_id, url=url, error=str(e))
+            return None
+        # A 404 is served as an HTML stub; guard against storing it as "text" if it ever returns 200.
+        if "application/pdf" not in resp.headers.get("content-type", "").lower():
+            log.warning("in_not_pdf", faolex_id=source_id,
+                        ctype=resp.headers.get("content-type", ""))
+            return None
+
+        full_text = _india_english(_pdf_to_text(resp.content))
+        if len(full_text) < 200:
+            log.warning("in_thin_text", faolex_id=source_id, chars=len(full_text))
+            return None
+
+        status_date = _iso_to_date((seed or {}).get("date")) if seed else None
+        # Prefer the human-facing FAOLEX record page; a mirror-only seed points source_url at its `url`.
+        source_url = (seed or {}).get("page") or (
+            url if (seed or {}).get("url") else IN_PAGE.format(id=source_id))
+        return ForeignLaw(
+            source_id=source_id,
+            region=self.region,
+            source=self.source,
+            title=english_label or f"India FAOLEX {source_id}",
+            full_text=full_text,
+            source_url=source_url,
+            english_label=english_label,
+            status_date=status_date,  # gazette notification date (seed), else year-only via the label
+        )
+
+
 # Registry of available foreign adapters, by region code. New countries: add the subclass + register.
 # Note: a registry key is just a lookup handle (e.g. "FR_CODE"); the client's own `.region` drives the
 # row's region (LegifranceCodeClient writes region="FR"), so JORF + codified FR data co-exist.
@@ -3376,6 +3492,8 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "AU_NSW": AustraliaNswClient,
     "AU_QLD": AustraliaQldClient,
     "AU_TAS": AustraliaTasClient,
+    # India (region="IN"): gazette EPR Rules via the FAOLEX PDF mirror.
+    "IN": IndiaFaolexClient,
 }
 
 

@@ -3,30 +3,36 @@ import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { useBills } from '@/hooks/useBills';
 
-// Engine snapshot. `relevant` is pulled live from the bill engine below; the value
-// here is only a fallback for first paint / offline. `universe` is the OpenStates bulk
-// corpus the engine draws from — verified at 1,490,425 state/D.C./territory bills
-// (1,560,420 incl. federal) in the 2026-06 monthly Postgres dump. `terms` & `categories`
-// describe the pre-screen lexicon.
+// Public engine snapshot. Only observable facts live here — the numbers a reader could verify
+// from the site itself (corpus scale, jurisdiction breadth, the live relevant count). The engine
+// internals that make distillation possible — the exact pre-screen lexicon, its weighting/tiering,
+// the model and prompts, confidence thresholds — are deliberately NOT surfaced. Keep it that way:
+// describe the method, not the recipe.
+// `relevant` is pulled live from the bill engine below; the value here is only a fallback for first
+// paint / offline. `universe` is the OpenStates bulk corpus the engine screens wholesale — verified
+// at 1,490,425 state/D.C./territory bills (1,560,420 incl. federal) in the 2026-06 monthly Postgres
+// dump. `jurisdictions` is the global reach: U.S. states, the EU, and national governments now
+// ingested from official sources.
 const ENGINE = {
-  universe: '1.5 million',   // bills in the U.S. legislative corpus the engine draws from
-  relevant: '1,535',         // fallback only — live count comes from useBills()
-  terms: '440+',             // circular-economy terms in the pre-screen lexicon
-  categories: 16,            // signal categories the terms are grouped into
+  universe: '1.5 million',   // bills in the U.S. legislative corpus screened wholesale
+  jurisdictions: '30+',      // U.S. states + EU + national governments ingested worldwide
+  relevant: '2,300',         // fallback only — live count comes from useBills()
 };
 
 const INSTRUMENTS = [
-  'Extended Producer Responsibility (EPR)',
+  'Extended Producer Responsibility (EPR) — incl. shared-responsibility & reverse-logistics regimes abroad',
   'Deposit Return / bottle bills',
   'Right to Repair',
   'Recycled-Content mandates',
+  'Financial incentives (grants, tax credits, procurement)',
   'Labeling & Disclosure',
 ];
 
 const MATERIALS = [
   'plastic packaging', 'paper packaging', 'glass', 'metals', 'electronics', 'batteries',
-  'paint', 'carpet', 'mattresses', 'tires', 'pharmaceuticals', 'solar panels', 'textiles',
-  'organics', 'other',
+  'paint', 'carpet', 'mattresses', 'tires', 'vehicles', 'construction', 'furniture',
+  'used oil', 'pharmaceuticals', 'solar panels', 'textiles', 'organics', 'bio-based materials',
+  'agriculture', 'hazardous materials', 'water', 'biodiversity',
 ];
 
 export default function MethodologyPage() {
@@ -40,21 +46,30 @@ export default function MethodologyPage() {
 
       <p className="text-text-secondary leading-relaxed">
         This page is powered by the <strong className="text-text-primary">Atlas Circular</strong> bill-tracker
-        and analysis engine — the same pipeline behind the API. It ingests the full U.S. legislative
-        universe, screens every bill against a fixed set of circularity criteria — EPR, deposit-return,
-        right-to-repair, recycled-content, and labeling instruments across 15 material &amp; product streams —
-        and auto-classifies the matches before a human spot-review. The goal is a judgment you can audit,
-        not a black box.
+        and analysis engine — the same pipeline behind the API. It screens the full U.S. legislative
+        universe and ingests circular-economy law from the EU and national governments worldwide, testing
+        every measure against a consistent set of circularity criteria — EPR, deposit-return,
+        right-to-repair, recycled-content, financial-incentive, and labeling instruments across two dozen
+        material &amp; product streams — and auto-classifies the matches before a human spot-review. The goal
+        is a judgment you can audit, not a black box.
+      </p>
+
+      <p className="text-text-secondary leading-relaxed">
+        We&apos;re transparent about <em className="text-text-primary">how</em> a call is made — the scope
+        below, the pipeline, and the auto-classified-vs-reviewed marker on every bill. The engine itself —
+        the exact screening lexicon, the model and prompts, and the confidence logic that ranks a match — is
+        proprietary. That&apos;s the line: enough to trust and check a result, not enough to clone the system
+        behind it.
       </p>
 
       <section className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border-default bg-border-default">
         <div className="bg-bg-card p-4 text-center">
           <div className="font-serif text-2xl text-text-primary">{ENGINE.universe}</div>
-          <div className="mt-1 text-xs text-text-muted leading-snug">bills in the U.S. legislative universe — 50 states, D.C. &amp; federal</div>
+          <div className="mt-1 text-xs text-text-muted leading-snug">U.S. bills screened wholesale — 50 states, D.C. &amp; federal</div>
         </div>
         <div className="bg-bg-card p-4 text-center">
-          <div className="font-serif text-2xl text-text-primary">{ENGINE.terms}</div>
-          <div className="mt-1 text-xs text-text-muted leading-snug">circular-economy terms in {ENGINE.categories} signal categories</div>
+          <div className="font-serif text-2xl text-text-primary">{ENGINE.jurisdictions}</div>
+          <div className="mt-1 text-xs text-text-muted leading-snug">jurisdictions worldwide — the EU &amp; national governments across five continents</div>
         </div>
         <div className="bg-bg-card p-4 text-center">
           <div className="font-serif text-2xl text-green-accent">{relevant}</div>
@@ -75,7 +90,7 @@ export default function MethodologyPage() {
             </ul>
           </div>
           <div>
-            <div className="text-text-muted text-xs uppercase tracking-wide mb-1">Material &amp; product streams (15)</div>
+            <div className="text-text-muted text-xs uppercase tracking-wide mb-1">Material &amp; product streams ({MATERIALS.length})</div>
             <p className="text-body text-text-secondary leading-relaxed">
               {MATERIALS.join(', ')}.
             </p>
@@ -88,13 +103,15 @@ export default function MethodologyPage() {
         <ol className="space-y-3 text-body text-text-secondary">
           <li>
             <span className="text-text-primary font-medium">1. Ingest.</span> Every bill from all 50
-            states and D.C. is pulled from Open States and refreshed as it moves.
+            states and D.C. is pulled from Open States and refreshed as it moves, alongside circular-economy
+            law from the EU and national governments worldwide, drawn from each jurisdiction&apos;s official
+            source.
           </li>
           <li>
-            <span className="text-text-primary font-medium">2. Pre-screen.</span> A curated
-            circular-economy lexicon — {ENGINE.terms} terms across {ENGINE.categories} signal
-            categories, tiered and weighted — narrows the full legislative universe to plausible
-            candidates, so deeper analysis is spent only on bills that might be relevant.
+            <span className="text-text-primary font-medium">2. Pre-screen.</span> A curated, weighted
+            circular-economy lexicon narrows the full legislative universe to plausible candidates, so the
+            deeper analysis is spent only on bills that might be relevant. (The specific terms and weights
+            are proprietary.)
           </li>
           <li>
             <span className="text-text-primary font-medium">3. Classify.</span> Each candidate is

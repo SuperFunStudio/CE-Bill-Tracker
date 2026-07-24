@@ -376,7 +376,8 @@ async def _count_match(db: AsyncSession, tsq, extra=()) -> int:
 
 
 async def _relevant_bills(
-    db: AsyncSession, question: str, page: int = 1, page_size: int = _PAGE_SIZE, facets=None
+    db: AsyncSession, question: str, page: int = 1, page_size: int = _PAGE_SIZE, facets=None,
+    balance_regions: bool = False,
 ) -> tuple[list, int, str]:
     """The FULL set of bills relevant to `question`, one page at a time — (rows, total, strategy),
     deterministic so paging is stable. Facet-hybrid: jurisdiction is resolved from the question
@@ -415,22 +416,36 @@ async def _relevant_bills(
                 + facets.product_labels)
         return f"{base}·{','.join(tags)}" if tags else base
 
-    def _match_page(tsq):
+    def _match_page(tsq, limit=None):
         # Rank = best of body-text and title/summary relevance (0 when a bill has no text row, so a
-        # title-only match still ranks by its metadata score). Snippet falls back to title.
+        # title-only match still ranks by its metadata score). Snippet falls back to title. `balance_rank`
+        # + `balance_country` (the country segment of the jurisdiction path) ride along for the optional
+        # region-balanced read set (_balance_read_set); other callers ignore them.
         text_rank = func.coalesce(func.ts_rank(BillText.text_tsv, tsq), 0.0)
         rank = func.greatest(text_rank, func.ts_rank(_meta_doc(), tsq))
         headline = func.ts_headline(
             _ENGLISH, func.coalesce(BillText.text, Bill.title, ""), tsq, _HEADLINE_PLAIN
         )
-        q = (select(*_cols(), headline.label("snippet"))
+        country = func.split_part(Jurisdiction.path, ".", 2)
+        q = (select(*_cols(), headline.label("snippet"),
+                    rank.label("balance_rank"), country.label("balance_country"))
              .outerjoin(BillText, BillText.bill_id == Bill.id)
              .outerjoin(lit, Bill.id == lit.c.related_law_id)
+             .outerjoin(Jurisdiction, Jurisdiction.id == Bill.jurisdiction_id)
              .where(Bill.ce_relevant.is_(True))
              .where(_match_filter(tsq)))
         for c in extra:
             q = q.where(c)
-        return q.order_by(rank.desc(), Bill.id.desc()).offset(offset).limit(page_size)
+        return q.order_by(rank.desc(), Bill.id.desc()).offset(offset).limit(limit or page_size)
+
+    async def _match_rows(tsq):
+        # Region-balanced read (relevance-gated) applies only to a corpus-wide ask (no place scoped —
+        # a named place already IS the geography, so balancing across countries there is wrong) on the
+        # deep-read call. Over-fetch a rank-ordered pool, then rebalance to page_size; else the plain page.
+        if balance_regions and not geo:
+            pool = (await db.execute(_match_page(tsq, limit=_BALANCE_POOL))).all()
+            return _balance_read_set(pool, page_size)
+        return (await db.execute(_match_page(tsq))).all()
 
     def _plain_page(where_extra, interleave=False):
         q = (select(*_cols())
@@ -507,7 +522,7 @@ async def _relevant_bills(
         defer_to_dim = (dim_ok and n < _MIN_TEXT_HITS and dim_total > n
                         and _dim_is_dominant(substantive, trig))
         if n > 0 and not defer_to_dim:
-            rows = (await db.execute(_match_page(tsq))).all()
+            rows = await _match_rows(tsq)
             return rows, n, _place_strategy("text")
 
     # RULE 2 — structured-by-dimension (candidacy computed above; the set is non-empty).
@@ -530,7 +545,7 @@ async def _relevant_bills(
         or_tsq = func.to_tsquery(_ENGLISH, " | ".join(substantive))
         n = await _count_match(db, or_tsq, extra)
         if n > 0:
-            rows = (await db.execute(_match_page(or_tsq))).all()
+            rows = await _match_rows(or_tsq)
             return rows, n, "text_broad"
 
     # RULE 4 — listing: the base set (place/material-scoped or whole corpus). Interleave across
@@ -726,6 +741,82 @@ _DEEP_READ = 100         # max bills whose full-text passages we read into one s
                          # output cap (the recycled-content answer neared it); pushing higher wants a
                          # max_tokens bump too. Narrow sets (<100 matched) read everything, so no change
                          # there. Batched map-reduce beyond this is the documented scale-up.
+
+# --- Region-balanced deep read (relevance-gated) -------------------------------------------------
+# The deep-read set is the top _DEEP_READ bills by ENGLISH full-text rank, and that ranking structurally
+# under-samples non-US/EU law: a US bill ranks on its whole statute body, a JP/CN/FR bill only on its
+# English title+summary (_meta_doc), so genuinely-relevant foreign matches get buried under the US
+# 50-statehouse volume and never reach the LLM — the answer then skews US/EU on a corpus-wide question.
+# This rebalances the read set to reserve a slice of slots for under-represented COUNTRIES, but admits a
+# promotion ONLY when the bill already cleared a relevance bar (_BALANCE_FLOOR_RATIO). That floor is the
+# overcompensation guard: a buried-but-on-topic foreign law surfaces, while an off-topic one that merely
+# caught a stray keyword never does — its slot reverts to pure relevance. If nothing qualifies, the set
+# is identical to today, so diversity is purely ADDITIVE and never trades away relevance.
+# Forward-compatible by construction: "country" is split_part(jurisdiction.path, 2) read live from the
+# tree — no hardcoded region list — so any newly-ingested region participates automatically.
+_BALANCE_POOL = 400            # candidates over-fetched (by rank) to rebalance from; the reach ceiling
+_BALANCE_BUDGET = 0.30         # ≤30% of the _DEEP_READ slots are reservable for diversity promotion
+_BALANCE_FLOOR_RATIO = 0.5     # a promoted bill must rank ≥ this × the weakest core bill's rank — the
+                               # overcompensation guard against surfacing irrelevant cross-border matches
+_BALANCE_PER_COUNTRY = 4       # cap promotions per country so no single region floods the budget
+_BALANCE_CORE_TARGET = 2       # a country already holding ≥ this many core slots isn't "under-represented"
+_REGION_BALANCED_READ = True   # server default (ON as of 2026-07-24 after the prod A/B: relevance-gated,
+                               # does no harm on US-dominated topics, surfaces buried landmark foreign law
+                               # — e.g. France AGEC on "right to repair", was 97% US). Admins still override
+                               # per-request via ResearchAskRequest.balance_regions to compare arms.
+
+
+def _balance_read_set(pool: list, page_size: int) -> list:
+    """Relevance-gated country rebalance of a rank-ordered candidate POOL into a page_size read set.
+    Keeps the top (1 - _BALANCE_BUDGET) fraction by PURE relevance as the core (precision backbone),
+    then reserves the remaining budget for the best-ranked bill from each UNDER-REPRESENTED country —
+    admitting a promotion ONLY if its rank clears _BALANCE_FLOOR_RATIO × the weakest core bill's rank.
+    Unused budget backfills with the next pure-relevance candidates, so the set never shrinks its
+    relevance coverage. Deterministic; if nothing qualifies it returns the pure top page_size."""
+    if len(pool) <= page_size:
+        return pool
+
+    def _rank(r) -> float:
+        return getattr(r, "balance_rank", 0.0) or 0.0
+
+    def _country(r) -> str:
+        return getattr(r, "balance_country", None) or "??"
+
+    core_n = max(1, round(page_size * (1 - _BALANCE_BUDGET)))
+    core = pool[:core_n]
+    core_min_rank = min(_rank(r) for r in core)
+    floor = _BALANCE_FLOOR_RATIO * core_min_rank
+
+    core_by_country: dict[str, int] = {}
+    for r in core:
+        core_by_country[_country(r)] = core_by_country.get(_country(r), 0) + 1
+
+    budget = page_size - core_n
+    promoted, promoted_ids, per_country = [], set(), {}
+    for r in pool[core_n:]:  # still in rank order — best under-represented matches promote first
+        if budget <= 0:
+            break
+        c = _country(r)
+        if core_by_country.get(c, 0) >= _BALANCE_CORE_TARGET:
+            continue  # country already well represented in the relevance core — not under-represented
+        if per_country.get(c, 0) >= _BALANCE_PER_COUNTRY:
+            continue  # don't let one region monopolize the diversity budget
+        if _rank(r) < floor:
+            continue  # RELEVANCE FLOOR — the overcompensation guard: off-topic bills never promote
+        promoted.append(r)
+        promoted_ids.add(r.Bill.id)
+        per_country[c] = per_country.get(c, 0) + 1
+        budget -= 1
+
+    result = core + promoted
+    if len(result) < page_size:  # backfill leftover budget with the next best pure-relevance candidates
+        for r in pool[core_n:]:
+            if len(result) >= page_size:
+                break
+            if r.Bill.id not in promoted_ids:
+                result.append(r)
+    return result[:page_size]
+
 
 _DEEP_SYSTEM = """\
 You are a policy-research analyst for a circular-economy / EPR legislation database. You are given the
@@ -1109,8 +1200,14 @@ async def ask_the_atlas(
     # The full matched set drives the table (page 1); the top _DEEP_READ are read DEEPLY — their
     # full-text passages, not summaries — and synthesized into a cited answer. Retrieval runs on the
     # (possibly rewritten) standalone query, with the resolved facets passed so it isn't re-resolved.
+    # Region-balanced deep read (relevance-gated): reserve a slice of the LLM's read set for buried-but-
+    # on-topic foreign law so a corpus-wide answer isn't all US/EU. Only the read set is affected — the
+    # displayed table (page_rows) is always pure relevance. Admins can flip it per-request for the A/B;
+    # everyone else gets the server default.
+    do_balance = body.balance_regions if (body.balance_regions is not None and access.is_admin) else _REGION_BALANCED_READ
     page_rows, total, strategy = await _relevant_bills(db, retrieval_q, page=1, page_size=_PAGE_SIZE, facets=facets)
-    read_rows, _, _ = await _relevant_bills(db, retrieval_q, page=1, page_size=_DEEP_READ, facets=facets)
+    read_rows, _, _ = await _relevant_bills(db, retrieval_q, page=1, page_size=_DEEP_READ, facets=facets,
+                                            balance_regions=do_balance)
 
     terms = facets.meaningful_terms()
     passages = await _passages_for(db, [r.Bill.id for r in read_rows], terms)

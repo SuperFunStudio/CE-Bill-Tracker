@@ -149,6 +149,9 @@ class ResearchAskRequest(BaseModel):
     and appended as the next turn. Omit it to start a fresh session."""
     question: str
     session_id: str | None = None
+    # A/B knob (admin-only, honored per-request): region-balance the LLM's deep-read set so a corpus-wide
+    # answer isn't dominated by US/EU. None = use the server default. See research._REGION_BALANCED_READ.
+    balance_regions: bool | None = None
 
 
 class ResearchChartBar(BaseModel):

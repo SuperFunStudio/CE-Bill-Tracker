@@ -12,7 +12,9 @@
       "Read(//tmp/**)",
       "Bash(curl -s -o /tmp/e -w 'en/akt/512012016003 blob-html: HTTP %{http_code} bytes=%{size_download}\\\\n' https://www.riigiteataja.ee/public-api/api/v1/en/akt/512012016003/blob-html)",
       "Bash(python3 -c \"import re;h=open\\('/tmp/e',encoding='utf-8',errors='replace'\\).read\\(\\);t=re.sub\\(r'<[^>]+>',' ',h\\);t=re.sub\\(r'\\\\s+',' ',t\\);print\\('  ',t[:200]\\)\")",
-      "WebFetch(domain:www.verpackungsgesetz.com)"
+      "WebFetch(domain:www.verpackungsgesetz.com)",
+      "WebFetch(domain:circularcitiesdeclaration.eu)",
+      "WebFetch(domain:ec.europa.eu)"
     ]
   }
 }

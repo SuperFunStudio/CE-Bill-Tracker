@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Playfair_Display, Roboto, Roboto_Mono } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
@@ -46,10 +46,27 @@ export const metadata: Metadata = {
   },
 };
 
+// theme-color renders <meta name="theme-color"> so the mobile browser chrome (status bar / URL bar)
+// matches the app surface instead of defaulting to white. Starts at the light surface; the pre-paint
+// script below and the theme toggle rewrite it to the dark surface when dark mode is active.
+// color-scheme tells the UA to render native controls + scrollbars for both themes.
+export const viewport: Viewport = {
+  themeColor: '#ffffff',
+  colorScheme: 'light dark',
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={`${roboto.variable} ${playfair.variable} ${robotoMono.variable}`}>
       <body className="bg-bg-primary text-text-primary antialiased">
+        {/* Anti-FOUC: apply the saved (or OS-preferred) theme synchronously, BEFORE first paint, so a
+            dark-mode load never flashes the light surface. Runs during HTML parse, ahead of the app.
+            Mirrors ThemeContext's resolution so there's no post-hydration correction. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}if(t==='dark'){document.documentElement.classList.add('dark');}var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute('content',t==='dark'?'#111827':'#ffffff');}}catch(e){}})();`,
+          }}
+        />
         <Providers>
           <AppShell>{children}</AppShell>
           <RouteAnalytics />

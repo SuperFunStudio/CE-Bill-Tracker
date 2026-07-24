@@ -27,7 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const showRegionBar = !REGION_BAR_HIDDEN.some(p => pathname === p || pathname?.startsWith(`${p}/`));
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-[100dvh] overflow-hidden">
       <TopNav />
       {showRegionBar && <GlobalRegionBar />}
       <main className="flex-1 overflow-auto">{children}</main>

@@ -51,6 +51,13 @@
   --scrollbar-thumb: #374151;
 }
 
+/* Theme the html element too (not just body): on mobile the area behind the status bar / notch and
+   the overscroll "rubber band" zone paint the html background, so without this it flashes white in
+   dark mode. Pairs with the pre-paint theme script + <meta name="theme-color"> in layout.tsx. */
+html {
+  background: var(--bg-primary);
+}
+
 body {
   color: var(--text-primary);
   background: var(--bg-primary);

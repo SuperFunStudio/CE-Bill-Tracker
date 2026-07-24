@@ -8,21 +8,29 @@ const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({
   toggle: () => {},
 });
 
+// Apply a theme to the DOM: the .dark class AND the <meta name="theme-color"> (so the mobile browser
+// chrome tracks the toggle, not just the OS setting). Kept in sync with the pre-paint script in layout.
+function applyTheme(t: Theme) {
+  document.documentElement.classList.toggle('dark', t === 'dark');
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', t === 'dark' ? '#111827' : '#ffffff');
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light');
 
+  // The pre-paint script in layout.tsx already resolved + applied the theme (localStorage, else OS
+  // preference) before hydration. Read what it applied so React state matches the DOM — no default
+  // that would flip the toggle icon or re-trigger a flash.
   useEffect(() => {
-    const stored = localStorage.getItem('theme') as Theme | null;
-    const resolved = stored ?? 'light';
-    setTheme(resolved);
-    document.documentElement.classList.toggle('dark', resolved === 'dark');
+    setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   }, []);
 
   const toggle = () => {
     setTheme(prev => {
       const next = prev === 'light' ? 'dark' : 'light';
       localStorage.setItem('theme', next);
-      document.documentElement.classList.toggle('dark', next === 'dark');
+      applyTheme(next);
       return next;
     });
   };

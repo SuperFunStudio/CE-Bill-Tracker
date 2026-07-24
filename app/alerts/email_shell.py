@@ -30,8 +30,8 @@ _ACCENT = "#1e6ae9"     # --green-accent (Atlas blue)
 DASHBOARD_URL = "https://www.atlascircular.com"
 
 # The masthead kicker + default tagline. Kept here so a single edit re-brands every email.
-_KICKER = "Atlas Circular · EPR Legislative Intelligence"
-TAGLINE = "Tracking sustainability across the globe"
+_KICKER = "SUPERFUN STUDIO · PRESENTS"
+TAGLINE = "Tracking circularity globally"
 
 
 def _masthead(tagline: str) -> str:

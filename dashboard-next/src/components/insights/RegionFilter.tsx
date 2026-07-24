@@ -23,6 +23,9 @@ const NON_EU_LABELS: Record<string, string> = {
   CH: 'Switzerland',
   NO: 'Norway',
   KR: 'South Korea',
+  ZA: 'South Africa',
+  KE: 'Kenya',
+  MX: 'Mexico',
   CN: 'China',
   CA: 'Canada',
   AU: 'Australia',
@@ -34,13 +37,16 @@ export function regionLabel(code: string): string {
 }
 
 // Display order: the two anchors (US, EU-central) first, then the rest alphabetical by label.
+// This is the single source of truth for the "which jurisdictions exist" universe — the home-page
+// "Top Regions" ticker filters against REGION_CODES so it can never surface a region you can't then
+// pick here (keep it complete vs the corpus: every foreign region we ingest should appear).
 const ANCHORS = ['US', 'EU'];
 const REST = [
   'UK', 'FR', 'DE', 'JP', 'PL', 'SE', 'NL', 'ES', 'FI', 'IE', 'DK',
   'CL', 'CH', 'SI', 'BR', 'AT', 'LU', 'LV', 'SK', 'LT', 'CZ', 'EE',
-  'CN', 'CA', 'AU', 'IN',
+  'CN', 'CA', 'AU', 'IN', 'KR', 'ZA', 'KE', 'NO', 'MX',
 ].sort((a, b) => regionLabel(a).localeCompare(regionLabel(b)));
-const REGION_CODES = [...ANCHORS, ...REST];
+export const REGION_CODES = [...ANCHORS, ...REST];
 
 export function RegionFilter({
   selected,

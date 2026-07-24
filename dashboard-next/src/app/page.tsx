@@ -15,7 +15,7 @@ import { ScopedDeadlineBanner } from '@/components/scope/ScopedDeadlineBanner';
 import { ScopeBar } from '@/components/scope/ScopeBar';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useRegion } from '@/components/layout/RegionContext';
-import { regionLabel } from '@/components/insights/RegionFilter';
+import { regionLabel, REGION_CODES } from '@/components/insights/RegionFilter';
 import { highlightIdsFor } from '@/components/map/RegionInsetMap';
 import { EU_MEMBERS } from '@/lib/jurisdictions';
 import { inScope } from '@/lib/scope';
@@ -114,8 +114,14 @@ export default function HomePage() {
       return c;
     };
     if (selectedRegions.length === 0) {
+      // Ticker must stay a subset of the region dropdown (RegionFilter's REGION_CODES) — otherwise it
+      // can surface a region (e.g. a foreign one not yet in the picker) that the user then can't select.
+      const KNOWN = new Set(REGION_CODES);
       return { mode: 'regions' as const, label: 'Top Regions',
-        data: tally(b => (b.region && b.region in EU_MEMBERS ? 'EU' : b.region || 'US')) };
+        data: tally(b => {
+          const k = b.region && b.region in EU_MEMBERS ? 'EU' : b.region || 'US';
+          return KNOWN.has(k) ? k : null;
+        }) };
     }
     if (selectedRegions.includes('US')) {
       return { mode: 'us-states' as const, label: 'Top States',

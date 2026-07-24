@@ -28,7 +28,9 @@ export function GlobalRegionBar() {
   const sole = regions.length === 1 ? regions[0] : null;
   return (
     <div className="border-b border-border-default bg-bg-secondary">
-      <div className="mx-auto max-w-6xl px-6 py-2 flex items-center gap-3">
+      {/* flex-wrap so that on a narrow phone the "View … page" link drops to its own line instead of
+          pushing past the viewport edge (it's whitespace-nowrap, so it can't break mid-label). */}
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         <RegionFilter selected={regions} onChange={setRegions} />
         {/* This bar sets the site-wide filter (e.g. it drives the Bill Explorer), so give it an
             explicit reset back to "All regions" whenever a selection is active. */}
@@ -43,7 +45,7 @@ export function GlobalRegionBar() {
         {sole && (
           <Link
             href={regionProfileHref(sole)}
-            className="ml-auto shrink-0 text-sm text-green-accent hover:underline whitespace-nowrap"
+            className="w-full sm:w-auto sm:ml-auto shrink-0 text-sm text-green-accent hover:underline truncate max-w-full"
           >
             {sole === 'US' ? 'View state standings' : `View ${regionLabel(sole)} page`} &rarr;
           </Link>

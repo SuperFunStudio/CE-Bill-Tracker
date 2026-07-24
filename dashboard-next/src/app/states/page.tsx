@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useBills } from '@/hooks/useBills';
+import { useFederalActions } from '@/hooks/useFederal';
 import { useRegion } from '@/components/layout/RegionContext';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { STATE_NAMES } from '@/lib/utils';
@@ -323,6 +324,10 @@ function WorldStandings() {
   // region: 'all' is REQUIRED here — the /bills endpoint defaults to US-only when no region is given,
   // so without this the national column would only ever show the United States (no France/Japan/…).
   const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000, region: 'all' });
+  // US FEDERAL regulatory activity — agency rulemakings (EPA/GSA/FTC) live in a separate table from
+  // bills, so they're fetched separately and folded into the US national row. Without them the US
+  // "federal" figure counts only its handful of introduced bills and understates real federal action.
+  const { data: federal = [] } = useFederalActions({ ce_relevant: true, limit: 500, days_back: 3650 });
 
   const { states, nations } = useMemo(() => {
     const stCount: Record<string, number> = {};
@@ -349,6 +354,12 @@ function WorldStandings() {
       g.count += 1;
       if (isEnacted) g.enacted += 1;
     }
+    // Fold US federal regulatory actions into the US national activity: every action is tracked
+    // activity; a FINAL rule (action_type "rule") is the in-force analog of an enacted law, so it
+    // counts toward the enacted share (proposed rules + notices are still in motion).
+    nat.US.count += federal.length;
+    nat.US.enacted += federal.filter(a => (a.action_type ?? '').toLowerCase() === 'rule').length;
+
     const states = Object.keys(STATE_NAMES)
       .map(abbr => ({ abbr, name: STATE_NAMES[abbr], count: stCount[abbr] ?? 0, enacted: stEnacted[abbr] ?? 0 }))
       .filter(r => r.count > 0)
@@ -356,7 +367,7 @@ function WorldStandings() {
     const nations = Object.values(nat)
       .sort((a, b) => b.count - a.count || b.enacted - a.enacted || a.name.localeCompare(b.name));
     return { states, nations };
-  }, [bills]);
+  }, [bills, federal]);
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -369,8 +380,8 @@ function WorldStandings() {
       <p className="text-text-secondary text-body -mt-2">
         A running tally of tracked circular-economy law worldwide. On the left, <strong>national</strong>{' '}
         law ranked by country; on the right, <strong>sub-national</strong> law — US states today, the only
-        sub-national tier we track individually. Ranked by activity (tracked bills); the bar shows the
-        share already enacted.
+        sub-national tier we track individually. Ranked by activity — tracked bills, plus US federal
+        regulatory actions; the bar shows the share already enacted (or in force).
       </p>
 
       {isError ? (
@@ -404,8 +415,11 @@ function WorldStandings() {
               ))}
             </ol>
             <p className="text-meta text-text-muted">
-              A <span className="uppercase">federal</span> tag marks a country counted on its national law
-              only (e.g. the US); its sub-national activity is the board on the right.
+              A <span className="uppercase">federal</span> tag marks a country counted on its national
+              activity only (e.g. the US) — its sub-national activity is the board on the right. The US
+              federal figure combines federal bills with agency regulatory actions (EPA/GSA/FTC
+              rulemakings); final rules count toward the enacted share. Regulatory actions are tracked
+              only for the US today, so other nations reflect enacted law alone.
             </p>
           </section>
 

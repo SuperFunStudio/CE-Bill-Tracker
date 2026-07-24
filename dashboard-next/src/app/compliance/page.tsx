@@ -4,6 +4,7 @@ import { useDeadlines, useDeadlineStats } from '@/hooks/useDeadlines';
 import { useBill } from '@/hooks/useBills';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { DeadlineModal } from '@/components/compliance/DeadlineModal';
+import { QuarterDeadlinesModal } from '@/components/compliance/QuarterDeadlinesModal';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { UpcomingDeadlinesLock } from '@/components/compliance/UpcomingDeadlinesLock';
@@ -22,8 +23,6 @@ import { EmptyState } from '@/components/ui/EmptyState';
 const PAST_DEADLINE_CUTOFF_DAYS = 5 * 365;
 // "Later" (>90 days out) can run to hundreds of rows; show a slice, then reveal the rest on request.
 const LATER_PREVIEW = 25;
-
-const MONTH_LETTERS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
 /** Plain-language relative time for a deadline date. */
 function relDays(dateStr: string | null): string | null {
@@ -59,6 +58,7 @@ export default function CompliancePage() {
   const [includePast, setIncludePast] = useState(false);
   const [showAllLater, setShowAllLater] = useState(false);
   const [selected, setSelected] = useState<DeadlineSummary | null>(null);
+  const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
 
   const { scope } = useScope();
   const scopeActive = useScopeActive();
@@ -125,23 +125,50 @@ export default function CompliancePage() {
     [windowed],
   );
 
-  // The one glance-chart: deadline density over the next 12 months, single hue.
+  // The one glance-chart: deadline density by quarter, single hue. Quarters read at a glance
+  // where twelve month-letters didn't, and each bar carries its own deadlines so a tap opens
+  // that quarter's list — urgency you can act on, not just feel.
   const rail = useMemo(() => {
     const now = new Date();
-    const buckets = Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      return { key: `${d.getFullYear()}-${d.getMonth()}`, letter: MONTH_LETTERS[d.getMonth()], count: 0 };
-    });
-    const idx = new Map(buckets.map((b, i) => [b.key, i]));
+    const startQ = Math.floor(now.getMonth() / 3);
+    const startYear = now.getFullYear();
+    const qIndex = (dt: Date) =>
+      (dt.getFullYear() - startYear) * 4 + (Math.floor(dt.getMonth() / 3) - startQ);
+    // Span just enough quarters to cover the data (min 4, max 12) so the axis stays legible.
+    let span = 4;
     for (const d of windowed) {
-      const dt = new Date(d.deadline_date);
-      const i = idx.get(`${dt.getFullYear()}-${dt.getMonth()}`);
-      if (i != null) buckets[i].count++;
+      const qi = qIndex(new Date(d.deadline_date));
+      if (qi >= 0) span = Math.max(span, qi + 1);
+    }
+    span = Math.min(12, span);
+    const buckets = Array.from({ length: span }, (_, i) => {
+      const qAbs = startQ + i;
+      const year = startYear + Math.floor(qAbs / 4);
+      const quarter = (qAbs % 4) + 1;
+      return {
+        key: `${year}-Q${quarter}`,
+        label: `Q${quarter} ${year}`,
+        quarter,
+        year,
+        count: 0,
+        items: [] as DeadlineSummary[],
+      };
+    });
+    for (const d of windowed) {
+      const qi = qIndex(new Date(d.deadline_date));
+      if (qi >= 0 && qi < buckets.length) {
+        buckets[qi].count++;
+        buckets[qi].items.push(d);
+      }
     }
     return buckets;
   }, [windowed]);
   const railMax = Math.max(1, ...rail.map(b => b.count));
   const railTotal = rail.reduce((s, b) => s + b.count, 0);
+  const activeQuarter = useMemo(
+    () => rail.find(b => b.key === selectedQuarter) ?? null,
+    [rail, selectedQuarter],
+  );
 
   const totalUpcoming = stats?.total_upcoming ?? 0;
   const shownCount = windowed.length;
@@ -219,18 +246,45 @@ export default function CompliancePage() {
         </p>
       )}
 
-      {/* The one glance-chart: shape of the year (Pro; the full calendar). */}
+      {/* The one glance-chart: shape of the year by quarter (Pro; the full calendar).
+          Each bar opens that quarter's deadlines so the density is a doorway, not just a warning. */}
       {proView && railTotal > 0 && (
-        <div className="grid grid-cols-12 gap-1 items-end h-14 border-b border-border-default pb-1" aria-label="Deadline density by month over the next year">
-          {rail.map((b, i) => (
-            <div key={i} className="flex flex-col items-center justify-end gap-1 h-full" title={`${b.count} deadline${b.count === 1 ? '' : 's'}`}>
-              <div
-                className="w-full max-w-[24px] rounded-t-sm bg-green-accent/50"
-                style={{ height: `${b.count ? Math.max(6, (b.count / railMax) * 100) : 0}%` }}
-              />
-              <span className="text-meta text-text-muted font-mono">{b.letter}</span>
-            </div>
-          ))}
+        <div>
+          <div
+            className="grid gap-1 items-end h-20 border-b border-border-default pb-1"
+            style={{ gridTemplateColumns: `repeat(${rail.length}, minmax(0, 1fr))` }}
+            aria-label="Deadline density by quarter"
+          >
+            {rail.map((b, i) => {
+              const showYear = i === 0 || b.quarter === 1;
+              return (
+                <button
+                  key={b.key}
+                  type="button"
+                  onClick={() => b.count > 0 && setSelectedQuarter(b.key)}
+                  disabled={b.count === 0}
+                  aria-label={`Q${b.quarter} ${b.year}: ${b.count} deadline${b.count === 1 ? '' : 's'}`}
+                  title={`${b.count} deadline${b.count === 1 ? '' : 's'} · Q${b.quarter} ${b.year}`}
+                  className="group flex flex-col items-center justify-end gap-1 h-full disabled:cursor-default"
+                >
+                  <span className={`text-meta tabular-nums ${b.count ? 'text-text-muted group-hover:text-text-primary' : 'text-transparent'}`}>
+                    {b.count || 0}
+                  </span>
+                  <div
+                    className={`w-full max-w-[34px] rounded-t-sm transition-colors ${
+                      b.count ? 'bg-green-accent/50 group-hover:bg-green-accent cursor-pointer' : 'bg-border-default/40'
+                    }`}
+                    style={{ height: `${b.count ? Math.max(8, (b.count / railMax) * 100) : 4}%` }}
+                  />
+                  <span className="text-meta text-text-muted font-mono leading-none">Q{b.quarter}</span>
+                  <span className="text-meta text-text-muted/70 font-mono leading-none">
+                    {showYear ? `’${String(b.year).slice(2)}` : ' '}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-text-muted mt-1.5">Tap a quarter to see its deadlines.</p>
         </div>
       )}
 
@@ -305,6 +359,12 @@ export default function CompliancePage() {
         </div>
       </details>
 
+      <QuarterDeadlinesModal
+        title={activeQuarter ? activeQuarter.label : null}
+        items={activeQuarter?.items ?? []}
+        onClose={() => setSelectedQuarter(null)}
+        onSelect={d => { setSelectedQuarter(null); setSelected(d); }}
+      />
       <DeadlineModal deadline={selected} bill={selectedBill ?? null} onClose={() => setSelected(null)} />
     </div>
   );

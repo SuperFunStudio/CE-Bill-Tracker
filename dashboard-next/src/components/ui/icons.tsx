@@ -259,3 +259,82 @@ export function MoonIcon(props: IconProps) {
     </Icon>
   );
 }
+
+// ── Design-lever icons ────────────────────────────────────────────────────────
+// One per Design-Guide principle (see components/design-guide/leverVisuals). Mobile swaps these
+// for an emoji; desktop keeps the monochrome line mark so the cards read in the Gazette voice.
+
+/** Möbius recycling triangle — design for recycling. */
+export function RecycleIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 19h4l-2.2-3.8" />
+      <path d="M4.3 14.2 6.5 10l3.5 2" />
+      <path d="M9.7 6.4 12 2.6l2.3 3.8" />
+      <path d="M17 5l2.2 3.8L15.4 11" />
+      <path d="M19.7 14.2 17.5 18H13" />
+    </Icon>
+  );
+}
+
+/** Circular arrows — reuse & refill. */
+export function LoopIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 12a8 8 0 0 1 13.7-5.6L20 8" />
+      <path d="M20 4v4h-4" />
+      <path d="M20 12a8 8 0 0 1-13.7 5.6L4 16" />
+      <path d="M4 20v-4h4" />
+    </Icon>
+  );
+}
+
+/** Wrench — repairability & durability. */
+export function WrenchIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M15.5 6.5a3.8 3.8 0 0 0-4.9 4.7L4 17.8 6.2 20l6.6-6.6a3.8 3.8 0 0 0 4.7-4.9l-2.3 2.3-2.2-.6-.6-2.2 2.3-2.3Z" />
+    </Icon>
+  );
+}
+
+/** Feather — source reduction (lightweighting). */
+export function FeatherIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M19 5a5 5 0 0 0-7 0l-6 6v5h5l6-6a5 5 0 0 0 2-5Z" />
+      <path d="M15 7 5 17" />
+      <path d="M12 10H8m6 3h-4" />
+    </Icon>
+  );
+}
+
+/** Leaf — compostability / regeneration. */
+export function LeafIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 19c0-8 5-13 14-13 0 9-5 14-13 14a6 6 0 0 1-1-1Z" />
+      <path d="M9 15c2-3 5-5 8-6" />
+    </Icon>
+  );
+}
+
+/** Flask — toxics elimination. */
+export function FlaskIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 3h6M10 3v6l-5 8.5A2 2 0 0 0 6.7 21h10.6a2 2 0 0 0 1.7-3.5L14 9V3" />
+      <path d="M7.5 15h9" />
+    </Icon>
+  );
+}
+
+/** Circle-slash — material restriction / ban. */
+export function BanIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.6 5.6l12.8 12.8" />
+    </Icon>
+  );
+}

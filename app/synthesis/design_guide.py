@@ -131,19 +131,27 @@ class GuideAuthor:
         )
         resp = await self._client.messages.create(
             model=SONNET_MODEL,
-            max_tokens=1500,
+            # Big levers (e.g. design_for_recycling, 28 evidence items) overflow a 1500-token
+            # budget and truncate into unparseable JSON; 3500 comfortably fits the largest section.
+            max_tokens=3500,
             temperature=0,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = resp.content[0].text.strip()
+        # Sonnet sometimes wraps the object in a ```json … ``` fence; strip it before parsing.
+        if raw.startswith("```"):
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw).strip()
+        # strict=False tolerates literal control chars (unescaped newlines) inside string values,
+        # which Sonnet occasionally emits and strict json.loads rejects.
         try:
-            return json.loads(raw)
+            return json.loads(raw, strict=False)
         except json.JSONDecodeError:
             m = re.search(r"\{.*\}", raw, re.DOTALL)
             if m:
                 try:
-                    return json.loads(m.group())
+                    return json.loads(m.group(), strict=False)
                 except json.JSONDecodeError:
                     pass
         log.warning("guide_author_parse_failed", lever=lever, raw=raw[:200])

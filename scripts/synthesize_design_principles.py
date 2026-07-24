@@ -58,13 +58,19 @@ async def persist_signals(dsn: str, signals: list, processed_bill_ids: list[int]
                 processed_bill_ids,
             )
             if signals:
+                def _clip(v, n):
+                    return v[:n] if isinstance(v, str) and len(v) > n else v
                 await conn.executemany(
                     "INSERT INTO bill_design_signal "
                     "(bill_id, lever, obligation_type, design_action, source_excerpt, "
                     " threshold_value, threshold_unit, confidence, extractor_model) "
                     "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-                    [(s.bill_id, s.lever, s.obligation_type, s.design_action, s.source_excerpt,
-                      s.threshold_value, s.threshold_unit, s.confidence, HAIKU_MODEL)
+                    # Guard the narrow varchar columns — an occasional verbose Haiku threshold_unit
+                    # (e.g. "percent_reuse_recycling_minimum_by_category", 43 chars) overflows
+                    # varchar(40) and aborts the whole persist transaction.
+                    [(s.bill_id, _clip(s.lever, 40), _clip(s.obligation_type, 20), s.design_action,
+                      s.source_excerpt, s.threshold_value, _clip(s.threshold_unit, 40),
+                      s.confidence, HAIKU_MODEL)
                      for s in signals],
                 )
     finally:

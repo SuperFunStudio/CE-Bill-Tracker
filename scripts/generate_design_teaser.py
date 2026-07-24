@@ -135,6 +135,32 @@ def main() -> None:
             evidence = {"state": top["state"], "bill": top.get("bill_number") or "",
                         "quote": (top.get("source_excerpt") or "").strip()}
 
+        # The front face now shows up to 3 concrete design examples (not one). Each carries its own
+        # cited source bill so a reader can tap straight through to the statute behind that line.
+        # Dedupe by bill AND by normalized action text so the three read as distinct imperatives
+        # (highest-confidence first), not three near-identical restatements of the same clause.
+        def _norm(s: str) -> str:
+            return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+        design_examples, seen_bill, seen_act = [], set(), set()
+        for e in ev_sorted:
+            bid = e.get("bill_id")
+            action = (e.get("design_action") or "").strip()
+            na = _norm(action)
+            if not action or bid in seen_bill or na in seen_act:
+                continue
+            seen_bill.add(bid)
+            seen_act.add(na)
+            design_examples.append({
+                "action": action,
+                "state": e["state"],
+                "billNumber": e.get("bill_number") or "",
+                "billId": int(bid) if bid else 0,
+                "quote": (e.get("source_excerpt") or "").strip(),
+            })
+            if len(design_examples) >= 3:
+                break
+
         # "Applies to" chips. The packaging materials (plastic/paper/glass/metal) collapse into one
         # "Packaging" chip so they don't crowd out the product categories — otherwise textiles,
         # electronics, batteries, vehicles all get buried under packaging variants. Then the top
@@ -186,6 +212,7 @@ def main() -> None:
             "billCount": len(bills),
             "states": sorted(states),
             "evidence": evidence,
+            "examples": design_examples,
             "feeImpact": fee_impact,
             "bills": bills,
         })
@@ -197,12 +224,15 @@ def main() -> None:
         "// The Free teaser: per-lever headline + direction + material/product focus (front face),\n"
         "// plus the grounded source bills behind the principle (back face -- each opens the bill modal).\n\n"
         "export interface TeaserBill {\n  state: string;\n  billNumber: string;\n  billId: number;\n}\n\n"
+        "export interface TeaserExample {\n  action: string;\n  state: string;\n  billNumber: string;\n"
+        "  billId: number;\n  quote: string;\n}\n\n"
         "export interface FeeImpact {\n  malus: boolean;\n  bonus: boolean;\n"
         "  setJurisdictions: string[];\n  usPending: boolean;\n"
         "  examples: { jurisdiction: string; amount: string }[];\n}\n\n"
         "export interface TeaserLever {\n  lever: string;\n  name: string;\n  headline: string;\n  direction: string;\n"
         "  focus: string[];\n  billCount: number;\n  states: string[];\n"
         "  evidence: { state: string; bill: string; quote: string } | null;\n"
+        "  examples: TeaserExample[];\n"
         "  feeImpact: FeeImpact | null;\n  bills: TeaserBill[];\n}\n\n"
         f"export const GUIDE_COVERAGE = {json.dumps(coverage)};\n\n"
         "export const TEASER_LEVERS: TeaserLever[] = "

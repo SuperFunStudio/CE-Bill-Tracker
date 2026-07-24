@@ -74,7 +74,7 @@ function UsStandings() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <GazetteHeader title="State Standings" subtitle="Who’s winning the Atlas Circular" />
+      <GazetteHeader title="State Rankings" subtitle="US circular-economy law momentum" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
@@ -194,7 +194,9 @@ function UsStandings() {
  * US momentum stages. (The world/all-regions view is the two-column WorldStandings below.)
  */
 function RegionStandings() {
-  const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000 });
+  // region: 'all' — the endpoint defaults to US-only, but this board filters to EU rows, so without
+  // it the EU list would always be empty.
+  const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000, region: 'all' });
 
   const rows = useMemo(() => {
     const groups: Record<string, { region: string; code: string; count: number; enacted: number }> = {};
@@ -213,7 +215,7 @@ function RegionStandings() {
       .sort((a, b) => b.count - a.count || b.enacted - a.enacted || a.name.localeCompare(b.name));
   }, [bills]);
 
-  const title = 'Member State Standings';
+  const title = 'Member State Rankings';
   const subtitle = 'Circular-economy law across the European Union';
 
   return (
@@ -306,20 +308,21 @@ function StandingRow({ rank, code, name, href, enacted, count, tag }: {
 }
 
 /**
- * The flagship two-column leaderboard: US states ranked next to the world's nations. This is where
- * the United States is scored *fairly* on two axes at once — its states dominate the left column,
- * while the US-as-a-nation (its FEDERAL law alone) sits low in the right column, because circular-
- * economy law in America is a state-level story with almost no federal analog. Inclusive of every
- * country we track.
+ * The flagship two-column activity tracker: NATIONAL law by country (left) alongside SUB-NATIONAL law
+ * (right). Not a US-vs-world comparison — just the global tally, by jurisdiction. Every country we
+ * track appears in the national column, ranked by tracked-bill activity with an enacted-share bar.
  *
  * Sub-national rows are first-class only for the US today: foreign provinces (CA/AU) collapse to their
  * country code in the data (see foreign_id in app/ingestion/foreign.py), so decomposing them into the
- * left column is a v2. The US-federal row is scored on bills with state == "US" (agency rulemakings
- * live in the separate federal_actions table and are not counted here).
+ * sub-national column is a v2 — hence the "United States" quick-select there is a single option for now
+ * and becomes a picker as more federations are tracked. The US national row is counted on bills with
+ * state == "US" (federal law; agency rulemakings live in the separate federal_actions table, not here).
  */
 function WorldStandings() {
   const { setRegions } = useRegion();
-  const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000 });
+  // region: 'all' is REQUIRED here — the /bills endpoint defaults to US-only when no region is given,
+  // so without this the national column would only ever show the United States (no France/Japan/…).
+  const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000, region: 'all' });
 
   const { states, nations } = useMemo(() => {
     const stCount: Record<string, number> = {};
@@ -357,17 +360,17 @@ function WorldStandings() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <GazetteHeader title="Standings" subtitle="US states next to the world’s nations" />
+      <GazetteHeader title="Rankings" subtitle="Circular-economy law activity by jurisdiction" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
       </div>
 
       <p className="text-text-secondary text-body -mt-2">
-        Two leaderboards, side by side. On the left, US states — the only federation whose sub-national
-        law we track individually. On the right, nations ranked by tracked law, with the United States
-        scored on its <em>federal</em> law alone. America leads by state and lags by nation: the same
-        country sits near the top of one column and the bottom of the other.
+        A running tally of tracked circular-economy law worldwide. On the left, <strong>national</strong>{' '}
+        law ranked by country; on the right, <strong>sub-national</strong> law — US states today, the only
+        sub-national tier we track individually. Ranked by activity (tracked bills); the bar shows the
+        share already enacted.
       </p>
 
       {isError ? (
@@ -383,32 +386,9 @@ function WorldStandings() {
         </div>
       ) : (
         <div className="grid gap-8 md:grid-cols-2">
-          {/* Left: US states */}
+          {/* Left: national law by country */}
           <section className="space-y-3">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="font-serif text-xl text-text-primary">State standings</h2>
-              <button onClick={() => setRegions(['US'])} className="text-xs text-green-accent hover:underline whitespace-nowrap">
-                Full momentum board &rarr;
-              </button>
-            </div>
-            <ol className="rounded-lg border border-border-default overflow-hidden">
-              <li className="flex items-center gap-3 bg-bg-secondary px-3 py-2 text-xs uppercase tracking-wide text-text-muted">
-                <span className="w-5 text-right">#</span>
-                <span className="w-8">St</span>
-                <span className="flex-1">Enacted share</span>
-                <span className="w-10 text-right">Enac.</span>
-                <span className="w-8 text-right">Bills</span>
-              </li>
-              {states.map((r, i) => (
-                <StandingRow key={r.abbr} rank={i + 1} code={r.abbr} name={r.name}
-                  href={`/jurisdictions/us/${r.abbr.toLowerCase()}/`} enacted={r.enacted} count={r.count} />
-              ))}
-            </ol>
-          </section>
-
-          {/* Right: nations */}
-          <section className="space-y-3">
-            <h2 className="font-serif text-xl text-text-primary">National standings</h2>
+            <h2 className="font-serif text-xl text-text-primary">National</h2>
             <ol className="rounded-lg border border-border-default overflow-hidden">
               <li className="flex items-center gap-3 bg-bg-secondary px-3 py-2 text-xs uppercase tracking-wide text-text-muted">
                 <span className="w-5 text-right">#</span>
@@ -424,9 +404,34 @@ function WorldStandings() {
               ))}
             </ol>
             <p className="text-meta text-text-muted">
-              The United States is ranked here on federal law only — its state-level leadership is the
-              board on the left.
+              A <span className="uppercase">federal</span> tag marks a country counted on its national law
+              only (e.g. the US); its sub-national activity is the board on the right.
             </p>
+          </section>
+
+          {/* Right: sub-national law (US states today) + a quick pivot to its parent national jurisdiction */}
+          <section className="space-y-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-serif text-xl text-text-primary">Sub-national</h2>
+              {/* Quick-select the national jurisdiction this sub-national tier belongs to. Today that's the
+                  US (opens its full momentum board); becomes a picker when more federations are tracked. */}
+              <button onClick={() => setRegions(['US'])} className="text-xs text-green-accent hover:underline whitespace-nowrap">
+                United States &rarr;
+              </button>
+            </div>
+            <ol className="rounded-lg border border-border-default overflow-hidden">
+              <li className="flex items-center gap-3 bg-bg-secondary px-3 py-2 text-xs uppercase tracking-wide text-text-muted">
+                <span className="w-5 text-right">#</span>
+                <span className="w-8">St</span>
+                <span className="flex-1">Enacted share</span>
+                <span className="w-10 text-right">Enac.</span>
+                <span className="w-8 text-right">Bills</span>
+              </li>
+              {states.map((r, i) => (
+                <StandingRow key={r.abbr} rank={i + 1} code={r.abbr} name={r.name}
+                  href={`/jurisdictions/us/${r.abbr.toLowerCase()}/`} enacted={r.enacted} count={r.count} />
+              ))}
+            </ol>
           </section>
         </div>
       )}

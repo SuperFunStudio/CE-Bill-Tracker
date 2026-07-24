@@ -30,9 +30,9 @@ const NAV_ITEMS: NavItem[] = [
   // bar (keywords filter; a question gets a grounded, cited answer over the same corpus). /ask
   // redirects here, preserving ?session= so saved research threads still open.
   { href: '/', label: 'Explore', Icon: HomeIcon },
-  // Standings is the two-column leaderboard (US states next to the world's nations) — global, so no
-  // usOnly gate. /states adapts to the region selection (US momentum board / EU board / two-column).
-  { href: '/states', label: 'Standings', Icon: CapitolIcon },
+  // Rankings is the global two-column activity tracker (national law by country + sub-national) —
+  // global, so no usOnly gate. /states adapts to the region selection (US momentum / EU / two-column).
+  { href: '/states', label: 'Rankings', Icon: CapitolIcon },
   // Upcoming Deadlines is a tabbed surface — Federal Actions is folded in as a subpage tab (see
   // DeadlinesTabs), so /federal lights this item up too. Federal has no top-level nav entry anymore.
   { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon, altPaths: ['/federal'] },
@@ -148,7 +148,7 @@ export function TopNav() {
               scrolled ? 'max-h-0 opacity-0' : 'mt-2 max-h-10 opacity-100 text-sm sm:text-base'
             }`}
           >
-            Tracking sustainability across the globe
+            Tracking circularity globally
           </p>
         </Link>
 

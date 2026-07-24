@@ -703,7 +703,7 @@ def render_payment_failed_html() -> str:
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
       Kind regards,<br>The Atlas Circular Team</p>"""
     return _lifecycle_shell(
-        "Tracking sustainability across the globe",
+        "Tracking circularity globally",
         body,
         "You're receiving this because a payment on your Atlas Circular Pro subscription needs attention.",
     )
@@ -756,7 +756,7 @@ def render_subscription_canceled_html() -> str:
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
       Kind regards,<br>The Atlas Circular Team</p>"""
     return _lifecycle_shell(
-        "Tracking sustainability across the globe",
+        "Tracking circularity globally",
         body,
         "You're receiving this because your Atlas Circular Pro subscription was canceled.",
     )
@@ -807,7 +807,7 @@ def render_referral_reward_html(days: int) -> str:
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:18px 0 0;">
       Kind regards,<br>The Atlas Circular Team</p>"""
     return _lifecycle_shell(
-        "Tracking sustainability across the globe",
+        "Tracking circularity globally",
         body,
         "You're receiving this because a friend signed up using your Atlas Circular referral link.",
     )

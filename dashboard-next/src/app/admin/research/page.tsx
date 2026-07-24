@@ -18,6 +18,7 @@ import {
   unpublishDraft,
   type ResearchTurnAdminItem,
   type ContentDraft,
+  type DraftMode,
 } from '@/lib/research-admin';
 
 type GetToken = () => Promise<string | null>;
@@ -158,19 +159,30 @@ function ResearchLog({ getToken }: { getToken: GetToken }) {
     }
   }
 
-  async function stage(thread: Thread, seqs: number[], editorial: boolean) {
+  async function stage(
+    thread: Thread,
+    seqs: number[],
+    opts: { editorial?: boolean; mode?: DraftMode; pairSize?: number } = {},
+  ) {
+    const { editorial = true, mode = 'full', pairSize } = opts;
     if (busy || seqs.length === 0) return;
     setBusy(true); setNotice(null); setError(null);
     try {
-      const draft = await createDraft(getToken, { session_id: thread.session_id, seqs, editorial });
+      const draft = await createDraft(getToken, {
+        session_id: thread.session_id, seqs, editorial, mode, pair_size: pairSize });
       const n = seqs.length;
       const what = n > 1 ? `${n} questions` : 'answer';
-      if (editorial && draft.editorial_applied === false) {
-        // The editorial pass failed and the server fell back to the verbatim separate-sections combine —
-        // don't claim a drafted article. Say what actually happened so it can be re-run or edited.
-        setError(`Editorial pass failed — staged the ${what} verbatim (separate sections) instead. Re-run "Draft article", or edit in Staging.`);
+      // Any mode other than a plain verbatim full-combine runs an LLM distillation; the server reports
+      // whether it actually produced the article (editorial_applied) or fell back to the verbatim combine.
+      const distilled = mode !== 'full' || editorial;
+      const label = mode === 'crop' ? 'Cropped short'
+        : mode === 'pair' ? `Paired ${pairSize}-bill short` : 'Drafted';
+      if (distilled && draft.editorial_applied === false) {
+        const reason = mode === 'pair' ? 'the thread cites too few bills, or the LLM pass failed'
+          : 'the LLM pass failed';
+        setError(`${label} couldn't run — ${reason}. Staged the ${what} verbatim instead. Re-run, or edit in Staging.`);
       } else {
-        setNotice(`${editorial ? 'Drafted' : 'Staged verbatim'} from ${what} → see the Staging tab.`);
+        setNotice(`${distilled ? `${label} article` : 'Staged verbatim'} from ${what} → see the Staging tab.`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not stage.');
@@ -212,7 +224,7 @@ function ResearchLog({ getToken }: { getToken: GetToken }) {
             thread={th}
             busy={busy}
             onToggleShare={() => toggleShare(th)}
-            onStage={(seqs, ed) => stage(th, seqs, ed)}
+            onStage={(seqs, opts) => stage(th, seqs, opts)}
           />
         ))}
         {threads.length === 0 && !error && <p className="text-text-muted text-sm">No research threads yet.</p>}
@@ -262,10 +274,11 @@ function ThreadCard({
   thread: Thread;
   busy: boolean;
   onToggleShare: () => void;
-  onStage: (seqs: number[], editorial: boolean) => void;
+  onStage: (seqs: number[], opts: { editorial?: boolean; mode?: DraftMode; pairSize?: number }) => void;
 }) {
   // Every turn selected by default; untick a follow-up to leave it out of the draft.
   const [selected, setSelected] = useState<Set<number>>(() => new Set(thread.turns.map(t => t.seq)));
+  const [pairSize, setPairSize] = useState<2 | 4>(2);  // pair mode: how many cited bills to contrast
   const [copied, copy] = useCopy();
   const multi = thread.turns.length > 1;
   const shared = thread.visibility === 'link' && !!thread.share_token;
@@ -320,14 +333,43 @@ function ThreadCard({
           {selectedSeqs.length} of {thread.turns.length} selected
         </span>
         <button
-          onClick={() => onStage(selectedSeqs, true)}
+          onClick={() => onStage(selectedSeqs, { editorial: true, mode: 'full' })}
           disabled={busy || selectedSeqs.length === 0}
           className="inline-flex items-center gap-1.5 rounded-lg bg-green-accent text-bg-primary px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
         >
           Draft article →
         </button>
+        {/* Short-form siblings — same distillation as scripts/shortform_articles.py */}
         <button
-          onClick={() => onStage(selectedSeqs, false)}
+          onClick={() => onStage(selectedSeqs, { mode: 'crop' })}
+          disabled={busy || selectedSeqs.length === 0}
+          className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+          title="Crop to the thread's single most impactful finding (~150-220 words)"
+        >
+          Crop short
+        </button>
+        <span className="inline-flex items-center gap-1">
+          <button
+            onClick={() => onStage(selectedSeqs, { mode: 'pair', pairSize })}
+            disabled={busy || selectedSeqs.length === 0}
+            className="rounded-lg border border-border-default px-3 py-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+            title="Contrast the selected cited bills side by side (~200 words)"
+          >
+            Pair bills
+          </button>
+          <select
+            value={pairSize}
+            onChange={e => setPairSize(Number(e.target.value) === 4 ? 4 : 2)}
+            disabled={busy}
+            aria-label="Bills to pair"
+            className="rounded-lg border border-border-default bg-bg-primary px-1.5 py-1.5 text-xs text-text-secondary focus:border-green-accent focus:outline-none disabled:opacity-40"
+          >
+            <option value={2}>2</option>
+            <option value={4}>4</option>
+          </select>
+        </span>
+        <button
+          onClick={() => onStage(selectedSeqs, { editorial: false, mode: 'full' })}
           disabled={busy || selectedSeqs.length === 0}
           className="text-xs text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
           title="Stage the selected answers verbatim, without the editorial LLM pass"

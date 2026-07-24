@@ -13,6 +13,16 @@ import {
 } from 'recharts';
 import { fetchLawsInForce } from '@/lib/api';
 import { regionLabel } from './RegionFilter';
+import {
+  ChartEmpty,
+  ChartError,
+  ChartSkeleton,
+  chartAxis,
+  chartGrid,
+  chartTooltip,
+  countAxis,
+  useChartTheme,
+} from '@/lib/charts/theme';
 import type { LawsInForcePoint } from '@/lib/types';
 
 /**
@@ -23,23 +33,15 @@ import type { LawsInForcePoint } from '@/lib/types';
  * "All" (too many to read) collapses to a single total line.
  */
 
-const PALETTE = ['#16a34a', '#3b82f6', '#f59e0b', '#8b5cf6', '#14b8a6', '#ef4444', '#ec4899'];
-const MAX_SERIES = 7;
-
-function useThemeColors() {
-  const [colors, setColors] = useState({ muted: '#6b7280', border: '#dee2e6' });
-  useEffect(() => {
-    const root = getComputedStyle(document.documentElement);
-    const get = (v: string, fb: string) => root.getPropertyValue(v).trim() || fb;
-    setColors({ muted: get('--text-muted', '#6b7280'), border: get('--border-default', '#dee2e6') });
-  }, []);
-  return colors;
-}
+// One region per categorical slot (fixed order, colorblind-validated — see lib/charts/theme). The
+// palette carries 8 hues; cap at 8 series so a 9th region never forces a cycle/repeat.
+const MAX_SERIES = 8;
 
 export function LawsInForceChart({ regions }: { regions?: string } = {}) {
   const [points, setPoints] = useState<LawsInForcePoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const colors = useThemeColors();
+  const colors = useChartTheme();
+  const palette = colors.categorical;
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +81,7 @@ export function LawsInForceChart({ regions }: { regions?: string } = {}) {
         for (const r of present) run += annual[r]?.[y] ?? 0;
         rows.push({ year: y, total: run });
       }
-      return { rows, series: [{ key: 'total', label: 'All jurisdictions', color: PALETTE[0] }], aggregated: true };
+      return { rows, series: [{ key: 'total', label: 'All jurisdictions', color: palette[0] }], aggregated: true };
     }
 
     // One cumulative line per region, ordered by total (biggest first → stable colors + legend).
@@ -97,38 +99,23 @@ export function LawsInForceChart({ regions }: { regions?: string } = {}) {
       }
       rows.push(row);
     }
-    const series = ordered.map((r, i) => ({ key: r, label: regionLabel(r), color: PALETTE[i % PALETTE.length] }));
+    const series = ordered.map((r, i) => ({ key: r, label: regionLabel(r), color: palette[i % palette.length] }));
     return { rows, series, aggregated: false };
-  }, [points]);
+  }, [points, palette]);
 
-  if (error) return <p className="text-sm text-error">{error}</p>;
-  if (!points) return <div className="h-[340px] w-full animate-pulse rounded-lg bg-bg-tertiary" />;
-  if (rows.length === 0) return <p className="text-text-muted text-sm">No enacted laws to chart yet.</p>;
+  if (error) return <ChartError>{error}</ChartError>;
+  if (!points) return <ChartSkeleton />;
+  if (rows.length === 0) return <ChartEmpty>No enacted laws to chart yet.</ChartEmpty>;
 
   return (
     <div className="space-y-3">
       <div className="h-[340px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
-            <XAxis dataKey="year" stroke={colors.muted} tick={{ fontSize: 11, fill: colors.muted }} tickLine={false} />
-            <YAxis
-              stroke={colors.muted}
-              tick={{ fontSize: 11, fill: colors.muted }}
-              tickLine={false}
-              allowDecimals={false}
-              width={44}
-            />
-            <Tooltip
-              contentStyle={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 8,
-                fontSize: 12,
-                color: 'var(--text-primary)',
-              }}
-              labelStyle={{ color: 'var(--text-primary)', fontWeight: 600 }}
-            />
+            <CartesianGrid {...chartGrid(colors)} />
+            <XAxis dataKey="year" {...chartAxis(colors)} />
+            <YAxis {...chartAxis(colors)} {...countAxis} />
+            <Tooltip {...chartTooltip} />
             {series.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
             {series.map((s) => (
               <Line

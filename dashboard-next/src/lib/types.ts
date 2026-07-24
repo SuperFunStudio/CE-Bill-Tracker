@@ -166,8 +166,15 @@ export interface ResearchChartBar { label: string; value: number; value2?: numbe
 export interface ResearchChart {
   title: string;
   bars: ResearchChartBar[];
-  /** "bar" = single series (bills-by-year); "grouped" = value + value2 per bar (jurisdiction ranking). */
-  kind?: 'bar' | 'grouped';
+  /**
+   * How to draw `bars`:
+   *  - "bar"     single-series horizontal bars (default)
+   *  - "grouped" value + value2 per bar (jurisdiction ranking: enacted vs all-tracked)
+   *  - "line"    trend over time — bars are (label=x, value=y), drawn as a connected line
+   *  - "area"    same as "line" with the region under the line filled
+   *  - "donut"   part-to-whole — each bar is a slice (label + value), one ring + legend
+   */
+  kind?: 'bar' | 'grouped' | 'line' | 'area' | 'donut';
   /** Legend labels for [value, value2] when kind === "grouped". */
   series?: string[] | null;
   footnote?: string | null;

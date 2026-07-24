@@ -294,12 +294,21 @@ class SharedSessionOut(BaseModel):
 class ContentDraftCreate(BaseModel):
     """Send one or more turns of a research thread to the staging area. `seqs` selects which turns to
     include (in a follow-up thread, tick the questions you want) — combined into a single article in seq
-    order. `seq` is the legacy single-turn form; if neither is given, the latest turn is used. `editorial`
-    runs a light LLM pass for a headline + dek + reshaped lede; off = the linked answers verbatim."""
+    order. `seq` is the legacy single-turn form; if neither is given, the latest turn is used.
+
+    `mode` picks the article shape:
+      - "full" (default): the long-form combine — every selected turn woven into one article. `editorial`
+        runs a light LLM pass for a headline + dek + reshaped lede; off = the linked answers verbatim.
+      - "crop": a SHORT piece cropped to the thread's single most impactful finding (~150-220 words).
+      - "pair": a SHORT "bills, side by side" piece contrasting `pair_size` (2 or 4) of the cited bills.
+    `editorial` is ignored for crop/pair (their LLM distillation is intrinsic). `pair_size` applies to pair
+    mode only; a thread that cites fewer bills than that degrades to the verbatim combine."""
     session_id: str
     seqs: list[int] | None = None
     seq: int | None = None
     editorial: bool = True
+    mode: str = "full"          # full | crop | pair
+    pair_size: int = 2          # pair mode: how many cited bills to contrast (2 or 4)
 
 
 class ContentDraftPatch(BaseModel):

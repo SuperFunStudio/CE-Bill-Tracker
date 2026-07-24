@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchInstrumentMaterialMatrix } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
+import { sequentialFill } from '@/lib/charts/theme';
 import { BillDrilldownPanel } from './BillDrilldownPanel';
 import { EnactedOnlyToggle } from './EnactedOnlyToggle';
 import { regionLabel } from './RegionFilter';
@@ -21,12 +22,6 @@ import type { InstrumentMaterialCell } from '@/lib/types';
 const INSTRUMENT_ORDER = [
   'epr', 'deposit_return', 'recycled_content', 'right_to_repair', 'incentives', 'labeling', 'preemption', 'other',
 ];
-
-function cellStyle(count: number, max: number): React.CSSProperties {
-  if (count === 0 || max === 0) return {};
-  const alpha = 0.1 + 0.85 * Math.sqrt(count / max);
-  return { background: `rgb(var(--green-accent) / ${alpha.toFixed(3)})` };
-}
 
 export function RegionInstrumentMatrix() {
   const [cells, setCells] = useState<InstrumentMaterialCell[] | null>(null);
@@ -107,7 +102,7 @@ export function RegionInstrumentMatrix() {
                       className={`border border-border-default p-0 text-center tabular-nums ${
                         clickable ? 'cursor-pointer hover:ring-1 hover:ring-inset hover:ring-[rgb(var(--green-accent))]' : ''
                       }`}
-                      style={cellStyle(count, max)}
+                      style={sequentialFill(count, max)}
                       title={`${regionLabel(region)} · ${formatInstrumentType(inst)}: ${count}${clickable ? ' — click to see the bills' : ''}`}
                     >
                       {clickable ? (

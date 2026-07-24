@@ -68,6 +68,9 @@ export function unitNoun(region: string): string {
 export function allJurisdictionParams(): { region: string; code: string }[] {
   const params: { region: string; code: string }[] = [];
   for (const st of Object.keys(STATE_NAMES)) params.push({ region: 'us', code: st.toLowerCase() });
+  // US-federal node (state == "US"): the country-level view, ranked among nations on the Standings
+  // board. STATE_NAMES holds only the 50 states + DC/PR, so add it explicitly.
+  params.push({ region: 'us', code: 'us' });
   params.push({ region: 'eu', code: 'eu' });
   const countries = new Set([...Object.keys(EU_MEMBERS), ...Object.keys(FOREIGN_COUNTRY_NAMES)]);
   for (const c of countries) params.push({ region: c.toLowerCase(), code: c.toLowerCase() });

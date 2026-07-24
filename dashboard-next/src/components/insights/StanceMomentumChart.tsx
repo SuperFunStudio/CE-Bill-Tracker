@@ -14,6 +14,16 @@ import {
 import { fetchStanceMomentum } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
+import {
+  ChartEmpty,
+  ChartError,
+  ChartSkeleton,
+  chartAxis,
+  chartGrid,
+  chartTooltip,
+  countAxis,
+  useChartTheme,
+} from '@/lib/charts/theme';
 import { BillDrilldownPanel } from './BillDrilldownPanel';
 import type { BillStancePoint, BillParams } from '@/lib/types';
 
@@ -36,25 +46,6 @@ const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = 
   ),
 ];
 
-// Reads the active theme's neutrals AND the canonical status palette (--status-*, see theme.css),
-// so "advances" green matches the enacted green used everywhere else instead of a one-off hex.
-function useThemeColors() {
-  const [colors, setColors] = useState({
-    muted: '#6b7280', border: '#dee2e6', advances: '#16a34a', weakens: '#dc2626',
-  });
-  useEffect(() => {
-    const root = getComputedStyle(document.documentElement);
-    const get = (v: string, fb: string) => root.getPropertyValue(v).trim() || fb;
-    setColors({
-      muted: get('--text-muted', '#6b7280'),
-      border: get('--border-default', '#dee2e6'),
-      advances: get('--status-enacted', '#16a34a'),
-      weakens: get('--status-weakens', '#dc2626'),
-    });
-  }, []);
-  return colors;
-}
-
 interface Row {
   year: number;
   advances: number;
@@ -67,7 +58,10 @@ export function StanceMomentumChart({ regions }: { regions?: string } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [instrument, setInstrument] = useState<string | undefined>(undefined);
   const [drill, setDrill] = useState<{ params: BillParams; title: string; subtitle: string } | null>(null);
-  const colors = useThemeColors();
+  const colors = useChartTheme();
+  // "advances" reads as the enacted/good green; "weakens" as the critical red (reserved status hues).
+  const advances = colors.status.enacted;
+  const weakens = colors.status.weakens;
 
   function openDrill(stance: 'advances' | 'weakens', d: { year?: number; payload?: { year?: number } }) {
     const year = d?.year ?? d?.payload?.year;
@@ -146,20 +140,20 @@ export function StanceMomentumChart({ regions }: { regions?: string } = {}) {
       </div>
 
       {error ? (
-        <p className="text-sm text-error">{error}</p>
+        <ChartError>{error}</ChartError>
       ) : !points ? (
-        <div className="h-[340px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
+        <ChartSkeleton />
       ) : rows.length === 0 ? (
-        <p className="text-text-muted text-sm">No stance-classified bills for this slice yet.</p>
+        <ChartEmpty>No stance-classified bills for this slice yet.</ChartEmpty>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors.advances }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: advances }} />
               Advances ({totals.advances.toLocaleString()})
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: colors.weakens }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: weakens }} />
               Weakens ({totals.weakens.toLocaleString()})
             </span>
             <span className="text-text-muted">
@@ -170,38 +164,20 @@ export function StanceMomentumChart({ regions }: { regions?: string } = {}) {
           <div className="h-[340px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={rows} stackOffset="sign" margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
-                <XAxis
-                  dataKey="year"
-                  stroke={colors.muted}
-                  tick={{ fontSize: 11, fill: colors.muted }}
-                  tickLine={false}
-                />
+                <CartesianGrid {...chartGrid(colors)} />
+                <XAxis dataKey="year" {...chartAxis(colors)} />
                 <YAxis
-                  stroke={colors.muted}
-                  tick={{ fontSize: 11, fill: colors.muted }}
-                  tickLine={false}
-                  allowDecimals={false}
-                  width={44}
+                  {...chartAxis(colors)}
+                  {...countAxis}
                   tickFormatter={(v: number) => `${Math.abs(v)}`}
                 />
                 <ReferenceLine y={0} stroke={colors.muted} />
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 8,
-                    fontSize: 12,
-                    color: 'var(--text-primary)',
-                  }}
-                  labelStyle={{ color: 'var(--text-primary)', fontWeight: 600 }}
-                  formatter={(value, name) => [Math.abs(Number(value)), name]}
-                />
+                <Tooltip {...chartTooltip} formatter={(value, name) => [Math.abs(Number(value)), name]} />
                 <Bar
                   dataKey="advances"
                   name="Advances"
                   stackId="stance"
-                  fill={colors.advances}
+                  fill={advances}
                   isAnimationActive={false}
                   cursor="pointer"
                   onClick={(d) => openDrill('advances', d)}
@@ -210,7 +186,7 @@ export function StanceMomentumChart({ regions }: { regions?: string } = {}) {
                   dataKey="weakens"
                   name="Weakens"
                   stackId="stance"
-                  fill={colors.weakens}
+                  fill={weakens}
                   isAnimationActive={false}
                   cursor="pointer"
                   onClick={(d) => openDrill('weakens', d)}

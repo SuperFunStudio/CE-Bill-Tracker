@@ -49,6 +49,24 @@
   --status-weakens:    #dc2626;  /* red    */
   --status-dormant:    #9ca3af;  /* gray   */
 
+  /* ── CHART CATEGORICAL PALETTE (Color axis) ─────────────────────────────
+     Fixed-order categorical hues for chart SERIES whose identity is a plain
+     category (region lines, etc.) — as opposed to a legislative stage, which
+     uses the --status-* palette above. The ORDER is the colorblind-safety
+     mechanism, not cosmetic: it was validated (adjacent-pair OKLab ΔE, CVD +
+     normal-vision floors, lightness band) with the dataviz palette validator
+     against the #ffffff / #1f2937 chart surfaces. Do NOT reorder or cycle, and
+     never synthesize a 9th hue — a 9th series folds to "Other" or a facet.
+     Consumed via useChartTheme() in lib/charts/theme. */
+  --chart-cat-1: #2a78d6;  /* blue    */
+  --chart-cat-2: #008300;  /* green   */
+  --chart-cat-3: #e87ba4;  /* magenta */
+  --chart-cat-4: #eda100;  /* yellow  */
+  --chart-cat-5: #1baf7a;  /* aqua    */
+  --chart-cat-6: #eb6834;  /* orange  */
+  --chart-cat-7: #4a3aa7;  /* violet  */
+  --chart-cat-8: #e34948;  /* red     */
+
   /* Material-category badge hue — the one sanctioned second color (distinguishes "what material"
      from the brand accent + status palette). Tokenized so the .badge-material utility is the single
      source instead of raw blue scattered across the company page. */
@@ -64,6 +82,17 @@
   --status-enacted:    #4ade80;
   --status-weakens:    #f87171;
   --status-dormant:    #6b7280;
+
+  /* Same eight hues, re-stepped for the dark surface (#1f2937) and validated as
+     a set — NOT an automatic flip. See the light block for the ordering rule. */
+  --chart-cat-1: #3987e5;
+  --chart-cat-2: #008300;
+  --chart-cat-3: #d55181;
+  --chart-cat-4: #c98500;
+  --chart-cat-5: #199e70;
+  --chart-cat-6: #d95926;
+  --chart-cat-7: #9085e9;
+  --chart-cat-8: #e66767;
 
   --material-bg:   #1e3a5f;  /* deep blue surface on dark */
   --material-text: #93c5fd;  /* blue-300 */

@@ -225,8 +225,9 @@ def _wants_year_chart(question: str) -> bool:
 
 
 def _year_chart(question: str, agg_scoped: dict, scope_labels: list[str]) -> ResearchChart | None:
-    """A bills-by-year bar chart from the SCOPED year aggregate, when the question asks for a trend and
-    the set spans ≥2 years. Returns None otherwise (the AnswerChart component hides an absent chart)."""
+    """A bills-by-year TREND LINE from the SCOPED year aggregate, when the question asks for a trend and
+    the set spans ≥2 years. Change-over-time reads better as a connected line than as bars (the dataviz
+    form heuristic). Returns None otherwise (the AnswerChart component hides an absent chart)."""
     if not _wants_year_chart(question):
         return None
     by_year = (agg_scoped or {}).get("bills_by_year") or []
@@ -235,7 +236,7 @@ def _year_chart(question: str, agg_scoped: dict, scope_labels: list[str]) -> Res
     bars = [ResearchChartBar(label=str(b["year"]), value=b["count"])
             for b in sorted(by_year, key=lambda b: b["year"])]
     suffix = f" — {', '.join(scope_labels)}" if scope_labels else ""
-    return ResearchChart(title=f"Bills by year{suffix}", bars=bars)
+    return ResearchChart(title=f"Bills by year{suffix}", kind="line", bars=bars)
 
 
 # A "which places lead / rank jurisdictions" question wants the by_jurisdiction ranking shown as a
@@ -293,6 +294,45 @@ def _jurisdiction_chart(question: str, agg_scoped: dict) -> ResearchChart | None
         footnote=("Ranked by enacted laws — the only axis comparable across borders (foreign law is "
                   "tracked enacted-only). 'All tracked bills' includes drafts and isn't comparable "
                   "country-to-country."))
+
+
+# A "what's the mix / breakdown / composition by material" question wants the material distribution as a
+# part-to-whole donut. Deterministic trigger, same pattern as the year/jurisdiction charts; the slice
+# counts come from the SQL material aggregate so they're exact. Temporal ("over time") and ranking
+# ("which places") frames are matched by the earlier dispatchers and win the single chart slot.
+_MATERIAL_CHART_TRIGGERS = (
+    "material mix", "material breakdown", "material composition", "by material", "which material",
+    "what material", "materials covered", "material coverage", "breakdown by material", "share of",
+    "composition", "make up of", "makeup of", "proportion", "what share", "how much of",
+    "distribution across materials", "split by material",
+)
+
+
+def _wants_material_chart(question: str) -> bool:
+    return any(t in question.lower() for t in _MATERIAL_CHART_TRIGGERS)
+
+
+def _material_label(key: str) -> str:
+    """Human label for a material_category key ('plastic_packaging' -> 'Plastic Packaging')."""
+    return (key or "unspecified").replace("_", " ").strip().title()
+
+
+def _material_chart(question: str, agg_scoped: dict) -> ResearchChart | None:
+    """A material-share donut from the SCOPED material aggregate, when the question asks for a material
+    mix / composition and the set spans ≥2 materials. Each slice is a material category's bill count;
+    the frontend caps at 7 slices + 'Other'. None otherwise."""
+    if not _wants_material_chart(question):
+        return None
+    mats = (agg_scoped or {}).get("material_coverage") or []
+    rows = [m for m in mats if (m.get("count") or 0) > 0]
+    if len(rows) < 2:
+        return None
+    bars = [ResearchChartBar(label=_material_label(m["material"]), value=m["count"])
+            for m in sorted(rows, key=lambda m: m["count"], reverse=True)]
+    return ResearchChart(
+        title="Bills by material", kind="donut", bars=bars,
+        footnote=("Share of in-scope bills touching each material. A bill spanning several materials "
+                  "counts in each, so slices can sum above the distinct-bill total."))
 
 
 def _lit_subquery():
@@ -1166,10 +1206,12 @@ async def ask_the_atlas(
     # Triggered on the rewritten query so a follow-up like "show that over time" still fires.
     scope_labels = (facets.place_labels + facets.material_labels + facets.instrument_labels
                     + facets.product_labels)
-    # A jurisdiction ranking chart takes precedence over the year chart when the question ranks places;
-    # both share the single chart slot.
+    # One chart slot, dispatched by question frame in precedence order: a jurisdiction RANKING wins first,
+    # then a TREND (over-time line), then a material COMPOSITION donut. Ordering matters where triggers
+    # overlap — "distribution over time" is temporal, so the year line beats the material donut.
     chart = (_jurisdiction_chart(retrieval_q, agg_scoped)
-             or _year_chart(retrieval_q, agg_scoped, scope_labels))
+             or _year_chart(retrieval_q, agg_scoped, scope_labels)
+             or _material_chart(retrieval_q, agg_scoped))
     return ResearchAnswer(answer=answer_text, citations=citations, chart=chart,
                           coverage_note=coverage, bills=bills,
                           session_id=str(session_id) if session_id else None, seq=seq,
@@ -1554,6 +1596,121 @@ def _combine_verbatim(pairs: list[tuple[str, str]]) -> str:
     return "\n\n".join(f"## {q}\n\n{a}" for q, a in pairs)
 
 
+# --- Short-form distillation: the crop / pair siblings of _editorialize. Same house voice + legal-status
+# discipline, but the mandate is CROP (to the single sharpest point) or PAIR (two-to-four bills side by
+# side), not the long-form combine. Shared by the /drafts endpoint (mode=crop|pair) and
+# scripts/shortform_articles.py, so voice + citation linking match the full flow exactly. ------------
+_CROP_SYSTEM = """\
+You are an editor turning internal policy-research Q&A into a VERY SHORT, punchy article for a
+circular-economy / EPR policy newsletter — read by producers, compliance teams, and policy staff. You are
+given one or more QUESTION/ANSWER pairs from a single research thread, each answer in markdown with inline
+[STATE BILL_NUMBER] citation markers.
+Do NOT summarize the thread. Find the SINGLE most impactful finding across it — the sharpest, most
+surprising, or most actionable point — and build a tight ~150-220 word piece around just that.
+Return a JSON object with EXACTLY these keys:
+- "title": a specific, non-clickbait headline (<= 90 chars) — name the finding, not "A look at…".
+- "dek": one-sentence standfirst on the takeaway (<= 160 chars).
+- "body": 1-3 short markdown paragraphs (no subheads — it's short). Open on the point, then the evidence.
+  DO NOT invent facts, numbers, or bills beyond the ANSWERS. PRESERVE the legal-status framing: keep a
+  proposed/introduced/pending bill in conditional voice ("would require… if enacted"); only bills an
+  answer presents as enacted may be stated as law in force. Keep every [STATE BILL_NUMBER] marker EXACTLY
+  as written, beside the claim it supports — cite only bills already in the ANSWERS.
+Output ONLY the JSON object — no preamble, no code fence.
+"""
+
+_PAIR_SYSTEM = """\
+You are an editor writing a VERY SHORT "bills, side by side" piece for a circular-economy / EPR policy
+newsletter — read by producers, compliance teams, and policy staff. You are given a research QUESTION and
+a set of CANDIDATE BILLS (each: ref, jurisdiction, legal status, year, title, and a short excerpt).
+Choose the {n} bills that form the MOST illuminating pairing or contrast — the same problem solved two
+ways, a leader vs a laggard, an enacted law vs a bold proposal — and put them in conversation.
+Return a JSON object with EXACTLY these keys:
+- "title": a specific headline (<= 90 chars) that frames the contrast.
+- "dek": one-sentence standfirst (<= 160 chars).
+- "body": a tight ~180-260 word markdown piece (no subheads). Name what each bill does and what the
+  contrast teaches. Cite each bill INLINE with [STATE BILL_NUMBER] EXACTLY as given in its `ref`. Respect
+  legal status: an enacted bill is law in force (indicative voice); ANY other status is a proposal not yet
+  in effect (conditional voice — "would require… if enacted"). Do NOT invent facts beyond the excerpts.
+- "refs": a JSON array of the {n} `ref` strings you actually used.
+Output ONLY the JSON object — no preamble, no code fence.
+"""
+
+
+def _parse_editorial_json(raw: str) -> dict:
+    """Strip an optional ``` fence and parse — shared by the editorial + short-form passes."""
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1]
+        if raw.rstrip().endswith("```"):
+            raw = raw.rstrip()[:-3]
+    return json.loads(raw)
+
+
+async def _shortform_llm(system: str, user: str) -> dict | None:
+    """One best-effort short-form pass -> {title, dek, body, [refs]}, retried once then None. Shorter
+    max_tokens than _editorialize (a crop/pair piece is ~250 words), same optional-polish contract: a
+    failure returns None so the caller degrades instead of blocking the draft."""
+    for attempt in (1, 2):
+        try:
+            resp = await _client.messages.create(
+                model=RESEARCH_MODEL, max_tokens=2000, temperature=0.3,
+                system=system + _HOUSE_VOICE,
+                messages=[{"role": "user", "content": user}])
+            if getattr(resp, "stop_reason", None) == "max_tokens":
+                raise ValueError("short-form output hit max_tokens (JSON truncated)")
+            data = _parse_editorial_json("".join(getattr(b, "text", "") for b in resp.content))
+            if isinstance(data, dict) and data.get("body") and data.get("title"):
+                return {"title": str(data["title"])[:300],
+                        "dek": (str(data["dek"]) if data.get("dek") else None),
+                        "body": str(data["body"]),
+                        "refs": data.get("refs")}
+            raise ValueError("short-form JSON missing title/body")
+        except Exception as e:  # noqa: BLE001 — short-form is optional polish, never block staging
+            log.warning("content_shortform_failed", attempt=attempt, error=str(e))
+    return None
+
+
+async def _crop_editorialize(pairs: list[tuple[str, str]]) -> dict | None:
+    """Crop a thread's (question, answer) pairs to its single most impactful point -> {title, dek, body}.
+    None on failure so the caller falls back to the verbatim combine."""
+    convo = "\n\n".join(f"QUESTION {i + 1}: {q}\n\nANSWER {i + 1}:\n{a}" for i, (q, a) in enumerate(pairs))
+    return await _shortform_llm(_CROP_SYSTEM, convo)
+
+
+async def _candidate_bill_details(db: AsyncSession, ids: list[int]) -> list[dict]:
+    """Cited-bill detail (input rank order preserved) for the pair prompt — ref, status, year, title,
+    excerpt. `ids` should already be the ranked, deduped cited set; only bills with a bill_number survive
+    (they need a citable `ref`)."""
+    ids = [i for i in dict.fromkeys(ids) if i is not None]
+    if not ids:
+        return []
+    rows = (await db.execute(
+        select(Bill.id, Bill.state, Bill.bill_number, Bill.region, Bill.status,
+               Bill.status_date, Bill.title, Bill.ai_summary).where(Bill.id.in_(ids)))).all()
+    by_id = {r.id: r for r in rows}
+    out = []
+    for i in ids:  # cited_bill_ids is already the ranked order; keep it
+        r = by_id.get(i)
+        if not r or not r.bill_number:
+            continue
+        status = r.status or "unknown"
+        out.append({
+            "ref": f"{r.state} {r.bill_number}", "region": r.region,
+            "status": status, "in_force": status == "enacted",
+            "year": r.status_date.year if r.status_date else None,
+            "title": (r.title or "")[:140], "excerpt": (r.ai_summary or "").strip()[:600],
+        })
+    return out
+
+
+async def _pair_editorialize(question: str, candidates: list[dict], n: int) -> dict | None:
+    """Contrast `n` of the candidate bills -> {title, dek, body}. None on failure / too few candidates."""
+    if len(candidates) < n:
+        return None
+    user = f"QUESTION: {question}\n\nCANDIDATE BILLS:\n{json.dumps(candidates, ensure_ascii=False)}"
+    return await _shortform_llm(_PAIR_SYSTEM.replace("{n}", str(n)), user)
+
+
 def _article_url(token: str) -> str:
     # Instant self-hosted article link (query param, not a path — static export, same as /r/ and ?bill=).
     return f"{DASHBOARD_URL}/p/?token={token}"
@@ -1585,9 +1742,11 @@ async def create_content_draft(
     db: AsyncSession = Depends(get_db),
 ) -> ContentDraftOut:
     """Send one or more turns of a research thread to the staging area: combine the selected turns (in
-    seq order) → editorial pass (optional) + citation link pass → an editable ContentDraft. `seqs` picks
+    seq order) → editorial/short-form pass + citation link pass → an editable ContentDraft. `seqs` picks
     the turns (tick the questions to keep); `seq` is the legacy single-turn form; neither → the latest
-    turn. `body_markdown` comes out Substack-ready, [STATE BILL_NUMBER] markers already deep-linked."""
+    turn. `mode` picks the shape: "full" (long-form combine, `editorial`-gated), "crop" (short — the
+    thread's single sharpest finding), or "pair" (short — `pair_size` cited bills side by side).
+    `body_markdown` comes out Substack-ready, [STATE BILL_NUMBER] markers already deep-linked."""
     from app.models import ContentDraft, ResearchTurn
     sess = await _get_session_or_404(db, body.session_id)
     tq = select(ResearchTurn).where(ResearchTurn.session_id == sess.id)
@@ -1610,18 +1769,30 @@ async def create_content_draft(
 
     # Materialize everything the write needs, then release the request connection before the ~15s
     # editorial call (same reason /ask does: don't hold an idle connection across an LLM round-trip).
-    # Union the cited bills across every selected turn so one link pass covers the whole combined body.
-    ref_map = await _ref_map_for(db, [i for t in turns for i in _cited_ids(t)])
+    # Union the cited bills across every selected turn so one link pass covers the whole combined body;
+    # pair mode also needs their detail (fetched now, before the connection is released).
+    cited_union = [i for t in turns for i in _cited_ids(t)]
+    ref_map = await _ref_map_for(db, cited_union)
+    candidates = await _candidate_bill_details(db, cited_union[:8]) if body.mode == "pair" else []
     first_seq, sess_id, sess_title = turns[0].seq, sess.id, sess.title
     await db.close()
 
+    # A crop/pair piece runs an intrinsic short-form pass; a full article runs the editorial combine only
+    # when asked. All three degrade to the verbatim combine (editorial_applied=False) if the LLM pass fails
+    # or, for pair, the thread cites too few bills — so a draft always lands.
     editorial_applied = False
     title, dek, body_src = (sess_title or pairs[0][0])[:300], None, _combine_verbatim(pairs)
-    if body.editorial:
+    if body.mode == "crop":
+        ed = await _crop_editorialize(pairs)
+    elif body.mode == "pair":
+        ed = await _pair_editorialize(pairs[0][0], candidates, body.pair_size)
+    elif body.editorial:
         ed = await _editorialize(pairs)
-        if ed:
-            title, dek, body_src = ed["title"], ed["dek"], ed["body"]
-            editorial_applied = True
+    else:
+        ed = None
+    if ed:
+        title, dek, body_src = ed["title"], ed["dek"], ed["body"]
+        editorial_applied = True
     body_md = link_citations(body_src, ref_map)
 
     async with AsyncSessionLocal() as s:
@@ -1632,9 +1803,10 @@ async def create_content_draft(
         await s.commit()
         await s.refresh(draft)
         out = _draft_out(draft)
-        # Tell the caller whether the requested editorial pass actually produced the article, so the admin
-        # UI can flag a silent fall-back to the verbatim separate-sections combine instead of claiming a draft.
-        out.editorial_applied = editorial_applied if body.editorial else None
+        # Tell the caller whether the requested distillation actually produced the article, so the admin UI
+        # can flag a silent fall-back to the verbatim separate-sections combine instead of claiming a draft.
+        # None only when a plain verbatim full-combine was requested (mode=full, editorial off).
+        out.editorial_applied = editorial_applied if (body.editorial or body.mode != "full") else None
         return out
 
 

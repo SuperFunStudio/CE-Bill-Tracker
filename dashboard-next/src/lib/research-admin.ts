@@ -99,9 +99,20 @@ export interface ContentDraftPage {
   items: ContentDraft[];
 }
 
+// mode: 'full' (long-form combine, editorial-gated) | 'crop' (short — the thread's sharpest finding) |
+// 'pair' (short — pair_size cited bills side by side). pair_size applies to 'pair' only.
+export type DraftMode = 'full' | 'crop' | 'pair';
+
 export const createDraft = (
   getToken: GetToken,
-  body: { session_id: string; seqs?: number[]; seq?: number | null; editorial?: boolean },
+  body: {
+    session_id: string;
+    seqs?: number[];
+    seq?: number | null;
+    editorial?: boolean;
+    mode?: DraftMode;
+    pair_size?: number;
+  },
 ) =>
   authedFetch<ContentDraft>('/research/drafts', getToken, {
     method: 'POST',

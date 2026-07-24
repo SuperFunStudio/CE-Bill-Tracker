@@ -18,6 +18,7 @@ import { ApiError, askResearch, fetchResearchBills, fetchResearchSession } from 
 import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchChart, ResearchCitation } from '@/lib/types';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillModal } from '@/components/ui/BillModal';
+import { useChartTheme } from '@/lib/charts/theme';
 
 // Local marker that an anonymous visitor has spent their one free question (server enforces the real
 // per-IP/day limit; this just avoids a wasted round-trip and shows the wall immediately).
@@ -212,13 +213,34 @@ function AnswerText({ text, cites, onCite }: {
   );
 }
 
+/**
+ * A chart the answer chose to show. All numbers are computed server-side from SQL aggregates, so they're
+ * exact; the model only picks WHICH aggregate is relevant and its `kind`. Renders one of four lightweight,
+ * dependency-free forms by `kind` — bars (default / grouped), a trend line/area, or a part-to-whole donut
+ * — colored from the shared chart primitive so identity/accent/status read the same as the Insights charts.
+ */
 function AnswerChart({ chart }: { chart: ResearchChart }) {
-  const { title, bars, kind, series, footnote } = chart;
-  const grouped = kind === 'grouped';
-  const max = Math.max(1, ...bars.map(b => (grouped ? (b.value2 ?? b.value) : b.value)));
+  const { title, kind, footnote } = chart;
+  const body =
+    kind === 'line' || kind === 'area' ? <TrendChart chart={chart} />
+    : kind === 'donut' ? <DonutChart chart={chart} />
+    : <BarsChart chart={chart} />;
   return (
     <div className="rounded-lg border border-border-default bg-bg-primary p-4 space-y-3">
       <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">{title}</div>
+      {body}
+      {footnote && <div className="text-[10px] text-text-muted leading-snug pt-1">{footnote}</div>}
+    </div>
+  );
+}
+
+// Default: horizontal bars, single-series or grouped (value inside value2, e.g. enacted ⊆ all-tracked).
+function BarsChart({ chart }: { chart: ResearchChart }) {
+  const { bars, kind, series } = chart;
+  const grouped = kind === 'grouped';
+  const max = Math.max(1, ...bars.map(b => (grouped ? (b.value2 ?? b.value) : b.value)));
+  return (
+    <>
       {grouped && series && series.length === 2 && (
         <div className="flex items-center gap-4 text-[11px] text-text-secondary">
           <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-green-accent" />{series[0]}</span>
@@ -244,7 +266,100 @@ function AnswerChart({ chart }: { chart: ResearchChart }) {
           </div>
         ))}
       </div>
-      {footnote && <div className="text-[10px] text-text-muted leading-snug pt-1">{footnote}</div>}
+    </>
+  );
+}
+
+// Trend over time: bars are (label=x, value=y), drawn as a connected line (area = filled underneath).
+// A single accent line — one series, so the card title names it and no legend is needed. Falls back to
+// bars if there are too few points to read as a trend.
+function TrendChart({ chart }: { chart: ResearchChart }) {
+  const colors = useChartTheme();
+  const bars = chart.bars;
+  if (bars.length < 2) return <BarsChart chart={{ ...chart, kind: 'bar' }} />;
+
+  const W = 560, H = 190, PAD_L = 30, PAD_R = 12, PAD_T = 12, PAD_B = 22;
+  const iw = W - PAD_L - PAD_R, ih = H - PAD_T - PAD_B;
+  const n = bars.length;
+  const maxV = Math.max(1, ...bars.map(b => b.value));
+  const x = (i: number) => PAD_L + (i / (n - 1)) * iw;
+  const y = (v: number) => PAD_T + ih - (v / maxV) * ih;
+  const line = bars.map((b, i) => `${x(i).toFixed(1)},${y(b.value).toFixed(1)}`).join(' ');
+  const areaPts = `${PAD_L},${(PAD_T + ih).toFixed(1)} ${line} ${x(n - 1).toFixed(1)},${(PAD_T + ih).toFixed(1)}`;
+  const stroke = colors.accent;
+  // Thin out x labels so they never collide: always the ends, then a sparse interior sample.
+  const every = Math.max(1, Math.ceil(n / 7));
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={chart.title} preserveAspectRatio="none">
+      {[0, 0.5, 1].map(t => {
+        const gy = PAD_T + ih - t * ih;
+        return (
+          <g key={t}>
+            <line x1={PAD_L} y1={gy} x2={W - PAD_R} y2={gy} stroke={colors.border} strokeDasharray="3 3" />
+            <text x={PAD_L - 5} y={gy + 3} textAnchor="end" fontSize="9" fill={colors.muted}>{Math.round(t * maxV)}</text>
+          </g>
+        );
+      })}
+      {chart.kind === 'area' && <polygon points={areaPts} fill={stroke} fillOpacity={0.12} />}
+      <polyline points={line} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+      {bars.map((b, i) => (
+        <circle key={i} cx={x(i)} cy={y(b.value)} r={2.5} fill={stroke}>
+          <title>{b.label}: {b.value}</title>
+        </circle>
+      ))}
+      {bars.map((b, i) =>
+        (i === 0 || i === n - 1 || i % every === 0)
+          ? <text key={`x${i}`} x={x(i)} y={H - 6} textAnchor="middle" fontSize="9" fill={colors.muted}>{b.label}</text>
+          : null,
+      )}
+    </svg>
+  );
+}
+
+// Part-to-whole: each bar is a slice. One ring + a direct-labeled legend (value + %), so identity is never
+// carried by color alone. Caps at 7 slices + "Other" — never cycles the 8-slot categorical palette.
+function DonutChart({ chart }: { chart: ResearchChart }) {
+  const colors = useChartTheme();
+  const sorted = [...chart.bars].sort((a, b) => b.value - a.value);
+  const slices = sorted.length > 8
+    ? [...sorted.slice(0, 7), { label: 'Other', value: sorted.slice(7).reduce((s, b) => s + b.value, 0) }]
+    : sorted;
+  const total = slices.reduce((s, b) => s + b.value, 0) || 1;
+
+  const C = 72, R = 60, r = 38;
+  const polar = (rad: number, ang: number) => `${(C + rad * Math.cos(ang)).toFixed(2)},${(C + rad * Math.sin(ang)).toFixed(2)}`;
+  let a0 = -Math.PI / 2;
+  const arcs = slices.map((s, i) => {
+    const a1 = a0 + (s.value / total) * 2 * Math.PI;
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    const d = `M ${polar(R, a0)} A ${R} ${R} 0 ${large} 1 ${polar(R, a1)} L ${polar(r, a1)} A ${r} ${r} 0 ${large} 0 ${polar(r, a0)} Z`;
+    const arc = { d, color: colors.categorical[i % colors.categorical.length], label: s.label, value: s.value, pct: Math.round((s.value / total) * 100) };
+    a0 = a1;
+    return arc;
+  });
+
+  return (
+    <div className="flex items-center gap-4 flex-wrap">
+      <svg viewBox="0 0 144 144" width={132} height={132} className="shrink-0" role="img" aria-label={chart.title}>
+        {arcs.map((s, i) => (
+          <path key={i} d={s.d} fill={s.color} stroke="var(--bg-primary)" strokeWidth={1.5}>
+            <title>{s.label}: {s.value} ({s.pct}%)</title>
+          </path>
+        ))}
+        <text x={C} y={C - 1} textAnchor="middle" fontSize="20" fontWeight="700" fill="var(--text-primary)">{total}</text>
+        <text x={C} y={C + 13} textAnchor="middle" fontSize="9" fill="var(--text-muted)">total</text>
+      </svg>
+      <ul className="space-y-1 text-xs flex-1 min-w-[150px]">
+        {arcs.map((s, i) => (
+          <li key={i} className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ background: s.color }} />
+            <span className="text-text-secondary truncate flex-1">{s.label}</span>
+            <span className="text-text-primary font-mono">{s.value}</span>
+            <span className="text-text-muted w-9 text-right tabular-nums">{s.pct}%</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

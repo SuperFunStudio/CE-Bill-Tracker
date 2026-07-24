@@ -217,9 +217,10 @@ export default function HomePage() {
         <StatesTicker
           label={leaderboard.label}
           data={leaderboard.data}
-          // "The rest →" only means the US state standings board — don't offer it under the world/EU
-          // leaderboards, where it wrongly dropped viewers onto the US-states page.
-          restHref={leaderboard.mode === 'us-states' ? '/states' : undefined}
+          // Always link through to the full Standings board (/states adapts to the selection: the US
+          // momentum board, the EU board, or the two-column States|Nations leaderboard by default).
+          restHref="/states"
+          restLabel={leaderboard.mode === 'us-states' ? 'The rest' : 'View all'}
           onSelect={code =>
             leaderboard.mode === 'us-states'
               ? setBillFilters(prev => ({ ...prev, state: prev.state === code ? '' : code }))

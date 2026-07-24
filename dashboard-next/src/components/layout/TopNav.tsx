@@ -9,7 +9,7 @@ import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
 import {
   HomeIcon, CalendarIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
-  LabelIcon, ScaleIcon, ChartIcon,
+  LabelIcon, ScaleIcon, ChartIcon, CapitolIcon,
 } from '@/components/ui/icons';
 
 // `usOnly` items are hidden outside the US (company impact scoring is US-only; Federal Actions, now a
@@ -30,6 +30,9 @@ const NAV_ITEMS: NavItem[] = [
   // bar (keywords filter; a question gets a grounded, cited answer over the same corpus). /ask
   // redirects here, preserving ?session= so saved research threads still open.
   { href: '/', label: 'Explore', Icon: HomeIcon },
+  // Standings is the two-column leaderboard (US states next to the world's nations) — global, so no
+  // usOnly gate. /states adapts to the region selection (US momentum board / EU board / two-column).
+  { href: '/states', label: 'Standings', Icon: CapitolIcon },
   // Upcoming Deadlines is a tabbed surface — Federal Actions is folded in as a subpage tab (see
   // DeadlinesTabs), so /federal lights this item up too. Federal has no top-level nav entry anymore.
   { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon, altPaths: ['/federal'] },

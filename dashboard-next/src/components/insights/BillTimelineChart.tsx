@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -14,6 +14,7 @@ import {
 import type { BillTimelinePoint, BillParams } from '@/lib/types';
 import { track } from '@/lib/analytics';
 import { formatInstrumentType } from '@/lib/utils';
+import { chartAxis, chartGrid, chartTooltip, countAxis, useChartTheme } from '@/lib/charts/theme';
 import { BillDrilldownPanel } from './BillDrilldownPanel';
 
 /**
@@ -45,22 +46,6 @@ const STATUS_CONFIG: StatusConfig[] = [
   { key: 'failed', label: 'Failed / died', color: '#9ca3af', kind: 'shot' },
 ];
 
-// Reads the active theme's neutral colors (so axes/grid match light & dark) plus the canonical
-// enacted green (--status-enacted), so the headline line matches the enacted green used elsewhere.
-function useThemeColors() {
-  const [colors, setColors] = useState({ muted: '#6b7280', border: '#dee2e6', enacted: '#16a34a' });
-  useEffect(() => {
-    const root = getComputedStyle(document.documentElement);
-    const get = (v: string, fb: string) => root.getPropertyValue(v).trim() || fb;
-    setColors({
-      muted: get('--text-muted', '#6b7280'),
-      border: get('--border-default', '#dee2e6'),
-      enacted: get('--status-enacted', '#16a34a'),
-    });
-  }, []);
-  return colors;
-}
-
 type Mode = 'cumulative' | 'annual';
 
 export function BillTimelineChart({
@@ -75,7 +60,7 @@ export function BillTimelineChart({
   const [visible, setVisible] = useState<Set<string>>(() => new Set(['enacted']));
   const [drillYear, setDrillYear] = useState<number | null>(null);
 
-  const colors = useThemeColors();
+  const colors = useChartTheme();
 
   // Clicking the chart drills the whole year (the timeline is multi-series, so a single point isn't
   // one status); the panel lists every bill active that year with its own status + source link.
@@ -187,30 +172,10 @@ export function BillTimelineChart({
             onClick={openDrill}
             className="cursor-pointer"
           >
-            <CartesianGrid strokeDasharray="3 3" stroke={colors.border} vertical={false} />
-            <XAxis
-              dataKey="year"
-              stroke={colors.muted}
-              tick={{ fontSize: 11, fill: colors.muted }}
-              tickLine={false}
-            />
-            <YAxis
-              stroke={colors.muted}
-              tick={{ fontSize: 11, fill: colors.muted }}
-              tickLine={false}
-              allowDecimals={false}
-              width={44}
-            />
-            <Tooltip
-              contentStyle={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border-default)',
-                borderRadius: 8,
-                fontSize: 12,
-                color: 'var(--text-primary)',
-              }}
-              labelStyle={{ color: 'var(--text-primary)', fontWeight: 600 }}
-            />
+            <CartesianGrid {...chartGrid(colors)} />
+            <XAxis dataKey="year" {...chartAxis(colors)} />
+            <YAxis {...chartAxis(colors)} {...countAxis} />
+            <Tooltip {...chartTooltip} />
             {showTrackingStart && (
               <ReferenceLine
                 x={trackingStartYear!}
@@ -232,7 +197,7 @@ export function BillTimelineChart({
                   type="monotone"
                   dataKey={c.key}
                   name={c.label}
-                  stroke={c.key === 'enacted' ? colors.enacted : c.color}
+                  stroke={c.key === 'enacted' ? colors.status.enacted : c.color}
                   strokeWidth={c.kind === 'score' ? 2.5 : 1.75}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -247,7 +212,7 @@ export function BillTimelineChart({
       <div className="flex flex-wrap gap-2">
         {series.map((c) => {
           const on = visible.has(c.key);
-          const chipColor = c.key === 'enacted' ? colors.enacted : c.color;
+          const chipColor = c.key === 'enacted' ? colors.status.enacted : c.color;
           return (
             <button
               key={c.key}

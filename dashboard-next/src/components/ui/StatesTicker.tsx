@@ -12,6 +12,7 @@ export function StatesTicker({
   data,
   onSelect,
   restHref,
+  restLabel = 'The rest',
 }: {
   /** Heading shown at the left ("Top States" / "Top Member States" / "Top Regions"). */
   label?: string;
@@ -19,8 +20,10 @@ export function StatesTicker({
   data: Record<string, number>;
   /** Tap handler — filter by a US state, or drill into a region. */
   onSelect?: (code: string) => void;
-  /** Optional "The rest →" destination (only meaningful for the US states list). */
+  /** Optional link destination for the bookend CTA (the full Standings board). */
   restHref?: string;
+  /** Bookend CTA label — "The rest" for the US states list, "View all" elsewhere. */
+  restLabel?: string;
 }) {
   const ranked = Object.entries(data)
     .filter(([, c]) => c > 0)
@@ -65,7 +68,7 @@ export function StatesTicker({
           href={restHref}
           className="shrink-0 pr-1 text-xs text-green-accent hover:underline whitespace-nowrap"
         >
-          The rest &rarr;
+          {restLabel} &rarr;
         </Link>
       )}
     </div>

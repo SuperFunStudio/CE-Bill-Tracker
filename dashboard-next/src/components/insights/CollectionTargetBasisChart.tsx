@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { fetchCollectionTargetBasis } from '@/lib/api';
+import { ChartEmpty, ChartError, ChartSkeleton, useChartTheme } from '@/lib/charts/theme';
 import type { CollectionTargetBasisPoint } from '@/lib/types';
 
 /**
@@ -32,24 +33,10 @@ const BASIS_LABELS: Record<string, string> = {
 // Weight/value_recovered are the poles of the question, so they get the accent; the rest are neutral.
 const BASIS_ACCENT = new Set(['weight', 'value_recovered']);
 
-function useThemeColors() {
-  const [colors, setColors] = useState({ accent: '#16a34a', muted: '#9ca3af', border: '#dee2e6' });
-  useEffect(() => {
-    const root = getComputedStyle(document.documentElement);
-    const get = (v: string, fb: string) => root.getPropertyValue(v).trim() || fb;
-    setColors({
-      accent: get('--green-accent', '#16a34a'),
-      muted: get('--text-muted', '#9ca3af'),
-      border: get('--border-default', '#dee2e6'),
-    });
-  }, []);
-  return colors;
-}
-
 export function CollectionTargetBasisChart({ regions }: { regions?: string } = {}) {
   const [points, setPoints] = useState<CollectionTargetBasisPoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const colors = useThemeColors();
+  const colors = useChartTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -71,14 +58,10 @@ export function CollectionTargetBasisChart({ regions }: { regions?: string } = {
       .sort((a, b) => b.count - a.count);
   }, [points]);
 
-  if (error) return <p className="text-sm text-error">{error}</p>;
-  if (!points) return <div className="h-[280px] w-full animate-pulse rounded-lg bg-bg-tertiary" />;
+  if (error) return <ChartError>{error}</ChartError>;
+  if (!points) return <ChartSkeleton heightClass="h-[280px]" />;
   if (rows.length === 0) {
-    return (
-      <p className="text-sm text-text-muted">
-        No collection-target basis data for the selected regions yet.
-      </p>
-    );
+    return <ChartEmpty>No collection-target basis data for the selected regions yet.</ChartEmpty>;
   }
 
   const total = rows.reduce((s, r) => s + r.count, 0);

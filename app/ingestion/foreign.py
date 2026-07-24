@@ -14,8 +14,10 @@ is just a subclass that knows how to (a) discover candidate law ids and (b) fetc
 First adapter: JapanEgovClient over the e-Gov 法令API (laws.e-gov.go.jp) — free, no key, full-text XML.
 UK (legislation.gov.uk API) and South Korea (law.go.kr Open API) are the next intended subclasses.
 
-Each act becomes a region=<XX>, state=<XX> bill keyed on foreign_id="<REGION>:<source>:<id>", with full
-text in bill_texts. Driver: scripts/ingest_foreign.py. Not wired into the US IngestionCoordinator loop.
+Each act becomes a region=<XX> bill keyed on foreign_id="<REGION>:<source>:<id>", with full text in
+bill_texts. `state` = region for national law; a sub-national client (see ForeignSourceClient.
+subnational — BC, Ontario, NSW, …) stamps a namespaced code ("CA-BC") so federations break into the
+sub-national tier. Driver: scripts/ingest_foreign.py. Not wired into the US IngestionCoordinator loop.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ import re
 import zipfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from urllib.parse import quote
 
 import httpx
 import structlog
@@ -168,6 +171,12 @@ class ForeignSourceClient(ABC):
 
     region: str = ""        # subclass sets, e.g. "JP"
     source: str = "foreign" # subclass sets, e.g. "egov"
+    # Sub-national jurisdiction this client's laws belong to, as a NAMESPACED code ("CA-BC", "AU-NSW").
+    # None (the default) = the client serves NATIONAL law, so the bill's `state` is just the region. A
+    # federation's province/state client sets this, and every law it yields lands in that sub-national
+    # tier (see the state= assignment in sync_foreign). Never a bare code — "WA" collides Western
+    # Australia vs Washington; the namespaced form is collision-safe even in state-only aggregations.
+    subnational: str | None = None
 
     def __init__(self, timeout: float = 45.0):
         self._timeout = timeout
@@ -3033,6 +3042,7 @@ class CanadaBcLawsClient(ForeignSourceClient):
 
     region = "CA"
     source = "bclaws"
+    subnational = "CA-BC"
 
     def __init__(self, timeout: float = 45.0):
         super().__init__(timeout)
@@ -3117,6 +3127,7 @@ class CanadaOntarioClient(ForeignSourceClient):
 
     region = "CA"
     source = "elaws"
+    subnational = "CA-ON"
 
     async def discover(self) -> list[tuple[str, str]]:
         out = {f"{s['type']}/{s['code']}": s["en"] for s in CA_ON_SEED}
@@ -3146,6 +3157,142 @@ class CanadaOntarioClient(ForeignSourceClient):
             source_url=CA_ON_PAGE.format(type=doc_type, code=code),
             # API returns only consolidation dates; the code's leading 2 digits are the enactment year.
             status_date=_on_code_year_date(code),
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Manitoba — official site (web2.gov.mb.ca/laws), clean server HTML; the English view is the page path
+# with ".php?lang=en". WRAP Act (C.C.S.M. c. W40) is the enabling EPR statute; the packaging/e-waste/
+# tire stewardship regimes are regs under it. source_id = the site path sans ".php" ("statutes/ccsm/
+# w040", "regs/current/195-2008"). Licence: OpenMB — permissive.
+# --------------------------------------------------------------------------------------------------
+
+CA_MB_BASE = "https://web2.gov.mb.ca/laws"
+CA_MB_SEED: list[dict] = [
+    {"id": "statutes/ccsm/w040", "en": "The Waste Reduction and Prevention Act (WRAP), C.C.S.M. c. W40 (Manitoba)"},
+    {"id": "regs/current/195-2008", "en": "Packaging and Printed Paper Stewardship Regulation 195/2008 (Manitoba)"},
+]
+
+
+class CanadaManitobaClient(ForeignSourceClient):
+    """Manitoba Laws adapter — server HTML, English rendition via ?lang=en."""
+
+    region = "CA"
+    source = "mblaws"
+    subnational = "CA-MB"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = {s["id"]: s["en"] for s in CA_MB_SEED}
+        log.info("ca_mb_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        url = f"{CA_MB_BASE}/{source_id}.php?lang=en"
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("ca_mb_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(_SCRIPT_STYLE_RE.sub(" ", r.text))
+        if len(full_text) < 100:
+            log.warning("ca_mb_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=url, english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Québec — LégisQuébec. EN document URLs 307-redirect to the /fr/ path with ?langCont=en (English text
+# in a French URL); the base client follows redirects. The REP regime (Reg. respecting the recovery and
+# reclamation of products) under the Environment Quality Act is the province's EPR core. source_id =
+# "<coll>/<id>" (cs=statute, cr=reg). Licence unclear (no reproduction order) — build for analysis;
+# flag before any redistribution.
+# --------------------------------------------------------------------------------------------------
+
+CA_QC_BASE = "https://www.legisquebec.gouv.qc.ca/en/document"
+CA_QC_SEED: list[dict] = [
+    {"id": "cs/Q-2", "en": "Environment Quality Act (Québec)"},
+    {"id": "cr/Q-2, r. 40.1", "en": "Regulation respecting the recovery and reclamation of products by enterprises (Québec REP)"},
+]
+
+
+class CanadaQuebecClient(ForeignSourceClient):
+    """LégisQuébec adapter — EN doc URLs redirect to /fr/…?langCont=en (English body, French URL)."""
+
+    region = "CA"
+    source = "legisquebec"
+    subnational = "CA-QC"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = {s["id"]: s["en"] for s in CA_QC_SEED}
+        log.info("ca_qc_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        url = f"{CA_QC_BASE}/{quote(source_id, safe='/,')}"
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("ca_qc_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(_SCRIPT_STYLE_RE.sub(" ", r.text))
+        if len(full_text) < 100:
+            log.warning("ca_qc_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=str(r.url), english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Alberta — King's Printer. Consolidated PDFs are FREE (the paywall is print-only): /documents/<Acts|
+# Regs>/<stem>.pdf. The Extended Producer Responsibility Regulation (AR 194/2022) is the province's EPR
+# instrument. source_id = "<Acts|Regs>/<stem>". Licence: King's Printer — commercial reproduction OK.
+# --------------------------------------------------------------------------------------------------
+
+CA_AB_BASE = "https://kings-printer.alberta.ca/documents"
+CA_AB_SEED: list[dict] = [
+    {"id": "Regs/2022_194", "en": "Extended Producer Responsibility Regulation, AR 194/2022 (Alberta)"},
+    {"id": "Regs/2004_093", "en": "Designated Material Recycling and Management Regulation, AR 93/2004 (Alberta)"},
+    {"id": "Acts/E12", "en": "Environmental Protection and Enhancement Act (Alberta)"},
+]
+
+
+class CanadaAlbertaClient(ForeignSourceClient):
+    """Alberta King's Printer adapter — free consolidated PDFs -> _pdf_to_text."""
+
+    region = "CA"
+    source = "kingsprinter"
+    subnational = "CA-AB"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = {s["id"]: s["en"] for s in CA_AB_SEED}
+        log.info("ca_ab_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        url = f"{CA_AB_BASE}/{source_id}.pdf"
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("ca_ab_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _pdf_to_text(r.content)
+        if len(full_text) < 100:
+            log.warning("ca_ab_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=url, english_label=english_label,
         )
 
 
@@ -3300,6 +3447,7 @@ class AustraliaEnActClient(ForeignSourceClient):
 
 class AustraliaNswClient(AustraliaEnActClient):
     source = "nsw"
+    subnational = "AU-NSW"
     host = "legislation.nsw.gov.au"
     fmt = "html"  # NSW XML export is a JS form; whole/html is the fetchable full text
     impersonate = True  # Cloudflare TLS-fingerprint challenge — fetch via curl_cffi
@@ -3311,6 +3459,7 @@ class AustraliaNswClient(AustraliaEnActClient):
 
 class AustraliaQldClient(AustraliaEnActClient):
     source = "qld"
+    subnational = "AU-QLD"
     host = "legislation.qld.gov.au"
     fmt = "xml"
     seeds = [
@@ -3321,11 +3470,106 @@ class AustraliaQldClient(AustraliaEnActClient):
 
 class AustraliaTasClient(AustraliaEnActClient):
     source = "tas"
+    subnational = "AU-TAS"
     host = "legislation.tas.gov.au"
     fmt = "xml"
     seeds = [
         {"id": "act-2022-005", "en": "Container Refund Scheme Act 2022 (TAS)"},
     ]
+
+
+# --------------------------------------------------------------------------------------------------
+# ACT — legislation.act.gov.au. The HTML view is a JS chunk loader; the DOCX download is the fetchable
+# full text: /DownloadFile/<a|sl>/<year-num>/current/DOCX/<year-num>.DOCX. The Waste Management and
+# Resource Recovery Act 2016 carries the ACT container-deposit scheme. source_id = "<type>/<year-num>".
+# Licence: CC BY (Territory legislation) — reproduction OK.
+# --------------------------------------------------------------------------------------------------
+
+AU_ACT_DOCX = "https://www.legislation.act.gov.au/DownloadFile/{type}/{num}/current/DOCX/{num}.DOCX"
+AU_ACT_SEED: list[dict] = [
+    {"id": "a/2016-51", "en": "Waste Management and Resource Recovery Act 2016 (ACT — container deposit)"},
+]
+
+
+class AustraliaActClient(ForeignSourceClient):
+    """ACT Legislation Register adapter (DOCX download -> docx_to_text; the HTML view is a JS loader)."""
+
+    region = "AU"
+    source = "act"
+    subnational = "AU-ACT"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = {s["id"]: s["en"] for s in AU_ACT_SEED}
+        log.info("au_act_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            doc_type, num = source_id.split("/", 1)
+        except ValueError:
+            return None
+        url = AU_ACT_DOCX.format(type=doc_type, num=num)
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("au_act_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = docx_to_text(r.content)
+        if len(full_text) < 100:
+            log.warning("au_act_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=url, english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# WA — legislation.wa.gov.au. Lotus-Notes portal; the "RedirectURL?OpenAgent&query=<mrdoc>.htm" agent
+# 302-redirects to the current consolidated HTML in the filestore (the base client follows redirects).
+# The Waste Avoidance and Resource Recovery Act 2007 is the state EPR/waste framework. source_id = the
+# "mrdoc_<n>" id (bumps on consolidation — re-scrape from the act homepage is a later enhancement).
+# Licence: CC BY 4.0.
+# --------------------------------------------------------------------------------------------------
+
+AU_WA_REDIRECT = ("https://www.legislation.wa.gov.au/legislation/statutes.nsf/"
+                  "RedirectURL?OpenAgent&query={id}.htm")
+AU_WA_SEED: list[dict] = [
+    {"id": "mrdoc_48005", "en": "Waste Avoidance and Resource Recovery Act 2007 (WA)"},
+]
+
+
+class AustraliaWaClient(ForeignSourceClient):
+    """Western Australia legislation adapter (Lotus-Notes RedirectURL -> consolidated HTML)."""
+
+    region = "AU"
+    source = "wa"
+    subnational = "AU-WA"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = {s["id"]: s["en"] for s in AU_WA_SEED}
+        log.info("au_wa_discovered", total=len(out))
+        return list(out.items())
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        url = AU_WA_REDIRECT.format(id=source_id)
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("au_wa_fetch_failed", id=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(_SCRIPT_STYLE_RE.sub(" ", r.text))
+        if len(full_text) < 100:
+            log.warning("au_wa_thin_text", id=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=str(r.url), english_label=english_label,
+        )
 
 
 # --------------------------------------------------------------------------------------------------
@@ -3483,15 +3727,20 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     # China (region="CN"): national DB + State Council policy library.
     "CN": ChinaFlkClient,
     "CN_GOV": ChinaGovCnClient,
-    # Canada (region="CA"): federal + provinces (province carried in `source`).
+    # Canada (region="CA"): federal + provinces (province carried in `source` -> namespaced `state`).
     "CA": CanadaJusticeClient,
     "CA_BC": CanadaBcLawsClient,
     "CA_ON": CanadaOntarioClient,
-    # Australia (region="AU"): federal + states (state carried in `source`).
+    "CA_MB": CanadaManitobaClient,
+    "CA_QC": CanadaQuebecClient,
+    "CA_AB": CanadaAlbertaClient,
+    # Australia (region="AU"): federal + states (state carried in `source` -> namespaced `state`).
     "AU": AustraliaFederalClient,
     "AU_NSW": AustraliaNswClient,
     "AU_QLD": AustraliaQldClient,
     "AU_TAS": AustraliaTasClient,
+    "AU_ACT": AustraliaActClient,
+    "AU_WA": AustraliaWaClient,
     # India (region="IN"): gazette EPR Rules via the FAOLEX PDF mirror.
     "IN": IndiaFaolexClient,
 }
@@ -3555,11 +3804,14 @@ async def sync_foreign(
                 bill = (
                     await db.execute(select(Bill).where(Bill.foreign_id == law.foreign_id))
                 ).scalar_one_or_none()
+                # National law → state == region; a sub-national client (BC, NSW, …) stamps its
+                # namespaced code ("CA-BC") so federations break out into the sub-national tier.
+                state_code = client.subnational or law.region
                 if bill is None:
-                    bill = Bill(foreign_id=law.foreign_id, region=law.region, state=law.region)
+                    bill = Bill(foreign_id=law.foreign_id, region=law.region, state=state_code)
                     db.add(bill)
                 bill.region = law.region
-                bill.state = law.region
+                bill.state = state_code
                 bill.bill_number = law.bill_number
                 bill.title = law.english_label or law.title
                 bill.description = law.summary

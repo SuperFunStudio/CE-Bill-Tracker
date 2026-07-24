@@ -42,8 +42,10 @@ class Bill(Base):
     # region+jurisdiction normalization is deferred (see plan serene-munching-brook).
     region: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
     # Within-region jurisdiction code. US: "CA"/"OR" for states, "US" for federal. EU: "EU" for
-    # EU-wide acts (and "DE"/"FR"/… for member states once those are added).
-    state: Mapped[str] = mapped_column(String(2), nullable=False)  # "CA", "OR", "US" federal; "EU" EU-wide
+    # EU-wide acts (and "DE"/"FR"/… for member states). Foreign federations carry a NAMESPACED
+    # sub-national code — "CA-BC", "AU-NSW" (never bare: "WA" would collide W. Australia vs Washington);
+    # a genuinely national foreign law keeps state == region. Widened to 16 in migration 041 for those.
+    state: Mapped[str] = mapped_column(String(16), nullable=False)  # "CA"/"US"/"EU"; "CA-BC","AU-NSW"
     # Atlas Circular jurisdiction node (migration 036). The normalized tree replacing the flat
     # region/state pair (which stay as denormalized mirrors during transition). Backfilled from
     # (region, state) via app/geo/jurisdictions.jurisdiction_code — e.g. (US,CA)->US-CA, (CA,CA)->CA.

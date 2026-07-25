@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
 import { CheckIcon, CloseIcon } from '@/components/ui/icons';
 import { useRegion } from '@/components/layout/RegionContext';
+import { RegionFilter } from '@/components/insights/RegionFilter';
 
 export interface BillFilterState {
   state: string;
@@ -104,6 +105,10 @@ interface BillFiltersProps {
   /** Omit the Search input — for the unified Explore surface, which owns a prominent adaptive
    *  search/ask bar above the facets and drives `filters.search` itself. */
   hideSearch?: boolean;
+  /** Render the jurisdiction (Regions) selector centered at the top of the filter box. On the home
+   *  page this folds the old site-wide GlobalRegionBar into the explorer's own filter set, so the
+   *  region control sits with the facets it governs instead of floating under the nav. */
+  showRegion?: boolean;
   /** Resin codes present in the current bill set. When non-empty, a "Resin / polymer" filter appears;
       derive with `resinOptionsFromBills(bills)`. Omitted/empty → the filter is hidden (e.g. before the
       polymer scan has populated any data), so no surface shows a dead control. */
@@ -225,12 +230,14 @@ function MultiSelect({
   );
 }
 
-export function BillFilters({ filters, onChange, hideState, hideSearch, resinOptions }: BillFiltersProps) {
+export function BillFilters({ filters, onChange, hideState, hideSearch, showRegion, resinOptions }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
 
   // EU-central law is EU-wide (no sub-jurisdiction yet), so the State select is hidden in EU mode —
-  // it returns with member-state national law (Phase B). Region itself is the global nav selector.
-  const { isUsView } = useRegion();
+  // it returns with member-state national law (Phase B). Region itself is the global nav selector,
+  // but when `showRegion` is set the selector is hosted here (regions/setRegions come from the same
+  // RegionContext, so it stays in sync with the rest of the site).
+  const { isUsView, regions, setRegions } = useRegion();
   const showState = !hideState && isUsView;
 
   // Rotate example terms through the placeholder to hint what's searchable (bill #, material, topic).
@@ -264,6 +271,14 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, resinOpt
 
   return (
     <div className="space-y-4 border-y border-text-primary/15 py-4">
+      {/* Region — centered above the facets it governs (home page only). Folds the old site-wide
+          GlobalRegionBar into the explorer so the jurisdiction sits with the rest of the filters. */}
+      {showRegion && (
+        <div className="flex justify-center pb-1">
+          <RegionFilter selected={regions} onChange={setRegions} />
+        </div>
+      )}
+
       {/* Search — omitted on the unified Explore surface, which hosts the adaptive search/ask bar. */}
       {!hideSearch && (
         <div className="flex flex-col gap-1">

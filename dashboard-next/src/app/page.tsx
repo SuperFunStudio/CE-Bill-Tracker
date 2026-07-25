@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useBills, useBillTextSearch } from '@/hooks/useBills';
 import { useFederalActions } from '@/hooks/useFederal';
@@ -40,6 +40,57 @@ const CoverageStrip = dynamic(
   { ssr: false, loading: () => <div className="h-24 bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
+/**
+ * Types the example questions out, one character at a time, as the search box's placeholder — a hint
+ * that the bar answers real questions, not just keyword filters. Runs only while `active` (input empty
+ * and no thread yet). Types a question with an eased, human rhythm, holds it long enough to read, then
+ * the whole line vanishes at once (no backspacing) and a cursor blinks for a beat before the next
+ * question begins. Returns the display string (typed text + cursor); '' when idle so the caller can
+ * fall back to a static placeholder.
+ */
+function useTypedPlaceholder(phrases: string[], active: boolean): string {
+  const [text, setText] = useState('');
+  const [cursorOn, setCursorOn] = useState(true);
+  useEffect(() => {
+    if (!active) { setText(''); setCursorOn(true); return; }
+    let phrase = 0, char = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    // Ease-out per-character delay: a touch deliberate at the start of a question, quickening as it
+    // flows, with an extra beat after punctuation. Reads as typed by a person, not a metronome.
+    const charDelay = (s: string, i: number) => {
+      const prev = s[i - 1];
+      if (prev === ',') return 240;
+      if (prev === '.' || prev === '?') return 300;
+      const p = i / s.length;              // 0 → 1 across the question
+      const ease = 1 - 0.6 * p * (2 - p);  // ease-out: ~1.0 early → ~0.4 late
+      return 34 + 46 * ease;               // ~80ms at the start → ~52ms by the end
+    };
+    const typeNext = () => {
+      const current = phrases[phrase % phrases.length];
+      char++;
+      setText(current.slice(0, char));
+      if (char >= current.length) { timer = setTimeout(vanish, 3000); return; }
+      timer = setTimeout(typeNext, charDelay(current, char));
+    };
+    const vanish = () => { setText(''); blink(0); };        // clear the whole line at once
+    const blink = (n: number) => {
+      if (n >= 3) {                                         // ~3 toggles, then the next question
+        setCursorOn(true);
+        phrase++; char = 0;
+        timer = setTimeout(typeNext, 260);
+        return;
+      }
+      setCursorOn(c => !c);
+      timer = setTimeout(() => blink(n + 1), 420);
+    };
+    timer = setTimeout(typeNext, 650);
+    return () => clearTimeout(timer);
+  }, [active, phrases]);
+  // Cursor stays solid while typing/holding; the blink state only toggles in the gap between
+  // questions. A figure space (U+2007) for the "off" frame keeps the placeholder width steady.
+  return active ? text + (cursorOn ? '▏' : ' ') : '';
+}
+
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
   const { region, regionsParam, regions: selectedRegions, setRegions, isUsView } = useRegion();
@@ -74,6 +125,10 @@ export default function HomePage() {
     setQuery('');
     setBillFilters(prev => ({ ...prev, search: '' }));
   };
+
+  // Cycle the example questions through the search-box placeholder, typewriter-style — but only before
+  // the reader has typed or asked anything, so the animation never fights a real query.
+  const typedPlaceholder = useTypedPlaceholder(RESEARCH_EXAMPLES, !research.hasAsked && query === '');
 
   const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
 
@@ -268,41 +323,32 @@ export default function HomePage() {
             <input
               value={query}
               onChange={e => { setQuery(e.target.value); setBillFilters(prev => ({ ...prev, search: e.target.value })); }}
-              placeholder={research.hasAsked ? 'Ask a follow-up — or type keywords to browse' : 'Search bills, or ask a question…'}
+              placeholder={
+                research.hasAsked
+                  ? 'Ask a follow-up — or type keywords to browse'
+                  : typedPlaceholder || 'Search bills, or ask a question…'
+              }
               aria-label="Search bills or ask a question"
               className="flex-1 min-w-0 bg-transparent text-body text-text-primary placeholder-text-muted focus:outline-none"
             />
+          </div>
+          {/* Ask button sits below the box (not crammed inside it), with the how-it-works hint below. */}
+          <div className="mt-2 flex justify-end">
             <button
               type="submit"
               disabled={research.busy || query.trim().length < 3}
-              className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-medium text-sm px-4 py-1.5 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-medium text-sm px-5 py-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {research.busy ? 'Thinking…' : research.hasAsked ? 'Ask follow-up' : 'Ask →'}
             </button>
           </div>
-          <p className="mt-1.5 text-xs text-text-muted">
+          <p className="mt-2 text-xs text-text-muted">
             <b className="text-text-secondary font-medium">Type keywords</b> to filter the bills instantly ·{' '}
             <b className="text-text-secondary font-medium">ask a full question</b> for a grounded, cited answer over the same corpus.
           </p>
         </form>
 
-        {/* Example questions — only before the first ask */}
-        {!research.active && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {RESEARCH_EXAMPLES.map(ex => (
-              <button
-                key={ex}
-                type="button"
-                onClick={() => { setQuery(''); research.ask(ex); }}
-                className="rounded-full border border-border-default px-3 py-1.5 text-xs text-text-secondary hover:border-text-primary/40 hover:text-text-primary text-left"
-              >
-                {ex}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch resinOptions={resinOptions} />
+        <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
 
         {region === 'US' && billFilters.state && (
           <div className="mt-2 text-sm text-text-muted">

@@ -30,22 +30,18 @@ const ENACTED = new Set(['enacted', 'signed']);
 
 type SortMode = 'active' | 'enacted';
 
-// ── Composite "activity" score ────────────────────────────────────────────────────────────────────
-// The Rankings board offers two ranks (see WorldStandings): ENACTED (laws in force — the fair
-// cross-jurisdiction comparison) and ACTIVITY (a marker of movement). Activity is a weighted composite
-// of how far each measure has advanced, so a heap of freshly-introduced bills can't outrank real
-// enacted law, and it's normalized to a 0–100 index per column so no single raw tally reads as "laws."
-type StageTally = { introduced: number; committee: number; advancing: number; enacted: number };
-const blankStage = (): StageTally => ({ introduced: 0, committee: 0, advancing: 0, enacted: 0 });
-const STAGE_WEIGHT: Record<StageKey, number> = { introduced: 1, committee: 2, advancing: 3, enacted: 5 };
+// ── Two ranks (see WorldStandings) ──────────────────────────────────────────────────────────────
+// ENACTED — laws in force, the fair cross-jurisdiction comparison (the metric the homepage globe
+// shades by). ACTIVITY — a plain count of every tracked bill (all statuses), plus US federal
+// regulatory actions, so it reads as an honest tally of movement rather than an abstract index.
+// `total` counts every bill regardless of status; the per-stage fields drive the momentum bar.
+type StageTally = { introduced: number; committee: number; advancing: number; enacted: number; total: number };
+const blankStage = (): StageTally => ({ introduced: 0, committee: 0, advancing: 0, enacted: 0, total: 0 });
 
 function tallyStage(t: StageTally, status: string | null | undefined): void {
+  t.total += 1; // every tracked bill counts toward Activity, whatever its status
   const stage = STAGE_OF[(status ?? '').toLowerCase()];
-  if (stage) t[stage] += 1; // failed/vetoed/dead map to nothing — activity tracks LIVE movement only
-}
-function stageScore(t: StageTally): number {
-  return t.introduced * STAGE_WEIGHT.introduced + t.committee * STAGE_WEIGHT.committee
-    + t.advancing * STAGE_WEIGHT.advancing + t.enacted * STAGE_WEIGHT.enacted;
+  if (stage) t[stage] += 1; // failed/vetoed/dead map to no stage — the momentum bar shows LIVE movement
 }
 
 // Which board to show, derived from the global region selection. An EXPLICIT US selection gets the
@@ -331,16 +327,16 @@ function StandingRow({ rank, code, name, href, primary, secondary, barPct, tag, 
 }
 
 // A ranked jurisdiction row (a country in the national column, or a US state in the sub-national one).
-type StandingEntry = { region: string; code: string; name: string; enacted: number; motion: number; raw: number };
+type StandingEntry = { region: string; code: string; name: string; enacted: number; motion: number; activity: number };
 
 /**
  * The flagship two-column activity tracker: NATIONAL law by country (left) alongside SUB-NATIONAL law
  * (right). Not a US-vs-world comparison — just the global tally, by jurisdiction.
  *
- * Two ranks (toggle): ENACTED — laws in force, the fair cross-jurisdiction comparison — and ACTIVITY,
- * a composite momentum index (introduced→enacted, weighted) that also folds in US federal regulatory
- * actions as a marker of movement. Crucially the US, with no enacted national EPR statute, sits near
- * the BOTTOM on the default Enacted rank; its heavy federal regulatory activity only lifts it on the
+ * Two ranks (toggle): ENACTED — laws in force, the fair cross-jurisdiction comparison (the metric the
+ * homepage globe shades by) — and ACTIVITY, a plain count of every tracked bill (all statuses) plus US
+ * federal regulatory actions. Crucially the US, with no enacted national EPR statute, sits near the
+ * BOTTOM on the default Enacted rank; its heavy bill + regulatory activity only lifts it on the
  * Activity rank, where that's the honest signal. (Regulatory actions never touch the enacted count.)
  *
  * Sub-national rows are first-class only for the US today: foreign provinces (CA/AU) collapse to their
@@ -375,25 +371,25 @@ function WorldStandings() {
       tallyStage((natStage[b.region] ??= blankStage()), b.status);
     }
 
-    // Federal regulatory actions → US ACTIVITY only. A final rule (action_type "rule") is in-force
-    // movement (enacted weight); proposed rules / notices are earlier-stage movement (committee weight).
-    const fedRules = federal.filter(a => (a.action_type ?? '').toLowerCase() === 'rule').length;
-    const usFedBonus = fedRules * STAGE_WEIGHT.enacted + (federal.length - fedRules) * STAGE_WEIGHT.committee;
+    // Federal regulatory actions (EPA/GSA/FTC rulemakings — not bills) count toward the US ACTIVITY
+    // tally as equal-weight items, so the US national row reflects its regulatory movement. They never
+    // touch the enacted-law count.
+    const usFedActions = federal.length;
 
-    const toRow = (meta: { region: string; code: string; name: string }, s: StageTally, bonus = 0): StandingEntry => ({
+    const toRow = (meta: { region: string; code: string; name: string }, s: StageTally, activityBonus = 0): StandingEntry => ({
       ...meta,
       enacted: s.enacted,
       motion: s.introduced + s.committee + s.advancing + s.enacted,
-      raw: stageScore(s) + bonus,
+      activity: s.total + activityBonus, // plain count of tracked bills (+ US federal actions)
     });
 
     const states = Object.keys(stStage)
       .map(abbr => toRow({ region: 'US', code: abbr, name: STATE_NAMES[abbr] ?? abbr }, stStage[abbr]))
       .filter(r => r.motion > 0);
-    const nations = Object.keys(natStage).map(code => toRow(natMeta[code], natStage[code], code === 'US' ? usFedBonus : 0));
+    const nations = Object.keys(natStage).map(code => toRow(natMeta[code], natStage[code], code === 'US' ? usFedActions : 0));
 
-    const maxNationRaw = Math.max(1, ...nations.map(r => r.raw));
-    const maxStateRaw = Math.max(1, ...states.map(r => r.raw));
+    const maxNationRaw = Math.max(1, ...nations.map(r => r.activity));
+    const maxStateRaw = Math.max(1, ...states.map(r => r.activity));
 
     // Q3 — per-country combined rollup (national + sub-national). Only the US has a sub-national tier
     // tracked today, so this is the US total; it generalizes as more federations gain state coverage.
@@ -407,8 +403,8 @@ function WorldStandings() {
 
     const cmp = (a: StandingEntry, b: StandingEntry) =>
       sortBy === 'enacted'
-        ? b.enacted - a.enacted || b.raw - a.raw || a.name.localeCompare(b.name)
-        : b.raw - a.raw || b.enacted - a.enacted || a.name.localeCompare(b.name);
+        ? b.enacted - a.enacted || b.activity - a.activity || a.name.localeCompare(b.name)
+        : b.activity - a.activity || b.enacted - a.enacted || a.name.localeCompare(b.name);
     nations.sort(cmp);
     states.sort(cmp);
 
@@ -417,11 +413,12 @@ function WorldStandings() {
 
   const isEnacted = sortBy === 'enacted';
   // Per-row display values, keyed off the active rank. Enacted: bold enacted count + enacted-share bar,
-  // muted total-in-motion. Activity: bold 0–100 index + index bar, muted enacted count.
-  const rowFor = (r: StandingEntry, maxRaw: number) =>
+  // muted total-in-motion. Activity: bold tracked-bill count (+ US fed actions) + relative bar, muted
+  // enacted count.
+  const rowFor = (r: StandingEntry, maxAct: number) =>
     isEnacted
       ? { primary: r.enacted, secondary: r.motion, barPct: r.motion ? (r.enacted / r.motion) * 100 : 0 }
-      : { primary: Math.round((r.raw / maxRaw) * 100), secondary: r.enacted, barPct: (r.raw / maxRaw) * 100 };
+      : { primary: r.activity, secondary: r.enacted, barPct: (r.activity / maxAct) * 100 };
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
@@ -451,9 +448,9 @@ function WorldStandings() {
           with no national statute in force (like the US, with no federal EPR law) rank low here even
           though their states or agencies are busy — switch to <strong>Activity</strong> for that.</>
         ) : (
-          <>Ranked by an <strong>activity index</strong> (0–100) — a composite of how far each measure has
-          advanced (introduced → enacted, weighted), plus US federal regulatory actions. A marker of
-          movement, not law in force — switch to <strong>Enacted laws</strong> for what&rsquo;s on the books.</>
+          <>Ranked by the <strong>count of tracked bills</strong> (every status), plus US federal
+          regulatory actions — a plain tally of movement, not law in force. Switch to{' '}
+          <strong>Enacted laws</strong> for what&rsquo;s on the books.</>
         )}
       </p>
 
@@ -491,7 +488,7 @@ function WorldStandings() {
                 <span className="flex-1 min-w-0">Country</span>
                 <span className="hidden sm:block w-14 shrink-0">{isEnacted ? 'Enac. share' : 'Activity'}</span>
                 <span className="w-8 text-right shrink-0">{isEnacted ? 'Bills' : 'Enac.'}</span>
-                <span className="w-9 text-right shrink-0">{isEnacted ? 'Laws' : 'Idx'}</span>
+                <span className="w-9 text-right shrink-0">{isEnacted ? 'Laws' : 'Total'}</span>
               </li>
               {nations.map((r, i) => {
                 const v = rowFor(r, maxNationRaw);
@@ -529,7 +526,7 @@ function WorldStandings() {
                 <span className="flex-1 min-w-0">State</span>
                 <span className="hidden sm:block w-14 shrink-0">{isEnacted ? 'Enac. share' : 'Activity'}</span>
                 <span className="w-8 text-right shrink-0">{isEnacted ? 'Bills' : 'Enac.'}</span>
-                <span className="w-9 text-right shrink-0">{isEnacted ? 'Laws' : 'Idx'}</span>
+                <span className="w-9 text-right shrink-0">{isEnacted ? 'Laws' : 'Total'}</span>
               </li>
               {states.map((r, i) => {
                 const v = rowFor(r, maxStateRaw);

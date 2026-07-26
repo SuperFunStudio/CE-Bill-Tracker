@@ -1,7 +1,7 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { useBills, useBillTextSearch } from '@/hooks/useBills';
+import { useBills, useBillTextSearch, useLawsInForce } from '@/hooks/useBills';
 import { useFederalActions } from '@/hooks/useFederal';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
 import { AlertBanner } from '@/components/ui/AlertBanner';
@@ -104,6 +104,9 @@ export default function HomePage() {
   const dimensionsCsv = billFilters.dimensions.length ? billFilters.dimensions.join(',') : undefined;
   const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, regions: regionsParam ?? 'all', dimensions: dimensionsCsv });
   const { data: federal = [] } = useFederalActions({ limit: 50 });
+  // Enacted laws in force by region — the SAME source the globe shades from, so the "Top Regions"
+  // ticker ranks identically to the map (combined national + sub-national enacted).
+  const { data: lawsInForce = [] } = useLawsInForce();
 
   const { scope } = useScope();
   const scopeActive = useScopeActive();
@@ -171,14 +174,18 @@ export default function HomePage() {
       return c;
     };
     if (selectedRegions.length === 0) {
-      // Ticker must stay a subset of the region dropdown (RegionFilter's REGION_CODES) — otherwise it
-      // can surface a region (e.g. a foreign one not yet in the picker) that the user then can't select.
+      // Top Regions ranks by the SAME laws-in-force totals the globe shades from (enacted, with US
+      // states + foreign provinces already rolled into the national region code). EU members collapse
+      // into the "EU" umbrella. Filtered to REGION_CODES so the ticker can only surface a region the
+      // dropdown can also select.
       const KNOWN = new Set(REGION_CODES);
-      return { mode: 'regions' as const, label: 'Top Regions',
-        data: tally(b => {
-          const k = b.region && b.region in EU_MEMBERS ? 'EU' : b.region || 'US';
-          return KNOWN.has(k) ? k : null;
-        }) };
+      const data: Record<string, number> = {};
+      for (const p of lawsInForce) {
+        const k = p.region in EU_MEMBERS ? 'EU' : p.region;
+        if (!KNOWN.has(k)) continue;
+        data[k] = (data[k] ?? 0) + p.count;
+      }
+      return { mode: 'regions' as const, label: 'Top Regions', data };
     }
     if (selectedRegions.includes('US')) {
       return { mode: 'us-states' as const, label: 'Top States',
@@ -189,7 +196,7 @@ export default function HomePage() {
         data: tally(b => (b.region && b.region in EU_MEMBERS ? b.region : null)) };
     }
     return { mode: 'none' as const, label: '', data: {} as Record<string, number> };
-  }, [mapSource, billFilters, selectedRegions]);
+  }, [mapSource, billFilters, selectedRegions, lawsInForce]);
 
   // Region-level counts for the world switcher bubbles. Reflects the currently-loaded set, so it's
   // complete on the default "all regions" landing (the moment the overview matters most); a single

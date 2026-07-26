@@ -1,11 +1,22 @@
 'use client';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { fetchBills, fetchBill, fetchBillText, fetchBillSearch, fetchBillTextCoverage, fetchMapSummary, fetchBillLitigationCases } from '@/lib/api';
+import { fetchBills, fetchBill, fetchBillText, fetchBillSearch, fetchBillTextCoverage, fetchMapSummary, fetchBillLitigationCases, fetchLawsInForce } from '@/lib/api';
 import { resilient, getSnapshot } from '@/lib/snapshot';
 import { useDebouncedValue } from './useDebouncedValue';
 import type { BillParams, BillSummary, StateMapSummary } from '@/lib/types';
 
 const STALE = 5 * 60 * 1000; // 5 min — mirrors Streamlit ttl=300
+
+/** Enacted CE laws in force, grouped by (year, region) — the source the homepage globe shades from.
+ *  Shared here so the "Top Regions" ticker ranks by the SAME numbers the globe does (combined
+ *  national + sub-national enacted, since a US state law is region="US"). No `regions` → every region. */
+export function useLawsInForce(regions?: string) {
+  return useQuery({
+    queryKey: ['lawsInForce', regions ?? 'all'],
+    queryFn: () => fetchLawsInForce(regions ? { regions } : undefined),
+    staleTime: STALE,
+  });
+}
 
 export function useBills(params?: BillParams) {
   return useQuery({

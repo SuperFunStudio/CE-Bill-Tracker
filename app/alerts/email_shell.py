@@ -31,7 +31,7 @@ DASHBOARD_URL = "https://www.atlascircular.com"
 
 # The masthead kicker + default tagline. Kept here so a single edit re-brands every email.
 _KICKER = "SUPERFUN STUDIO · PRESENTS"
-TAGLINE = "Tracking circularity globally"
+TAGLINE = "Tracking the circular economy"
 
 
 def _masthead(tagline: str) -> str:

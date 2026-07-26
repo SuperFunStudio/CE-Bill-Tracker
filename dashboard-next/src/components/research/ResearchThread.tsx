@@ -364,12 +364,10 @@ function DonutChart({ chart }: { chart: ResearchChart }) {
   );
 }
 
+/** The list of cited bills — the header/count now lives on the disclosure toggle that wraps this. */
 function CitedBills({ citations, onOpen }: { citations: ResearchCitation[]; onOpen: (b: BillSummary) => void }) {
   return (
     <div className="space-y-2">
-      <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
-        Cited bills ({citations.length})
-      </div>
       <ul className="space-y-2">
         {citations.map(c => {
           const body = (
@@ -463,6 +461,97 @@ export function ResearchWall({ wall, onSignIn }: { wall: 'signin' | 'upgrade'; o
   );
 }
 
+/** A small uppercase-meta disclosure toggle, styled to match the "More filters" control on the home
+ *  explorer — a label, an optional count, and a chevron that rotates when open. */
+function DisclosureToggle({ open, onToggle, label, count }: {
+  open: boolean; onToggle: () => void; label: string; count?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex items-center gap-1.5 text-text-secondary text-xs font-semibold uppercase tracking-wide transition-colors hover:text-text-primary"
+    >
+      <span>{label}{count != null ? ` (${count})` : ''}</span>
+      <span className={`text-meta transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+    </button>
+  );
+}
+
+/** One question + its answer. The whole answer collapses from the question row (so a long thread reads
+ *  on one page), and the cited-bills list sits behind its own disclosure (revealed on click). */
+function ThreadTurn({ turn, index, total, isLast, billPage, pageBusy, goToPage, onOpenBill }: {
+  turn: { q: string; answer: ResearchAnswer };
+  index: number;
+  total: number;
+  isLast: boolean;
+  billPage: ResearchBillPage | null;
+  pageBusy: boolean;
+  goToPage: (p: number) => void;
+  onOpenBill: (b: BillSummary) => void;
+}) {
+  const [answerOpen, setAnswerOpen] = useState(true);
+  const [citesOpen, setCitesOpen] = useState(false);
+  const cites = new Map<string, ResearchCitation>();
+  for (const c of turn.answer.citations) if (c.bill) cites.set(citationRef(c), c);
+
+  return (
+    <div className="space-y-5 border-t border-border-default pt-6">
+      {/* The question row is the collapse toggle for the whole answer. */}
+      <button
+        type="button"
+        onClick={() => setAnswerOpen(o => !o)}
+        aria-expanded={answerOpen}
+        className="flex w-full items-start gap-2 text-left font-serif text-lg text-text-primary group"
+      >
+        <span className="shrink-0 text-green-accent">{total > 1 ? `Q${index + 1}.` : 'Q.'}</span>
+        <span className="flex-1">{turn.q}</span>
+        <span className={`shrink-0 mt-1 text-sm text-text-muted transition-transform group-hover:text-text-secondary ${answerOpen ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+
+      {answerOpen && (
+        <>
+          <AnswerText text={turn.answer.answer} cites={cites} onCite={c => c.bill && onOpenBill(c.bill)} />
+
+          {turn.answer.chart && turn.answer.chart.bars.length > 0 && <AnswerChart chart={turn.answer.chart} />}
+
+          {turn.answer.citations.length > 0 && (
+            <div className="space-y-2">
+              <DisclosureToggle
+                open={citesOpen}
+                onToggle={() => setCitesOpen(o => !o)}
+                label="Cited bills"
+                count={turn.answer.citations.length}
+              />
+              {citesOpen && <CitedBills citations={turn.answer.citations} onOpen={onOpenBill} />}
+            </div>
+          )}
+
+          {isLast && billPage && billPage.total > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
+                  Relevant bills ({billPage.total})
+                </div>
+                <span className="text-xs text-text-muted">{strategyLabel(billPage.strategy)}</span>
+              </div>
+              <div className={pageBusy ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
+                <BillTable bills={billPage.items} />
+              </div>
+              <BillPager page={billPage} busy={pageBusy} onGo={goToPage} />
+            </div>
+          )}
+
+          {turn.answer.coverage_note && (
+            <p className="text-xs text-text-muted border-t border-border-default pt-3">{turn.answer.coverage_note}</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /** The conversation: each turn's question, grounded answer, chart, cited bills, and — on the latest
  *  turn — the paginated relevant-bills table (the shared evidence). Owns its own citation modal. */
 export function ResearchThread({ research }: { research: ResearchState }) {
@@ -473,44 +562,19 @@ export function ResearchThread({ research }: { research: ResearchState }) {
     <>
       {error && <p className="text-sm text-error">{error}</p>}
 
-      {turns.map((t, ti) => {
-        const isLast = ti === turns.length - 1;
-        const cites = new Map<string, ResearchCitation>();
-        for (const c of t.answer.citations) if (c.bill) cites.set(citationRef(c), c);
-        return (
-          <div key={ti} className="space-y-5 border-t border-border-default pt-6">
-            <div className="flex gap-2 font-serif text-lg text-text-primary">
-              <span className="shrink-0 text-green-accent">{turns.length > 1 ? `Q${ti + 1}.` : 'Q.'}</span>
-              <span>{t.q}</span>
-            </div>
-
-            <AnswerText text={t.answer.answer} cites={cites} onCite={c => c.bill && setModalBill(c.bill)} />
-
-            {t.answer.chart && t.answer.chart.bars.length > 0 && <AnswerChart chart={t.answer.chart} />}
-
-            {t.answer.citations.length > 0 && <CitedBills citations={t.answer.citations} onOpen={setModalBill} />}
-
-            {isLast && billPage && billPage.total > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide">
-                    Relevant bills ({billPage.total})
-                  </div>
-                  <span className="text-xs text-text-muted">{strategyLabel(billPage.strategy)}</span>
-                </div>
-                <div className={pageBusy ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
-                  <BillTable bills={billPage.items} />
-                </div>
-                <BillPager page={billPage} busy={pageBusy} onGo={goToPage} />
-              </div>
-            )}
-
-            {t.answer.coverage_note && (
-              <p className="text-xs text-text-muted border-t border-border-default pt-3">{t.answer.coverage_note}</p>
-            )}
-          </div>
-        );
-      })}
+      {turns.map((t, ti) => (
+        <ThreadTurn
+          key={ti}
+          turn={t}
+          index={ti}
+          total={turns.length}
+          isLast={ti === turns.length - 1}
+          billPage={billPage}
+          pageBusy={pageBusy}
+          goToPage={goToPage}
+          onOpenBill={setModalBill}
+        />
+      ))}
 
       {busy && (
         <div className="space-y-3 border-t border-border-default pt-6">

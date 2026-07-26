@@ -35,9 +35,11 @@ const RegionInsetMap = dynamic(
   { ssr: false, loading: () => <div className="h-80 bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
-const CoverageStrip = dynamic(
-  () => import('@/components/map/CoverageStrip').then(m => ({ default: m.CoverageStrip })),
-  { ssr: false, loading: () => <div className="h-24 bg-bg-secondary rounded-lg animate-pulse" /> }
+// A slowly-rotating d3-geo globe of laws-in-force by jurisdiction — the "all regions" overview. Canvas
+// + window APIs, so client-only (ssr:false).
+const CoverageGlobe = dynamic(
+  () => import('@/components/map/CoverageGlobe').then(m => ({ default: m.CoverageGlobe })),
+  { ssr: false, loading: () => <div className="h-[420px] bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
 /**
@@ -389,17 +391,25 @@ export default function HomePage() {
           All regions → a ranked coverage readout. US → the states choropleth. EU → the bloc, cropped
           to Europe. A single country → a cropped locator. A code with no geometry → a text panel. */}
       <section>
-        {drilledEuMember && (
-          <div className="mb-2 text-sm text-text-muted">
-            <button onClick={() => setRegions(['EU'])} className="text-green-accent hover:underline">← European Union</button>
-            <span className="mx-1.5">/</span>
-            <span className="text-text-secondary">{regionLabel(soleRegion!)}</span>
+        {/* Drilled into a single region → the map shows that jurisdiction; give an explicit way back
+            out to the globe (and, for an EU member, up to the bloc first). */}
+        {soleRegion && (
+          <div className="mb-2 flex items-center gap-1.5 text-sm text-text-muted">
+            <button onClick={() => setRegions([])} className="text-green-accent hover:underline">← Back to the globe</button>
+            {drilledEuMember && (
+              <>
+                <span className="mx-0.5">/</span>
+                <button onClick={() => setRegions(['EU'])} className="text-green-accent hover:underline">European Union</button>
+                <span className="mx-0.5">/</span>
+                <span className="text-text-secondary">{regionLabel(soleRegion!)}</span>
+              </>
+            )}
           </div>
         )}
         {/* Keyed by selection so the zoom-settle animation replays on every drill in/out. */}
         <div key={soleRegion ?? 'all'} className="region-map-in">
         {!soleRegion ? (
-          <CoverageStrip data={regionCounts} onSelect={code => setRegions([code])} />
+          <CoverageGlobe onSelect={code => setRegions([code])} />
         ) : soleRegion === 'US' ? (
           <StateMap
             data={mapData}

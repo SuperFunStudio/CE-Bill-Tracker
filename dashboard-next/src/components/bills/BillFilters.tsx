@@ -358,12 +358,14 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
             )}
             <span className={`text-text-muted text-meta transition-transform ${showMore ? 'rotate-180' : ''}`}>▾</span>
           </button>
-          {activeCount > 0 && (
+          {(activeCount > 0 || regions.length > 0) && (
             <button
-              onClick={reset}
+              // Reset clears the facets AND the region selection — the region lives here now, so its
+              // reset belongs on this bar too (there's no global region bar on the home page).
+              onClick={() => { reset(); if (regions.length) setRegions([]); }}
               className="ml-auto self-end rounded-full border border-border-default px-3 py-1 text-meta text-text-secondary transition-colors hover:border-text-primary/40 hover:text-text-primary"
             >
-              Reset ({activeCount})
+              Reset ({activeCount + (regions.length > 0 ? 1 : 0)})
             </button>
           )}
         </div>

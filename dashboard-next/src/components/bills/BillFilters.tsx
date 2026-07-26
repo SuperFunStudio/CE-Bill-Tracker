@@ -246,6 +246,18 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     const id = setInterval(() => setExampleIdx(i => (i + 1) % SEARCH_EXAMPLES.length), 2500);
     return () => clearInterval(id);
   }, []);
+
+  // Home-explorer (showRegion) layout keeps Region + State up front and folds the rest behind a
+  // "More filters" toggle. Start expanded only if one of those secondary filters is already active,
+  // so a filtered arrival isn't hidden.
+  const secondaryActiveCount = [
+    filters.status,
+    filters.instrumentType,
+    filters.materialCategories.length > 0,
+    filters.dimensions.length > 0,
+    filters.polymers.length > 0,
+  ].filter(Boolean).length;
+  const [showMore, setShowMore] = useState(secondaryActiveCount > 0);
   // On a fixed-state context, reset preserves the locked state instead of clearing it.
   const reset = () => onChange(hideState ? { ...DEFAULT_FILTERS, state: filters.state } : DEFAULT_FILTERS);
 
@@ -269,16 +281,105 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     label: `${abbr} — ${name}`,
   }));
 
+  // The Status / Instrument / Materials / Compliance / Resin controls — shared between the default
+  // grid and the collapsible "More filters" panel of the home-explorer layout.
+  const secondaryFields = (
+    <>
+      <Select
+        label="Status"
+        value={filters.status}
+        onChange={v => set({ status: v })}
+        options={STATUSES}
+        placeholder="All Statuses"
+      />
+      <Select
+        label="Instrument"
+        value={filters.instrumentType}
+        onChange={v => set({ instrumentType: v })}
+        options={INSTRUMENT_TYPES.map(t => ({ value: t, label: formatInstrumentType(t) }))}
+        placeholder="All Types"
+      />
+      <MultiSelect
+        label="Materials & Products"
+        values={filters.materialCategories}
+        onChange={v => set({ materialCategories: v })}
+        options={MATERIAL_CATEGORIES.map(m => ({
+          value: m,
+          label: m.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        }))}
+        placeholder="All"
+      />
+      <MultiSelect
+        label="Compliance"
+        values={filters.dimensions}
+        onChange={v => set({ dimensions: v })}
+        options={COMPLIANCE_DIMENSIONS}
+        placeholder="Any"
+      />
+      {showResin && (
+        <MultiSelect
+          label="Resin / Polymer"
+          values={filters.polymers}
+          onChange={v => set({ polymers: v })}
+          options={resinOptions!.map(code => ({ value: code, label: RESIN_NAMES[code] ?? code }))}
+          placeholder="Any"
+        />
+      )}
+    </>
+  );
+
+  // Home-explorer layout: Region + State (US) always visible; the rest fold behind "More filters" so
+  // the bar stays calm above the ask box.
+  if (showRegion) {
+    return (
+      <div className="space-y-3 border-y border-text-primary/15 py-4">
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+          <RegionFilter selected={regions} onChange={setRegions} />
+          {showState && (
+            <div className="min-w-[9rem]">
+              <Select
+                label="State"
+                value={filters.state}
+                onChange={v => set({ state: v })}
+                options={stateOptions}
+                placeholder="All States"
+              />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowMore(v => !v)}
+            aria-expanded={showMore}
+            className="flex items-center gap-1.5 pb-1 text-left transition-colors group"
+          >
+            <span className="font-serif text-text-muted group-hover:text-text-primary text-meta uppercase tracking-wider">More filters</span>
+            {secondaryActiveCount > 0 && (
+              <span className="rounded-full bg-green-dark/40 text-green-accent text-[10px] leading-none px-1.5 py-0.5">{secondaryActiveCount}</span>
+            )}
+            <span className={`text-text-muted text-meta transition-transform ${showMore ? 'rotate-180' : ''}`}>▾</span>
+          </button>
+          {activeCount > 0 && (
+            <button
+              onClick={reset}
+              className="ml-auto self-end rounded-full border border-border-default px-3 py-1 text-meta text-text-secondary transition-colors hover:border-text-primary/40 hover:text-text-primary"
+            >
+              Reset ({activeCount})
+            </button>
+          )}
+        </div>
+
+        {/* Secondary controls — revealed on demand. */}
+        {showMore && (
+          <div className={`grid grid-cols-2 gap-3 pt-1 ${showResin ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
+            {secondaryFields}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 border-y border-text-primary/15 py-4">
-      {/* Region — centered above the facets it governs (home page only). Folds the old site-wide
-          GlobalRegionBar into the explorer so the jurisdiction sits with the rest of the filters. */}
-      {showRegion && (
-        <div className="flex justify-center pb-1">
-          <RegionFilter selected={regions} onChange={setRegions} />
-        </div>
-      )}
-
       {/* Search — omitted on the unified Explore surface, which hosts the adaptive search/ask bar. */}
       {!hideSearch && (
         <div className="flex flex-col gap-1">
@@ -320,49 +421,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
             placeholder="All States"
           />
         )}
-        <Select
-          label="Status"
-          value={filters.status}
-          onChange={v => set({ status: v })}
-          options={STATUSES}
-          placeholder="All Statuses"
-        />
-        <Select
-          label="Instrument"
-          value={filters.instrumentType}
-          onChange={v => set({ instrumentType: v })}
-          options={INSTRUMENT_TYPES.map(t => ({
-            value: t,
-            label: formatInstrumentType(t),
-          }))}
-          placeholder="All Types"
-        />
-        <MultiSelect
-          label="Materials & Products"
-          values={filters.materialCategories}
-          onChange={v => set({ materialCategories: v })}
-          options={MATERIAL_CATEGORIES.map(m => ({
-            value: m,
-            label: m.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-          }))}
-          placeholder="All"
-        />
-        <MultiSelect
-          label="Compliance"
-          values={filters.dimensions}
-          onChange={v => set({ dimensions: v })}
-          options={COMPLIANCE_DIMENSIONS}
-          placeholder="Any"
-        />
-        {showResin && (
-          <MultiSelect
-            label="Resin / Polymer"
-            values={filters.polymers}
-            onChange={v => set({ polymers: v })}
-            options={resinOptions!.map(code => ({ value: code, label: RESIN_NAMES[code] ?? code }))}
-            placeholder="Any"
-          />
-        )}
+        {secondaryFields}
       </div>
 
       {/* Reset. (eprOnly — circular-economy relevance — is the product's fixed editorial scope, applied

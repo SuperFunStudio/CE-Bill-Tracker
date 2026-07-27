@@ -450,11 +450,13 @@ class AlertSubscription(Base):
 
 
 class AccessRequest(Base):
-    """A captured "request access / pricing" click — the willingness-to-pay field experiment.
+    """A captured "request access / pricing" click — the willingness-to-pay field experiment, and
+    (for the Researcher tier) the approval gate before checkout.
 
     Each paid tier's CTA (and the Company Impact gate) records who's interested, from what org, and
-    in which tier, before any billing exists. Watching these tells us the real segment and price
-    ceiling. Purely a lead-capture log; no behavioural effect.
+    in which tier. For most tiers this is a lead-capture log; for Researcher it is load-bearing —
+    `_research_checkout` (app/api/billing.py) 403s until an approved research request exists for the
+    email, so `status` is reviewed by an admin in /admin (migration 042).
     """
     __tablename__ = "access_requests"
 
@@ -462,14 +464,23 @@ class AccessRequest(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     organization: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Which tier they asked about: "pro" | "team" | "enterprise" | "api" | "company_impact".
+    # Which tier they asked about: "pro" | "team" | "enterprise" | "api" | "company_impact" |
+    # "research" | "student" | "bespoke".
     plan_interest: Mapped[str] = mapped_column(String(50), nullable=False)
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Where the click came from: "pricing" | "company_gate" — for funnel attribution.
     source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Review state for the approval gate: "pending" | "approved" | "denied". Only Researcher checkout
+    # reads it today; other tiers stay "pending" harmlessly (they don't gate on it).
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
+    reviewed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (Index("idx_access_requests_created", "created_at"),)
+    __table_args__ = (
+        Index("idx_access_requests_created", "created_at"),
+        Index("idx_access_requests_status", "status"),
+    )
 
 
 class FederalAction(Base):

@@ -18,6 +18,9 @@ PLAN_LABELS = {
     "enterprise": "Enterprise / API",
     "api": "API",
     "company_impact": "Portfolio Exposure",
+    "research": "Researchers",
+    "student": "Students",
+    "bespoke": "Bespoke",
 }
 
 

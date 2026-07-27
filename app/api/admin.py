@@ -236,10 +236,52 @@ async def list_access_requests(
                 "plan_interest": r.plan_interest,
                 "message": r.message,
                 "source": r.source,
+                "status": r.status,
+                "reviewed_by": r.reviewed_by,
+                "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows
         ],
+    }
+
+
+class ReviewAccessRequest(BaseModel):
+    # New review state: "approved" unlocks Researcher checkout for that email; "denied"/"pending"
+    # keep it blocked. See _research_is_approved in app/api/billing.py.
+    status: str
+
+
+@router.post("/access-requests/{request_id}/review")
+async def review_access_request(
+    request_id: int,
+    payload: ReviewAccessRequest,
+    admin: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve / deny an access-request lead. Approving a `research` request is what lets that email
+    reach Researcher checkout (billing._research_is_approved); other tiers are invoiced by hand and
+    the status is just a review marker. Stamps who reviewed it and when for the audit trail."""
+    status = (payload.status or "").lower().strip()
+    if status not in ("approved", "denied", "pending"):
+        raise HTTPException(status_code=422, detail="status must be approved | denied | pending")
+    req = (
+        await db.execute(select(AccessRequest).where(AccessRequest.id == request_id))
+    ).scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="access request not found")
+    req.status = status
+    req.reviewed_by = admin.email
+    req.reviewed_at = datetime.now(timezone.utc)
+    await db.commit()
+    log.info("admin_review_access_request", request_id=request_id, status=status, by=admin.email)
+    return {
+        "id": req.id,
+        "email": req.email,
+        "plan_interest": req.plan_interest,
+        "status": req.status,
+        "reviewed_by": req.reviewed_by,
+        "reviewed_at": req.reviewed_at.isoformat() if req.reviewed_at else None,
     }
 
 

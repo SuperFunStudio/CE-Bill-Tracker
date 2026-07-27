@@ -24,6 +24,7 @@ export const FOREIGN_COUNTRY_NAMES: Record<string, string> = {
   JP: 'Japan', UK: 'United Kingdom', CL: 'Chile', CH: 'Switzerland', BR: 'Brazil',
   KR: 'South Korea', ZA: 'South Africa', KE: 'Kenya', CN: 'China', CA: 'Canada',
   AU: 'Australia', NO: 'Norway', MX: 'Mexico', IN: 'India',
+  RW: 'Rwanda', ZM: 'Zambia', MW: 'Malawi', SL: 'Sierra Leone',
 };
 
 /** Valid jurisdiction codes → names for a region, including its whole-region sentinel. */

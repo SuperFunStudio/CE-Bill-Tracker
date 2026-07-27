@@ -252,6 +252,50 @@ remanufacturing) with an explicit "status":
 """
 
 
+def _salvage_truncated_json(raw: str) -> dict:
+    """Best-effort recovery from a truncated/malformed extraction blob. Bracket-walks the `deadlines`
+    array (respecting strings/escapes), collecting every COMPLETE object even if the array itself was
+    cut off, plus the headline effective_date / compliance_date. Returns {} if nothing recoverable."""
+    out: dict = {}
+    m = re.search(r'"deadlines"\s*:\s*\[', raw)
+    if m:
+        objs, depth, start, in_str, esc = [], 0, None, False, False
+        i = m.end()
+        while i < len(raw):
+            ch = raw[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+            elif ch == '"':
+                in_str = True
+            elif ch == "{":
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0 and start is not None:
+                    try:
+                        objs.append(json.loads(raw[start:i + 1]))
+                    except json.JSONDecodeError:
+                        pass
+                    start = None
+            elif ch == "]" and depth == 0:
+                break
+            i += 1
+        if objs:
+            out["deadlines"] = objs
+    for key in ("effective_date", "compliance_date"):
+        mm = re.search(r'"' + key + r'"\s*:\s*"(\d{4}-\d{2}-\d{2})', raw)
+        if mm:
+            out[key] = mm.group(1)
+    return out
+
+
 @dataclass
 class SonnetResult:
     covered_products: list[str]
@@ -306,21 +350,29 @@ class SonnetExtractor:
 
     def build_params(
         self, state: str, bill_number: str, title: str, full_text: str, region: str = "US",
+        max_chars: int = 40000, max_output_tokens: int = 16000,
     ) -> dict:
         """The messages.create kwargs for one bill — factored out so the Batch API can submit the
-        SAME request (model/prompt/schema) without a live call. See scripts/extract_dimensions_batch.py."""
+        SAME request (model/prompt/schema) without a live call. See scripts/extract_dimensions_batch.py.
+
+        max_chars bounds how much bill text is sent (see select_text_window). The 40000 default is the
+        live-pipeline budget. A targeted backfill can raise it to send whole large regulations, whose
+        staged deadlines and final 'entry into force / application' article sit far past the 40K front
+        window — the reason PPWR's 12 Aug 2026 application date was originally missed."""
         prompt = USER_TEMPLATE.format(
             state=state,
             bill_number=bill_number or "Unknown",
             title=title or "",
             # ~10K tokens of text, keyword-windowed for large omnibus acts (see select_text_window).
             # region drives language-aware anchors so native-language law windows on its obligations.
-            full_text=select_text_window(full_text, region=region),
+            full_text=select_text_window(full_text, region=region, max_chars=max_chars),
         )
         return {
             "model": self._model,
-            "max_tokens": 16000,  # compliance JSON for large bills overflows a smaller budget; grew with
-            # each envelope wave (4000→8000 v2, →12000 v3, →16000 v4/eight, →v5 twelve) to curb truncation
+            "max_tokens": max_output_tokens,  # compliance JSON for large bills overflows a smaller budget; grew
+            # with each envelope wave (4000→8000 v2, →12000 v3, →16000 v4/eight, →v5 twelve) to curb truncation.
+            # A backfill over huge omnibus laws (all 12 envelopes + many deadlines) can still overflow 16K and
+            # truncate the JSON mid-object — raise this for those (see reextract_deadlines_targeted --max-tokens).
             "temperature": 0,
             "system": SYSTEM_PROMPT_TEMPLATE.format(region=region_label(region)),
             "messages": [{"role": "user", "content": prompt}],
@@ -330,6 +382,7 @@ class SonnetExtractor:
         """Parse a model response (live or batched) into a SonnetResult. Tolerant of prose-wrapped or
         truncated JSON, exactly as the live path was."""
         raw = (raw or "").strip()
+        salvaged = False
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
@@ -338,14 +391,25 @@ class SonnetExtractor:
             try:
                 data = json.loads(match.group()) if match else {}
             except json.JSONDecodeError:
-                # Truncated or malformed JSON (e.g. response cut off mid-object).
-                log.warning("sonnet_json_parse_failed", bill_number=bill_number, raw=raw[:200])
-                data = {}
+                # Truncated or malformed JSON (e.g. output cut off mid-object at max_tokens). The
+                # `deadlines` array sits near the TOP of the schema, so it usually survives a tail
+                # truncation that only loses the later envelope fields — salvage it rather than
+                # discarding the whole extraction (which powers the Upcoming Deadlines page).
+                data = _salvage_truncated_json(raw)
+                salvaged = bool(data)
+                if salvaged:
+                    log.warning("sonnet_json_salvaged", bill_number=bill_number,
+                                deadlines=len(data.get("deadlines", [])))
+                else:
+                    log.warning("sonnet_json_parse_failed", bill_number=bill_number, raw=raw[:200])
 
-        # Stamp the schema version only on a real parse, so a failed extraction stays "unversioned"
-        # and a backfill re-runs it rather than treating an empty result as done.
-        if data:
+        # Stamp the schema version only on a real, complete parse, so a failed extraction stays
+        # "unversioned" and a backfill re-runs it rather than treating an empty result as done.
+        # A salvaged (deadline-only) result is flagged, not versioned, so it's re-extractable later.
+        if data and not salvaged:
             data["extraction_version"] = EXTRACTION_VERSION
+        elif salvaged:
+            data["extraction_salvaged"] = True
 
         return SonnetResult(
             covered_products=data.get("covered_products", []),
@@ -380,7 +444,9 @@ class SonnetExtractor:
 
     async def extract(
         self, state: str, bill_number: str, title: str, full_text: str, region: str = "US",
+        max_chars: int = 40000, max_output_tokens: int = 16000,
     ) -> SonnetResult:
-        params = self.build_params(state, bill_number, title, full_text, region)
+        params = self.build_params(state, bill_number, title, full_text, region,
+                                   max_chars=max_chars, max_output_tokens=max_output_tokens)
         resp = await self._client.messages.create(**params)
         return self.parse_response(resp.content[0].text, bill_number=bill_number)

@@ -63,8 +63,25 @@ export interface AccessRequestRow {
   plan_interest: string;
   message: string | null;
   source: string | null;
+  /** Review state for the approval gate: 'pending' | 'approved' | 'denied'. Approving a `research`
+   *  request is what unlocks Researcher checkout for that email (see billing._research_is_approved). */
+  status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   created_at: string | null;
 }
+
+/** Set the review state of an access-request lead. 'approved' on a `research` row lets that email
+ *  reach Researcher checkout; other tiers are invoiced by hand and this is just a review marker. */
+export const reviewAccessRequest = (
+  getToken: GetToken,
+  id: number,
+  status: 'approved' | 'denied' | 'pending',
+) =>
+  authedFetch<AccessRequestRow>(`/admin/access-requests/${id}/review`, getToken, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  });
 
 export interface EntitlementRow {
   email: string;

@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # NREL incentives panel (state-profile Phase 2). Declared so a shared .env carrying
     # NREL_API_KEY doesn't trip extra='forbid' and crash the backend.
     nrel_api_key: str = ""
+    # Legacy/stray .env key — the live Africa client reads `lawsafrica_token` (above), not this.
+    # Declared for the same reason as nrel_api_key: a shared .env carrying AFRICA_LAWS_API_KEY must
+    # not trip extra='forbid' and crash boot.
+    africa_laws_api_key: str = ""
 
     # SEC EDGAR — user-agent required by SEC fair-use policy
     sec_user_agent: str = "AtlasCircular/1.0 contact@atlascircular.com"

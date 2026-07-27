@@ -2224,6 +2224,203 @@ class LawsAfricaKEClient(LawsAfricaClient):
 
 
 # --------------------------------------------------------------------------------------------------
+# Indigo / Akoma Ntoso law portals — a shared base for the open, no-token African law sites that all run
+# Laws.Africa's Indigo software: Kenya Law (new.kenyalaw.org) and the AfricanLII "peachjam" network
+# (*.lii.org). Each work is server-rendered as themed HTML at {base_url}/{uri}/eng with the statute body
+# in a <la-akoma-ntoso> web component; site chrome (nav/footer) sits outside it. This is a DISTINCT, free
+# path from the keyed api.laws.africa (whose commercial plan only entitles za-cpt on our account; every
+# national jurisdiction there 403s) — we pay for that pan-African API only once there are paying
+# customers. Archetype A. Caveats seen across the network: (a) some sites Cloudflare-challenge document
+# pages (the interstitial carries "Just a moment"), (b) many works are catalog STUBS with no AKN text —
+# both yield None here and are skipped by sync_foreign, exactly like a fetch miss.
+# --------------------------------------------------------------------------------------------------
+
+# The statute body is the light-DOM content of Indigo's <la-akoma-ntoso> element; strip it with _strip_tags.
+_AKN_BODY_RE = re.compile(r"<la-akoma-ntoso\b[^>]*>(.*?)</la-akoma-ntoso>", re.S | re.I)
+_AKN_PAGE_TITLE_RE = re.compile(r"<title>(.*?)</title>", re.S | re.I)
+# Trailing site-name on the page <title>: "Short Title - Kenya Law" / "... - MalawiLII" / "... - Laws.Africa".
+_AKN_TITLE_SUFFIX_RE = re.compile(r"\s*[-–—]\s*(?:[\w. ]*LII|Kenya Law|Laws?\.Africa)\s*$", re.I)
+_CF_CHALLENGE_MARKER = "Just a moment"  # Cloudflare bot interstitial — the page carries no statute text
+
+
+class IndigoAknClient(ForeignSourceClient):
+    """Base for open Indigo/Akoma-Ntoso portals (Kenya Law + the AfricanLII network). Subclass sets
+    region, source, base_url. Shared fetch: GET {base_url}/{uri}/eng, extract the <la-akoma-ntoso> body."""
+
+    base_url: str = ""
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        uri = source_id.lstrip("/")
+        url = f"{self.base_url}/{uri}/eng"
+        try:
+            resp = await self.http.get(url)
+            resp.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("indigo_fetch_failed", region=self.region, uri=uri, error=str(e))
+            return None
+        if _CF_CHALLENGE_MARKER in resp.text:  # Cloudflare challenge -> no content available to HTTP
+            log.warning("indigo_cf_blocked", region=self.region, uri=uri)
+            return None
+        body = _AKN_BODY_RE.search(resp.text)
+        full_text = _strip_tags(body.group(1)) if body else ""
+        if len(full_text) < 200:  # catalog stub / missing container -> no usable text
+            log.warning("indigo_thin_text", region=self.region, uri=uri, chars=len(full_text))
+            return None
+        full_text = cap_for_tsvector(full_text)
+        # Prefer the page's own <title> (minus the site suffix) for the official name; fall back to the
+        # curated English label, then the raw URI.
+        title = english_label or uri
+        mt = _AKN_PAGE_TITLE_RE.search(resp.text)
+        if mt:
+            official = _AKN_TITLE_SUFFIX_RE.sub("", _strip_tags(mt.group(1))).strip()
+            if official:
+                title = official
+        return ForeignLaw(
+            source_id=uri,
+            region=self.region,
+            source=self.source,
+            title=title,
+            full_text=full_text,
+            source_url=url,
+            english_label=english_label,
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Kenya — new.kenyalaw.org, the National Council for Law Reporting's own public Indigo instance. region
+# ="KE", source="kenyalaw" (namespaces the foreign_id apart from the dormant LawsAfrica KE seeds, so the
+# two never collide if the paid pan-African API is enabled). Seed-only: the public /legislation/ index is
+# a curated partial that OMITS recently gazetted EPR statutes (the 2022 Waste Act isn't in it), so —
+# as with India/FAOLEX — curated seeds, not index enumeration, are the reliable discovery path.
+# --------------------------------------------------------------------------------------------------
+
+KENYALAW_BASE = "https://new.kenyalaw.org"
+
+# Canonical Kenyan circular-economy / EPR cluster (verified to resolve on new.kenyalaw.org). Over-
+# inclusive is fine — the region-aware Haiku classifier judges ce_relevant at the confidence floor.
+KE_SEED_LAWS: list[dict] = [
+    {"uri": "akn/ke/act/2022/31",
+     "en": "Sustainable Waste Management Act, No. 31 of 2022 (EPR + circular economy)"},
+    {"uri": "akn/ke/act/1999/8",
+     "en": "Environmental Management and Co-ordination Act (EMCA), No. 8 of 1999 (framework)"},
+    {"uri": "akn/ke/act/ln/2006/121",
+     "en": "EMCA (Waste Management) Regulations, 2006 (Legal Notice 121)"},
+]
+
+
+class KenyaLawClient(IndigoAknClient):
+    """new.kenyalaw.org (Kenya Law) adapter — open Indigo instance, no key. Seed-only."""
+
+    region = "KE"
+    source = "kenyalaw"
+    base_url = KENYALAW_BASE
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = [(s["uri"], s["en"]) for s in KE_SEED_LAWS]
+        log.info("ke_discovered", total=len(out), seeded=len(out))
+        return out
+
+
+# --------------------------------------------------------------------------------------------------
+# AfricanLII network — the "peachjam" LII sites (ghalii.org, zambialii.org, malawilii.org, …) run the
+# same Indigo/AKN stack as Kenya Law, open + no token. Discovery adds a best-effort peachjam full-text
+# search over the EPR cluster on top of curated seeds: GET {base}/search/api/documents/?search=<q>&
+# nature=Act returns JSON with a `results_html` fragment; we pull the /akn/<cc>/act/… work URIs out of it.
+# Search is over-inclusive and occasionally flaky (Cloudflare), so seeds guarantee the flagship laws and
+# fetch() drops any stub/CF page. Only sites verified to serve AKN text (not CF-walled) are registered.
+# --------------------------------------------------------------------------------------------------
+
+AFRICANLII_QUERIES = ("waste management", "environment", "plastic", "pollution", "recycling", "sanitation")
+# Keep the EPR / circular-economy / environmental-framework cluster; drop obvious non-CE search noise.
+_AFRICANLII_KEEP_RE = re.compile(
+    r"\benvironment(al)?\b|\bwaste\b|\bplastic\b|pollution|sanitat|e-?waste|hazardous|recycl|litter|packaging",
+    re.I)
+_AFRICANLII_DROP_RE = re.compile(
+    r"universit|labour|customs|excise|invest|associat|water supply|printing|\bfund\b|tribunal|minerals"
+    r"|education|secondary|nursing|small and medium", re.I)
+
+
+def _africanlii_work_uri(href: str, place: str) -> str | None:
+    """Reduce a peachjam result href (which may carry an expression date, #fragment, or /source suffix)
+    to the bare work URI, e.g. '/akn/zm/act/1990/12/eng@1994-...#sec_3' -> 'akn/zm/act/1990/12'."""
+    href = href.split("#")[0].split("/source")[0].split("/eng")[0]
+    m = re.match(rf"/akn/{place}/act/(?:[a-z]+/)?\d+/[^/@]+", href)
+    return m.group(0).lstrip("/") if m else None
+
+
+class AfricanLIIClient(IndigoAknClient):
+    """AfricanLII peachjam base. Subclass sets region, place (AKN country code), base_url, SEEDS."""
+
+    source = "africanlii"
+    place: str = ""             # AKN country code, e.g. "zm"
+    SEEDS: list[dict] = []
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out: dict[str, str] = {s["uri"]: s["en"] for s in self.SEEDS}
+        for q in AFRICANLII_QUERIES:
+            try:
+                r = await self.http.get(
+                    f"{self.base_url}/search/api/documents/", params={"search": q, "nature": "Act"})
+                fragment = r.json().get("results_html", "")
+            except (httpx.HTTPError, ValueError) as e:
+                log.warning("africanlii_search_failed", region=self.region, q=q, error=str(e))
+                continue
+            for href, inner in re.findall(
+                    rf'href="(/akn/{self.place}/act/[^"]+?)"[^>]*>(.*?)</a>', fragment, re.S):
+                # Each result block has ONE fragment-less anchor carrying the work TITLE, plus section
+                # deep-links (…#sec_N) whose text is a section heading. Filter on titles only — matching
+                # section text pulls in huge unrelated codes (a "waste" section in the Penal/Mines Act).
+                if "#" in href:
+                    continue
+                uri = _africanlii_work_uri(href, self.place)
+                title = _strip_tags(inner)
+                if (uri and title and len(title) > 10
+                        and _AFRICANLII_KEEP_RE.search(title) and not _AFRICANLII_DROP_RE.search(title)):
+                    out.setdefault(uri, "")
+        log.info("africanlii_discovered", region=self.region, total=len(out), seeded=len(self.SEEDS))
+        return list(out.items())
+
+
+class ZambiaLiiClient(AfricanLIIClient):
+    region = "ZM"
+    place = "zm"
+    base_url = "https://zambialii.org"
+    SEEDS = [
+        {"uri": "akn/zm/act/1990/12",
+         "en": "Environmental Protection and Pollution Control Act, 1990 (Zambia)"},
+    ]
+
+
+class MalawiLiiClient(AfricanLIIClient):
+    region = "MW"
+    place = "mw"
+    base_url = "https://malawilii.org"
+    SEEDS = [
+        {"uri": "akn/mw/act/1996/23", "en": "Environment Management Act (Malawi)"},
+    ]
+
+
+class RwandaLiiClient(AfricanLIIClient):
+    region = "RW"
+    place = "rw"
+    base_url = "https://rwandalii.org"
+    SEEDS = [
+        {"uri": "akn/rw/act/law/2018/48", "en": "Law N°48/2018 on Environment (Rwanda framework)"},
+        {"uri": "akn/rw/act/law/2019/17",
+         "en": "Law N°17/2019 prohibiting manufacture/import/use of plastic bags & single-use plastics"},
+    ]
+
+
+class SierraLeoneLiiClient(AfricanLIIClient):
+    region = "SL"
+    place = "sl"
+    base_url = "https://sierralii.org"
+    SEEDS = [
+        {"uri": "akn/sl/act/2022/15", "en": "Environmental Protection Agency Act, 2022 (Sierra Leone)"},
+    ]
+
+
+# --------------------------------------------------------------------------------------------------
 # Denmark — retsinformation.dk. Open, no key. No search API (SPA filters client-side), so seed ELI
 # ids and fetch the server-rendered LexDania XML. Archetype A.
 #   law text: GET /eli/lta/{year}/{number}/xml   (LexDania XML; <DocumentTitle> in <Meta>)
@@ -3714,7 +3911,18 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "PL": PolandEliClient,
     "KR": KoreaLawGoKrClient,
     "ZA": LawsAfricaZAClient,
-    "KE": LawsAfricaKEClient,
+    # Kenya: the OPEN new.kenyalaw.org path is the default (no token, works today). The keyed
+    # Laws.Africa seeds stay registered under KE_LAWSAFRICA — dormant until the paid pan-African API
+    # entitlement is bought (our current plan 403s national KE), then usable without disturbing KE.
+    "KE": KenyaLawClient,
+    "KE_LAWSAFRICA": LawsAfricaKEClient,
+    # AfricanLII peachjam network (open, no token) — only sites verified to serve AKN text are here.
+    # Ghana/Tanzania/Uganda/Zimbabwe/Lesotho are Cloudflare-walled on document pages (like AU_NSW) and
+    # Eswatini was unreachable, so they're deliberately NOT registered until reachable (or via the paid API).
+    "ZM": ZambiaLiiClient,
+    "MW": MalawiLiiClient,
+    "RW": RwandaLiiClient,
+    "SL": SierraLeoneLiiClient,
     "DK": DenmarkRetsinfoClient,
     "FI": FinlandFinlexClient,
     "LU": LuxembourgLegiluxClient,

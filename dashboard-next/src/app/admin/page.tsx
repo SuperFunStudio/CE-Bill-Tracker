@@ -7,6 +7,7 @@ import {
   fetchAdminStats,
   fetchSubscribers,
   fetchAccessRequests,
+  reviewAccessRequest,
   fetchEntitlements,
   setSubscriberActive,
   grantPro,
@@ -616,10 +617,17 @@ function SubscribersPanel({ getToken, reloadKey }: { getToken: GetToken; reloadK
 
 // ── Access requests (leads) ────────────────────────────────────────────────────
 
+const STATUS_TONE: Record<string, 'green' | 'red' | 'amber'> = {
+  approved: 'green',
+  denied: 'red',
+  pending: 'amber',
+};
+
 function AccessRequestsPanel({ getToken, reloadKey }: { getToken: GetToken; reloadKey: number }) {
   const [rows, setRows] = useState<AccessRequestRow[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -634,24 +642,63 @@ function AccessRequestsPanel({ getToken, reloadKey }: { getToken: GetToken; relo
 
   useEffect(() => { load(); }, [load, reloadKey]);
 
+  async function review(id: number, status: 'approved' | 'denied') {
+    setError(null);
+    setBusyId(id);
+    try {
+      const updated = await reviewAccessRequest(getToken, id, status);
+      setRows(rs => rs.map(r => (r.id === id ? { ...r, ...updated } : r)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update the request.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <Section title={`Access-request leads (${total})`}>
+      <p className="text-text-muted text-xs mb-2">
+        Approving a <span className="text-text-secondary">research</span> request unlocks Researcher
+        checkout for that email; other tiers are invoiced by hand, so their status is just a marker.
+      </p>
       {error && <p className="text-red-400 text-xs">{error}</p>}
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse">
           <thead><tr className="border-b border-border-default">
-            <Th>Email</Th><Th>Name</Th><Th>Org</Th><Th>Interest</Th><Th>Source</Th><Th>Message</Th><Th>When</Th>
+            <Th>Email</Th><Th>Org</Th><Th>Interest</Th><Th>Status</Th><Th>Message</Th><Th>When</Th><Th>Review</Th>
           </tr></thead>
           <tbody>
             {rows.map(r => (
               <tr key={r.id} className="border-b border-border-default/50">
                 <Td className="text-text-primary">{r.email}</Td>
-                <Td className="text-text-secondary">{r.name || '—'}</Td>
                 <Td className="text-text-secondary">{r.organization || '—'}</Td>
                 <Td><Pill tone="green">{r.plan_interest}</Pill></Td>
-                <Td className="text-text-muted">{r.source || '—'}</Td>
+                <Td>
+                  <Pill tone={STATUS_TONE[r.status] ?? 'amber'}>{r.status}</Pill>
+                  {r.reviewed_by && (
+                    <span className="block text-text-muted text-[11px] mt-0.5">by {r.reviewed_by}</span>
+                  )}
+                </Td>
                 <Td className="text-text-muted max-w-[16rem]">{r.message || '—'}</Td>
                 <Td className="text-text-secondary whitespace-nowrap">{fmtDate(r.created_at)}</Td>
+                <Td className="whitespace-nowrap">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => review(r.id, 'approved')}
+                      disabled={busyId === r.id || r.status === 'approved'}
+                      className="rounded border border-green-accent/50 px-2 py-0.5 text-xs text-green-accent hover:bg-green-dark/30 disabled:opacity-40"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => review(r.id, 'denied')}
+                      disabled={busyId === r.id || r.status === 'denied'}
+                      className="rounded border border-red-400/40 px-2 py-0.5 text-xs text-red-400 hover:bg-red-400/10 disabled:opacity-40"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                </Td>
               </tr>
             ))}
             {rows.length === 0 && !error && (

@@ -162,8 +162,12 @@ export default function PricingPage() {
           {plan === 'research' ? (
             <Link href="/account" className={secondaryBtn}>Manage membership</Link>
           ) : (
-            <button onClick={() => startPlan('research', 'Researchers')} disabled={busy === 'research'} className={primaryBtn}>
-              {busy === 'research' ? 'Starting…' : 'Get access →'}
+            // Researcher access is approval-gated: capture a written request (email + org + message)
+            // via the modal rather than self-serving Stripe checkout. The team reviews the request in
+            // /admin and sends a Stripe invoice / payment link on approval. (The `research` checkout
+            // path in billing.py still exists but is intentionally no longer reachable from the UI.)
+            <button onClick={() => openPlan('research', 'Researchers')} className={primaryBtn}>
+              Request access →
             </button>
           )}
         </div>

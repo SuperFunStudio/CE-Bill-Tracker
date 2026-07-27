@@ -12,11 +12,12 @@ import { useBills } from '@/hooks/useBills';
 // paint / offline. `universe` is the OpenStates bulk corpus the engine screens wholesale — verified
 // at 1,490,425 state/D.C./territory bills (1,560,420 incl. federal) in the 2026-06 monthly Postgres
 // dump. `jurisdictions` is the global reach: U.S. states, the EU, and national governments now
-// ingested from official sources.
+// ingested from official sources — 37 distinct region codes carry relevant law as of 2026-07 (the EU
+// plus 35 national governments across six continents), so 35+ is the honest, still-growing floor.
 const ENGINE = {
   universe: '1.5 million',   // bills in the U.S. legislative corpus screened wholesale
-  jurisdictions: '30+',      // U.S. states + EU + national governments ingested worldwide
-  relevant: '2,300',         // fallback only — live count comes from useBills()
+  jurisdictions: '35+',      // EU + national governments ingested worldwide (37 region codes live)
+  relevant: '2,400',         // fallback only — live count comes from useBills() (~2,399 on 2026-07)
 };
 
 const INSTRUMENTS = [
@@ -69,7 +70,7 @@ export default function MethodologyPage() {
         </div>
         <div className="bg-bg-card p-4 text-center">
           <div className="font-serif text-2xl text-text-primary">{ENGINE.jurisdictions}</div>
-          <div className="mt-1 text-xs text-text-muted leading-snug">jurisdictions worldwide — the EU &amp; national governments across five continents</div>
+          <div className="mt-1 text-xs text-text-muted leading-snug">jurisdictions worldwide — the EU &amp; national governments across six continents</div>
         </div>
         <div className="bg-bg-card p-4 text-center">
           <div className="font-serif text-2xl text-green-accent">{relevant}</div>

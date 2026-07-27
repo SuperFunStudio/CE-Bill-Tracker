@@ -250,9 +250,11 @@ export default function HomePage() {
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
-      {/* Above-the-fold value prop + primary CTA — signed-out visitors only, so the app view stays
-          uncluttered for users who've already converted. The single loudest action is "start free". */}
-      {!user && (
+      {/* Value prop + primary CTA — held back until a signed-out visitor has spent their one free
+          question and is reaching for a second (research.freeAskUsed). A fresh visitor gets the clean
+          Explore/Ask surface first; the "start free" pitch only lands once they've engaged and hit the
+          limit. Never shown to users who've already converted. */}
+      {!user && research.freeAskUsed && (
         <section className="rounded-xl border border-green-accent/30 bg-green-hero p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="max-w-2xl">
             <h1 className="font-serif text-2xl sm:text-3xl text-text-primary leading-tight text-balance">

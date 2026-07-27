@@ -106,6 +106,19 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+/** Gift — the "free month of Pro" referral offer (site footer + unlock cards). */
+export function GiftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20 12v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8" />
+      <path d="M2 7h20v5H2z" />
+      <path d="M12 21V7" />
+      <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+      <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
+    </Icon>
+  );
+}
+
 /** Close / dismiss — replaces ad-hoc ✕ glyphs so close controls align and size like text. */
 export function CloseIcon(props: IconProps) {
   return (

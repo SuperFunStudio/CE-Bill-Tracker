@@ -22,7 +22,7 @@ export const PRICING_HEADER = {
 // into coursework and studio work, and every export ships with an Atlas source line. (Pay-what-you-wish
 // retired — the marketing reach is worth more than the token donation.)
 export const STUDENT = {
-  label: 'Students',
+  label: 'Student',
   headline: 'Free',
   sub: 'Verified .edu or .ac.uk email',
   who: 'Full research access for coursework, theses, and studio projects. Exports carry an Atlas source line.',
@@ -41,14 +41,14 @@ export const RESEARCH = {
     save: 'Save $120/yr vs monthly',
   },
   who: 'Academics, non-profits, and institutions doing published work.',
-  features: ['Everything in Students', 'Track how bills move over time', 'Cite and export with sources'],
+  features: ['Everything in Student', 'Track how bills move over time', 'Cite and export with sources'],
 };
 
 // Pro / Professionals — self-serve, founding offer. Displayed prices are the founding (50%-off) rate;
 // `was` is the post-window price struck through. Both periods carry the coupon (billing.py).
 export const PRO = {
   name: 'Pro', // internal/account-page plan name; `label` is the pricing-card chip
-  label: 'Professionals',
+  label: 'Professional',
   badge: 'Most popular',
   monthly: { price: '$200', was: '$400', cadence: '/mo', sub: 'First seat · extra seats billed annually' },
   annual: {

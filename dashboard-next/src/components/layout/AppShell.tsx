@@ -2,6 +2,7 @@
 import { usePathname } from 'next/navigation';
 import { TopNav } from './TopNav';
 import { GlobalRegionBar } from './GlobalRegionBar';
+import { SiteFooter } from './SiteFooter';
 import { ScopeOnboarding } from '@/components/scope/ScopeOnboarding';
 
 /**
@@ -31,7 +32,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col h-[100dvh] overflow-hidden">
       <TopNav />
       {showRegionBar && <GlobalRegionBar />}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto">
+        {children}
+        {/* The referral offer is the standing end-of-funnel CTA on every page — no longer buried in
+            the Upcoming Deadlines lock card. Lives inside the scroll area, at the foot of content. */}
+        <SiteFooter />
+      </main>
       <ScopeOnboarding />
     </div>
   );

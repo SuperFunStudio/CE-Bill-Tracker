@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '@/components/auth/AuthContext';
 import { startProCheckout } from '@/lib/billing';
 import { PRO, upgradeLabel } from '@/lib/tiers';
-import { getMyReferralCode, referralLink } from '@/lib/referrals';
+import { useReferralShare } from '@/hooks/useReferralShare';
 import { track } from '@/lib/analytics';
 import { LockIcon } from '@/components/ui/icons';
 
@@ -15,48 +15,17 @@ import { LockIcon } from '@/components/ui/icons';
  * sharer earns a month of Pro (granted server-side; we poll to flip the gate open).
  */
 export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number }) {
-  const { user, isPro, openAuth, getToken, refreshEntitlement } = useAuth();
+  const { user, openAuth, getToken, refreshEntitlement } = useAuth();
+  // Shared share-to-unlock flow (link load, copy/share, grant polling) — see useReferralShare.
+  const { link, copied, shared, copyError, copy, share } = useReferralShare('deadlines_lock');
   const [mounted, setMounted] = useState(false);
-  const [link, setLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [shared, setShared] = useState(false);
   const [trialBusy, setTrialBusy] = useState(false);
   const [trialError, setTrialError] = useState<string | null>(null);
-  const [copyError, setCopyError] = useState(false);
 
   useEffect(() => {
     setMounted(true); // triggers the fade-in transition
     track('deadlines_lock_shown');
   }, []);
-
-  // Load the signed-in user's share link.
-  useEffect(() => {
-    if (!user) {
-      setLink(null);
-      return;
-    }
-    let active = true;
-    (async () => {
-      try {
-        const code = await getMyReferralCode(await getToken());
-        if (active) setLink(referralLink(code));
-      } catch {
-        /* leave null — UI shows a gentle loading state */
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [user, getToken]);
-
-  // Once they've shared, poll for the grant so the gate opens the moment the colleague signs up.
-  useEffect(() => {
-    if (!user || !shared || isPro) return;
-    const id = setInterval(() => {
-      refreshEntitlement();
-    }, 15000);
-    return () => clearInterval(id);
-  }, [user, shared, isPro, refreshEntitlement]);
 
   const startTrial = useCallback(async () => {
     track('deadlines_lock_cta', { action: 'trial' });
@@ -75,39 +44,15 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
     }
   }, [user, getToken, openAuth]);
 
-  const copy = useCallback(async () => {
-    if (!link) return;
-    setCopyError(false);
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setShared(true);
-      track('referral_share', { method: 'copy' });
-    } catch {
-      // Clipboard blocked (insecure context / permissions) — tell the user to copy manually.
-      setCopyError(true);
-    }
-  }, [link]);
-
-  const share = useCallback(async () => {
-    if (!link) return;
-    track('referral_share', { method: 'native' });
-    setShared(true);
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'Atlas Circular — Upcoming EPR Deadlines',
-          text: 'Track every EPR compliance deadline across all 50 states.',
-          url: link,
-        });
-      } else {
-        await navigator.clipboard.writeText(link);
-        setCopied(true);
-      }
-    } catch {
-      /* user cancelled the share sheet */
-    }
-  }, [link]);
+  // The lock card seeds the native share sheet with deadline-specific copy.
+  const shareDeadlines = useCallback(
+    () =>
+      share({
+        title: 'Atlas Circular — Upcoming EPR Deadlines',
+        text: 'Track every EPR compliance deadline across all 50 states.',
+      }),
+    [share],
+  );
 
   return (
     <div
@@ -186,7 +131,7 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
                 </button>
               </div>
               <button
-                onClick={share}
+                onClick={shareDeadlines}
                 className="w-full rounded-lg border border-green-accent bg-green-dark px-4 py-2 text-sm font-medium text-green-accent hover:opacity-90 transition-opacity"
               >
                 Share to a colleague →

@@ -47,6 +47,24 @@ COUNTRIES: dict[str, tuple[str, str, list[str]]] = {
     "LV": ("Latvia", "country", ["LV", "Latvia", "Latvian", "Latvija"]),
     "SI": ("Slovenia", "country", ["SI", "Slovenia", "Slovenian", "Slovenija"]),
     "SK": ("Slovakia", "country", ["SK", "Slovakia", "Slovak", "Slovensko"]),
+    # Non-US/EU regions from the foreign-expansion backlog (were ingested + on the globe but had no
+    # jurisdiction node, so place-scoped Ask-the-Bills questions silently dropped them — e.g. "compare
+    # Kenya with Chile and Japan" scoped to Chile+Japan only). Resolve by NAME, not the bare 2-letter
+    # code: CO/IN collide with US states (Colorado/Indiana) and IT/NO/PE/MW collide with common domain
+    # tokens (IT dept, "no", PE=polyethylene, MW=megawatt). Türkiye carries the English exonym "Turkey".
+    "CO": ("Colombia", "country", ["Colombia", "Colombian"]),
+    "IN": ("India", "country", ["India", "Indian", "Bharat"]),
+    "IT": ("Italy", "country", ["Italy", "Italian", "Italia"]),
+    "KE": ("Kenya", "country", ["Kenya", "Kenyan"]),
+    "MW": ("Malawi", "country", ["Malawi", "Malawian"]),
+    "MX": ("Mexico", "country", ["Mexico", "Mexican", "México"]),
+    "NO": ("Norway", "country", ["Norway", "Norwegian", "Norge"]),
+    "PE": ("Peru", "country", ["Peru", "Peruvian", "Perú"]),
+    "RW": ("Rwanda", "country", ["Rwanda", "Rwandan"]),
+    "SL": ("Sierra Leone", "country", ["Sierra Leone", "Sierra Leonean"]),
+    "TR": ("Türkiye", "country", ["Türkiye", "Turkiye", "Turkey", "Turkish"]),
+    "UY": ("Uruguay", "country", ["Uruguay", "Uruguayan"]),
+    "ZM": ("Zambia", "country", ["Zambia", "Zambian"]),
 }
 
 # US sub-jurisdictions. Federal (state == "US") maps to the US country node itself, not a child.

@@ -20,3 +20,6 @@ tmp/
 
 # Local scheduler lock
 .claude/scheduled_tasks.lock
+
+# transient deadlines batch job state
+.batch_state/

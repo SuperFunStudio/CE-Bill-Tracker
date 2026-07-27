@@ -9,6 +9,23 @@ CE frameworks + 14 map-only/pipeline). The stocktake measures *policy intent*; w
 Status legend: **BUILT** (adapter live, in corpus) · **ASSESSED** (portal researched, not built) ·
 **TODO** (not yet assessed).
 
+## Update 2026-07-26 — Italy, Norway, Türkiye BUILT
+- **IT** `ItalyNormattivaClient` — normattiva.it URN permalink (`/uri-res/N2Ls?urn:nir:stato:{coord}`)
+  returns consolidated full-text HTML over plain HTTP (no token/session); the OpenData API is bulk-ZIP
+  only. 6 seeds (Env Code 152/2006, packaging 116/2020, WEEE 49/2014, batteries 188/2008, ELV 209/2003,
+  SUP 196/2021). Real enactment dates parsed from the URN. Archetype A — the tracker's "SPA/async" fear
+  was wrong. (188/2008 & 209/2003 return thin consolidated views ~5–7k chars but carry the real header.)
+- **NO** `NorwayLovdataClient` — lovdata.no free `/dokument/{SF/forskrift|NL/lov}/{date}-{num}` HTML.
+  3 seeds (Pollution Control Act 1981, Avfallsforskriften 2004 = the WEEE/battery/packaging/SUP/gear EPR
+  umbrella, Product Control Act 1976). Real dates from the path. Archetype A — no bulk tar.bz2 needed.
+- **TR** `TurkiyeMevzuatClient` — mevzuat.gov.tr `/File/GeneratePdf?mevzuatNo=…&mevzuatTur=…` PDF (pypdf;
+  Turkish extracts clean, no mojibake filter). 5 seeds (Çevre Kanunu 2872, Waste Mgmt 20644, Packaging
+  38745, WEEE 40055, Batteries 7118). `tur` token varies (Kanun vs KurumVeKurulusYonetmeligi) — per-seed.
+- All 14 seeds fetch-verified locally (discover→fetch). Registered in FOREIGN_CLIENTS; frontend maps
+  (jurisdictions.ts, RegionInsetMap CODE_TO_ISO) synced — TR added, IT/NO already present.
+- **TODO(TR):** ELV (Ömrünü Tamamlamış Araçlar) + Sıfır Atık (Zero Waste, 2019) regs — mevzuatNo not yet
+  verified; add as seeds once confirmed (same pattern). Next Asia-Pac wins per prior research: NZ, Singapore.
+
 ## Summary (updated after the EU fan-out)
 - BUILT jurisdictions: **23** — JP, FR, UK(+devolved), DE, NL, ES, CL, SE, IE, AT, BR, CH, PL,
   **DK, FI, LU, EE, LV, SK, LT, SI, CZ** (the 9 EU members added in the fan-out). EU directive layer

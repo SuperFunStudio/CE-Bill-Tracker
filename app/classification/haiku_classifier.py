@@ -88,6 +88,9 @@ REGION_LABELS = {
     "CR": "Costa Rica",
     "HN": "Honduras",
     "IN": "India",
+    "IT": "Italy",
+    "NO": "Norway",
+    "TR": "Türkiye",
 }
 
 

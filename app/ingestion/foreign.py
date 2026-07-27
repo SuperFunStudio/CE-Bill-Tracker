@@ -3885,6 +3885,183 @@ class IndiaFaolexClient(ForeignSourceClient):
         )
 
 
+# --------------------------------------------------------------------------------------------------
+# Italy — Normattiva (normattiva.it). The consolidated (multivigente) full text of every national act
+# resolves over plain HTTP from the ELI/URN permalink — no cookies, no token, no session:
+#   law text: GET https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:{coordinate}
+# where {coordinate} = "{act-type}:{YYYY-MM-DD};{number}" (e.g. decreto.legislativo:2020-09-03;116).
+# The OpenData API (dati.normattiva.it, CC-BY-4.0 since 2026-01-01) only ships bulk ZIP collections,
+# so the per-act permalink is the right rung. The URN's date segment IS the enactment date (parsed for
+# status_date). Archetype A. Seed the marquee EPR decrees; the region-aware Haiku floor judges relevance.
+# --------------------------------------------------------------------------------------------------
+
+IT_PERMALINK = "https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:{coord}"
+# HTML comments (<!-- … -->) survive the generic tag strip when they contain '>'; drop them for clean text.
+_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+IT_SEED_LAWS: list[dict] = [
+    {"coord": "decreto.legislativo:2006-04-03;152",
+     "en": "Environmental Code (Testo Unico Ambientale — waste framework, Part IV)", "material": "waste"},
+    {"coord": "decreto.legislativo:2020-09-03;116",
+     "en": "Decree transposing the Waste + Packaging Directives (EPR reform)", "material": "packaging"},
+    {"coord": "decreto.legislativo:2014-03-14;49",
+     "en": "RAEE Decree — waste electrical & electronic equipment (WEEE, EPR)", "material": "electronics"},
+    {"coord": "decreto.legislativo:2008-11-20;188",
+     "en": "Decree on batteries and accumulators (EPR)", "material": "batteries"},
+    {"coord": "decreto.legislativo:2003-06-24;209",
+     "en": "Decree on end-of-life vehicles (ELV, EPR)", "material": "vehicles"},
+    {"coord": "decreto.legislativo:2021-11-08;196",
+     "en": "Decree on single-use plastic products (SUP Directive)", "material": "plastics"},
+]
+
+
+class ItalyNormattivaClient(ForeignSourceClient):
+    """Normattiva adapter. Italian consolidated law via the URN permalink (HTML), no key (curated seeds)."""
+
+    region = "IT"
+    source = "normattiva"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("it_discovered", total=len(IT_SEED_LAWS))
+        return [(s["coord"], s["en"]) for s in IT_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        url = IT_PERMALINK.format(coord=source_id)
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("it_fetch_failed", coord=source_id, error=str(e))
+            return None
+        body = _HTML_COMMENT_RE.sub(" ", _SCRIPT_STYLE_RE.sub(" ", r.text))
+        full_text = _strip_tags(body)
+        if len(full_text) < 100:
+            log.warning("it_thin_text", coord=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=url, english_label=english_label,
+            status_date=_iso_to_date(source_id),  # the URN carries the enactment date (…:YYYY-MM-DD;num)
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Norway — Lovdata (lovdata.no). The FREE public site serves every consolidated law (NL) and regulation
+# (SF) as clean server-rendered HTML at a deterministic document path (Lovdata Pro is the paywalled tier;
+# the base texts here are open). No key, no session:
+#   law text: GET https://lovdata.no/dokument/{coll}/{type}/{YYYY-MM-DD}-{num}
+# where {coll}/{type} = SF/forskrift (regulation) or NL/lov (statute). The path's date IS the enactment
+# date (parsed for status_date). Archetype A. Norway's EPR sits in the avfallsforskriften chapters
+# (WEEE, batteries, packaging ch.6/7, SUP ch.7A, fishing-gear ch.7B) under the pollution-control statute.
+# --------------------------------------------------------------------------------------------------
+
+NO_BASE = "https://lovdata.no/dokument"
+NO_SEED_LAWS: list[dict] = [
+    {"path": "NL/lov/1981-03-13-6",
+     "en": "Pollution Control Act (Forurensningsloven — EPR legal basis)", "material": "waste"},
+    {"path": "SF/forskrift/2004-06-01-930",
+     "en": "Waste Regulation (Avfallsforskriften — WEEE, batteries, packaging, SUP, fishing-gear EPR)",
+     "material": "multi"},
+    {"path": "NL/lov/1976-06-11-79",
+     "en": "Product Control Act (Produktkontrolloven — product/EPR basis)", "material": "multi"},
+]
+
+
+class NorwayLovdataClient(ForeignSourceClient):
+    """Lovdata adapter. Norwegian consolidated law/regulation via the public document path (HTML), no key."""
+
+    region = "NO"
+    source = "lovdata"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("no_discovered", total=len(NO_SEED_LAWS))
+        return [(s["path"], s["en"]) for s in NO_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        url = f"{NO_BASE}/{source_id}"
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("no_fetch_failed", path=source_id, error=str(e))
+            return None
+        full_text = _strip_tags(_SCRIPT_STYLE_RE.sub(" ", r.text))
+        if len(full_text) < 100:
+            log.warning("no_thin_text", path=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=url, english_label=english_label,
+            status_date=_iso_to_date(source_id),  # the path carries the enactment date (…/YYYY-MM-DD-num)
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Türkiye — Mevzuat Bilgi Sistemi (mevzuat.gov.tr). No catalog API, but the official site renders every
+# consolidated act to a PDF at a deterministic endpoint (no key, no session):
+#   law text: GET https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo={no}&mevzuatTur={tur}&mevzuatTertip={t}
+# `tur` is the act-type token — "Kanun" for a statute, "KurumVeKurulusYonetmeligi" for a ministry
+# regulation (yönetmelik) — so it's stored per-seed. Turkish PDFs are single-language (pypdf extracts
+# ç/ş/ğ/ı cleanly — no bilingual-mojibake filter needed, unlike India). Archetype C→D (PDF). Seed the
+# core EPR regs; year in the English label gives the derived status_date (mevzuatNo carries no date).
+# --------------------------------------------------------------------------------------------------
+
+TR_PDF = "https://www.mevzuat.gov.tr/File/GeneratePdf?mevzuatNo={no}&mevzuatTur={tur}&mevzuatTertip={t}"
+TR_PAGE = "https://www.mevzuat.gov.tr/mevzuat?MevzuatNo={no}&MevzuatTur={code}&MevzuatTertip={t}"
+# GeneratePdf `tur` token -> the numeric MevzuatTur code the human-facing HTML page uses.
+_TR_PAGE_CODE = {"Kanun": "1", "KurumVeKurulusYonetmeligi": "7"}
+TR_SEED_LAWS: list[dict] = [
+    {"no": "2872", "tur": "Kanun", "t": "5",
+     "en": "Environmental Law No. 2872 (Çevre Kanunu — EPR legal basis, 1983)", "material": "waste"},
+    {"no": "20644", "tur": "KurumVeKurulusYonetmeligi", "t": "5",
+     "en": "Waste Management Regulation (Atık Yönetimi Yönetmeliği, 2015)", "material": "waste"},
+    {"no": "38745", "tur": "KurumVeKurulusYonetmeligi", "t": "5",
+     "en": "Packaging Waste Control Regulation (Ambalaj Atıklarının Kontrolü, 2021)", "material": "packaging"},
+    {"no": "40055", "tur": "KurumVeKurulusYonetmeligi", "t": "5",
+     "en": "Waste Electrical & Electronic Equipment Regulation (AEEE, 2022)", "material": "electronics"},
+    {"no": "7118", "tur": "KurumVeKurulusYonetmeligi", "t": "5",
+     "en": "Waste Battery & Accumulator Control Regulation (Atık Pil ve Akümülatör, 2004)", "material": "batteries"},
+]
+
+
+class TurkiyeMevzuatClient(ForeignSourceClient):
+    """mevzuat.gov.tr adapter. Turkish consolidated law via the GeneratePdf endpoint (PDF), no key (seeds)."""
+
+    region = "TR"
+    source = "mevzuat"
+
+    async def discover(self) -> list[tuple[str, str]]:
+        log.info("tr_discovered", total=len(TR_SEED_LAWS))
+        return [(s["no"], s["en"]) for s in TR_SEED_LAWS]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        seed = next((s for s in TR_SEED_LAWS if s["no"] == source_id), None)
+        if not seed:
+            log.warning("tr_unknown_seed", no=source_id)
+            return None
+        url = TR_PDF.format(no=source_id, tur=seed["tur"], t=seed["t"])
+        try:
+            r = await self.http.get(url)
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("tr_fetch_failed", no=source_id, error=str(e))
+            return None
+        if "application/pdf" not in r.headers.get("content-type", "").lower():
+            log.warning("tr_not_pdf", no=source_id, ctype=r.headers.get("content-type", ""))
+            return None
+        full_text = _pdf_to_text(r.content)
+        if len(full_text) < 200:
+            log.warning("tr_thin_text", no=source_id, chars=len(full_text))
+            return None
+        page = TR_PAGE.format(no=source_id, code=_TR_PAGE_CODE.get(seed["tur"], "7"), t=seed["t"])
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=english_label or source_id, full_text=full_text,
+            source_url=page, english_label=english_label,  # year in the label -> derived status_date
+        )
+
+
 # Registry of available foreign adapters, by region code. New countries: add the subclass + register.
 # Note: a registry key is just a lookup handle (e.g. "FR_CODE"); the client's own `.region` drives the
 # row's region (LegifranceCodeClient writes region="FR"), so JORF + codified FR data co-exist.
@@ -3951,6 +4128,12 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "AU_WA": AustraliaWaClient,
     # India (region="IN"): gazette EPR Rules via the FAOLEX PDF mirror.
     "IN": IndiaFaolexClient,
+    # Italy (region="IT"): consolidated EPR decrees via the Normattiva URN permalink (HTML).
+    "IT": ItalyNormattivaClient,
+    # Norway (region="NO"): pollution-control statute + avfallsforskriften EPR chapters via Lovdata (HTML).
+    "NO": NorwayLovdataClient,
+    # Türkiye (region="TR"): core EPR regs via the mevzuat.gov.tr GeneratePdf endpoint (PDF).
+    "TR": TurkiyeMevzuatClient,
 }
 
 

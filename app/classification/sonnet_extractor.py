@@ -31,6 +31,7 @@ REGION_LABELS = {
     "LU": "Luxembourg", "LV": "Latvia", "SK": "Slovakia", "LT": "Lithuania", "CZ": "Czechia",
     "EE": "Estonia", "KR": "South Korea", "NO": "Norway", "BE": "Belgium", "IT": "Italy",
     "PT": "Portugal", "CA": "Canada", "AU": "Australia", "CN": "China", "IN": "India",
+    "TR": "Türkiye",
 }
 
 
@@ -72,6 +73,10 @@ _NATIVE_ANCHORS = {
     "pl": ["odpowiedzialność producenta", "opakowania", "kaucja", "zbiórka", "recykling"],
     "pt": ["responsabilidade compartilhada", "logística reversa", "embalagens", "resíduos", "reciclagem"],
     "it": ["responsabilità estesa del produttore", "imballaggi", "cauzione", "raccolta", "riciclaggio"],
+    "no": ["produsentansvar", "utvidet produsentansvar", "emballasje", "pant", "innsamling",
+           "gjenvinning", "materialgjenvinning", "ombruk", "retur"],
+    "tr": ["genişletilmiş üretici sorumluluğu", "üretici sorumluluğu", "ambalaj", "depozito",
+           "toplama", "geri dönüşüm", "geri kazanım", "yeniden kullanım", "sıfır atık"],
     "cs": ["odpovědnost výrobců", "obaly", "zálohování", "recyklace"],
     "ja": ["生産者責任", "拡大生産者責任", "容器包装", "デポジット", "リサイクル", "回収", "再商品化"],
     "zh": ["生产者责任", "生产者责任延伸", "包装", "回收", "押金", "循环经济", "再生"],
@@ -82,6 +87,7 @@ _NATIVE_ANCHORS = {
 _REGION_LANG = {
     "FR": "fr", "DE": "de", "AT": "de", "ES": "es", "CL": "es", "NL": "nl", "SE": "sv",
     "PL": "pl", "BR": "pt", "IT": "it", "CZ": "cs", "JP": "ja", "CN": "zh", "KR": "ko",
+    "NO": "no", "TR": "tr",
 }
 
 

@@ -23,7 +23,7 @@ export const REGION_LABELS: Record<string, string> = {
 export const FOREIGN_COUNTRY_NAMES: Record<string, string> = {
   JP: 'Japan', UK: 'United Kingdom', CL: 'Chile', CH: 'Switzerland', BR: 'Brazil',
   KR: 'South Korea', ZA: 'South Africa', KE: 'Kenya', CN: 'China', CA: 'Canada',
-  AU: 'Australia', NO: 'Norway', MX: 'Mexico', IN: 'India',
+  AU: 'Australia', NO: 'Norway', MX: 'Mexico', IN: 'India', TR: 'Türkiye',
   RW: 'Rwanda', ZM: 'Zambia', MW: 'Malawi', SL: 'Sierra Leone',
 };
 

@@ -6,6 +6,7 @@ import { BillTimelineChart } from '@/components/insights/BillTimelineChart';
 import { LawsInForceChart } from '@/components/insights/LawsInForceChart';
 import { StanceMomentumChart } from '@/components/insights/StanceMomentumChart';
 import { CollectionTargetBasisChart } from '@/components/insights/CollectionTargetBasisChart';
+import { FeeCoverageChart } from '@/components/insights/FeeCoverageChart';
 import { InstrumentMaterialMatrix } from '@/components/insights/InstrumentMaterialMatrix';
 import { WorldCoverageMap } from '@/components/insights/WorldCoverageMap';
 import { RegionInstrumentMatrix } from '@/components/insights/RegionInstrumentMatrix';
@@ -353,6 +354,18 @@ export default function InsightsPage() {
               from each bill&apos;s text, so a bill with several targets contributes several.
             </p>
             <CollectionTargetBasisChart regions={regionsCsv} />
+          </Section>
+
+          <Section kicker="Producer fees" title="What compliance actually costs: fees across jurisdictions">
+            <p className="text-text-secondary text-body leading-relaxed">
+              The money a producer owes — read straight from the enacting text and cited to it. This spans
+              the whole tracked corpus (it ignores the region filter): registration fees, per-tonne and
+              per-unit producer charges, revenue thresholds, and eco-modulation, jurisdiction by
+              jurisdiction. It&apos;s the clearest picture anywhere of what circular-economy compliance costs,
+              and it&apos;s the one dataset our API gates by breadth — the US slice is open, the 40+-jurisdiction
+              body is the paid product.
+            </p>
+            <FeeCoverageChart />
           </Section>
 
           <Section kicker="Outliers" title="The 'Other' bucket: emergent instruments to watch">

@@ -9,6 +9,7 @@ import type {
   BillTimelinePoint,
   BillStancePoint,
   CollectionTargetBasisPoint,
+  FeeAmountsSummary,
   ResearchAnswer,
   ResearchBillPage,
   EvaluateResponse,
@@ -282,6 +283,12 @@ export async function fetchCollectionTargetBasis(params?: { regions?: string }):
   return apiFetch<CollectionTargetBasisPoint[]>(
     buildUrl('/bills/collection-target-basis', params as Record<string, string | number | boolean | undefined>),
   );
+}
+
+/** Bill-sourced fee coverage aggregate — open, full (spans every jurisdiction, ignores the region
+ * filter). Feeds the Insights "fees across jurisdictions" chart. See /compliance/fee-amounts/summary. */
+export async function fetchFeeSummary(): Promise<FeeAmountsSummary> {
+  return apiFetch<FeeAmountsSummary>(buildUrl('/compliance/fee-amounts/summary'));
 }
 
 /** Per-year, per-region CE laws that came into force — cumulated client-side into the "laws on the

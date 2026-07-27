@@ -313,6 +313,24 @@ export interface CollectionTargetBasisPoint {
   region?: string | null;
 }
 
+/** A {key, count} pair from the fee-summary aggregate (by basis / fee_kind / currency / region). */
+export interface KeyCount {
+  key: string;
+  count: number;
+}
+
+/** /compliance/fee-amounts/summary — open, full aggregate over the bill-sourced fee entries. */
+export interface FeeAmountsSummary {
+  bills_with_fees: number;
+  bills_with_numeric: number;
+  total_rate_entries: number;
+  numeric_rate_entries: number;
+  by_basis: KeyCount[];
+  by_fee_kind: KeyCount[];
+  by_currency: KeyCount[];
+  by_region: KeyCount[];
+}
+
 /** One (year, region) bucket from /bills/laws-in-force — CE laws that came into force that year. */
 export interface LawsInForcePoint {
   year: number;

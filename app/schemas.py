@@ -959,6 +959,88 @@ class FeeScheduleResponse(BaseModel):
     categories: list[FeeScheduleCategory]
 
 
+# --- Bill-sourced fee amounts (compliance_details.fee_amounts envelope) ---
+# Layer A of the fee API: the fee facts a measure actually STATES, cited to a verbatim source_excerpt.
+# Distinct from FeeScheduleResponse above (Layer B — the curated CA/UK/JP rate-table engine). See
+# docs/FEE_DATA_API_SPEC.md.
+
+
+class FeeAmountRow(BaseModel):
+    """One monetary amount a measure states, flattened from fee_amounts.rates[] with its bill context.
+
+    `amount` is None when the measure states the mechanism (basis) but leaves the number to rulemaking.
+    `fee_kind` is derived (app/synthesis/fee_kind.py) to cut through the mixed KINDS in rates[].
+    `grounded` is True when the envelope carries a verbatim source_excerpt (≈always, for `present`).
+    """
+    bill_id: int
+    region: str
+    state: str
+    bill_number: str | None = None
+    bill_title: str | None = None
+    status: str | None = None
+    source_url: str | None = None
+    basis: str | None = None  # per_ton | per_unit | flat | eco_modulated | percent_revenue | unspecified
+    amount: float | None = None
+    currency: str | None = None  # ISO 4217
+    material: str | None = None  # free-text descriptor of what the rate applies to
+    fee_kind: str  # producer_fee | registration | incentive | penalty | threshold | admin_cost | unspecified
+    grounded: bool
+    source_excerpt: str | None = None
+    extraction_version: int | None = None
+
+
+class FeeAmountsResponse(BaseModel):
+    """Wrapper (not a bare list) so the teaser lock is legible to callers.
+
+    `teaser` is True when the caller was capped to the US teaser (non-Pro); `total_available` is the row
+    count matching the filters at the caller's access level, so a teaser can show what's behind the gate.
+    """
+    rows: list[FeeAmountRow]
+    count: int  # rows on this page
+    total_available: int  # total matching rows at this access level
+    teaser: bool
+    note: str | None = None
+
+
+class KeyCount(BaseModel):
+    key: str
+    count: int
+
+
+class FeeAmountsSummary(BaseModel):
+    """Open, full aggregate over the bill-sourced fee entries — the breadth teaser + chartable stat."""
+    bills_with_fees: int  # distinct bills with >=1 fee_amounts rate entry
+    bills_with_numeric: int  # distinct bills with >=1 entry carrying an amount
+    total_rate_entries: int
+    numeric_rate_entries: int
+    by_basis: list[KeyCount]
+    by_fee_kind: list[KeyCount]
+    by_currency: list[KeyCount]
+    by_region: list[KeyCount]
+
+
+class EcoModulationRow(BaseModel):
+    """One measure's eco-modulation criteria (design attributes that raise/lower fees), cited."""
+    bill_id: int
+    region: str
+    state: str
+    bill_number: str | None = None
+    bill_title: str | None = None
+    status: str | None = None
+    source_url: str | None = None
+    criteria: list[str] = []
+    grounded: bool
+    source_excerpt: str | None = None
+
+
+class EcoModulationResponse(BaseModel):
+    rows: list[EcoModulationRow]
+    count: int
+    total_available: int
+    teaser: bool
+    note: str | None = None
+
+
 # --- Real-world outcomes (bill_outcome) ---
 
 

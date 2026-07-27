@@ -46,9 +46,12 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
   },
   {
     title: 'Compliance & regulatory',
-    blurb: 'The obligations behind the laws — fees, pathways, federal action, and litigation.',
+    blurb: 'The obligations behind the laws — fees, pathways, federal action, and litigation. Fee data comes in two layers: the amounts a law itself STATES (fee-amounts, cited to the enacting text) and curated per-material rate tables set by agency/PRO rulemaking (fee-schedule).',
     endpoints: [
-      { method: 'GET', path: '/compliance/fee-schedule', desc: 'Producer-fee estimates with citations grounded in enacted text.' },
+      { method: 'GET', path: '/compliance/fee-amounts', desc: 'Producer fees a law states — per-tonne / per-unit / flat / %-revenue, each cited to a verbatim excerpt. US-only free; the full 40+ jurisdictions need an API plan.' },
+      { method: 'GET', path: '/compliance/fee-amounts/summary', desc: 'Open aggregate: fee coverage counts by jurisdiction, kind, basis, and currency.' },
+      { method: 'GET', path: '/compliance/eco-modulation', desc: 'Eco-modulation criteria (design attributes that raise/lower fees) per law, cited. US-only free; full set with an API plan.' },
+      { method: 'GET', path: '/compliance/fee-schedule', desc: 'Curated per-material producer-fee rate tables + eco-modulation math (CA SB 54, UK pEPR, Japan) — the runnable rates set by agency/PRO rulemaking, not the statute.' },
       { method: 'GET', path: '/compliance/pathways', desc: 'The primary next-action per enacted law (join this PRO / file this plan).' },
       { method: 'GET', path: '/federal-actions', desc: 'Tracked federal regulatory actions (US).' },
       { method: 'GET', path: '/litigation-cases', desc: 'Circular-economy litigation cases; drill into a case for events.' },

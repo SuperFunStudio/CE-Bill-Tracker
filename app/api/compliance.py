@@ -8,21 +8,38 @@ See app/models.py CompliancePathway/ComplianceEntity and scripts/build_complianc
 
 GET /compliance/fee-schedule returns the CA SB 54 (2027 draft) producer fee schedule —
 pure in-code reference data (app/scoring/ca_sb54_fees.py, the same grounded anchor the
-company-obligations scoring uses), no DB. Public/free, like /pathways.
+company-obligations scoring uses), no DB. Public/free, like /pathways. This is Layer B — the
+curated, runnable per-material rate-table engine.
+
+GET /compliance/fee-amounts (+ /summary) and /compliance/eco-modulation are Layer A — the fee facts
+a measure actually STATES, read straight from the compliance_details.fee_amounts / eco_modulation
+envelopes (no LLM), each cited to a verbatim source_excerpt. These are the API's differentiated
+cross-jurisdiction dataset, so they're breadth-gated: the /summary aggregate is open+full, but the
+row endpoints serve the full 40+ jurisdictions only to a Pro/admin caller and a US-only capped teaser
+to everyone else (best-effort, never 401s). See docs/FEE_DATA_API_SPEC.md.
 """
+import json
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_optional_pro
 from app.database import get_db
 from app.models import Bill, ComplianceEntity, CompliancePathway
 from app.schemas import (
     ComplianceEntityRef,
     CompliancePathwaySummary,
+    EcoModulationResponse,
+    EcoModulationRow,
+    FeeAmountRow,
+    FeeAmountsResponse,
+    FeeAmountsSummary,
     FeeScheduleCategory,
     FeeSchedulePlasticAdder,
     FeeScheduleRate,
     FeeScheduleResponse,
+    KeyCount,
 )
 from app.scoring.ca_sb54_fees import (
     _PLASTIC_PPMF_ADDER,
@@ -35,12 +52,22 @@ from app.scoring.ca_sb54_fees import (
     _cents_lb_to_per_tonne,
 )
 from app.scoring.materials import _CANONICAL_ALIASES
+from app.synthesis.fee_kind import classify_fee_kind
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
 
 # Final 2027 rates land October 2026 (see ca_sb54_fees.py module docstring); until then
 # these are the published draft ranges.
 RATES_FINAL_EXPECTED = "October 2026"
+
+# Breadth gate for the Layer-A row endpoints. A non-Pro caller sees only US rows, capped — the free
+# teaser. The value of the dataset is the 40+-jurisdiction body behind the gate (docs §7).
+FEE_TEASER_REGION = "US"
+FEE_TEASER_LIMIT = 25
+_FEE_TEASER_NOTE = (
+    "Showing the US teaser. Full cross-jurisdiction fee data (40+ jurisdictions), uncapped, "
+    "requires an API plan — see /developers."
+)
 
 
 def _fee_rate(tier: str, name: str | None, base_cents: float, adder_cents: float,
@@ -93,6 +120,304 @@ async def fee_schedule():
             total_cents_per_lb=_PLASTIC_REUSE_ADDER + _PLASTIC_PPMF_ADDER,
         ),
         categories=categories,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Layer A — bill-sourced fee amounts + eco-modulation (from compliance_details)
+# ---------------------------------------------------------------------------
+
+
+def _parse_regions(regions: str | None) -> list[str] | None:
+    """CSV of jurisdiction codes -> upper-cased list, or None for "all" (empty/missing/contains 'all').
+    Local copy of the bills.py helper to avoid coupling the compliance router to the bills router."""
+    if not regions:
+        return None
+    codes = [r.strip().upper() for r in regions.split(",") if r.strip()]
+    if not codes or "ALL" in codes:
+        return None
+    return codes
+
+
+def _resolve_regions(region: str | None, regions: str | None) -> list[str] | None:
+    """Fee endpoints default to ALL regions (cross-jurisdiction is the value) — unlike bills.py's
+    US-default. `regions` CSV wins; a single `region` narrows; None/"all" => no region filter."""
+    if regions is not None:
+        return _parse_regions(regions)
+    if region is None or region.lower() == "all":
+        return None
+    return [region.upper()]
+
+
+def _gate_regions(codes: list[str] | None, is_pro: bool) -> tuple[list[str] | None, bool]:
+    """Apply the breadth gate. A non-Pro caller is forced to the US teaser regardless of what they
+    asked for; Pro/admin keeps the resolved scope. Returns (effective_codes, is_teaser)."""
+    if is_pro:
+        return codes, False
+    return [FEE_TEASER_REGION], True
+
+
+async def _fetch_fee_rows(
+    db: AsyncSession,
+    *,
+    codes: list[str] | None,
+    state: str | None,
+    status: str | None,
+    basis: str | None,
+    currency: str | None,
+) -> list[dict]:
+    """Lateral-unnest the fee_amounts.rates[] of every ce_relevant bill whose envelope is `present`.
+
+    Returns ALL matching entries (no SQL LIMIT/OFFSET) — the set is small (~1.3k rows corpus-wide), and
+    the derived fee_kind + material_category filters and pagination are applied in Python so they stay
+    correct. Scalar fields are pulled as text (r->>'…') so a malformed amount can't crash a ::numeric cast.
+    """
+    clauses = [
+        "b.ce_relevant = true",
+        "b.compliance_details->'fee_amounts'->>'status' = 'present'",
+    ]
+    params: dict = {}
+    if codes is not None:
+        clauses.append("b.region IN :regions")
+        params["regions"] = codes
+    if state:
+        clauses.append("b.state = :state")
+        params["state"] = state.upper()
+    if status:
+        clauses.append("b.status = :status")
+        params["status"] = status
+    if basis:
+        clauses.append("r->>'basis' = :basis")
+        params["basis"] = basis
+    if currency:
+        clauses.append("upper(r->>'currency') = :currency")
+        params["currency"] = currency.upper()
+
+    sql = f"""
+        SELECT b.id AS bill_id, b.region, b.state, b.bill_number, b.title AS bill_title,
+               b.status, b.source_url, b.material_categories,
+               r->>'basis'    AS basis,
+               r->>'amount'   AS amount,
+               r->>'currency' AS currency,
+               r->>'material' AS material,
+               b.compliance_details->'fee_amounts'->>'source_excerpt' AS source_excerpt,
+               b.compliance_details->>'extraction_version' AS extraction_version
+        FROM bills b
+        CROSS JOIN LATERAL jsonb_array_elements(b.compliance_details->'fee_amounts'->'rates') AS r
+        WHERE {' AND '.join(clauses)}
+        ORDER BY b.last_action_date DESC NULLS LAST, b.id
+    """
+    stmt = text(sql)
+    if codes is not None:
+        stmt = stmt.bindparams(bindparam("regions", expanding=True))
+    res = await db.execute(stmt, params)
+    return [dict(m) for m in res.mappings().all()]
+
+
+def _coerce_amount(raw) -> float | None:
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_json_list(val) -> list | None:
+    """material_categories / criteria come back as a JSON string or an already-decoded list depending on
+    the driver's JSONB codec — normalize to a Python list."""
+    if isinstance(val, str):
+        try:
+            val = json.loads(val)
+        except json.JSONDecodeError:
+            return None
+    return val if isinstance(val, list) else None
+
+
+def _build_fee_rows(
+    records: list[dict],
+    *,
+    fee_kind: str | None = None,
+    has_amount: bool | None = None,
+    material_category: str | None = None,
+) -> list[FeeAmountRow]:
+    """Type, classify, and filter raw DB records into FeeAmountRow. Pure (no I/O) so it's unit-tested
+    without a database. Applies the derived-fee_kind, has_amount, and material_category filters here."""
+    out: list[FeeAmountRow] = []
+    for m in records:
+        amount = _coerce_amount(m.get("amount"))
+        if has_amount is True and amount is None:
+            continue
+        if has_amount is False and amount is not None:
+            continue
+        if material_category:
+            mats = _coerce_json_list(m.get("material_categories"))
+            if not (mats and material_category in mats):
+                continue
+        kind = classify_fee_kind(m.get("basis"), m.get("material"))
+        if fee_kind and kind != fee_kind:
+            continue
+        excerpt = m.get("source_excerpt")
+        ev = m.get("extraction_version")
+        out.append(
+            FeeAmountRow(
+                bill_id=m["bill_id"],
+                region=m["region"],
+                state=m["state"],
+                bill_number=m.get("bill_number"),
+                bill_title=m.get("bill_title"),
+                status=m.get("status"),
+                source_url=m.get("source_url"),
+                basis=m.get("basis"),
+                amount=amount,
+                currency=m.get("currency"),
+                material=m.get("material"),
+                fee_kind=kind,
+                grounded=bool(excerpt),
+                source_excerpt=excerpt,
+                extraction_version=int(ev) if ev and str(ev).isdigit() else None,
+            )
+        )
+    return out
+
+
+@router.get("/fee-amounts", response_model=FeeAmountsResponse)
+async def fee_amounts(
+    region: str | None = Query(default=None, description="Jurisdiction family (default: all). Non-Pro is forced to US."),
+    regions: str | None = Query(default=None, description="CSV of codes; wins over `region`."),
+    state: str | None = None,
+    status: str | None = None,
+    basis: str | None = Query(default=None, description="per_ton|per_unit|flat|eco_modulated|percent_revenue|unspecified"),
+    fee_kind: str | None = Query(default=None, description="producer_fee|registration|incentive|penalty|threshold|admin_cost|unspecified"),
+    currency: str | None = Query(default=None, description="ISO 4217, e.g. USD, EUR, GBP"),
+    has_amount: bool | None = Query(default=None, description="true = only entries with a numeric amount"),
+    material_category: str | None = None,
+    limit: int = Query(default=100, le=5000),
+    offset: int = 0,
+    is_pro: bool = Depends(get_optional_pro),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bill-sourced fee amounts, one row per stated rate, cited. US-teaser for non-Pro; full for Pro."""
+    codes, teaser = _gate_regions(_resolve_regions(region, regions), is_pro)
+    records = await _fetch_fee_rows(
+        db, codes=codes, state=state, status=status, basis=basis, currency=currency
+    )
+    rows = _build_fee_rows(
+        records, fee_kind=fee_kind, has_amount=has_amount, material_category=material_category
+    )
+    page_limit = min(limit, FEE_TEASER_LIMIT) if teaser else limit
+    page = rows[offset : offset + page_limit]
+    return FeeAmountsResponse(
+        rows=page,
+        count=len(page),
+        total_available=len(rows),
+        teaser=teaser,
+        note=_FEE_TEASER_NOTE if teaser else None,
+    )
+
+
+@router.get("/fee-amounts/summary", response_model=FeeAmountsSummary)
+async def fee_amounts_summary(db: AsyncSession = Depends(get_db)):
+    """Open, full aggregate over the bill-sourced fee entries — the breadth teaser + chartable stat."""
+    records = await _fetch_fee_rows(db, codes=None, state=None, status=None, basis=None, currency=None)
+    rows = _build_fee_rows(records)  # classify all, no filtering
+    bills_with_fees: set[int] = set()
+    bills_with_numeric: set[int] = set()
+    numeric = 0
+    by_basis: dict[str, int] = {}
+    by_fee_kind: dict[str, int] = {}
+    by_currency: dict[str, int] = {}
+    by_region: dict[str, int] = {}
+    for r in rows:
+        bills_with_fees.add(r.bill_id)
+        if r.amount is not None:
+            bills_with_numeric.add(r.bill_id)
+            numeric += 1
+        by_basis[r.basis or "unspecified"] = by_basis.get(r.basis or "unspecified", 0) + 1
+        by_fee_kind[r.fee_kind] = by_fee_kind.get(r.fee_kind, 0) + 1
+        if r.currency:
+            by_currency[r.currency.upper()] = by_currency.get(r.currency.upper(), 0) + 1
+        by_region[r.region] = by_region.get(r.region, 0) + 1
+
+    def _counts(d: dict[str, int]) -> list[KeyCount]:
+        return [KeyCount(key=k, count=v) for k, v in sorted(d.items(), key=lambda kv: -kv[1])]
+
+    return FeeAmountsSummary(
+        bills_with_fees=len(bills_with_fees),
+        bills_with_numeric=len(bills_with_numeric),
+        total_rate_entries=len(rows),
+        numeric_rate_entries=numeric,
+        by_basis=_counts(by_basis),
+        by_fee_kind=_counts(by_fee_kind),
+        by_currency=_counts(by_currency),
+        by_region=_counts(by_region),
+    )
+
+
+@router.get("/eco-modulation", response_model=EcoModulationResponse)
+async def eco_modulation(
+    region: str | None = Query(default=None, description="Jurisdiction family (default: all). Non-Pro is forced to US."),
+    regions: str | None = None,
+    state: str | None = None,
+    status: str | None = None,
+    limit: int = Query(default=100, le=5000),
+    offset: int = 0,
+    is_pro: bool = Depends(get_optional_pro),
+    db: AsyncSession = Depends(get_db),
+):
+    """Eco-modulation criteria (design attributes that raise/lower fees) per measure, cited. One row per
+    bill. US-teaser for non-Pro; full for Pro."""
+    codes, teaser = _gate_regions(_resolve_regions(region, regions), is_pro)
+    clauses = [
+        "b.ce_relevant = true",
+        "b.compliance_details->'eco_modulation'->>'status' = 'present'",
+    ]
+    params: dict = {}
+    if codes is not None:
+        clauses.append("b.region IN :regions")
+        params["regions"] = codes
+    if state:
+        clauses.append("b.state = :state")
+        params["state"] = state.upper()
+    if status:
+        clauses.append("b.status = :status")
+        params["status"] = status
+    sql = f"""
+        SELECT b.id AS bill_id, b.region, b.state, b.bill_number, b.title AS bill_title,
+               b.status, b.source_url,
+               b.compliance_details->'eco_modulation'->'criteria' AS criteria,
+               b.compliance_details->'eco_modulation'->>'source_excerpt' AS source_excerpt
+        FROM bills b
+        WHERE {' AND '.join(clauses)}
+        ORDER BY b.last_action_date DESC NULLS LAST, b.id
+    """
+    stmt = text(sql)
+    if codes is not None:
+        stmt = stmt.bindparams(bindparam("regions", expanding=True))
+    records = [dict(m) for m in (await db.execute(stmt, params)).mappings().all()]
+    all_rows = [
+        EcoModulationRow(
+            bill_id=m["bill_id"],
+            region=m["region"],
+            state=m["state"],
+            bill_number=m.get("bill_number"),
+            bill_title=m.get("bill_title"),
+            status=m.get("status"),
+            source_url=m.get("source_url"),
+            criteria=_coerce_json_list(m.get("criteria")) or [],
+            grounded=bool(m.get("source_excerpt")),
+            source_excerpt=m.get("source_excerpt"),
+        )
+        for m in records
+    ]
+    page_limit = min(limit, FEE_TEASER_LIMIT) if teaser else limit
+    page = all_rows[offset : offset + page_limit]
+    return EcoModulationResponse(
+        rows=page,
+        count=len(page),
+        total_available=len(all_rows),
+        teaser=teaser,
+        note=_FEE_TEASER_NOTE if teaser else None,
     )
 
 

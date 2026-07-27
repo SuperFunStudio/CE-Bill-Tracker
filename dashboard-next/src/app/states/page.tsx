@@ -327,22 +327,32 @@ function StandingRow({ rank, code, name, href, primary, secondary, barPct, tag, 
 }
 
 // A ranked jurisdiction row (a country in the national column, or a US state in the sub-national one).
-type StandingEntry = { region: string; code: string; name: string; enacted: number; motion: number; activity: number };
+// `combinedEnacted`/`combinedMotion` fold in the country's sub-national tier (US states today); they
+// only differ from the national figures for a federation with tracked sub-national law.
+type StandingEntry = {
+  region: string; code: string; name: string;
+  enacted: number; motion: number; activity: number;
+  combinedEnacted: number; combinedMotion: number;
+};
 
 /**
- * The flagship two-column activity tracker: NATIONAL law by country (left) alongside SUB-NATIONAL law
- * (right). Not a US-vs-world comparison — just the global tally, by jurisdiction.
+ * The flagship two-column ranking: NATIONAL law by country (left) alongside SUB-NATIONAL law (right).
+ * Not a US-vs-world comparison — just the global tally, by jurisdiction. Each column carries its OWN
+ * ranking control, because the two tiers are measured differently:
  *
- * Two ranks (toggle): ENACTED — laws in force, the fair cross-jurisdiction comparison (the metric the
- * homepage globe shades by) — and ACTIVITY, a plain count of every tracked bill (all statuses) plus US
- * federal regulatory actions. Crucially the US, with no enacted national EPR statute, sits near the
- * BOTTOM on the default Enacted rank; its heavy bill + regulatory activity only lifts it on the
- * Activity rank, where that's the honest signal. (Regulatory actions never touch the enacted count.)
+ * NATIONAL toggle — "National" vs "Combined". National law is enacted-heavy with no introduced→enacted
+ * funnel, so an activity/introduced axis is meaningless here; both views rank by ENACTED laws in force.
+ * "Combined" folds each country's sub-national enacted laws into its total — today only the US has a
+ * tracked sub-national tier, so switching to Combined is what lifts the US (no federal EPR statute) up
+ * on the strength of its 50 states. It generalizes as more federations gain state coverage.
+ *
+ * SUB-NATIONAL toggle — "Enacted" vs "Activity". Here the US pipeline IS a funnel, so the introduced/
+ * enacted distinction is real: Enacted ranks by laws in force; Activity ranks by a plain count of every
+ * tracked bill (all statuses). This is where that toggle lives.
  *
  * Sub-national rows are first-class only for the US today: foreign provinces (CA/AU) collapse to their
  * country code in the data (see foreign_id in app/ingestion/foreign.py), so decomposing them into the
- * sub-national column is a v2. A per-country "all tiers combined" rollup (national + sub-national) is
- * shown above the board — for now that only differs from the national figure for the US.
+ * sub-national column is a v2.
  */
 function WorldStandings() {
   const { setRegions } = useRegion();
@@ -350,11 +360,13 @@ function WorldStandings() {
   // so without this the national column would only ever show the United States (no France/Japan/…).
   const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000, region: 'all' });
   // US FEDERAL regulatory activity — agency rulemakings (EPA/GSA/FTC) live in a separate table from
-  // bills. They feed the US ACTIVITY score only (movement, not enacted law), never the enacted count.
+  // bills. They feed the sub-national ACTIVITY score only (movement, not enacted law); the national
+  // column ranks purely by enacted law and never counts them.
   const { data: federal = [] } = useFederalActions({ ce_relevant: true, limit: 500, days_back: 3650 });
-  const [sortBy, setSortBy] = useState<'enacted' | 'activity'>('enacted');
+  const [natView, setNatView] = useState<'national' | 'combined'>('national'); // left column: enacted scope
+  const [subView, setSubView] = useState<'enacted' | 'activity'>('enacted');   // right column: enacted vs activity
 
-  const { states, nations, maxNationRaw, maxStateRaw, usRollup } = useMemo(() => {
+  const { states, nations, maxStateRaw, usRollup } = useMemo(() => {
     const stStage: Record<string, StageTally> = {};
     const natStage: Record<string, StageTally> = { US: blankStage() };
     const natMeta: Record<string, { region: string; code: string; name: string }> = {
@@ -371,90 +383,107 @@ function WorldStandings() {
       tallyStage((natStage[b.region] ??= blankStage()), b.status);
     }
 
-    // Federal regulatory actions (EPA/GSA/FTC rulemakings — not bills) count toward the US ACTIVITY
-    // tally as equal-weight items, so the US national row reflects its regulatory movement. They never
-    // touch the enacted-law count.
-    const usFedActions = federal.length;
-
-    const toRow = (meta: { region: string; code: string; name: string }, s: StageTally, activityBonus = 0): StandingEntry => ({
-      ...meta,
-      enacted: s.enacted,
-      motion: s.introduced + s.committee + s.advancing + s.enacted,
-      activity: s.total + activityBonus, // plain count of tracked bills (+ US federal actions)
-    });
+    const toRow = (meta: { region: string; code: string; name: string }, s: StageTally, activityBonus = 0): StandingEntry => {
+      const enacted = s.enacted;
+      const motion = s.introduced + s.committee + s.advancing + s.enacted;
+      return { ...meta, enacted, motion, activity: s.total + activityBonus, combinedEnacted: enacted, combinedMotion: motion };
+    };
 
     const states = Object.keys(stStage)
       .map(abbr => toRow({ region: 'US', code: abbr, name: STATE_NAMES[abbr] ?? abbr }, stStage[abbr]))
       .filter(r => r.motion > 0);
-    const nations = Object.keys(natStage).map(code => toRow(natMeta[code], natStage[code], code === 'US' ? usFedActions : 0));
 
-    const maxNationRaw = Math.max(1, ...nations.map(r => r.activity));
+    // Per-country sub-national totals, folded into the national row's "Combined" view. Only the US has a
+    // tracked sub-national tier today; the map generalizes as more federations gain state coverage.
+    const subEnactedByCountry: Record<string, { enacted: number; motion: number }> = {
+      US: {
+        enacted: states.reduce((n, r) => n + r.enacted, 0),
+        motion: states.reduce((n, r) => n + r.motion, 0),
+      },
+    };
+
+    const nations = Object.keys(natStage).map(code => {
+      const row = toRow(natMeta[code], natStage[code]);
+      const sub = subEnactedByCountry[code];
+      if (sub) { row.combinedEnacted = row.enacted + sub.enacted; row.combinedMotion = row.motion + sub.motion; }
+      return row;
+    });
+
     const maxStateRaw = Math.max(1, ...states.map(r => r.activity));
 
-    // Q3 — per-country combined rollup (national + sub-national). Only the US has a sub-national tier
-    // tracked today, so this is the US total; it generalizes as more federations gain state coverage.
+    // Per-country combined rollup callout: the US across every tier (federal + all 50 states).
     const usNat = nations.find(n => n.code === 'US')!;
     const usRollup = {
-      enacted: usNat.enacted + states.reduce((n, r) => n + r.enacted, 0),
-      motion: usNat.motion + states.reduce((n, r) => n + r.motion, 0),
+      enacted: usNat.combinedEnacted,
+      motion: usNat.combinedMotion,
       states: states.length,
       federalActions: federal.length,
     };
 
+    return { states, nations, maxStateRaw, usRollup };
+  }, [bills, federal]);
+
+  // National column ranks by enacted law only; "Combined" swaps in the tier-combined figures.
+  const isCombined = natView === 'combined';
+  const sortedNations = useMemo(() => {
+    const key = (r: StandingEntry) => (isCombined ? r.combinedEnacted : r.enacted);
+    const tie = (r: StandingEntry) => (isCombined ? r.combinedMotion : r.motion);
+    return [...nations].sort((a, b) => key(b) - key(a) || tie(b) - tie(a) || a.name.localeCompare(b.name));
+  }, [nations, isCombined]);
+  const natRowFor = (r: StandingEntry) =>
+    isCombined
+      ? { primary: r.combinedEnacted, secondary: r.combinedMotion, barPct: r.combinedMotion ? (r.combinedEnacted / r.combinedMotion) * 100 : 0 }
+      : { primary: r.enacted, secondary: r.motion, barPct: r.motion ? (r.enacted / r.motion) * 100 : 0 };
+
+  // Sub-national column carries the enacted-vs-activity toggle (the US pipeline is a real funnel).
+  const subEnacted = subView === 'enacted';
+  const sortedStates = useMemo(() => {
     const cmp = (a: StandingEntry, b: StandingEntry) =>
-      sortBy === 'enacted'
+      subEnacted
         ? b.enacted - a.enacted || b.activity - a.activity || a.name.localeCompare(b.name)
         : b.activity - a.activity || b.enacted - a.enacted || a.name.localeCompare(b.name);
-    nations.sort(cmp);
-    states.sort(cmp);
-
-    return { states, nations, maxNationRaw, maxStateRaw, usRollup };
-  }, [bills, federal, sortBy]);
-
-  const isEnacted = sortBy === 'enacted';
-  // Per-row display values, keyed off the active rank. Enacted: bold enacted count + enacted-share bar,
-  // muted total-in-motion. Activity: bold tracked-bill count (+ US fed actions) + relative bar, muted
-  // enacted count.
-  const rowFor = (r: StandingEntry, maxAct: number) =>
-    isEnacted
+    return [...states].sort(cmp);
+  }, [states, subEnacted]);
+  const subRowFor = (r: StandingEntry) =>
+    subEnacted
       ? { primary: r.enacted, secondary: r.motion, barPct: r.motion ? (r.enacted / r.motion) * 100 : 0 }
-      : { primary: r.activity, secondary: r.enacted, barPct: (r.activity / maxAct) * 100 };
+      : { primary: r.activity, secondary: r.enacted, barPct: (r.activity / maxStateRaw) * 100 };
+
+  const Toggle = <T extends string>({ value, options, onChange }: {
+    value: T; options: readonly (readonly [T, string])[]; onChange: (v: T) => void;
+  }) => (
+    <div className="inline-flex rounded-md border border-border-default overflow-hidden text-xs">
+      {options.map(([mode, label]) => (
+        <button
+          key={mode}
+          onClick={() => onChange(mode)}
+          aria-pressed={value === mode}
+          className={`px-2.5 py-1 font-mono uppercase tracking-wide transition-colors ${
+            value === mode ? 'bg-green-accent text-bg-primary' : 'bg-bg-secondary text-text-muted hover:text-text-primary'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
-      <GazetteHeader title="Rankings" subtitle="Circular-economy law activity by jurisdiction" />
+      <GazetteHeader title="Rankings" subtitle="Circular-economy law by jurisdiction" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
-        <div className="inline-flex rounded-md border border-border-default overflow-hidden text-xs">
-          {([['enacted', 'Enacted laws'], ['activity', 'Activity']] as const).map(([mode, label]) => (
-            <button
-              key={mode}
-              onClick={() => setSortBy(mode)}
-              aria-pressed={sortBy === mode}
-              className={`px-3 py-1.5 font-mono uppercase tracking-wide transition-colors ${
-                sortBy === mode ? 'bg-green-accent text-bg-primary' : 'bg-bg-secondary text-text-muted hover:text-text-primary'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <p className="text-text-secondary text-body -mt-2">
-        {isEnacted ? (
-          <>Ranked by <strong>laws enacted</strong> — the fair comparison across jurisdictions. Countries
-          with no national statute in force (like the US, with no federal EPR law) rank low here even
-          though their states or agencies are busy — switch to <strong>Activity</strong> for that.</>
-        ) : (
-          <>Ranked by the <strong>count of tracked bills</strong> (every status), plus US federal
-          regulatory actions — a plain tally of movement, not law in force. Switch to{' '}
-          <strong>Enacted laws</strong> for what&rsquo;s on the books.</>
-        )}
+        Two rankings side by side. <strong>National</strong> ranks countries by circular-economy law in
+        force — the fair comparison across borders; switch it to <strong>Combined</strong> to fold in each
+        country&rsquo;s sub-national laws (today that means the US and its 50 states). <strong>Sub-national</strong>
+        ranks US states, where you can toggle between law <strong>enacted</strong> and total <strong>activity</strong>.
       </p>
 
-      {/* Q3 — per-country combined rollup: the US across every tier (federal + all 50 states). */}
+      {/* Per-country combined rollup: the US across every tier (federal + all 50 states). */}
       {!isLoading && !isError && (
         <div className="rounded-lg border border-border-default bg-bg-secondary/50 px-4 py-3 text-sm text-text-secondary">
           <span className="font-serif text-text-primary">United States — all tiers combined:</span>{' '}
@@ -478,34 +507,38 @@ function WorldStandings() {
         </div>
       ) : (
         <div className="grid gap-8 md:grid-cols-2">
-          {/* Left: national law by country */}
+          {/* Left: national law by country — ranked by enacted law (National) or tier-combined enacted (Combined). */}
           <section className="space-y-3">
-            <h2 className="font-serif text-xl text-text-primary">National</h2>
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-serif text-xl text-text-primary">National</h2>
+              <Toggle value={natView} onChange={setNatView}
+                options={[['national', 'National'], ['combined', 'Combined']] as const} />
+            </div>
             <ol className="rounded-lg border border-border-default overflow-hidden">
               <li className="flex items-center gap-2.5 bg-bg-secondary px-3 py-2 text-xs uppercase tracking-wide text-text-muted">
                 <span className="w-5 text-right shrink-0">#</span>
                 <span className="w-9 shrink-0">Jx</span>
                 <span className="flex-1 min-w-0">Country</span>
-                <span className="hidden sm:block w-14 shrink-0">{isEnacted ? 'Enac. share' : 'Activity'}</span>
-                <span className="w-8 text-right shrink-0">{isEnacted ? 'Bills' : 'Enac.'}</span>
-                <span className="w-9 text-right shrink-0">{isEnacted ? 'Laws' : 'Total'}</span>
+                <span className="hidden sm:block w-14 shrink-0">Enac. share</span>
+                <span className="w-8 text-right shrink-0">Bills</span>
+                <span className="w-9 text-right shrink-0">Laws</span>
               </li>
-              {nations.map((r, i) => {
-                const v = rowFor(r, maxNationRaw);
+              {sortedNations.map((r, i) => {
+                const v = natRowFor(r);
                 return (
                   <StandingRow key={`${r.region}/${r.code}`} rank={i + 1} code={r.code} name={r.name}
                     href={`/jurisdictions/${r.region.toLowerCase()}/${r.code.toLowerCase()}/`}
                     primary={v.primary} secondary={v.secondary} barPct={v.barPct}
-                    tag={r.region === 'US' ? 'federal' : undefined}
-                    note={r.region === 'US' && !isEnacted ? `incl. ${federal.length} fed actions` : undefined} />
+                    tag={r.region === 'US' && !isCombined ? 'federal' : undefined} />
                 );
               })}
             </ol>
             <p className="text-meta text-text-muted">
-              A <span className="uppercase">federal</span> tag marks a country counted on its national law
-              only (e.g. the US) — its sub-national activity is the board on the right. US federal agency
-              regulatory actions (EPA/GSA/FTC rulemakings) count toward the <strong>Activity</strong> rank
-              only, never the enacted-law count. Regulatory actions are tracked only for the US today.
+              National law is enacted-heavy with no introduced→enacted pipeline, so this column ranks
+              purely by <strong>laws in force</strong>. On <span className="uppercase">National</span> a
+              federal tag marks a country counted on its national statutes only (e.g. the US, with no
+              federal EPR law); <span className="uppercase">Combined</span> folds in its sub-national tier —
+              the board on the right — which is what lifts the US.
             </p>
           </section>
 
@@ -513,23 +546,27 @@ function WorldStandings() {
           <section className="space-y-3">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="font-serif text-xl text-text-primary">Sub-national</h2>
-              {/* Quick-select the national jurisdiction this sub-national tier belongs to. Today that's the
-                  US (opens its full momentum board); becomes a picker when more federations are tracked. */}
-              <button onClick={() => setRegions(['US'])} className="text-xs text-green-accent hover:underline whitespace-nowrap">
-                United States &rarr;
-              </button>
+              <div className="flex items-center gap-3">
+                <Toggle value={subView} onChange={setSubView}
+                  options={[['enacted', 'Enacted'], ['activity', 'Activity']] as const} />
+                {/* Quick-select the national jurisdiction this sub-national tier belongs to. Today that's the
+                    US (opens its full momentum board); becomes a picker when more federations are tracked. */}
+                <button onClick={() => setRegions(['US'])} className="text-xs text-green-accent hover:underline whitespace-nowrap">
+                  United States &rarr;
+                </button>
+              </div>
             </div>
             <ol className="rounded-lg border border-border-default overflow-hidden">
               <li className="flex items-center gap-2.5 bg-bg-secondary px-3 py-2 text-xs uppercase tracking-wide text-text-muted">
                 <span className="w-5 text-right shrink-0">#</span>
                 <span className="w-9 shrink-0">St</span>
                 <span className="flex-1 min-w-0">State</span>
-                <span className="hidden sm:block w-14 shrink-0">{isEnacted ? 'Enac. share' : 'Activity'}</span>
-                <span className="w-8 text-right shrink-0">{isEnacted ? 'Bills' : 'Enac.'}</span>
-                <span className="w-9 text-right shrink-0">{isEnacted ? 'Laws' : 'Total'}</span>
+                <span className="hidden sm:block w-14 shrink-0">{subEnacted ? 'Enac. share' : 'Activity'}</span>
+                <span className="w-8 text-right shrink-0">{subEnacted ? 'Bills' : 'Enac.'}</span>
+                <span className="w-9 text-right shrink-0">{subEnacted ? 'Laws' : 'Total'}</span>
               </li>
-              {states.map((r, i) => {
-                const v = rowFor(r, maxStateRaw);
+              {sortedStates.map((r, i) => {
+                const v = subRowFor(r);
                 return (
                   <StandingRow key={r.code} rank={i + 1} code={r.code} name={r.name}
                     href={`/jurisdictions/us/${r.code.toLowerCase()}/`}

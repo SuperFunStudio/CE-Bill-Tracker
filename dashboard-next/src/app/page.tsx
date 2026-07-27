@@ -325,22 +325,9 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Filters first — Region + State up front, the rest behind "More filters" — then the ask bar. */}
-        <div className="mb-3">
-          <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
-
-          {region === 'US' && billFilters.state && (
-            <div className="mt-2 text-sm text-text-muted">
-              Showing <span className="text-green-accent font-medium">{STATE_NAMES[billFilters.state] ?? billFilters.state}</span>
-              {' — '}
-              <Link href={`/jurisdictions/us/${billFilters.state.toLowerCase()}/`} className="underline hover:text-text-secondary">view {STATE_NAMES[billFilters.state] ?? billFilters.state} profile</Link>
-              {' · '}
-              <button onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className="underline hover:text-text-secondary">clear</button>
-            </div>
-          )}
-        </div>
-
-        {/* The adaptive bar — keywords filter the table instantly; a full question gets a cited answer. */}
+        {/* The adaptive bar leads — keywords filter the table instantly; a full question gets a cited
+            answer. It sits ABOVE the facets so it reads as the primary action, not something the filters
+            below it control. */}
         <form onSubmit={e => { e.preventDefault(); submitQuery(); }} className="mb-3">
           <div className="flex items-center gap-2 rounded-xl border-2 border-green-accent/60 bg-bg-secondary px-3 py-2 focus-within:border-green-accent transition-colors">
             <span aria-hidden className="text-text-muted text-lg leading-none">⌕</span>
@@ -371,6 +358,22 @@ export default function HomePage() {
             <b className="text-text-secondary font-medium">ask a full question</b> for a grounded, cited answer over the same corpus.
           </p>
         </form>
+
+        {/* Facets below the bar — Region + State up front, the rest behind "More filters" — they narrow
+            the same corpus the bar searches. */}
+        <div className="mb-3">
+          <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
+
+          {region === 'US' && billFilters.state && (
+            <div className="mt-2 text-sm text-text-muted">
+              Showing <span className="text-green-accent font-medium">{STATE_NAMES[billFilters.state] ?? billFilters.state}</span>
+              {' — '}
+              <Link href={`/jurisdictions/us/${billFilters.state.toLowerCase()}/`} className="underline hover:text-text-secondary">view {STATE_NAMES[billFilters.state] ?? billFilters.state} profile</Link>
+              {' · '}
+              <button onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className="underline hover:text-text-secondary">clear</button>
+            </div>
+          )}
+        </div>
 
       </section>
 

@@ -6,7 +6,8 @@ import { formatInstrumentType } from '@/lib/utils';
 import { CheckIcon } from '@/components/ui/icons';
 import { useScope } from '@/components/scope/ScopeContext';
 import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
-import { REGION_LABELS, jurisdictionsFor } from '@/lib/jurisdictions';
+import { jurisdictionsFor } from '@/lib/jurisdictions';
+import { REGION_CODES, regionLabel } from '@/components/insights/RegionFilter';
 
 // Policy "topics" a reader can follow — the tracked circular-economy instruments
 // (see app/classification instrument_type enum). Order mirrors the About copy.
@@ -16,13 +17,18 @@ const TOPICS = ['epr', 'right_to_repair', 'deposit_return', 'recycled_content', 
 const formatMaterial = (slug: string) =>
   slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-// Regions a subscriber can follow. `hasSub` = the region has selectable sub-jurisdictions today
-// (US states). EU member-state selection arrives with Phase B national law, so EU is whole-region
-// for now; new regions (UK, …) flip hasSub on once their jurisdiction data lands.
-const SUB_REGIONS: { code: string; hasSub: boolean }[] = [
+// The two anchor regions get their own detail card: US drills down to states (`hasSub`); EU is
+// whole-region (EU-wide directives — its member states are followable as their own regions in the
+// chip grid below). Everything else is national law we ingest as a single followable region.
+const ANCHOR_REGIONS: { code: string; hasSub: boolean }[] = [
   { code: 'US', hasSub: true },
   { code: 'EU', hasSub: false },
 ];
+// Every other tracked jurisdiction, followed whole-region. Derived from REGION_CODES (the single
+// source of truth for "which jurisdictions exist"), so new adapters appear here automatically.
+const OTHER_REGIONS = REGION_CODES.filter(c => c !== 'US' && c !== 'EU');
+// The full universe this form can build a subscription scope for.
+const ALL_REGION_CODES = ['US', 'EU', ...OTHER_REGIONS];
 
 type RegionSel = { included: boolean; all: boolean; codes: string[] };
 
@@ -45,10 +51,11 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
   const [organization, setOrganization] = useState('');
   const [topics, setTopics] = useState<string[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
-  const [regionSel, setRegionSel] = useState<Record<string, RegionSel>>({
-    US: { included: true, all: true, codes: [] },
-    EU: { included: false, all: true, codes: [] },
-  });
+  const [regionSel, setRegionSel] = useState<Record<string, RegionSel>>(() =>
+    Object.fromEntries(
+      ALL_REGION_CODES.map(code => [code, { included: code === 'US', all: true, codes: [] }]),
+    ),
+  );
   const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
   const [error, setError] = useState('');
 
@@ -94,7 +101,7 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
 
   function buildRegionScope(): Record<string, string[]> {
     const scopeOut: Record<string, string[]> = {};
-    for (const { code } of SUB_REGIONS) {
+    for (const code of ALL_REGION_CODES) {
       const s = regionSel[code];
       if (!s?.included) continue;
       scopeOut[code] = s.all || s.codes.length === 0 ? ['*'] : s.codes;
@@ -208,9 +215,10 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
           Regions &amp; jurisdictions
         </legend>
         <div className="space-y-3">
-          {SUB_REGIONS.map(({ code, hasSub }) => {
+          {/* Anchor regions — US (drills to states) and the EU bloc — get a full card. */}
+          {ANCHOR_REGIONS.map(({ code, hasSub }) => {
             const sel = regionSel[code];
-            const label = REGION_LABELS[code] ?? code;
+            const label = regionLabel(code);
             return (
               <div key={code} className="rounded-md border border-border-default p-3">
                 <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
@@ -259,12 +267,38 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
 
                 {sel.included && !hasSub && (
                   <p className="mt-1 pl-6 text-text-muted text-xs">
-                    EU-wide measures now; member-state coverage is coming.
+                    EU-wide measures. Follow individual member states as their own regions below.
                   </p>
                 )}
               </div>
             );
           })}
+
+          {/* Every other tracked jurisdiction — national law, followed whole-region — as compact chips. */}
+          <div>
+            <p className="text-text-muted text-xs mb-2">More jurisdictions</p>
+            <div className="flex flex-wrap gap-2">
+              {OTHER_REGIONS.map(code => {
+                const on = regionSel[code]?.included;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    onClick={() => patchRegion(code, { included: !on })}
+                    aria-pressed={on}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
+                      on
+                        ? 'border-green-accent bg-green-dark text-green-accent'
+                        : 'border-border-default text-text-secondary hover:border-green-accent/40 hover:text-text-primary'
+                    }`}
+                  >
+                    {on && <CheckIcon className="text-xs" />}
+                    {regionLabel(code)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
         <p className="text-text-muted text-xs mt-2">Uncheck all regions to follow everything.</p>
       </fieldset>

@@ -12,10 +12,10 @@ export type BillingPeriod = 'monthly' | 'annual';
 
 // Header — value anchoring above the tier grid.
 export const PRICING_HEADER = {
-  title: 'Circular economy regulation, tracked across 25+ jurisdictions',
+  title: 'Circular economy regulation, tracked across 37 jurisdictions',
   subtitle:
     "Legislative intelligence platforms start around $50,000 a year. Atlas covers what they don't — and costs what a single missed EPR registration would.",
-  chips: ['25+ jurisdictions', 'EPR, packaging, right to repair, ESPR', 'Updated daily'],
+  chips: ['37 jurisdictions', 'EPR, packaging, right to repair, ESPR', 'Updated daily'],
 };
 
 // Student — verified-edu, free. The return to us is distribution, not revenue: students carry Atlas
@@ -32,7 +32,7 @@ export const STUDENT = {
 // Researchers — monthly or annual (annual discounted). Mirrors PRO's two-period shape so the pricing
 // toggle drives both cards.
 export const RESEARCH = {
-  label: 'Researchers',
+  label: 'Researcher',
   monthly: { price: '$30', cadence: '/mo', sub: '1 seat' },
   annual: {
     price: '$240',

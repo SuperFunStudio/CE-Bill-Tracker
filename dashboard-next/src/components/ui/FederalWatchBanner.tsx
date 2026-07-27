@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 const STORAGE_KEY = 'botb_federal_watch_dismissed';
 
 /**
- * Pithy, dismissible federal-preemption notice. "Learn more" jumps to the full
- * #federal-context section at the bottom of the page; the ✕ hides it (remembered).
+ * Pithy, dismissible federal-preemption notice. "Learn more" links to Upcoming Deadlines
+ * (where the Oregon case is tracked); the ✕ hides it (remembered).
  */
 export function FederalWatchBanner({ highRiskCount = 0 }: { highRiskCount?: number }) {
   const [hidden, setHidden] = useState(true);
@@ -26,15 +27,15 @@ export function FederalWatchBanner({ highRiskCount = 0 }: { highRiskCount?: numb
       <div className="flex items-center gap-2 text-sm min-w-0">
         <span aria-hidden className="shrink-0">⚖️</span>
         <span className="truncate sm:whitespace-normal">
-          The wildcard: an Oregon court case this July could let judges strike down state
-          packaging laws nationwide{highRiskCount > 0 ? ` (${highRiskCount} federal actions on watch)` : ''}.
+          The wildcard: an Oregon court case could let judges strike down state packaging laws
+          nationwide — a ruling is expected this August{highRiskCount > 0 ? ` (${highRiskCount} federal actions on watch)` : ''}.
         </span>
-        <a
-          href="#federal-context"
+        <Link
+          href="/compliance"
           className="shrink-0 font-medium underline underline-offset-2 hover:no-underline whitespace-nowrap"
         >
-          Learn more ↓
-        </a>
+          Learn more →
+        </Link>
       </div>
       <button
         onClick={dismiss}

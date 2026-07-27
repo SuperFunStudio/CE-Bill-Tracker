@@ -256,11 +256,11 @@ export default function HomePage() {
         <section className="rounded-xl border border-green-accent/30 bg-green-hero p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="max-w-2xl">
             <h1 className="font-serif text-2xl sm:text-3xl text-text-primary leading-tight text-balance">
-              A compliance deadline never slips past you when someone's already read every bill.
+              Never miss a compliance deadline.
             </h1>
             <p className="mt-2 text-text-secondary text-body leading-relaxed">
-              We track every circular-economy bill and EPR obligation across all 50 states — and pull out the dates and requirements so you don't have to.
-              Start free — no card required.
+              We track every circular-economy bill and EPR obligation, then pull out the dates and
+              requirements so you don&apos;t have to. Start free — no card required.
             </p>
           </div>
           <div className="flex flex-col gap-2 shrink-0 sm:w-48">
@@ -473,42 +473,8 @@ export default function HomePage() {
         {isUsView && <FederalWatchBanner highRiskCount={highPreemption} />}
       </div>
 
-      {/* Portfolio Exposure front door — promote the paid translation from a buried tab */}
-      <section className="rounded-xl border border-green-accent/30 bg-green-dark/20 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="max-w-xl">
-          <h2 className="font-serif text-xl text-text-primary mb-1">See what this means for your portfolio</h2>
-          <p className="text-text-secondary text-sm leading-relaxed">
-            Translate the firehose into your exposure — which enacted laws hit your materials and
-            states, what each one requires, and when your next deadline falls.
-          </p>
-        </div>
-        <Link
-          href="/company"
-          className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-semibold px-5 py-2.5 hover:opacity-90 transition-opacity text-center"
-        >
-          See your exposure →
-        </Link>
-      </section>
-
       {/* Get free updates */}
       <SubscribeSection className="border-t border-border-default pt-8" />
-
-      {/* Federal preemption context — target of the banner's "Learn more" */}
-      <section id="federal-context" className="scroll-mt-6 border-t border-border-default pt-6">
-        <h2 className="font-serif text-2xl text-text-primary mb-2">Federal preemption watch</h2>
-        <p className="text-text-secondary text-sm sm:text-base max-w-3xl leading-relaxed">
-          The Oregon NAW constitutional challenge — trial <span className="text-text-primary font-medium">July 13, 2026</span> —
-          argues that state packaging EPR programs violate the Dormant Commerce Clause. A ruling for the
-          plaintiffs could set precedent for challenges to packaging laws in every state, which is why it&rsquo;s
-          the single most important thing to watch this year.
-          {highPreemption > 0 && (
-            <> We're tracking <span className="text-text-primary font-medium">{highPreemption}</span> high-risk federal {highPreemption === 1 ? 'action' : 'actions'} right now.</>
-          )}
-        </p>
-        <Link href="/federal" className="inline-block mt-3 text-sm text-green-accent hover:underline">
-          View Federal Actions &rarr;
-        </Link>
-      </section>
 
       {/* Footer */}
       <footer className="border-t border-border-default pt-6 pb-2 text-center">

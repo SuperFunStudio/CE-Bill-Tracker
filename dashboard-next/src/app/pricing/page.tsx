@@ -166,7 +166,7 @@ export default function PricingPage() {
             // via the modal rather than self-serving Stripe checkout. The team reviews the request in
             // /admin and sends a Stripe invoice / payment link on approval. (The `research` checkout
             // path in billing.py still exists but is intentionally no longer reachable from the UI.)
-            <button onClick={() => openPlan('research', 'Researchers')} className={primaryBtn}>
+            <button onClick={() => openPlan('research', 'Researcher')} className={primaryBtn}>
               Request access →
             </button>
           )}

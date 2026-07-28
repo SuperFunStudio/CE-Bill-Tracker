@@ -179,10 +179,19 @@ async def main() -> None:
         await engine.dispose()
         return
 
+    # Rewrite BOTH the primary instrument_type AND the instrument_types JSONB array, so the array-based
+    # filters (GET /bills, the instrument matrices) surface the promoted bill under its new instrument.
+    # Updating only the primary left the array as its stale ['other'], so the new filter chip returned
+    # nothing while the primary-based donut showed the bill — a drift this repairs going forward. The new
+    # array is [new_type, ...any other real types the bill already carried], dropping the now-stale 'other'.
     async with Session() as db:
         for r in promote:
             await db.execute(
-                text("UPDATE bills SET instrument_type=:t, updated_at=now() WHERE id=:id"),
+                text("UPDATE bills SET instrument_type=:t, updated_at=now(), "
+                     "instrument_types = jsonb_build_array(:t) || COALESCE((SELECT jsonb_agg(e) "
+                     "FROM jsonb_array_elements_text(COALESCE(instrument_types,'[]'::jsonb)) e "
+                     "WHERE e NOT IN ('other', :t)), '[]'::jsonb) "
+                     "WHERE id=:id"),
                 {"t": r["new"], "id": r["id"]})
         await db.commit()
     print(f"\nUPDATED {len(promote)} bills out of `other` into a named instrument.")

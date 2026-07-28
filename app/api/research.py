@@ -377,7 +377,7 @@ async def _count_match(db: AsyncSession, tsq, extra=()) -> int:
 
 async def _relevant_bills(
     db: AsyncSession, question: str, page: int = 1, page_size: int = _PAGE_SIZE, facets=None,
-    balance_regions: bool = False,
+    balance_regions: bool = False, broaden_floor: int = 0,
 ) -> tuple[list, int, str]:
     """The FULL set of bills relevant to `question`, one page at a time — (rows, total, strategy),
     deterministic so paging is stable. Facet-hybrid: jurisdiction is resolved from the question
@@ -388,6 +388,10 @@ async def _relevant_bills(
       2. structured-by-dimension — only when NO place was named (a place means "list bills there");
       3. OR-broaden — only when no place was named and free text found nothing precise;
       4. listing — the base set (place-scoped, or the whole corpus) ranked by recency.
+    `broaden_floor` (Fix #2, set on the router-driven path): if RULE 1's precise match is thinner than
+    this, DON'T return it — fall through to a broader rule (the structured-scope listing when scoped, or
+    the OR-broaden when not). This kills the router's over-narrow failure where a residual free_text term
+    ANDs a good scoped set down to 1-2 bills; the deterministic path passes 0 (behaviour unchanged).
     The metadata arm reaches the same titled bills the Explorer shows (incl. non-English laws like
     AGEC). Match rules carry a `snippet` (ts_headline, body text falling back to title); listing/
     dimension rules don't (rows expose it via getattr default). Litigation columns join for the table.
@@ -521,7 +525,10 @@ async def _relevant_bills(
         # query (extra terms present) into the whole dimension. See _dim_is_dominant.
         defer_to_dim = (dim_ok and n < _MIN_TEXT_HITS and dim_total > n
                         and _dim_is_dominant(substantive, trig))
-        if n > 0 and not defer_to_dim:
+        # Fix #2: on the router-driven path, a match thinner than the floor is the over-narrow bug — let
+        # it fall through to the structured-scope listing (RULE 4) or the OR-broaden (RULE 3).
+        too_thin = broaden_floor and n < broaden_floor
+        if n > 0 and not defer_to_dim and not too_thin:
             rows = await _match_rows(tsq)
             return rows, n, _place_strategy("text")
 
@@ -993,7 +1000,7 @@ async def _load_history(db: AsyncSession, uid: str, session_id: str):
 
 
 async def _persist_turn(uid, question, facets, strategy, total, answer_text, cited_ids, bill_ids,
-                        shadow=None, session_id=None, seq=1, retrieval_query=None):
+                        shadow=None, session_id=None, seq=1, retrieval_query=None, used_router=False):
     """Persist the answer as a research_session + turn — the analysis layer that later becomes the
     Layer-1 knowledge cache. Uses its OWN fresh session (not the request's, which was released before
     the long LLM call) so a healthy connection does the write. When `session_id` is given (a follow-up),
@@ -1007,9 +1014,10 @@ async def _persist_turn(uid, question, facets, strategy, total, answer_text, cit
             s.add(sess)
             await s.flush()
             session_id = sess.id
-        fac = {"places": facets.place_labels, "reference": facets.reference_labels, "strategy": strategy}
+        fac = {"places": facets.place_labels, "reference": facets.reference_labels, "strategy": strategy,
+               "routed_by": "router" if used_router else "deterministic"}  # which resolver drove retrieval
         if shadow:
-            fac["shadow_router"] = shadow  # A1 shadow-mode comparison (router vs deterministic); not used for retrieval
+            fac["shadow_router"] = shadow  # router-vs-deterministic comparison (persisted every ask)
         s.add(ResearchTurn(
             session_id=session_id, seq=seq, question=question,
             rewritten_query=(retrieval_query if retrieval_query is not None else facets.free_text),
@@ -1021,12 +1029,21 @@ async def _persist_turn(uid, question, facets, strategy, total, answer_text, cit
         return session_id
 
 
-# --- Shadow-mode LLM router (A1) -----------------------------------------------------------------
-# Runs the LLM query router (app/api/research_router.py) alongside the deterministic resolver on every
-# ask, logs + persists the comparison, but does NOT drive retrieval yet. Fired concurrently with the
-# Sonnet synthesis (which makes no DB calls), so it adds ~no latency. Flip to router-driven retrieval
-# only after the shadow diffs on real traffic look right. See tests/eval/README.md.
+# --- LLM router (A1) — SELECTIVE primary + shadow ------------------------------------------------
+# The LLM query router (app/api/research_router.py) runs alongside the deterministic resolver on every
+# ask. Two things happen with its output:
+#   (1) SELECTIVE FLIP — for the intents where a 121-ask shadow review showed the router clearly beats
+#       the deterministic resolver (count aggregates; 2-place comparisons), its facets DRIVE retrieval.
+#       Everything else stays on the deterministic path, which still wins the place-anchored "what can X
+#       teach" family. See _should_use_router.
+#   (2) SHADOW — the comparison is still logged/persisted for every ask so we can keep widening the flip.
+# The flip is safe because (a) reference-place anchoring (research_router Fix #1) stops the router
+# collapsing a named place to junk, and (b) broaden_floor (Fix #2) stops a residual free_text term
+# over-narrowing a good scoped set to 1-2 bills.
 _query_router = None
+
+# Router-driven retrieval broadens away any free-text match thinner than this (the over-narrow bug).
+_ROUTER_MIN_HITS = 3
 
 
 def _get_router():
@@ -1037,38 +1054,82 @@ def _get_router():
     return _query_router
 
 
+def _should_use_router(rf) -> bool:
+    """Whether the router's facets (not the deterministic resolver's) should DRIVE retrieval for this
+    ask. Scoped to the two intents the shadow review validated as router wins; the deterministic path
+    keeps everything else (esp. single-place "learn from X" questions it already anchors well)."""
+    if rf is None:
+        return False
+    if rf.intent == "count":
+        return True
+    # A genuine head-to-head comparison across 2+ explicitly named jurisdictions.
+    if rf.intent == "compare" and len(rf.place_labels) >= 2:
+        return True
+    return False
+
+
+async def _route_safe(question: str):
+    """Route a question on the router's OWN session, never raising — a router failure (LLM error, bad
+    parse) just means we fall back to the deterministic resolver. Returns RoutedFacets or None."""
+    try:
+        async with AsyncSessionLocal() as s:
+            return await _get_router().route(s, question)
+    except Exception as e:  # noqa: BLE001 — routing must never break the ask
+        log.warning("research_router_failed", error=str(e))
+        return None
+
+
+async def _choose_facets(db: AsyncSession, question: str):
+    """Resolve BOTH the deterministic facets and the router's, then pick which drives retrieval. The two
+    run concurrently (the router uses its own session, so there's no shared-session race), and the router
+    parse is cached per-question so /research/bills re-deriving the same choice for paging is ~free.
+    Returns (facets_for_retrieval, used_router, rf_or_None, det_facets)."""
+    det_facets, rf = await asyncio.gather(resolve_facets(db, question), _route_safe(question))
+    used_router = _should_use_router(rf)
+    return (rf.to_facets() if used_router else det_facets), used_router, rf, det_facets
+
+
 def _facet_diff(det_slugs, router_slugs):
     d, r = set(det_slugs), set(router_slugs)
     only_d, only_r = sorted(d - r), sorted(r - d)
     return {"only_deterministic": only_d, "only_router": only_r} if (only_d or only_r) else None
 
 
-async def _shadow_route(question: str, det, det_total: int, det_top_ids: list) -> dict | None:
-    """Best-effort shadow comparison. On a fresh session: route `question`, diff the facets vs the
-    deterministic `det`, AND re-run the SAME retrieval with the router's facets to record the actual
-    RESULTS delta (total + top-page bill-set difference) vs the deterministic result the user got.
-    MUST NOT raise — it runs in a gather() with synthesis, so an exception here would break the answer."""
+async def _shadow_route(question: str, det, rf, used_router: bool) -> dict | None:
+    """Best-effort side-by-side comparison of the deterministic resolver vs the router, persisted on
+    every ask so we can keep widening the flip (see _should_use_router). `rf` was already routed in
+    _choose_facets (no second LLM call). Re-runs BOTH retrievals off its OWN session — with the router
+    path getting the SAME broaden_floor it would on the live flip — and records the results delta plus
+    `used_router` (whether the router actually drove THIS ask). MUST NOT raise — it's gather()'d with
+    synthesis, so an exception here would break the answer."""
+    if rf is None:
+        return None
     try:
         async with AsyncSessionLocal() as s:
-            rf = await _get_router().route(s, question)
+            d_rows, det_total, det_strategy = await _relevant_bills(
+                s, question, page=1, page_size=_PAGE_SIZE, facets=det)
             r_rows, r_total, r_strategy = await _relevant_bills(
-                s, question, page=1, page_size=_PAGE_SIZE, facets=rf.to_facets())
-            r_ids = [row.Bill.id for row in r_rows]
+                s, question, page=1, page_size=_PAGE_SIZE, facets=rf.to_facets(),
+                broaden_floor=_ROUTER_MIN_HITS)
+        det_ids = [row.Bill.id for row in d_rows]
+        r_ids = [row.Bill.id for row in r_rows]
         diff = {k: v for k, v in {
             "materials": _facet_diff(det.material_slugs, rf.material_slugs),
             "instruments": _facet_diff(det.instrument_slugs, rf.instrument_slugs),
             "products": _facet_diff(det.product_slugs, rf.product_slugs),
             "places": _facet_diff(det.place_labels, rf.place_labels),
         }.items() if v}
-        d, r = set(det_top_ids), set(r_ids)
+        d, r = set(det_ids), set(r_ids)
         results = {
-            "det_total": det_total, "router_total": r_total, "router_strategy": r_strategy,
+            "det_total": det_total, "det_strategy": det_strategy,
+            "router_total": r_total, "router_strategy": r_strategy,
             "top_overlap": len(d & r), "top_only_deterministic": sorted(d - r),
             "top_only_router": sorted(r - d),
         }
         has_illus = bool(rf.material_illustrations or rf.product_illustrations or rf.instrument_illustrations)
         shadow = {
             "intent": rf.intent,
+            "used_router": used_router,  # did the router actually drive retrieval for THIS ask?
             "router": {
                 "places": rf.place_labels, "reference": rf.reference_labels, "exclude": rf.exclude_place_labels,
                 "materials": rf.material_slugs, "instruments": rf.instrument_slugs,
@@ -1080,8 +1141,8 @@ async def _shadow_route(question: str, det, det_total: int, det_top_ids: list) -
             },
             "diff": diff, "results": results, "has_illustrations": has_illus,
         }
-        log.info("research_shadow_router", q=question[:120], intent=rf.intent, diff=diff or None,
-                 det_total=det_total, router_total=r_total,
+        log.info("research_shadow_router", q=question[:120], intent=rf.intent, used_router=used_router,
+                 diff=diff or None, det_total=det_total, router_total=r_total,
                  top_changed=len(d ^ r), illus=has_illus)
         return shadow
     except Exception as e:  # noqa: BLE001 — shadow must never affect the ask
@@ -1194,7 +1255,10 @@ async def ask_the_atlas(
         history, seq, session_id = await _load_history(db, access.uid, body.session_id)
     retrieval_q = await _rewrite_followup(history, question) if history else question
 
-    facets = await resolve_facets(db, retrieval_q)
+    # Resolve BOTH resolvers and pick which drives retrieval (router for count / 2-place compare, else
+    # deterministic). `used_router` also sets broaden_floor so a thin router free-text match broadens.
+    facets, used_router, rf, det_facets = await _choose_facets(db, retrieval_q)
+    broaden_floor = _ROUTER_MIN_HITS if used_router else 0
     geo_extra = _scope_extra(facets)  # jurisdiction + material scope for the scoped aggregates
 
     # The full matched set drives the table (page 1); the top _DEEP_READ are read DEEPLY — their
@@ -1205,9 +1269,10 @@ async def ask_the_atlas(
     # displayed table (page_rows) is always pure relevance. Admins can flip it per-request for the A/B;
     # everyone else gets the server default.
     do_balance = body.balance_regions if (body.balance_regions is not None and access.is_admin) else _REGION_BALANCED_READ
-    page_rows, total, strategy = await _relevant_bills(db, retrieval_q, page=1, page_size=_PAGE_SIZE, facets=facets)
+    page_rows, total, strategy = await _relevant_bills(
+        db, retrieval_q, page=1, page_size=_PAGE_SIZE, facets=facets, broaden_floor=broaden_floor)
     read_rows, _, _ = await _relevant_bills(db, retrieval_q, page=1, page_size=_DEEP_READ, facets=facets,
-                                            balance_regions=do_balance)
+                                            balance_regions=do_balance, broaden_floor=broaden_floor)
 
     terms = facets.meaningful_terms()
     passages = await _passages_for(db, [r.Bill.id for r in read_rows], terms)
@@ -1241,11 +1306,12 @@ async def ask_the_atlas(
     read_bill_ids = [r.Bill.id for r in read_rows]
     await db.close()
 
-    # Synthesis (Sonnet, DB-free) and the shadow router (Haiku, own session) run concurrently — the
-    # router finishes within the synthesis window, so shadow mode costs ~no added latency.
+    # Synthesis (Sonnet, DB-free) and the shadow comparison (re-runs BOTH retrievals off its own session)
+    # run concurrently — the comparison finishes within the synthesis window, so it costs ~no latency. The
+    # router was already called in _choose_facets, so no second LLM call — rf is passed straight through.
     answer_text, shadow = await asyncio.gather(
         _safe_deep_answer(question, scope, agg_scoped, agg_corpus, packed, history=history),
-        _shadow_route(retrieval_q, facets, total, [r.Bill.id for r in page_rows]),
+        _shadow_route(retrieval_q, det_facets, rf, used_router),
     )
     # None = synthesis errored/timed out (see _safe_deep_answer): degrade to a retry message, still
     # return the bills table below, and DON'T persist a junk turn. "" = model returned empty (rare) →
@@ -1291,7 +1357,8 @@ async def ask_the_atlas(
         try:
             session_id = await _persist_turn(
                 access.uid, question, facets, strategy, total, answer_text, cited_ids, read_bill_ids,
-                shadow=shadow, session_id=session_id, seq=seq, retrieval_query=retrieval_q)
+                shadow=shadow, session_id=session_id, seq=seq, retrieval_query=retrieval_q,
+                used_router=used_router)
         except Exception as e:  # noqa: BLE001
             log.warning("research_persist_failed", error=str(e))
 
@@ -1323,10 +1390,15 @@ async def research_bills(
     _user: AuthedUser = Depends(require_capability(CAP_ASK)),
     db: AsyncSession = Depends(get_db),
 ) -> ResearchBillPage:
-    """SQL-only pagination over the FULL relevant-bill set for a question — no LLM call. The Ask page's
-    Prev/Next hit this for pages 2+, re-running the same deterministic cascade as /research/ask and
-    slicing, so Next is cheap and the set is identical to what the answer narrated."""
-    rows, total, strategy = await _relevant_bills(db, question, page=page, page_size=page_size)
+    """SQL-only pagination over the FULL relevant-bill set for a question. The Ask page's Prev/Next hit
+    this for pages 2+, re-running the same cascade as /research/ask and slicing, so Next is cheap and the
+    set is identical to what the answer narrated. It re-derives the SAME router-vs-deterministic choice
+    (_choose_facets) so a router-driven answer pages consistently; the per-question router parse is cached
+    so this is ~free. One Haiku call at most (cache miss on a cold replica)."""
+    facets, used_router, _rf, _det = await _choose_facets(db, question)
+    broaden_floor = _ROUTER_MIN_HITS if used_router else 0
+    rows, total, strategy = await _relevant_bills(
+        db, question, page=page, page_size=page_size, facets=facets, broaden_floor=broaden_floor)
     return ResearchBillPage(
         total=total, page=page, page_size=page_size, strategy=strategy,
         items=[_row_to_summary(r) for r in rows],

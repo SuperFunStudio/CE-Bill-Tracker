@@ -30,7 +30,7 @@ from app.classification.materials import CANONICAL_MATERIALS
 from app.config import settings
 from app.models import Jurisdiction
 from app.synthesis.product_taxonomy import SLUGS as PRODUCT_SLUGS, vocab_block
-from app.api.research_facets import Facets
+from app.api.research_facets import Facets, _EVERYWHERE_CUES
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
@@ -199,6 +199,8 @@ class RoutedFacets:
     place_ids: list[int] = field(default_factory=list)
     place_labels: list[str] = field(default_factory=list)
     reference_labels: list[str] = field(default_factory=list)
+    reference_ids: list[int] = field(default_factory=list)  # subtree ids of reference-role places
+    anchor_references: bool = False  # Fix #1: scope retrieval TO the reference place (still narrate as reference)
     exclude_place_ids: list[int] = field(default_factory=list)
     exclude_place_labels: list[str] = field(default_factory=list)
     material_slugs: list[str] = field(default_factory=list)
@@ -215,9 +217,17 @@ class RoutedFacets:
     def to_facets(self) -> Facets:
         """Degrade to the existing deterministic Facets contract: FILTER-role facets only, so
         _scope_extra / _relevant_bills behave exactly as today (illustrations never become AND
-        filters). Shadow-mode adapter."""
+        filters). Shadow-mode adapter.
+
+        Fix #1 (reference-place anchoring): when the only geography the router found is a REFERENCE
+        place ("what can France teach the rest?"), we still scope retrieval to it — exactly like the
+        deterministic RULE 3 — instead of dropping to a place-less free-text scan that collapses to a
+        handful of junk hits. The place stays labeled a reference for narration (place_labels empty)."""
+        place_ids, place_labels = self.place_ids, self.place_labels
+        if self.anchor_references and not self.place_ids:
+            place_ids, place_labels = self.reference_ids, []
         return Facets(
-            place_ids=self.place_ids, place_labels=self.place_labels,
+            place_ids=place_ids, place_labels=place_labels,
             reference_labels=self.reference_labels,
             material_slugs=self.material_slugs,
             material_labels=[s.replace("_", " ") for s in self.material_slugs],
@@ -258,6 +268,7 @@ async def _bind(db: AsyncSession, data: dict, question: str) -> RoutedFacets:
         select(Jurisdiction.id, Jurisdiction.name, Jurisdiction.path, Jurisdiction.aliases))).all()
 
     filt_paths, ref_labels, excl_paths, filt_labels, excl_labels = set(), [], set(), [], []
+    ref_paths: set = set()
     for p in data.get("places", []):
         matches = _match_place(nodes, (p or {}).get("name", ""))
         if not matches:
@@ -265,6 +276,7 @@ async def _bind(db: AsyncSession, data: dict, question: str) -> RoutedFacets:
         role = (p or {}).get("role", "filter")
         if role == "reference":
             ref_labels += [n.name for n in matches]
+            ref_paths |= {n.path for n in matches}
         elif role == "exclude":
             excl_paths |= {n.path for n in matches}
             excl_labels += [n.name for n in matches]
@@ -278,10 +290,18 @@ async def _bind(db: AsyncSession, data: dict, question: str) -> RoutedFacets:
     dims = [d for d in data.get("dimensions", []) if d in DIMENSION_KEYS]
     intent = data.get("intent") if data.get("intent") in INTENTS else "list"
 
+    # Fix #1: a reference place with NO filter place and no explicit "search everywhere" cue is still the
+    # retrieval anchor (scope to it) — mirrors research_facets RULE 3. An everywhere cue ("across all
+    # regions") keeps the place a pure benchmark (no scope), matching the deterministic _EVERYWHERE_CUES.
+    reference_ids = _subtree_ids(nodes, ref_paths)
+    everywhere = any(cue in f" {question.lower()} " for cue in _EVERYWHERE_CUES)
+    anchor_references = bool(reference_ids) and not filt_paths and not everywhere
+
     return RoutedFacets(
         intent=intent,
         place_ids=_subtree_ids(nodes, filt_paths), place_labels=sorted(set(filt_labels)),
         reference_labels=sorted(set(ref_labels)),
+        reference_ids=reference_ids, anchor_references=anchor_references,
         exclude_place_ids=_subtree_ids(nodes, excl_paths), exclude_place_labels=sorted(set(excl_labels)),
         material_slugs=mat_f, material_illustrations=mat_i,
         instrument_slugs=ins_f, instrument_illustrations=ins_i,

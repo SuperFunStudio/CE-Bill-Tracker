@@ -15,7 +15,7 @@ const playfair = Playfair_Display({ subsets: ['latin'], weight: ['500', '600', '
 const robotoMono = Roboto_Mono({ subsets: ['latin'], weight: ['400', '500', '700'], variable: '--font-mono', display: 'swap' });
 
 const SITE_URL = 'https://www.atlascircular.com';
-const TITLE = 'Atlas Circular — A Circular-Economy Law Atlas';
+const TITLE = 'Atlas Circular — Navigate Circular-Economy Legislation';
 const DESCRIPTION =
   'Track sustainability and circular-economy law across the globe — bills, deadlines, and analysis, by jurisdiction.';
 
@@ -29,12 +29,14 @@ export const metadata: Metadata = {
     siteName: 'Atlas Circular',
     title: TITLE,
     description: DESCRIPTION,
+    // Share card: dark globe (US + Western Europe lit) + wordmark + coverage legend. Regenerate with
+    // scripts/gen-og-globe.mjs then scripts/render-og-preview.mjs. ?v cache-busts social scrapers.
     images: [
       {
-        url: '/og-image.png',
+        url: '/og-image.png?v=2',
         width: 1200,
         height: 630,
-        alt: 'Atlas Circular — A Circular-Economy Law Atlas',
+        alt: 'Atlas Circular — a jurisdiction-aware atlas of circular-economy law',
       },
     ],
   },
@@ -42,7 +44,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: TITLE,
     description: DESCRIPTION,
-    images: ['/og-image.png'],
+    images: ['/og-image.png?v=2'],
   },
 };
 

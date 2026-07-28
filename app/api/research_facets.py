@@ -120,9 +120,14 @@ _INSTRUMENT_ALIASES: dict[str, list[str]] = {
     "right_to_repair": ["right to repair", "right-to-repair"],
     "deposit_return": ["deposit return", "deposit-return", "bottle bill", "container deposit",
                        "deposit refund", "deposit scheme"],
+    "disposal_ban": ["disposal ban", "landfill ban", "disposal prohibition", "landfill prohibition",
+                     "waste disposal ban"],
+    "organics_diversion": ["organics diversion", "organic waste diversion", "food waste diversion",
+                           "organics recycling", "mandatory composting", "organic waste ban"],
 }
 _INSTRUMENT_LABELS: dict[str, str] = {
     "epr": "EPR", "right_to_repair": "right to repair", "deposit_return": "deposit return",
+    "disposal_ban": "disposal ban", "organics_diversion": "organics diversion",
 }
 
 # Natural-language → bill_product_coverage.product_slug (see app/synthesis/product_taxonomy.py). The

@@ -349,7 +349,8 @@ _INSTRUMENT_LABELS_DISPLAY = {
     "epr": "EPR", "right_to_repair": "Right to Repair", "deposit_return": "Deposit Return",
     "incentives": "Incentives", "labeling": "Labeling", "recycled_content": "Recycled Content",
     "preemption": "Preemption", "chemical_restriction": "Chemical Restriction",
-    "product_stewardship": "Product Stewardship", "other": "Other / Uncategorized",
+    "product_stewardship": "Product Stewardship", "disposal_ban": "Disposal Ban",
+    "organics_diversion": "Organics Diversion", "other": "Other / Uncategorized",
 }
 
 

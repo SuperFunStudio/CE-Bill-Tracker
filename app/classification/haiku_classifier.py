@@ -135,7 +135,7 @@ Return this exact JSON structure:
   "is_ce_relevant": <true or false>,
   "confidence": <float 0.0-1.0>,
   "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","vehicles","construction","furniture","used_oil","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","hazardous_materials","water","biodiversity","other"]>,
-  "instrument_types": <list of one or more from: "epr","right_to_repair","recycled_content","deposit_return","incentives","labeling","chemical_restriction","preemption","budget","other"; put the primary/most-central instrument FIRST. A law is often several at once (e.g. an EPR law with recycled-content + labeling mandates)>,
+  "instrument_types": <list of one or more from: "epr","right_to_repair","recycled_content","deposit_return","incentives","labeling","chemical_restriction","preemption","disposal_ban","organics_diversion","budget","other"; put the primary/most-central instrument FIRST. A law is often several at once (e.g. an EPR law with recycled-content + labeling mandates)>,
   "stance": <one of: "advances","weakens","neutral">,
   "urgency": <one of: "high","medium","low">,
   "reasoning": "<1 sentence max>"
@@ -175,14 +175,27 @@ compostable materials), regenerative agriculture & soil health (healthy soils, c
 carbon farming, biochar), or organics recycling / composting (source-separated organics,
 anaerobic digestion, compost market development) ARE circular-economy relevant — set
 is_ce_relevant=true. Tag their material as "biobased", "agriculture", or "organics"; include the
-actual policy lever in instrument_types (a standard/ban → its type; a financial lever →
-"incentives"; else "other").
+actual policy lever in instrument_types (an organics diversion / mandatory-composting mandate →
+"organics_diversion"; a landfill/disposal ban → "disposal_ban"; another standard/ban → its type;
+a financial lever → "incentives"; else "other").
 
 Incentives: when the bill's PRIMARY lever is financial — a tax credit / deduction / rebate, an
 appropriation / grant / funding program, or a public procurement / tender — and it funds a
 circular-economy or biological-cycle outcome (recycling, reuse, repair, composting, soil
 health, bio-based materials, an EPR/stewardship program), include "incentives" in instrument_types
 and set is_ce_relevant=true. A generic appropriation NOT tied to a circular-economy outcome is "budget".
+
+Disposal ban vs organics diversion (two mechanism instruments, kept distinct):
+  - "disposal_ban": the lever is a PROHIBITION on end-of-life disposal — a bill that bans or
+    restricts sending specified materials to landfill or incineration to force diversion (e.g. an
+    e-waste, battery, yard-waste, food-waste, or C&D landfill ban; "may not be disposed of in a
+    landfill"). The mechanism is the ban itself; tag the material separately.
+  - "organics_diversion": the lever is a POSITIVE mandate to divert organic / food waste from
+    disposal — mandatory source-separation or curbside organics collection, a commercial-generator
+    organics-recycling requirement, an anaerobic-digestion / composting mandate, or a food-donation /
+    food-rescue requirement. Use this (not "disposal_ban") for organics-specific diversion duties;
+    material stays "organics". If an organics bill is ONLY a landfill ban with no diversion duty, use
+    "disposal_ban". Do not use either for a purely financial composting grant — that is "incentives".
 
 Water & biodiversity: two cross-cutting subjects, in scope ONLY through their circular-economy tie —
 NOT as general environmental law. Tag "water" for material LEAKAGE into or RECOVERY from waterways —

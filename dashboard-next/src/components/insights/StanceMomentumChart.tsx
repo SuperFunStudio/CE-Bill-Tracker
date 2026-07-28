@@ -41,7 +41,7 @@ import type { BillStancePoint, BillParams } from '@/lib/types';
 // Mirror the page's INSTRUMENT_OPTIONS so this section can be sliced independently of the timeline.
 const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = [
   { value: undefined, label: 'All instruments' },
-  ...['epr', 'deposit_return', 'right_to_repair', 'recycled_content', 'incentives', 'labeling', 'preemption', 'other'].map(
+  ...['epr', 'deposit_return', 'right_to_repair', 'recycled_content', 'incentives', 'labeling', 'preemption', 'disposal_ban', 'organics_diversion', 'other'].map(
     (v) => ({ value: v, label: formatInstrumentType(v) }),
   ),
 ];

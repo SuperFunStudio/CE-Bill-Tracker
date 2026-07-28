@@ -28,7 +28,7 @@ import type { BillTimelinePoint } from '@/lib/types';
 // components/bills/BillFilters.tsx. `undefined` is the "All instruments" view (the running total).
 const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = [
   { value: undefined, label: 'All instruments' },
-  ...['epr', 'deposit_return', 'right_to_repair', 'recycled_content', 'incentives', 'labeling', 'preemption', 'other'].map(
+  ...['epr', 'deposit_return', 'right_to_repair', 'recycled_content', 'incentives', 'labeling', 'preemption', 'disposal_ban', 'organics_diversion', 'other'].map(
     (v) => ({ value: v, label: formatInstrumentType(v) }),
   ),
 ];

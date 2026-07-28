@@ -178,6 +178,8 @@ const INSTRUMENT_DISPLAY: Record<string, string> = {
   incentives: 'Incentives',
   labeling: 'Labeling',
   preemption: 'Preemption',
+  disposal_ban: 'Disposal Ban',
+  organics_diversion: 'Organics Diversion',
   other: 'Other',
 };
 

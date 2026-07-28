@@ -38,7 +38,8 @@ RELEVANCE_CONFIDENCE_FLOOR = 0.5
 # Lets the federal page filter on the same instrument facet as bills.
 _VALID_INSTRUMENTS = (
     "epr", "right_to_repair", "recycled_content", "deposit_return",
-    "labeling", "chemical_restriction", "preemption", "budget", "other",
+    "labeling", "chemical_restriction", "preemption", "disposal_ban",
+    "organics_diversion", "budget", "other",
 )
 
 SYSTEM_PROMPT = """\
@@ -63,7 +64,7 @@ Return this exact JSON structure:
   "confidence": <float 0.0-1.0>,
   "preemption_risk": <one of: "none","low","medium","high">,
   "friction_type": <one of: "preemption","federal_mandate","compliance_burden","comment_opportunity","funding","study","none">,
-  "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","labeling","chemical_restriction","preemption","budget","other">,
+  "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","labeling","chemical_restriction","preemption","disposal_ban","organics_diversion","budget","other">,
   "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","vehicles","construction","furniture","used_oil","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","hazardous_materials","water","biodiversity","other"]>,
   "summary": "<1-2 sentence plain-English summary for a compliance professional: what the action is and why it matters>"
 }}
@@ -81,6 +82,10 @@ state-bill tracking. Pick the single closest match and AVOID "other" unless noth
   - "labeling": recyclability / compostability / environmental-marketing-claims labeling
     (e.g. FTC Green Guides).
   - "chemical_restriction": substance bans/restrictions in products or packaging (e.g. PFAS, 6PPD).
+  - "disposal_ban": a prohibition on sending specified materials to landfill/incineration to force
+    diversion (e.g. an e-waste, battery, or food-waste landfill ban).
+  - "organics_diversion": a positive mandate to divert organic/food waste from disposal —
+    mandatory composting/source-separation, anaerobic digestion, or food-donation requirements.
   - "preemption": federal action whose main effect is to override/preempt state programs.
   - "budget": funding / appropriations / grants where funding is the primary instrument.
   - "other": only when none of the above genuinely fit.

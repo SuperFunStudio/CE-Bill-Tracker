@@ -48,7 +48,7 @@ CONCURRENCY = 8
 # (see INSTRUMENT_TYPES in dashboard-next/.../BillFilters.tsx). Never write the un-tracked
 # buckets — keeping a bill as `other` is strictly better than burying it in budget/chemical.
 PROMOTABLE = {"epr", "deposit_return", "right_to_repair", "recycled_content",
-              "incentives", "labeling", "preemption"}
+              "incentives", "labeling", "preemption", "disposal_ban", "organics_diversion"}
 
 # Ceremonial bills (resolutions, designations) carry no mechanism — leave them as `other`.
 _RESO_PREFIX = ("HR", "SR", "HJR", "SJR", "HCR", "SCR", "HJM", "SJM", "HJ", "SJ", "HM", "SM")

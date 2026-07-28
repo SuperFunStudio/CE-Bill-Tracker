@@ -40,6 +40,7 @@ MATERIAL_SLUGS: tuple[str, ...] = tuple(sorted(CANONICAL_MATERIALS - {"other"}))
 INSTRUMENT_SLUGS: tuple[str, ...] = (
     "epr", "right_to_repair", "deposit_return", "incentives", "labeling",
     "recycled_content", "preemption", "chemical_restriction", "product_stewardship",
+    "disposal_ban", "organics_diversion",
 )
 # compliance-detail envelopes (mirror app/api/research.py _DIM_TRIGGERS keys). The last four are new
 # (2026-07-13) and routable now; their compliance_details envelopes are not yet extracted, so retrieval

@@ -19,6 +19,7 @@ import json
 import re
 import secrets
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 
 import anthropic
@@ -375,6 +376,66 @@ def _instrument_chart(question: str, agg_scoped: dict) -> ResearchChart | None:
         title="Bills by instrument type", kind="donut", bars=bars,
         footnote=("Each bill counted once by its primary instrument type; 'Other / Uncategorized' = bills "
                   "outside the named instrument categories."))
+
+
+# The 'Other / Uncategorized' instrument bucket is a catch-all, not a monolith. When a question is about
+# instruments or that bucket, we keyword-cluster the in-scope 'other' bills so the ANSWER can name what's
+# actually in there (organics diversion, disposal bans, single-use bans, studies/task-forces, ...). This
+# is display-only and APPROXIMATE — regex over title+summary, a bill can hit several — never a taxonomy.
+# Patterns are deliberately specific (e.g. the study cluster requires "task force"/"working group", NOT a
+# bare "commission"/"report", which would false-match "European Commission" on every EU bill).
+_OTHER_SUBTHEME_PATTERNS = {
+    "organics / food-waste diversion": r"compost|organic waste|food waste|food scrap|yard waste|anaerobic digest|food donation",
+    "disposal / landfill ban": r"landfill ban|disposal ban|may not (be )?dispos|prohibit\w* .{0,30}disposal|ban\w* .{0,30}(landfill|disposal)|waste diversion",
+    "single-use / foodware ban": r"single.?use|foodware|food service ware|polystyrene|\bstraw\b|utensil|takeout container|to.?go container",
+    "carryout bag": r"carryout bag|plastic bag|checkout bag|\bbag ban\b",
+    "reuse / refill / returnable": r"reusab|refill|returnable|\breuse\b|bring your own",
+    "recycling program / market development": r"recycling (program|market|infrastructure|goal|rate|facility)|market development|end market|secondary material market",
+    "study / task force / commission": r"task force|working group|feasibility study|pilot program|advisory (council|committee|board)|\bstudy\b.{0,30}(recycl|waste|circular)",
+    "green procurement": r"procurement|purchasing preference|state agenc.{0,20}(buy|purchas)|recycled.content.{0,15}purchas",
+    "hazardous / pharma / paint stewardship": r"pharmaceutic|drug (take-?back|disposal)|\bpaint\b|mercury|household hazardous|\bsharps\b",
+    "textiles / carpet / mattress": r"textile|carpet|mattress",
+}
+_OTHER_DETAIL_TRIGGERS = (
+    "other", "uncategorized", "outside", "sub-theme", "subtheme", "sub theme", "miscellaneous",
+    "what else", "leftover", "catch-all", "catchall", "doesn't fit", "don't fit", "not fit",
+)
+
+
+def _wants_other_detail(question: str) -> bool:
+    return any(t in question.lower() for t in _OTHER_DETAIL_TRIGGERS)
+
+
+async def _other_subthemes(db: AsyncSession, extra) -> dict | None:
+    """Keyword-cluster the in-scope 'Other / Uncategorized' instrument bills (primary instrument_type =
+    other/NULL, within the question's scope) so an answer can describe what the catch-all contains.
+    Display-only and approximate. Returns {total_other, subthemes:[{theme,count}], unclustered} or None
+    when the bucket is too small (< 8) or nothing clusters."""
+    q = (select(Bill.title, Bill.ai_summary)
+         .where(Bill.ce_relevant.is_(True))
+         .where(func.coalesce(Bill.instrument_type, "other") == "other"))
+    for c in extra:
+        q = q.where(c)
+    rows = (await db.execute(q)).all()
+    if len(rows) < 8:
+        return None
+    counts: Counter = Counter()
+    matched = 0
+    for r in rows:
+        blob = f"{r.title or ''} {r.ai_summary or ''}".lower()
+        hit = False
+        for theme, pat in _OTHER_SUBTHEME_PATTERNS.items():
+            if re.search(pat, blob):
+                counts[theme] += 1
+                hit = True
+        if hit:
+            matched += 1
+    subthemes = [{"theme": t, "count": c} for t, c in counts.most_common() if c >= 3]
+    if not subthemes:
+        return None
+    return {"total_other": len(rows),
+            "note": "keyword-grouped and approximate; a bill can appear under several sub-themes",
+            "subthemes": subthemes, "unclustered": len(rows) - matched}
 
 
 def _lit_subquery():
@@ -907,6 +968,11 @@ Rules:
   bill can have several). For a question about "instrument categories / policy types / mechanisms" use
   instrument_breakdown and call them instruments; for "requirements / provisions" use dimension_prevalence
   and call them dimensions. Do NOT label dimension counts as instruments.
+- If AGGREGATES.other_subthemes is present, the 'Other / Uncategorized' instrument bucket is NOT a single
+  theme: describe its main sub-themes from those counts (e.g. organics/food-waste diversion, disposal
+  bans, single-use bans, reuse/refill, studies/task-forces). State plainly that this grouping is
+  approximate (keyword-based, bills can span several) and mention the unclustered remainder; do NOT
+  present these sub-theme counts as their own instrument_type categories.
 - NEVER claim something is absent when SCOPE.total > 0 — describe what the material shows. A true zero
   is only when SCOPE.total = 0.
 - For "over time / by year / trend" questions, use AGGREGATES.bills_by_year (exact per-year counts from
@@ -1345,6 +1411,12 @@ async def ask_the_atlas(
     jur_gran = _jurisdiction_granularity(retrieval_q)
     agg_scoped = await _aggregates(db, geo_extra, jurisdiction_granularity=jur_gran)
     agg_corpus = await _aggregates(db, jurisdiction_granularity=jur_gran) if geo_extra else None
+    # When the ask is about instruments / the 'other' bucket, break that catch-all into sub-themes so the
+    # answer can describe what's actually in it (not just report "Other: N").
+    if _wants_instrument_chart(retrieval_q) or _wants_other_detail(retrieval_q):
+        ot = await _other_subthemes(db, geo_extra)
+        if ot:
+            agg_scoped["other_subthemes"] = ot
 
     scope: dict = {"total": total, "strategy": strategy, "read": len(packed)}
     if facets.place_labels:

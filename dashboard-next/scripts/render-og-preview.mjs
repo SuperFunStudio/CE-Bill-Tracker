@@ -31,11 +31,9 @@ body { width: 1200px; height: 630px; overflow: hidden; }
 .svg { position: absolute; top: 0; left: 0; }
 .col { position: absolute; top: 0; left: 0; width: 560px; height: 100%; display: flex; flex-direction: column;
   justify-content: center; padding: 0 0 0 72px; }
-.kicker { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
-.kicker .bar { width: 34px; height: 3px; background: rgb(${ACCENT}); border-radius: 2px; }
-.kicker .txt { font-size: 20px; letter-spacing: 4px; color: rgb(${ACCENT}); text-transform: uppercase; }
 .word { font-family: 'Playfair', serif; font-weight: 600; font-size: 82px; line-height: 1.02; color: #f6efe9; letter-spacing: 1px; }
-.tag { margin-top: 26px; font-size: 25px; line-height: 1.35; color: #9fadbd; max-width: 430px; }
+.subtitle { margin-top: 16px; font-size: 28px; font-weight: 500; letter-spacing: 0.4px; color: rgb(${ACCENT}); }
+.tag { margin-top: 22px; font-size: 31px; line-height: 1.32; color: #c2ccd6; max-width: 470px; }
 .legend { display: flex; align-items: center; gap: 12px; margin-top: 40px; }
 .legend .lo { font-size: 16px; color: #6b7887; }
 .legend .hi { font-size: 16px; color: #8b98a7; }
@@ -49,9 +47,9 @@ body { width: 1200px; height: 630px; overflow: hidden; }
     ${litPaths}
   </svg>
   <div class="col">
-    <div class="kicker"><div class="bar"></div><div class="txt">Circular-economy law</div></div>
     <div class="word">Atlas<br/>Circular</div>
-    <div class="tag">Navigate circular-economy legislation — bills, deadlines, and analysis across the globe, by jurisdiction.</div>
+    <div class="subtitle">Tracking circularity globally</div>
+    <div class="tag">Stay on top of the latest circular economy legislation with bills, calendars and analysis.</div>
     <div class="legend"><span class="lo">Fewer</span><div class="grad"></div><span class="hi">More laws</span></div>
   </div>
 </div>

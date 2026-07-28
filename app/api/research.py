@@ -335,6 +335,48 @@ def _material_chart(question: str, agg_scoped: dict) -> ResearchChart | None:
                   "counts in each, so slices can sum above the distinct-bill total."))
 
 
+# An instrument-type composition donut — "how many bills fall under each instrument category / policy
+# type / mechanism". Slices come from the SQL instrument_breakdown (primary instrument_type, mutually
+# exclusive), so unlike the material donut they sum to the distinct-bill total. Triggers are specific to
+# the instrument axis so a material-composition question keeps the slot.
+_INSTRUMENT_CHART_TRIGGERS = (
+    "instrument", "policy type", "policy types", "type of policy", "types of policy",
+    "kind of policy", "kinds of policy", "policy mechanism", "mechanism", "mechanisms",
+    "type of bill", "types of bill", "kind of bill", "kinds of bill",
+)
+_INSTRUMENT_LABELS_DISPLAY = {
+    "epr": "EPR", "right_to_repair": "Right to Repair", "deposit_return": "Deposit Return",
+    "incentives": "Incentives", "labeling": "Labeling", "recycled_content": "Recycled Content",
+    "preemption": "Preemption", "chemical_restriction": "Chemical Restriction",
+    "product_stewardship": "Product Stewardship", "other": "Other / Uncategorized",
+}
+
+
+def _wants_instrument_chart(question: str) -> bool:
+    return any(t in question.lower() for t in _INSTRUMENT_CHART_TRIGGERS)
+
+
+def _instrument_label(key: str) -> str:
+    return _INSTRUMENT_LABELS_DISPLAY.get(key, (key or "other").replace("_", " ").strip().title())
+
+
+def _instrument_chart(question: str, agg_scoped: dict) -> ResearchChart | None:
+    """An instrument-type composition donut from the SCOPED instrument_breakdown, when the question is
+    about instrument categories / policy types and the set spans ≥2 instruments. Each slice is a primary
+    instrument_type's bill count (mutually exclusive → sums to the distinct-bill total). None otherwise."""
+    if not _wants_instrument_chart(question):
+        return None
+    rows = [i for i in (agg_scoped or {}).get("instrument_breakdown") or [] if (i.get("count") or 0) > 0]
+    if len(rows) < 2:
+        return None
+    bars = [ResearchChartBar(label=_instrument_label(i["instrument"]), value=i["count"])
+            for i in sorted(rows, key=lambda i: i["count"], reverse=True)]
+    return ResearchChart(
+        title="Bills by instrument type", kind="donut", bars=bars,
+        footnote=("Each bill counted once by its primary instrument type; 'Other / Uncategorized' = bills "
+                  "outside the named instrument categories."))
+
+
 def _lit_subquery():
     """Active-litigation counts per bill, so the relevant-bill table's Litigation column populates
     (mirrors app/api/bills.py._lit_subquery — kept local to avoid a cross-module private import)."""
@@ -632,6 +674,17 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
     for c in extra:
         prev_q = prev_q.where(c)
     prevalence_row = (await db.execute(prev_q)).first()
+    # Instrument-type breakdown — the PRIMARY policy-mechanism axis (epr, deposit_return, incentives,
+    # right_to_repair, labeling, ...). Mutually exclusive (one primary instrument_type per bill;
+    # NULL/'other' = outside the named categories), so it SUMS to the scoped total — the direct answer to
+    # "how many bills under each instrument category" and the honest basis for an instrument pie/donut.
+    # Distinct from dimension_prevalence (overlapping compliance envelopes); do not conflate the two.
+    itype = func.coalesce(Bill.instrument_type, "other")
+    itype_q = (select(itype.label("itype"), func.count().label("n"))
+               .select_from(Bill).where(Bill.ce_relevant.is_(True)))
+    for c in extra:
+        itype_q = itype_q.where(c)
+    itype_rows = (await db.execute(itype_q.group_by(itype).order_by(func.count().desc()))).all()
     # Product/material coverage — how many bills cover each material_category. Answers "how many
     # different product types are covered" exactly from SQL instead of guessing from a sample.
     mat = func.jsonb_array_elements_text(Bill.material_categories).table_valued("value").lateral()
@@ -704,6 +757,7 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
     jur_rows = (await db.execute(jur_q)).all()
     agg = {
         "collection_target_basis": [{"basis": r.basis or "unspecified", "count": r.n} for r in basis_rows],
+        "instrument_breakdown": [{"instrument": r.itype, "count": r.n} for r in itype_rows],
         "dimension_prevalence": {d: getattr(prevalence_row, d) for d in DIMENSION_KEYS},
         "material_coverage": [{"material": r.material, "count": r.n} for r in mat_rows],
         "bills_by_year": [{"year": int(r.yr), "count": r.n} for r in year_rows if r.yr is not None],
@@ -845,6 +899,14 @@ Rules:
 - Where a requirement/finding recurs across bills, say so and cite several; flag single-bill outliers.
 - You MAY state exact numbers from AGGREGATES. If both a scoped and corpus-wide count are given, reason
   about coverage from them ("122 of the 146 corpus-wide sit in France; the rest are elsewhere").
+- AGGREGATES has TWO DIFFERENT category axes — never conflate them. `instrument_breakdown` = bill counts
+  by INSTRUMENT TYPE (the kind of policy mechanism: EPR, deposit return, incentives, right to repair,
+  labeling, …); it is mutually exclusive (one primary type per bill, 'other' = outside the named
+  categories) and SUMS to the total. `dimension_prevalence` = how many bills carry each COMPLIANCE
+  DIMENSION (an overlapping requirement envelope: penalties, PRO structure, fees, eco-modulation, …; a
+  bill can have several). For a question about "instrument categories / policy types / mechanisms" use
+  instrument_breakdown and call them instruments; for "requirements / provisions" use dimension_prevalence
+  and call them dimensions. Do NOT label dimension counts as instruments.
 - NEVER claim something is absent when SCOPE.total > 0 — describe what the material shows. A true zero
   is only when SCOPE.total = 0.
 - For "over time / by year / trend" questions, use AGGREGATES.bills_by_year (exact per-year counts from
@@ -1371,10 +1433,13 @@ async def ask_the_atlas(
     scope_labels = (facets.place_labels + facets.material_labels + facets.instrument_labels
                     + facets.product_labels)
     # One chart slot, dispatched by question frame in precedence order: a jurisdiction RANKING wins first,
-    # then a TREND (over-time line), then a material COMPOSITION donut. Ordering matters where triggers
-    # overlap — "distribution over time" is temporal, so the year line beats the material donut.
+    # then a TREND (over-time line), then an INSTRUMENT composition donut, then a material COMPOSITION
+    # donut. Ordering matters where triggers overlap — "distribution over time" is temporal, so the year
+    # line beats the donuts; the instrument axis is checked before material so "how many bills per
+    # instrument" gets the instrument donut, not a material one.
     chart = (_jurisdiction_chart(retrieval_q, agg_scoped)
              or _year_chart(retrieval_q, agg_scoped, scope_labels)
+             or _instrument_chart(retrieval_q, agg_scoped)
              or _material_chart(retrieval_q, agg_scoped))
     return ResearchAnswer(answer=answer_text, citations=citations, chart=chart,
                           coverage_note=coverage, bills=bills,

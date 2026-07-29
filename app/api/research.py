@@ -555,25 +555,47 @@ async def _relevant_bills(
             return _balance_read_set(pool, page_size)
         return (await db.execute(_match_page(tsq))).all()
 
-    def _plain_page(where_extra, interleave=False):
-        q = (select(*_cols())
+    def _plain_page(where_extra, interleave=False, limit=None, with_country=False):
+        # `with_country` attaches the country path segment as `balance_country` (joining the jurisdiction
+        # tree) so a rank-free listing pool can feed the region-balanced read set (see _plain_rows);
+        # `limit` over-fetches that pool. Neither changes the Bill/case_count/max_risk shape callers use.
+        country = func.split_part(Jurisdiction.path, ".", 2)
+        cols = list(_cols())
+        if with_country:
+            cols.append(country.label("balance_country"))
+        q = (select(*cols)
              .outerjoin(lit, Bill.id == lit.c.related_law_id)
              .where(Bill.ce_relevant.is_(True)))
         for c in list(extra) + list(where_extra):
             q = q.where(c)
+        if interleave or with_country:
+            q = q.join(Jurisdiction, Jurisdiction.id == Bill.jurisdiction_id)
         if interleave:
             # Round-robin at the COUNTRY level so a comparison ("France vs US") is balanced on page 1
             # — plain recency buries foreign bills (mostly no status_date), and partitioning by leaf
             # jurisdiction lets the US's 50 state nodes flood France's single node. split_part(path,2)
             # is the country segment ('world.us.us_ca' -> 'us', 'world.fr' -> 'fr').
-            country = func.split_part(Jurisdiction.path, ".", 2)
             rn = func.row_number().over(
                 partition_by=country,
                 order_by=[Bill.status_date.desc().nullslast(), Bill.id.desc()],
             )
-            q = q.join(Jurisdiction, Jurisdiction.id == Bill.jurisdiction_id)
             return q.order_by(rn.asc(), country).offset(offset).limit(page_size)
-        return q.order_by(Bill.status_date.desc().nullslast(), Bill.id.desc()).offset(offset).limit(page_size)
+        return q.order_by(Bill.status_date.desc().nullslast(), Bill.id.desc()).offset(offset).limit(limit or page_size)
+
+    async def _plain_rows(where_extra, interleave=False):
+        # Region-balanced LISTING (relevance-free) — Fix #2. On the deep-read call for a corpus-wide facet
+        # listing (material/instrument/product scope, or the RULE 2 dimension set — no place), plain
+        # recency returns an all-US read set whenever US volume dominates the facet (the "right-to-repair
+        # worldwide" gap: instrument-scoped asks bypassed _match_rows' balancing entirely). Over-fetch a
+        # recency pool tagged with balance_country and rebalance it. NO relevance floor is needed here —
+        # every bill already matches the scope, so balance_rank defaults to 0 and _balance_read_set
+        # promotes purely for region spread. A named place (geo) or a 2+-place interleave keeps its exact
+        # ordering (balancing off there); table pages pass balance_regions=False so they stay pure too.
+        if balance_regions and not geo and not interleave:
+            pool = (await db.execute(
+                _plain_page(where_extra, limit=_BALANCE_POOL, with_country=True))).all()
+            return _balance_read_set(pool, page_size)
+        return (await db.execute(_plain_page(where_extra, interleave=interleave))).all()
 
     def _diversity_page():
         # Spread across the corpus's distinct policy TYPES: round-robin one representative per
@@ -639,7 +661,7 @@ async def _relevant_bills(
     # RULE 2 — structured-by-dimension (candidacy computed above; the set is non-empty).
     if dim_ok and dim_total > 0:
         where_dim = [Bill.compliance_details[dim]["status"].astext == "present"]
-        rows = (await db.execute(_plain_page(where_dim))).all()
+        rows = await _plain_rows(where_dim)
         return rows, dim_total, f"dimension:{dim}"
 
     # RULE 2.5 — diversity/outlier spread: "what are the most unique TYPES of bills?" wants a broad
@@ -663,7 +685,7 @@ async def _relevant_bills(
     # jurisdictions when comparing 2+ named places so each shows on page 1; otherwise straight recency.
     interleave = len(facets.place_labels) > 1
     n = await _count_plain([])
-    rows = (await db.execute(_plain_page([], interleave=interleave))).all() if n else []
+    rows = (await _plain_rows([], interleave=interleave)) if n else []
     base = ("jurisdiction" if geo else "material" if facets.material_slugs
             else "product" if facets.product_slugs
             else "instrument" if facets.instrument_slugs else "all")

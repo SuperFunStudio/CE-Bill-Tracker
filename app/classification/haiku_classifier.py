@@ -114,6 +114,11 @@ Circular economy scope includes both the technical cycle (the above) and the bio
 bio-based / biomanufactured materials (biopolymers, bioplastics, compostable materials), regenerative \
 agriculture & soil health (healthy soils, cover crops, carbon farming, biochar), and organics recycling / \
 composting infrastructure (source-separated organics, anaerobic digestion, compost market development). \
+The technical cycle also covers the END-OF-LIFE and DECOMMISSIONING of durable products and infrastructure \
+assets — mandatory take-back, removal, recycling, and site restoration at the end of service life \
+(end-of-life vehicles, electronics, batteries, solar panels and utility-scale solar/wind facilities, \
+oil/gas wells), and the FINANCIAL-ASSURANCE mechanisms that guarantee it (decommissioning bonds, surety, \
+dedicated decommissioning funds) — but only when a physical product or material stream is retired. \
 Two adjacent subjects are in scope ONLY through their circular-economy tie: material LEAKAGE into or \
 RECOVERY from waterways (microplastics, marine litter, biosolids / water reuse) and BIODIVERSITY as an \
 outcome of material or sourcing choices (deforestation-free sourcing, regenerative / nature-positive \
@@ -169,6 +174,19 @@ on producers/importers/distributors to run a waste-management plan for their pro
 plano de gerenciamento de resíduos sólidos). These are EPR even when the text never says "EPR". A generic
 integrated-waste-management or recycling-targets law that assigns NO producer/importer obligation is
 circular-economy relevant but not "epr" — tag its actual lever instead.
+
+End-of-life & decommissioning: a measure that governs how a durable product or infrastructure asset is
+RETIRED — mandatory take-back / removal, recycling or safe disposal, and SITE RESTORATION at the end of
+its service life (end-of-life vehicles, e-waste, batteries, solar panels and utility-scale solar/wind
+facilities, oil/gas wells) — is circular-economy relevant; set is_ce_relevant=true and tag the material
+(e.g. "solar_panels","vehicles","batteries","electronics","construction","tires"). Pick the instrument by
+the LEVER: a producer/owner duty to take back, remove, or decommission the product at end of life → "epr";
+a FINANCIAL-ASSURANCE requirement that guarantees decommissioning — a bond, surety, or dedicated
+decommissioning fund — → "incentives"; an end-of-life landfill/disposal prohibition → "disposal_ban"; else
+"other". A law may carry several (e.g. a removal duty backed by a bond → ["epr","incentives"]). IN SCOPE
+ONLY when a physical product or material stream is retired — NOT human/medical end-of-life, and NOT
+financial or real-property abandonment (foreclosure, abandoned buildings/vehicles with no
+material-recovery or decommissioning duty).
 
 Biological cycle: bills on bio-based / biomanufactured materials (biopolymers, bioplastics,
 compostable materials), regenerative agriculture & soil health (healthy soils, cover crops,

@@ -15,6 +15,9 @@
       "WebFetch(domain:www.verpackungsgesetz.com)",
       "WebFetch(domain:circularcitiesdeclaration.eu)",
       "WebFetch(domain:ec.europa.eu)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\kenny\\.claude\\projects\\c--Users-kenny-SignalScout\\memory"
     ]
   }
 }

@@ -144,8 +144,9 @@ function Select({
   );
 }
 
-/** Checkbox popover styled to match the underline Selects — for filters that take several values. */
-function MultiSelect({
+/** Checkbox popover styled to match the underline Selects — for filters that take several values.
+ *  Exported so other surfaces (e.g. the subscribe form) get the same tickable-dropdown affordance. */
+export function MultiSelect({
   label, values, onChange, options, placeholder,
 }: {
   label: string;

@@ -5,7 +5,7 @@ import { track } from '@/lib/analytics';
 import { formatInstrumentType } from '@/lib/utils';
 import { CheckIcon } from '@/components/ui/icons';
 import { useScope } from '@/components/scope/ScopeContext';
-import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
+import { MATERIAL_CATEGORIES, MultiSelect } from '@/components/bills/BillFilters';
 import { jurisdictionsFor } from '@/lib/jurisdictions';
 import { REGION_CODES, regionLabel } from '@/components/insights/RegionFilter';
 
@@ -83,11 +83,6 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
     }
   }, [ready, prefilled, scope, prefill]);
 
-  const toggleTopic = (t: string) =>
-    setTopics(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
-  const toggleMaterial = (m: string) =>
-    setMaterials(prev => (prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]));
-
   const patchRegion = (r: string, patch: Partial<RegionSel>) =>
     setRegionSel(prev => ({ ...prev, [r]: { ...prev[r], ...patch } }));
   const toggleCode = (r: string, code: string) =>
@@ -97,6 +92,15 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
         ...prev,
         [r]: { ...prev[r], codes: codes.includes(code) ? codes.filter(c => c !== code) : [...codes, code] },
       };
+    });
+
+  // The "more jurisdictions" dropdown works off a flat code list; bridge it to the Record state.
+  const otherRegionsSelected = OTHER_REGIONS.filter(c => regionSel[c]?.included);
+  const setOtherRegionsSelected = (vals: string[]) =>
+    setRegionSel(prev => {
+      const next = { ...prev };
+      for (const c of OTHER_REGIONS) next[c] = { ...next[c], included: vals.includes(c) };
+      return next;
     });
 
   function buildRegionScope(): Record<string, string[]> {
@@ -151,63 +155,29 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Topics */}
-      <fieldset>
-        <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
-          Topics
-        </legend>
-        <div className="flex flex-wrap gap-2">
-          {TOPICS.map(t => {
-            const on = topics.includes(t);
-            return (
-              <button
-                key={t}
-                type="button"
-                onClick={() => toggleTopic(t)}
-                aria-pressed={on}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
-                  on
-                    ? 'border-green-accent bg-green-dark text-green-accent'
-                    : 'border-border-default text-text-secondary hover:border-green-accent/40 hover:text-text-primary'
-                }`}
-              >
-                {on && <CheckIcon className="text-xs" />}
-                {formatInstrumentType(t)}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-text-muted text-xs mt-2">Leave all unselected to follow every topic.</p>
-      </fieldset>
+      {/* Topics — tickable dropdown (empty = follow every topic). */}
+      <div>
+        <MultiSelect
+          label="Topics"
+          values={topics}
+          onChange={setTopics}
+          options={TOPICS.map(t => ({ value: t, label: formatInstrumentType(t) }))}
+          placeholder="All topics"
+        />
+        <p className="text-text-muted text-xs mt-1">Leave unselected to follow every topic.</p>
+      </div>
 
-      {/* Materials & Products */}
-      <fieldset>
-        <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
-          Materials &amp; Products
-        </legend>
-        <div className="flex flex-wrap gap-2">
-          {MATERIAL_CATEGORIES.map(m => {
-            const on = materials.includes(m);
-            return (
-              <button
-                key={m}
-                type="button"
-                onClick={() => toggleMaterial(m)}
-                aria-pressed={on}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
-                  on
-                    ? 'border-green-accent bg-green-dark text-green-accent'
-                    : 'border-border-default text-text-secondary hover:border-green-accent/40 hover:text-text-primary'
-                }`}
-              >
-                {on && <CheckIcon className="text-xs" />}
-                {formatMaterial(m)}
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-text-muted text-xs mt-2">Leave all unselected to follow every material.</p>
-      </fieldset>
+      {/* Materials & Products — tickable dropdown (empty = follow every material). */}
+      <div>
+        <MultiSelect
+          label="Materials & Products"
+          values={materials}
+          onChange={setMaterials}
+          options={MATERIAL_CATEGORIES.map(m => ({ value: m, label: formatMaterial(m) }))}
+          placeholder="All materials"
+        />
+        <p className="text-text-muted text-xs mt-1">Leave unselected to follow every material.</p>
+      </div>
 
       {/* Regions & jurisdictions */}
       <fieldset>
@@ -274,31 +244,15 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
             );
           })}
 
-          {/* Every other tracked jurisdiction — national law, followed whole-region — as compact chips. */}
-          <div>
-            <p className="text-text-muted text-xs mb-2">More jurisdictions</p>
-            <div className="flex flex-wrap gap-2">
-              {OTHER_REGIONS.map(code => {
-                const on = regionSel[code]?.included;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => patchRegion(code, { included: !on })}
-                    aria-pressed={on}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
-                      on
-                        ? 'border-green-accent bg-green-dark text-green-accent'
-                        : 'border-border-default text-text-secondary hover:border-green-accent/40 hover:text-text-primary'
-                    }`}
-                  >
-                    {on && <CheckIcon className="text-xs" />}
-                    {regionLabel(code)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* Every other tracked jurisdiction — national law, followed whole-region — as a
+              tickable dropdown rather than a wide chip cloud. */}
+          <MultiSelect
+            label="More jurisdictions"
+            values={otherRegionsSelected}
+            onChange={setOtherRegionsSelected}
+            options={OTHER_REGIONS.map(code => ({ value: code, label: regionLabel(code) }))}
+            placeholder="None selected"
+          />
         </div>
         <p className="text-text-muted text-xs mt-2">Uncheck all regions to follow everything.</p>
       </fieldset>

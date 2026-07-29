@@ -61,12 +61,20 @@ const ACCOUNT_ITEM: NavItem = { href: '/account', label: 'Account', Icon: UserIc
 /**
  * Top nav with the "ATLAS CIRCULAR" masthead centered, theme toggle pinned right.
  * At sm+ an inline section bar (newspaper-style) shows every destination; on mobile that
- * collapses behind the left hamburger into a dropdown. On scroll the brand shrinks.
+ * collapses behind the left hamburger into a dropdown.
+ *
+ * The big masthead lives in normal flow and simply scrolls off the top; only the compact
+ * bar below it is sticky, and its height never changes. That's deliberate: a `sticky`
+ * element that *resizes* while pinned shortens the document above the viewport and yanks
+ * everything below upward (the "zoom forward" jolt on first scroll, worst on mobile). Here
+ * nothing pinned resizes — a small wordmark just fades in (opacity only) once the masthead
+ * has scrolled away, so there's no reflow.
  */
 export function TopNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const scrolled = useScrolled(80);
+  // Drives only the small-wordmark fade-in; ~past the masthead so the two brands don't overlap.
+  const scrolled = useScrolled(120);
   const { theme, toggle } = useTheme();
   const { isPro, isAdmin } = useAuth();
   const { isUsView } = useRegion();
@@ -108,87 +116,104 @@ export function TopNav() {
     });
 
   return (
-    <header className="sticky top-0 z-40 bg-bg-secondary/95 backdrop-blur border-b border-border-default">
-      <div
-        className={`relative flex flex-col items-center justify-center px-14 transition-all duration-300 ${
-          scrolled ? 'py-2.5' : 'py-5 sm:py-7'
-        }`}
-      >
-        {/* Hamburger — left corner, mobile only (desktop uses the inline bar below) */}
-        <button
-          onClick={() => setMenuOpen(o => !o)}
-          className={`sm:hidden absolute left-3 p-2 text-text-secondary hover:text-text-primary transition-all duration-300 ${
-            scrolled ? 'top-1/2 -translate-y-1/2' : 'top-3'
-          }`}
-          aria-label="Toggle navigation"
-          aria-expanded={menuOpen}
-        >
-          {menuOpen ? (
-            <svg width="22" height="22" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-          ) : (
-            <svg width="22" height="22" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-            </svg>
-          )}
-        </button>
-
-        {/* Brand — large & centered at top, condenses onto the button row on scroll */}
-        <Link href="/" onClick={() => setMenuOpen(false)} className="text-center leading-none">
-          <h1
-            className={`font-serif uppercase text-text-primary tracking-[0.06em] transition-all duration-300 ${
-              scrolled ? 'text-lg sm:text-xl' : 'text-3xl sm:text-5xl'
-            }`}
-          >
+    <header>
+      {/* Masthead — big brand + tagline. In NORMAL FLOW (not sticky), so it simply scrolls
+          up and off the top of the page. Because nothing here resizes while pinned, the
+          old first-scroll "zoom forward" jump is gone. */}
+      <div className="flex flex-col items-center justify-center px-14 pt-5 pb-4 sm:pt-7 sm:pb-6 text-center">
+        <Link href="/" onClick={() => setMenuOpen(false)} className="leading-none">
+          <h1 className="font-serif uppercase text-text-primary tracking-[0.06em] text-3xl sm:text-5xl">
             Atlas Circular
           </h1>
-          <p
-            className={`font-serif text-text-secondary overflow-hidden transition-all duration-300 ${
-              scrolled ? 'max-h-0 opacity-0' : 'mt-2 max-h-10 opacity-100 text-sm sm:text-base'
-            }`}
-          >
+          <p className="mt-2 font-serif text-text-secondary text-sm sm:text-base">
             Tracking circularity globally
           </p>
         </Link>
-
-        {/* Theme toggle — right corner */}
-        <button
-          onClick={toggle}
-          className={`absolute right-3 p-2 text-lg text-text-secondary hover:text-text-primary transition-all duration-300 ${
-            scrolled ? 'top-1/2 -translate-y-1/2' : 'top-3'
-          }`}
-          aria-label="Toggle theme"
-        >
-          {theme === 'light' ? <MoonIcon /> : <SunIcon />}
-        </button>
       </div>
 
-      {/* Desktop section bar — visible at sm+. The auth button lives in its own flex column (not an
-          absolute overlay) so wrapped nav links never slide underneath it on tablet/desktop widths. */}
-      <nav className="hidden sm:flex items-start gap-3 border-t border-border-default px-4 py-2">
-        <div className="flex-1 flex items-center justify-center flex-wrap gap-x-5 gap-y-1">
-          {renderLinks('bar')}
-        </div>
-        <div className="shrink-0 self-center">
-          <AuthButton />
-        </div>
-      </nav>
+      {/* Compact bar — the ONLY sticky element, and its height is constant in both scroll
+          states, so pinning it never reflows the page. */}
+      <div className="sticky top-0 z-40 bg-bg-secondary/95 backdrop-blur border-b border-border-default">
+        {/* Mobile toolbar row */}
+        <div className="relative flex items-center justify-center py-2.5 sm:hidden">
+          {/* Hamburger — left corner (desktop uses the inline bar below) */}
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-text-secondary hover:text-text-primary"
+            aria-label="Toggle navigation"
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? (
+              <svg width="22" height="22" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+            )}
+          </button>
 
-      {/* Mobile dropdown menu (opened by the hamburger) */}
-      {menuOpen && (
-        <nav className="sm:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
-          <div className="max-w-6xl mx-auto p-3 space-y-1">
-            {renderLinks('menu')}
-            <div className="pt-2 border-t border-border-default mt-2">
-              <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />
-            </div>
-            <div className="text-text-muted text-xs text-center pt-2">
-              Circular-economy law atlas · Beta
-            </div>
+          {/* Small wordmark — fades in (opacity only, no layout impact) once the masthead
+              has scrolled away, so brand identity persists in the pinned bar. */}
+          <Link
+            href="/"
+            onClick={() => setMenuOpen(false)}
+            aria-hidden={!scrolled}
+            className={`font-serif uppercase text-text-primary tracking-[0.06em] text-lg leading-none transition-opacity duration-300 ${
+              scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            Atlas Circular
+          </Link>
+
+          {/* Theme toggle — right corner */}
+          <button
+            onClick={toggle}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-lg text-text-secondary hover:text-text-primary"
+            aria-label="Toggle theme"
+          >
+            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+          </button>
+        </div>
+
+        {/* Desktop section bar — visible at sm+. The auth button lives in its own flex column (not an
+            absolute overlay) so wrapped nav links never slide underneath it on tablet/desktop widths.
+            The wordmark is an in-flow column (always takes its width, just fades) so the centered
+            links don't shift when it appears on scroll. */}
+        <nav className="hidden sm:flex items-start gap-3 px-4 py-2">
+          <Link
+            href="/"
+            aria-hidden={!scrolled}
+            className={`shrink-0 self-center font-serif uppercase text-text-primary tracking-[0.06em] text-base leading-none transition-opacity duration-300 ${
+              scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            Atlas Circular
+          </Link>
+          <div className="flex-1 flex items-center justify-center flex-wrap gap-x-5 gap-y-1">
+            {renderLinks('bar')}
+          </div>
+          <div className="shrink-0 self-center">
+            <AuthButton />
           </div>
         </nav>
-      )}
+
+        {/* Mobile dropdown menu (opened by the hamburger) — anchored below this bar */}
+        {menuOpen && (
+          <nav className="sm:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
+            <div className="max-w-6xl mx-auto p-3 space-y-1">
+              {renderLinks('menu')}
+              <div className="pt-2 border-t border-border-default mt-2">
+                <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />
+              </div>
+              <div className="text-text-muted text-xs text-center pt-2">
+                Circular-economy law atlas · Beta
+              </div>
+            </div>
+          </nav>
+        )}
+      </div>
     </header>
   );
 }

@@ -490,7 +490,9 @@ function WorldStandings() {
           <span className="tabular-nums text-text-primary">{usRollup.enacted}</span> enacted ·{' '}
           <span className="tabular-nums text-text-primary">{usRollup.motion}</span> bills in motion across
           federal + {usRollup.states} states ·{' '}
-          <span className="tabular-nums text-text-primary">{usRollup.federalActions}</span> federal regulatory actions
+          <Link href="/federal" className="text-green-accent hover:underline">
+            <span className="tabular-nums">{usRollup.federalActions}</span> federal regulatory actions
+          </Link>
         </div>
       )}
 

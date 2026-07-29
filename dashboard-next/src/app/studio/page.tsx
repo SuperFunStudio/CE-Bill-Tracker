@@ -960,7 +960,7 @@ function SpecBar({
   const fmt = useFmt();
   const t = quote.totals;
   return (
-    <div className="sticky top-[2.75rem] sm:top-[3rem] z-30 rounded-lg border border-border-default bg-bg-secondary/95 backdrop-blur px-3.5 py-2.5 space-y-2">
+    <div className="sticky top-[3.25rem] z-30 rounded-lg border border-border-default bg-bg-secondary/95 backdrop-blur px-3.5 py-2.5 space-y-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <label htmlFor="spec-product" className="sr-only">
           Product name

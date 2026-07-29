@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeContext';
 import { useRegion } from './RegionContext';
-import { useScrolled } from '@/hooks/useScrolled';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
 import {
@@ -59,22 +58,18 @@ const NAV_ITEMS: NavItem[] = [
 const ACCOUNT_ITEM: NavItem = { href: '/account', label: 'Account', Icon: UserIcon };
 
 /**
- * Top nav with the "ATLAS CIRCULAR" masthead centered, theme toggle pinned right.
- * At sm+ an inline section bar (newspaper-style) shows every destination; on mobile that
- * collapses behind the left hamburger into a dropdown.
+ * Top nav: a single slim bar with the "ATLAS CIRCULAR" wordmark on the left and the inline
+ * section links on the right, theme + account pinned far right. Below lg the inline links
+ * collapse behind the hamburger into a dropdown (the full set only fits one row at lg+).
  *
- * The big masthead lives in normal flow and simply scrolls off the top; only the compact
- * bar below it is sticky, and its height never changes. That's deliberate: a `sticky`
- * element that *resizes* while pinned shortens the document above the viewport and yanks
- * everything below upward (the "zoom forward" jolt on first scroll, worst on mobile). Here
- * nothing pinned resizes — a small wordmark just fades in (opacity only) once the masthead
- * has scrolled away, so there's no reflow.
+ * Non-animated by design: the bar has a fixed height and nothing resizes on scroll, so
+ * pinning it never reflows the page. (An earlier version shrank a taller pinned header,
+ * which shortened the document above the viewport and yanked content upward — the "zoom
+ * forward" jolt, worst on mobile.)
  */
 export function TopNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  // Drives only the small-wordmark fade-in; ~past the masthead so the two brands don't overlap.
-  const scrolled = useScrolled(120);
   const { theme, toggle } = useTheme();
   const { isPro, isAdmin } = useAuth();
   const { isUsView } = useRegion();
@@ -116,30 +111,52 @@ export function TopNav() {
     });
 
   return (
-    <header>
-      {/* Masthead — big brand + tagline. In NORMAL FLOW (not sticky), so it simply scrolls
-          up and off the top of the page. Because nothing here resizes while pinned, the
-          old first-scroll "zoom forward" jump is gone. */}
-      <div className="flex flex-col items-center justify-center px-14 pt-5 pb-4 sm:pt-7 sm:pb-6 text-center">
-        <Link href="/" onClick={() => setMenuOpen(false)} className="leading-none">
-          <h1 className="font-serif uppercase text-text-primary tracking-[0.06em] text-3xl sm:text-5xl">
+    // Single slim sticky bar — brand left, inline section links right (frog-style). Fixed
+    // height, nothing resizes on scroll, so no reflow/"zoom" jump and the brand shows once.
+    <header className="sticky top-0 z-40 bg-bg-secondary/95 backdrop-blur border-b border-border-default">
+      <div className="flex items-center gap-3 px-4 sm:px-6 min-h-[3.25rem] py-2">
+        {/* Brand — left. The slogan rides alongside as secondary text (hidden until there's
+            room for it) so identity stays without a whole masthead row. */}
+        <Link href="/" onClick={() => setMenuOpen(false)} className="flex items-center gap-2.5 shrink-0">
+          <span className="font-serif uppercase text-text-primary tracking-[0.06em] text-lg sm:text-xl leading-none">
             Atlas Circular
-          </h1>
-          <p className="mt-2 font-serif text-text-secondary text-sm sm:text-base">
+          </span>
+          <span className="hidden xl:inline border-l border-border-default pl-2.5 font-serif text-text-muted text-xs leading-tight">
             Tracking circularity globally
-          </p>
+          </span>
         </Link>
-      </div>
 
-      {/* Compact bar — the ONLY sticky element, and its height is constant in both scroll
-          states, so pinning it never reflows the page. */}
-      <div className="sticky top-0 z-40 bg-bg-secondary/95 backdrop-blur border-b border-border-default">
-        {/* Mobile toolbar row */}
-        <div className="relative flex items-center justify-center py-2.5 sm:hidden">
-          {/* Hamburger — left corner (desktop uses the inline bar below) */}
+        {/* Desktop section links — inline only at lg+, where the full set fits on one row;
+            below that everything collapses behind the hamburger. */}
+        <nav className="hidden lg:flex flex-1 items-center justify-end flex-wrap gap-x-5 gap-y-1">
+          {renderLinks('bar')}
+        </nav>
+
+        {/* Desktop right controls — theme + account. */}
+        <div className="hidden lg:flex items-center gap-1 shrink-0">
+          <button
+            onClick={toggle}
+            className="p-1.5 text-lg text-text-secondary hover:text-text-primary"
+            aria-label="Toggle theme"
+          >
+            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+          </button>
+          <AuthButton />
+        </div>
+
+        {/* Compact right controls — theme + hamburger (links live in the dropdown). Shown up
+            through the tablet range; the inline bar only takes over at lg+. */}
+        <div className="flex items-center gap-1 ml-auto lg:hidden">
+          <button
+            onClick={toggle}
+            className="p-2 text-lg text-text-secondary hover:text-text-primary"
+            aria-label="Toggle theme"
+          >
+            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+          </button>
           <button
             onClick={() => setMenuOpen(o => !o)}
-            className="absolute left-3 top-1/2 -translate-y-1/2 p-2 text-text-secondary hover:text-text-primary"
+            className="p-2 text-text-secondary hover:text-text-primary"
             aria-label="Toggle navigation"
             aria-expanded={menuOpen}
           >
@@ -153,67 +170,23 @@ export function TopNav() {
               </svg>
             )}
           </button>
-
-          {/* Small wordmark — fades in (opacity only, no layout impact) once the masthead
-              has scrolled away, so brand identity persists in the pinned bar. */}
-          <Link
-            href="/"
-            onClick={() => setMenuOpen(false)}
-            aria-hidden={!scrolled}
-            className={`font-serif uppercase text-text-primary tracking-[0.06em] text-lg leading-none transition-opacity duration-300 ${
-              scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-          >
-            Atlas Circular
-          </Link>
-
-          {/* Theme toggle — right corner */}
-          <button
-            onClick={toggle}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-lg text-text-secondary hover:text-text-primary"
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? <MoonIcon /> : <SunIcon />}
-          </button>
         </div>
+      </div>
 
-        {/* Desktop section bar — visible at sm+. The auth button lives in its own flex column (not an
-            absolute overlay) so wrapped nav links never slide underneath it on tablet/desktop widths.
-            The wordmark is an in-flow column (always takes its width, just fades) so the centered
-            links don't shift when it appears on scroll. */}
-        <nav className="hidden sm:flex items-start gap-3 px-4 py-2">
-          <Link
-            href="/"
-            aria-hidden={!scrolled}
-            className={`shrink-0 self-center font-serif uppercase text-text-primary tracking-[0.06em] text-base leading-none transition-opacity duration-300 ${
-              scrolled ? 'opacity-100' : 'opacity-0 pointer-events-none'
-            }`}
-          >
-            Atlas Circular
-          </Link>
-          <div className="flex-1 flex items-center justify-center flex-wrap gap-x-5 gap-y-1">
-            {renderLinks('bar')}
-          </div>
-          <div className="shrink-0 self-center">
-            <AuthButton />
+      {/* Dropdown menu (opened by the hamburger) — anchored below the bar; used below lg */}
+      {menuOpen && (
+        <nav className="lg:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
+          <div className="max-w-6xl mx-auto p-3 space-y-1">
+            {renderLinks('menu')}
+            <div className="pt-2 border-t border-border-default mt-2">
+              <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />
+            </div>
+            <div className="text-text-muted text-xs text-center pt-2">
+              Circular-economy law atlas · Beta
+            </div>
           </div>
         </nav>
-
-        {/* Mobile dropdown menu (opened by the hamburger) — anchored below this bar */}
-        {menuOpen && (
-          <nav className="sm:hidden absolute left-0 right-0 top-full bg-bg-secondary border-b border-border-default shadow-lg">
-            <div className="max-w-6xl mx-auto p-3 space-y-1">
-              {renderLinks('menu')}
-              <div className="pt-2 border-t border-border-default mt-2">
-                <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />
-              </div>
-              <div className="text-text-muted text-xs text-center pt-2">
-                Circular-economy law atlas · Beta
-              </div>
-            </div>
-          </nav>
-        )}
-      </div>
+      )}
     </header>
   );
 }

@@ -938,6 +938,35 @@ def _balance_read_set(pool: list, page_size: int) -> list:
                 break
             if r.Bill.id not in promoted_ids:
                 result.append(r)
+
+    # --- Diagnostics (observational; never affects the returned set) -----------------------------
+    # Trace the retrieval funnel by country so we can see WHERE foreign law drops out: it's in the pool,
+    # it's under-represented (eligible for promotion), but did it clear the relevance floor? A large
+    # `floor_gated_by_country` with `budget_unfilled` > 0 is the smoking gun for the rank asymmetry —
+    # foreign title-only matches can't reach a floor set by US full-text ranks. Counts the FULL tail
+    # (not just up to budget exhaustion) so floor-gating is visible even when the budget filled.
+    try:
+        floor_gated: dict[str, int] = {}
+        under_rep_eligible: dict[str, int] = {}
+        for r in pool[core_n:]:
+            c = _country(r)
+            if core_by_country.get(c, 0) >= _BALANCE_CORE_TARGET:
+                continue  # not under-represented — excluded from the diversity budget by design
+            under_rep_eligible[c] = under_rep_eligible.get(c, 0) + 1
+            if _rank(r) < floor:
+                floor_gated[c] = floor_gated.get(c, 0) + 1
+        log.info(
+            "research_balance_funnel",
+            page_size=page_size, core_n=core_n, budget_unfilled=budget,
+            core_min_rank=round(core_min_rank, 4), floor=round(floor, 4),
+            pool_by_country=dict(Counter(_country(r) for r in pool).most_common()),
+            core_by_country=dict(sorted(core_by_country.items(), key=lambda kv: -kv[1])),
+            promoted_by_country=dict(sorted(per_country.items(), key=lambda kv: -kv[1])),
+            floor_gated_by_country=dict(sorted(floor_gated.items(), key=lambda kv: -kv[1])),
+            under_rep_eligible_by_country=dict(sorted(under_rep_eligible.items(), key=lambda kv: -kv[1])),
+        )
+    except Exception:  # noqa: BLE001 — diagnostics must never break the read
+        pass
     return result[:page_size]
 
 
@@ -1478,6 +1507,30 @@ async def ask_the_atlas(
                 year=b.status_date.year if b.status_date else None,
                 snippet=(passages.get(b.id) or "").strip()[:280] or None,
                 bill=_row_to_summary(r)))
+
+    # --- Diversity funnel (read -> cite) --------------------------------------------------------
+    # Pairs with research_balance_funnel (the retrieval side). This is the SYNTHESIS side: of the bills
+    # that actually reached the LLM, which regions did it cite? If foreign law is well-represented in
+    # `read_by_region` but collapses in `cited_by_region`, the skew is the model ignoring given foreign
+    # bills (thin title-only excerpts, US-centric framing) — a prompt/citation-stage fix, not retrieval.
+    # If foreign law is already thin in `read_by_region`, the leak is upstream (floor/pool). Region
+    # buckets everything beyond US/EU as "foreign" — the CA/MX/JP/KR/CN/BR/… the answers keep missing.
+    try:
+        _foreign = lambda reg: (reg or "??") not in ("US", "EU")
+        read_by_region = Counter((r.Bill.region or "??") for r in read_rows)
+        cited_by_region = Counter((c.region or "??") for c in citations)
+        log.info(
+            "research_diversity_funnel",
+            balanced=do_balance, strategy=strategy, matched_total=total,
+            read=len(read_rows), cited=len(cited_ids),
+            read_regions=len(read_by_region), cited_regions=len(cited_by_region),
+            read_foreign=sum(n for reg, n in read_by_region.items() if _foreign(reg)),
+            cited_foreign=sum(n for reg, n in cited_by_region.items() if _foreign(reg)),
+            read_by_region=dict(read_by_region.most_common()),
+            cited_by_region=dict(cited_by_region.most_common()),
+        )
+    except Exception:  # noqa: BLE001 — diagnostics must never break the answer
+        pass
 
     coverage = None if not synth_ok else (
         f"Synthesized from the {len(packed)} most relevant of {total} matched bills."

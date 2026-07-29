@@ -71,6 +71,26 @@ _COMPARISON_CUES = (
     "compared to other", "comparable", "similar to", "similar law", "similar mechanism", "counterpart",
 )
 
+# _CONTRAST_CUES — the named place is a FOIL, not the target: the question asks what exists BEYOND it,
+# or what it LACKS. "Which foreign countries have laws with no US analog?", "materials underrepresented
+# in the US", "what are we missing domestically". Left to Rule 4 (plain filter) these silently returned
+# 100% US bills on questions explicitly about foreign law — the dominant cause of the US/EU citation
+# skew (confirmed by the funnel probe: 4/5 global asks scoped to United States → 0 foreign reads).
+# Directionality matters: "US law with no FOREIGN analog" wants US bills, so cues are US-foil-directional
+# (they encode that the US is what we're looking PAST), not generic negations. High-precision on purpose
+# — the LLM router is the recall backstop; a missed contrast just falls back to today's behavior.
+_CONTRAST_CUES = (
+    "foreign countr", "foreign law", "foreign jurisdiction", "foreign nation",
+    "other than the us", "outside the us", "outside the united states", "beyond the us",
+    "non-us ", "non us ",
+    "no us analog", "no us analogue", "no us equivalent", "no us counterpart",
+    "no analog in the us", "no equivalent in the us", "without a us",
+    "underrepresented in us", "under-represented in us", "underrepresented in the us",
+    "under-represented in the us", "missing domestically", "missing in the us", "lacking in the us",
+    "what are we missing", "we are missing", "we're missing",
+    "exclusively in foreign", "only in foreign", "absent in the us", "absent from the us",
+)
+
 
 # Natural-language → canonical material_categories slug (see app/classification/materials.py). Lets
 # "what does the corpus have about tires?" resolve to the material FACET (material_categories @>
@@ -291,6 +311,14 @@ async def _load_nodes(db: AsyncSession):
     )).all()
 
 
+def _is_us_place(node) -> bool:
+    """True for the US (national node or any US state) — the foil in a US-centric contrast question.
+    The country is the 2nd path segment ('world.us' / 'world.us.us_ca' -> 'us', 'world.fr' -> 'fr'),
+    matching split_part(path,'.',2) used in research.py's country rollups."""
+    parts = (node.path or "").split(".")
+    return len(parts) >= 2 and parts[1] == "us"
+
+
 async def resolve_facets(db: AsyncSession, question: str) -> Facets:
     nodes = await _load_nodes(db)
     lower_q = f" {question.lower()} "
@@ -337,6 +365,26 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
     #    jurisdiction (materials/instruments still apply — "carpet EPR like France's everywhere").
     if matched and any(cue in lower_q for cue in _EVERYWHERE_CUES):
         return Facets(place_ids=[], place_labels=[], reference_labels=place_labels, **common)
+
+    # 1.5) Contrastive / exclusion framing where a DOMESTIC place (the US) is a FOIL, not the target:
+    #    "foreign countries with no US analog", "materials underrepresented in the US", "what are we
+    #    missing domestically". Plain-filtered (Rule 4) these silently returned 100% US bills on questions
+    #    explicitly about foreign law — the dominant driver of the US/EU skew. Demote the US foil to a
+    #    reference; keep any OTHER named place as the anchor, else go corpus-wide (which also re-enables the
+    #    region-balanced read, since nothing is geo-scoped). Guarded on a US foil actually being named, so a
+    #    stray "foreign countries" cue alongside a non-US anchor ("France vs foreign countries") falls
+    #    through to normal handling instead of wrongly unscoping.
+    if matched and any(cue in lower_q for cue in _CONTRAST_CUES):
+        foils = sorted({n.name for n in matched.values() if _is_us_place(n)})
+        if foils:
+            anchors = [n for n in matched.values() if not _is_us_place(n)]
+            if anchors:
+                anchor_paths = {n.path for n in anchors}
+                anchor_ids = [n.id for n in nodes
+                              if any(n.path == p or n.path.startswith(p + ".") for p in anchor_paths)]
+                return Facets(place_ids=anchor_ids, place_labels=sorted({n.name for n in anchors}),
+                              reference_labels=foils, **common)
+            return Facets(place_ids=[], place_labels=[], reference_labels=place_labels, **common)
 
     # 2) Two or more named places → a head-to-head comparison ("Germany vs China"): scope to ALL of them
     #    as filters so retrieval returns each corpus (interleaved), instead of a free-text match on bills

@@ -467,16 +467,47 @@ def _match_filter(tsq):
     return or_(BillText.text_tsv.op("@@")(tsq), _meta_doc().op("@@")(tsq))
 
 
-async def _count_match(db: AsyncSession, tsq, extra=()) -> int:
+def _rank_expr(tsq):
+    """Best of body-text and title/summary relevance for `tsq` (0 when a bill has no text row). This is
+    BOTH the RULE-1 ORDER BY key and the rank-floor filter, so the floor is consistent with the ranking."""
+    return func.greatest(func.coalesce(func.ts_rank(BillText.text_tsv, tsq), 0.0),
+                         func.ts_rank(_meta_doc(), tsq))
+
+
+# RULE-1 relative rank floor: drop a precise match ranked more than ~3 orders of magnitude below the top
+# hit — the "incidental" bug where common query terms (end, life, waste) co-occur by accident in a long or
+# scrape-polluted statute body a bill isn't actually about. Relative-to-top (not absolute) so a uniformly
+# low-ranked set — a single rare term buried in long EU directives — is NEVER emptied: when the top rank is
+# ~0 the floor is ~0 and everything survives. Calibrated on 39 recent asks: at this fraction no dropped
+# bill ever exceeded 2% of the top hit's rank (see scripts calibration), so it only strips the dead tail.
+_RANK_FLOOR_FRAC = 0.001
+
+
+async def _count_match(db: AsyncSession, tsq, extra=(), rank_floor: float = 0.0) -> int:
     # LEFT join: title-only matches (no bill_texts row, or foreign body text) must still count.
     q = (select(func.count(func.distinct(Bill.id)))
          .select_from(Bill)
          .outerjoin(BillText, BillText.bill_id == Bill.id)
          .where(Bill.ce_relevant.is_(True))
          .where(_match_filter(tsq)))
+    if rank_floor > 0:
+        q = q.where(_rank_expr(tsq) >= rank_floor)
     for c in extra:
         q = q.where(c)
     return (await db.scalar(q)) or 0
+
+
+async def _max_rank(db: AsyncSession, tsq, extra=()) -> float:
+    """The top ts_rank across the matched set (within scope) — the reference the RULE-1 rank floor scales
+    off. One scalar aggregate over the already GIN-filtered match subset (same cost profile as ordering)."""
+    q = (select(func.max(_rank_expr(tsq)))
+         .select_from(Bill)
+         .outerjoin(BillText, BillText.bill_id == Bill.id)
+         .where(Bill.ce_relevant.is_(True))
+         .where(_match_filter(tsq)))
+    for c in extra:
+        q = q.where(c)
+    return float(await db.scalar(q) or 0.0)
 
 
 async def _relevant_bills(
@@ -492,10 +523,11 @@ async def _relevant_bills(
       2. structured-by-dimension — only when NO place was named (a place means "list bills there");
       3. OR-broaden — only when no place was named and free text found nothing precise;
       4. listing — the base set (place-scoped, or the whole corpus) ranked by recency.
-    `broaden_floor` (Fix #2, set on the router-driven path): if RULE 1's precise match is thinner than
-    this, DON'T return it — fall through to a broader rule (the structured-scope listing when scoped, or
-    the OR-broaden when not). This kills the router's over-narrow failure where a residual free_text term
-    ANDs a good scoped set down to 1-2 bills; the deterministic path passes 0 (behaviour unchanged).
+    `broaden_floor` (Fix #2): if RULE 1's precise match is thinner than this, DON'T return it — fall
+    through to a broader rule (the structured-scope listing when scoped, or the OR-broaden when not).
+    This kills the over-narrow failure where rare AND-ed terms collapse to 1-2 incidental bills — the
+    router's residual free_text term, or a bare deterministic multi-concept ask. Both live paths now pass
+    _BROADEN_FLOOR; 0 (the default) preserves the raw match for callers that want it (e.g. counts).
     The metadata arm reaches the same titled bills the Explorer shows (incl. non-English laws like
     AGEC). Match rules carry a `snippet` (ts_headline, body text falling back to title); listing/
     dimension rules don't (rows expose it via getattr default). Litigation columns join for the table.
@@ -524,13 +556,13 @@ async def _relevant_bills(
                 + facets.product_labels)
         return f"{base}·{','.join(tags)}" if tags else base
 
-    def _match_page(tsq, limit=None):
+    def _match_page(tsq, limit=None, rank_floor=0.0):
         # Rank = best of body-text and title/summary relevance (0 when a bill has no text row, so a
         # title-only match still ranks by its metadata score). Snippet falls back to title. `balance_rank`
         # + `balance_country` (the country segment of the jurisdiction path) ride along for the optional
-        # region-balanced read set (_balance_read_set); other callers ignore them.
-        text_rank = func.coalesce(func.ts_rank(BillText.text_tsv, tsq), 0.0)
-        rank = func.greatest(text_rank, func.ts_rank(_meta_doc(), tsq))
+        # region-balanced read set (_balance_read_set); other callers ignore them. `rank_floor` drops the
+        # incidental tail so the count (_count_match, same floor) and the returned rows stay in lockstep.
+        rank = _rank_expr(tsq)
         headline = func.ts_headline(
             _ENGLISH, func.coalesce(BillText.text, Bill.title, ""), tsq, _HEADLINE_PLAIN
         )
@@ -542,18 +574,20 @@ async def _relevant_bills(
              .outerjoin(Jurisdiction, Jurisdiction.id == Bill.jurisdiction_id)
              .where(Bill.ce_relevant.is_(True))
              .where(_match_filter(tsq)))
+        if rank_floor > 0:
+            q = q.where(rank >= rank_floor)
         for c in extra:
             q = q.where(c)
         return q.order_by(rank.desc(), Bill.id.desc()).offset(offset).limit(limit or page_size)
 
-    async def _match_rows(tsq):
+    async def _match_rows(tsq, rank_floor=0.0):
         # Region-balanced read (relevance-gated) applies only to a corpus-wide ask (no place scoped —
         # a named place already IS the geography, so balancing across countries there is wrong) on the
         # deep-read call. Over-fetch a rank-ordered pool, then rebalance to page_size; else the plain page.
         if balance_regions and not geo:
-            pool = (await db.execute(_match_page(tsq, limit=_BALANCE_POOL))).all()
+            pool = (await db.execute(_match_page(tsq, limit=_BALANCE_POOL, rank_floor=rank_floor))).all()
             return _balance_read_set(pool, page_size)
-        return (await db.execute(_match_page(tsq))).all()
+        return (await db.execute(_match_page(tsq, rank_floor=rank_floor))).all()
 
     def _plain_page(where_extra, interleave=False, limit=None, with_country=False):
         # `with_country` attaches the country path segment as `balance_country` (joining the jurisdiction
@@ -646,7 +680,11 @@ async def _relevant_bills(
     # set is larger — then we defer to that set (RULE 2) so a stray framing word can't collapse the answer.
     if substantive:
         tsq = func.websearch_to_tsquery(_ENGLISH, " ".join(substantive))
-        n = await _count_match(db, tsq, extra)
+        # Rank floor (relative to the top hit) drops the incidental co-occurrence tail so a bare
+        # multi-term ask isn't narrated off junk matches. Count and rows both apply it, so `n` reflects
+        # the cleaned set the reader/table will see, and the broaden decision below is made on it.
+        rank_floor = await _max_rank(db, tsq, extra) * _RANK_FLOOR_FRAC
+        n = await _count_match(db, tsq, extra, rank_floor=rank_floor)
         # Escalate a THIN match to the dimension set ONLY for a bare topic ask — never swallow a specific
         # query (extra terms present) into the whole dimension. See _dim_is_dominant.
         defer_to_dim = (dim_ok and n < _MIN_TEXT_HITS and dim_total > n
@@ -655,7 +693,7 @@ async def _relevant_bills(
         # it fall through to the structured-scope listing (RULE 4) or the OR-broaden (RULE 3).
         too_thin = broaden_floor and n < broaden_floor
         if n > 0 and not defer_to_dim and not too_thin:
-            rows = await _match_rows(tsq)
+            rows = await _match_rows(tsq, rank_floor=rank_floor)
             return rows, n, _place_strategy("text")
 
     # RULE 2 — structured-by-dimension (candidacy computed above; the set is non-empty).
@@ -1222,8 +1260,11 @@ async def _persist_turn(uid, question, facets, strategy, total, answer_text, cit
 # over-narrowing a good scoped set to 1-2 bills.
 _query_router = None
 
-# Router-driven retrieval broadens away any free-text match thinner than this (the over-narrow bug).
-_ROUTER_MIN_HITS = 3
+# Retrieval broadens away any RULE-1 free-text match thinner than this (the over-narrow bug), on BOTH
+# the router-driven and the deterministic path. A bare multi-concept ask ("waste classification across
+# jurisdictions", "end-of-life decommissioning") ANDs its rare terms down to 1-2 incidental hits; below
+# this floor RULE 1 defers to the OR-broaden / structured listing instead of narrating that junk set.
+_BROADEN_FLOOR = 3
 
 
 def _get_router():
@@ -1287,10 +1328,10 @@ async def _shadow_route(question: str, det, rf, used_router: bool) -> dict | Non
     try:
         async with AsyncSessionLocal() as s:
             d_rows, det_total, det_strategy = await _relevant_bills(
-                s, question, page=1, page_size=_PAGE_SIZE, facets=det)
+                s, question, page=1, page_size=_PAGE_SIZE, facets=det, broaden_floor=_BROADEN_FLOOR)
             r_rows, r_total, r_strategy = await _relevant_bills(
                 s, question, page=1, page_size=_PAGE_SIZE, facets=rf.to_facets(),
-                broaden_floor=_ROUTER_MIN_HITS)
+                broaden_floor=_BROADEN_FLOOR)
         det_ids = [row.Bill.id for row in d_rows]
         r_ids = [row.Bill.id for row in r_rows]
         diff = {k: v for k, v in {
@@ -1436,9 +1477,10 @@ async def ask_the_atlas(
     retrieval_q = await _rewrite_followup(history, question) if history else question
 
     # Resolve BOTH resolvers and pick which drives retrieval (router for count / 2-place compare, else
-    # deterministic). `used_router` also sets broaden_floor so a thin router free-text match broadens.
+    # deterministic). The over-narrow broaden floor applies to BOTH paths now — the deterministic path
+    # over-narrows on bare rare-term asks exactly as the router did on a residual free_text term.
     facets, used_router, rf, det_facets = await _choose_facets(db, retrieval_q)
-    broaden_floor = _ROUTER_MIN_HITS if used_router else 0
+    broaden_floor = _BROADEN_FLOOR
     geo_extra = _scope_extra(facets)  # jurisdiction + material scope for the scoped aggregates
 
     # The full matched set drives the table (page 1); the top _DEEP_READ are read DEEPLY — their
@@ -1608,10 +1650,9 @@ async def research_bills(
     set is identical to what the answer narrated. It re-derives the SAME router-vs-deterministic choice
     (_choose_facets) so a router-driven answer pages consistently; the per-question router parse is cached
     so this is ~free. One Haiku call at most (cache miss on a cold replica)."""
-    facets, used_router, _rf, _det = await _choose_facets(db, question)
-    broaden_floor = _ROUTER_MIN_HITS if used_router else 0
+    facets, _used_router, _rf, _det = await _choose_facets(db, question)
     rows, total, strategy = await _relevant_bills(
-        db, question, page=page, page_size=page_size, facets=facets, broaden_floor=broaden_floor)
+        db, question, page=page, page_size=page_size, facets=facets, broaden_floor=_BROADEN_FLOOR)
     return ResearchBillPage(
         total=total, page=page, page_size=page_size, strategy=strategy,
         items=[_row_to_summary(r) for r in rows],

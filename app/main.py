@@ -10,6 +10,12 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.api import access, admin, bills, alerts, pipeline, health, federal, companies, webhooks, billing, design, user, compliance, referrals, insights, research, evaluate
 from app.api.federal import litigation_router
 from app.ratelimit import limiter
+from app.utils.logging_config import configure_logging
+from app.utils.request_logging import RequestLoggingMiddleware
+from app.utils.security_headers import SecurityHeadersMiddleware
+
+# Configure structlog once, at import time, before anything logs — JSON on Cloud Run, console locally.
+configure_logging()
 
 
 @asynccontextmanager
@@ -59,6 +65,14 @@ app.add_middleware(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+# Security headers on every response (nosniff, frame-deny, HSTS, referrer/permissions policy).
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Added last so it's the OUTERMOST middleware: it wraps SlowAPI and the exception handler, so every
+# request is logged with its final status — including 429s the limiter rejects and 500s the handler
+# returns. See app/utils/request_logging.py.
+app.add_middleware(RequestLoggingMiddleware)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

@@ -104,6 +104,25 @@ class Bill(Base):
 
     # Full compliance extraction (Sonnet output)
     compliance_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Extracted effective/compliance date, promoted from compliance_details['effective_date'] to a real
+    # indexable column so the bills list can range-filter on it ("what takes effect between X and Y" —
+    # the CSO's forward-planning date). Written at Sonnet-extraction time (app/extract_job.py) and
+    # backfilled from the JSONB by migration 043. Day-precise by construction: the backfill only accepts
+    # a full YYYY-MM-DD, so a year-only extracted value stays NULL here (year charts use status_date).
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    @property
+    def date_precision(self) -> str:
+        """Granularity of this row's activity date, for honest UI rendering. US rows carry a real
+        last_action_date (day). Foreign rows have no last_action_date and a status_date that is usually
+        the Jan-1 year-only placeholder (see app/ingestion/law_dates.py) — those render as "YYYY (year)".
+        Anything with a non-Jan-1 status_date (JP, some FR) is genuine day precision."""
+        if self.last_action_date is not None:
+            return "day"
+        sd = self.status_date
+        if sd is not None and sd.month == 1 and sd.day == 1:
+            return "year"
+        return "day"
 
     @property
     def polymers(self) -> list[str] | None:
@@ -133,6 +152,7 @@ class Bill(Base):
         Index("idx_bills_region", "region"),
         Index("idx_bills_last_action", "last_action_date"),
         Index("idx_bills_relevant", "ce_relevant"),
+        Index("idx_bills_effective_date", "effective_date"),
         Index("idx_bills_policy_stance", "policy_stance"),
         Index("idx_bills_material_categories", "material_categories", postgresql_using="gin"),
         Index("idx_bills_instrument_types", "instrument_types", postgresql_using="gin"),

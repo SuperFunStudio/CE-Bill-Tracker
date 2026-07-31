@@ -15,6 +15,12 @@ export interface BillFilterState {
   dimensions: string[];
   urgency: string;
   search: string;
+  /** "search by date" (§9). '' = no date filter. 'effective' ranges the extracted compliance date;
+   *  'activity' ranges the most-recent-action date (coalesce last_action_date, status_date). */
+  dateType: '' | 'effective' | 'activity';
+  /** Inclusive ISO (YYYY-MM-DD) bounds; '' = unbounded on that end. */
+  dateFrom: string;
+  dateTo: string;
   eprOnly: boolean;
   enactedOnly: boolean;
   hasLitigation: boolean;
@@ -29,6 +35,9 @@ export const DEFAULT_FILTERS: BillFilterState = {
   dimensions: [],
   urgency: '',
   search: '',
+  dateType: '',
+  dateFrom: '',
+  dateTo: '',
   eprOnly: true,
   enactedOnly: false,
   hasLitigation: false,
@@ -231,6 +240,60 @@ export function MultiSelect({
   );
 }
 
+/** A single date bound, styled to match the underline Selects. Native date picker for zero deps. */
+function DateInput({
+  label, value, onChange,
+}: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="font-serif text-text-muted text-meta uppercase tracking-wider">{label}</label>
+      <input
+        type="date"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 text-sm text-text-primary focus:outline-none focus:border-green-accent [color-scheme:light] dark:[color-scheme:dark]"
+      />
+    </div>
+  );
+}
+
+/** "Search by date" (§9): a date-type select + from/to bounds, revealed once a type is chosen. Occupies
+ *  its own row (col-span-full) so it doesn't disturb the surrounding filter grid's column math. */
+function DateFilter({
+  dateType, dateFrom, dateTo, onChange,
+}: {
+  dateType: BillFilterState['dateType'];
+  dateFrom: string;
+  dateTo: string;
+  onChange: (patch: Partial<BillFilterState>) => void;
+}) {
+  return (
+    <div className="col-span-full flex flex-wrap items-end gap-x-4 gap-y-2">
+      <div className="min-w-[12rem]">
+        <Select
+          label="Date filter"
+          value={dateType}
+          onChange={v =>
+            // Clearing the type clears the bounds too, so an empty date filter can't linger.
+            onChange(v ? { dateType: v as BillFilterState['dateType'] } : { dateType: '', dateFrom: '', dateTo: '' })
+          }
+          options={[
+            { value: 'effective', label: 'Effective / compliance date' },
+            { value: 'activity', label: 'Legislative activity date' },
+          ]}
+          placeholder="No date filter"
+        />
+      </div>
+      {dateType && (
+        <>
+          <DateInput label="From" value={dateFrom} onChange={v => onChange({ dateFrom: v })} />
+          <DateInput label="To" value={dateTo} onChange={v => onChange({ dateTo: v })} />
+        </>
+      )}
+    </div>
+  );
+}
+
 export function BillFilters({ filters, onChange, hideState, hideSearch, showRegion, resinOptions }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
 
@@ -257,6 +320,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     filters.materialCategories.length > 0,
     filters.dimensions.length > 0,
     filters.polymers.length > 0,
+    filters.dateType,
   ].filter(Boolean).length;
   const [showMore, setShowMore] = useState(secondaryActiveCount > 0);
   // On a fixed-state context, reset preserves the locked state instead of clearing it.
@@ -274,6 +338,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     filters.materialCategories.length > 0,
     filters.polymers.length > 0,
     filters.dimensions.length > 0,
+    filters.dateType,
     filters.search,
   ].filter(Boolean).length;
 
@@ -326,6 +391,12 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
           placeholder="Any"
         />
       )}
+      <DateFilter
+        dateType={filters.dateType}
+        dateFrom={filters.dateFrom}
+        dateTo={filters.dateTo}
+        onChange={patch => set(patch)}
+      />
     </>
   );
 
@@ -448,6 +519,16 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding } from '@/lib/utils';
 
+/** Granularity of a bill's activity date. Prefers the server's date_precision; falls back to deriving
+ *  it (older/snapshot rows may lack the field): a Jan-1 status_date with no last_action_date is the
+ *  year-only foreign placeholder. Exported so a row renderer can qualify such dates as "YYYY (year)". */
+export function billDatePrecision(b: BillSummary): 'day' | 'year' {
+  if (b.date_precision === 'day' || b.date_precision === 'year') return b.date_precision;
+  if (b.last_action_date) return 'day';
+  const sd = b.status_date ?? '';
+  return sd.slice(5) === '01-01' ? 'year' : 'day';
+}
+
 export function applyBillFilters(bills: BillSummary[], f: BillFilterState): BillSummary[] {
   return bills.filter(b => {
     if (f.eprOnly && !b.ce_relevant) return false;
@@ -462,7 +543,29 @@ export function applyBillFilters(bills: BillSummary[], f: BillFilterState): Bill
     // Resin filter: keep bills naming ANY of the selected resins (OR), mirroring material categories.
     if (f.polymers.length &&
         !f.polymers.some(p => (b.polymers ?? []).includes(p))) return false;
-    if (f.hasLitigation && !(b.litigation_case_count > 0)) return false;
+    // Search by date (§9). ISO YYYY-MM-DD strings compare lexicographically, so string < / > is a
+    // correct date comparison. Mirrors the server-side §9b semantics for parity.
+    if (f.dateType && (f.dateFrom || f.dateTo)) {
+      if (f.dateType === 'effective') {
+        const d = b.effective_date;                 // day-precise, or null when not extracted
+        if (!d) return false;
+        if (f.dateFrom && d < f.dateFrom) return false;
+        if (f.dateTo && d > f.dateTo) return false;
+      } else {
+        // Activity date: coalesce(last_action_date, status_date). Year-only rows match on year overlap
+        // so a mid-year range still includes a bill dated only to that year.
+        const activity = b.last_action_date ?? b.status_date ?? null;
+        if (!activity) return false;
+        if (billDatePrecision(b) === 'year') {
+          const y = (b.status_date ?? '').slice(0, 4);
+          if (f.dateFrom && y < f.dateFrom.slice(0, 4)) return false;
+          if (f.dateTo && y > f.dateTo.slice(0, 4)) return false;
+        } else {
+          if (f.dateFrom && activity < f.dateFrom) return false;
+          if (f.dateTo && activity > f.dateTo) return false;
+        }
+      }
+    }
     if (f.search) {
       const q = f.search.toLowerCase();
       const title = fixEncoding(b.title).toLowerCase();

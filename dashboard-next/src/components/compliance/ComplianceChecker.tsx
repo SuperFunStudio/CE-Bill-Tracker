@@ -1,7 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { useRegion } from '@/components/layout/RegionContext';
-import { useRegionPathways } from '@/hooks/useCompliancePathways';
+import { usePathwaysScoped } from '@/hooks/useCompliancePathways';
 import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
 import { PathwayCard } from './PathwayCard';
 import { SkeletonList } from '@/components/ui/SkeletonList';
@@ -16,13 +15,14 @@ const ACTION_ORDER: Record<string, number> = {
 
 /**
  * Self-serve "which laws apply to me?" view. The producer picks what they make; we show the enacted
- * laws in the current region (top-nav selector) whose covered materials overlap, each with its
- * concrete next step + deadline. Region-generic — works for US and EU off the same pathways data.
+ * laws in the selected regions whose covered materials overlap, each with its concrete next step +
+ * deadline. Region scope comes from the page's Region filter (regionParams) — NOT the top-nav
+ * RegionContext, which is hidden on /compliance and collapses to a US/EU primary that can't reach the
+ * foreign-country pathways. Default (empty selection) is region="all", spanning every jurisdiction.
  */
-export function ComplianceChecker() {
-  const { region, def } = useRegion();
+export function ComplianceChecker({ regionParams }: { regionParams: { region?: string; regions?: string } }) {
   const [materials, setMaterials] = useState<string[]>([]);
-  const { data: pathways = [], isLoading } = useRegionPathways(region);
+  const { data: pathways = [], isLoading } = usePathwaysScoped(regionParams);
 
   const toggle = (m: string) =>
     setMaterials(prev => (prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]));
@@ -45,8 +45,8 @@ export function ComplianceChecker() {
     <section className="rounded-xl border border-border-default bg-bg-tertiary/30 p-5">
       <h2 className="font-serif text-2xl text-text-primary">Does this apply to my products?</h2>
       <p className="text-text-secondary text-sm mt-1">
-        Pick what you make to see the enacted <span className="text-text-primary">{def.label}</span> laws
-        that cover it and your next step. Switch region in the filter bar above.
+        Pick what you make to see the enacted EPR laws that cover it and your next step. Use the{' '}
+        <span className="text-text-primary">Regions</span> filter above to change jurisdictions.
       </p>
 
       {/* Material picker */}
@@ -86,7 +86,7 @@ export function ComplianceChecker() {
         ) : matches.length === 0 ? (
           <p className="text-text-muted text-sm py-6 text-center">
             {pathways.length === 0
-              ? `No enacted ${def.label} laws with a mapped compliance pathway yet.`
+              ? 'No enacted laws with a mapped compliance pathway in the selected regions yet.'
               : 'No laws match those materials — try a broader selection.'}
           </p>
         ) : (

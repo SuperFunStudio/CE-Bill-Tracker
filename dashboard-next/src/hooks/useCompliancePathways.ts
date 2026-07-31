@@ -27,3 +27,17 @@ export function useRegionPathways(region: string) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+/**
+ * Pathways scoped by an arbitrary {state | region | regions} shape — the general form used where a
+ * caller has a multi-select region choice (the compliance checker) or a non-US jurisdiction (a
+ * foreign profile passes {region: <country>}, a US state passes {state: <code>}). Pathways now exist
+ * for every region, so this can reach far past the old US/EU-primary that useRegion() collapsed to.
+ */
+export function usePathwaysScoped(params: { state?: string; region?: string; regions?: string }) {
+  return useQuery({
+    queryKey: ['pathways-scoped', params.state ?? '', params.region ?? '', params.regions ?? ''],
+    queryFn: () => fetchCompliancePathways(params),
+    staleTime: 5 * 60 * 1000,
+  });
+}

@@ -425,6 +425,7 @@ async def eco_modulation(
 async def list_pathways(
     state: str | None = Query(default=None, description="Sub-jurisdiction code (e.g. CA, EU)"),
     region: str | None = Query(default=None, description="Jurisdiction family: US (default), EU, or all"),
+    regions: str | None = Query(default=None, description="CSV of codes (multi-select); wins over `region`."),
     db: AsyncSession = Depends(get_db),
 ):
     q = (
@@ -437,11 +438,15 @@ async def list_pathways(
             Bill.bill_number,
         )
     )
-    # Default to US so the existing state pages are unaffected; region="all" spans every region.
-    if region is None:
+    # Region scoping: a `regions` CSV or a single `region` win; a bare caller (state-only, no region)
+    # keeps the historical US default so existing state-page fetches are unaffected. "all" (or an
+    # all-containing CSV) drops the filter entirely — every region's pathways (now that they exist).
+    if region is not None or regions is not None:
+        codes = _resolve_regions(region, regions)
+        if codes:
+            q = q.where(Bill.region.in_(codes))
+    else:
         q = q.where(Bill.region == "US")
-    elif region.lower() != "all":
-        q = q.where(Bill.region == region.upper())
     if state:
         q = q.where(Bill.state == state.upper())
     rows = (await db.execute(q)).all()

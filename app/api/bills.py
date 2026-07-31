@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Integer, case, func, literal_column, select, true
+from sqlalchemy import Integer, and_, case, func, literal_column, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_optional_pro
@@ -93,6 +93,15 @@ async def list_bills(
     # years of a biennium so a cycle bar lists exactly its bills.
     year_from: int | None = None,
     year_to: int | None = None,
+    # "Search by date" (docs/SCOPE_FACET_AND_MATERIAL_NAVIGATION.md §9). Two dates a CSO uses
+    # differently: effective_* range the extracted compliance date (when an obligation takes effect —
+    # forward planning), activity_* range coalesce(last_action_date, status_date) (when a bill moved —
+    # monitoring). Both are inclusive DATE bounds. effective_date is day-precise by construction; the
+    # activity range applies a year-overlap rule for year-only foreign rows (see below).
+    effective_from: date | None = None,
+    effective_to: date | None = None,
+    activity_from: date | None = None,
+    activity_to: date | None = None,
     limit: int = Query(default=100, le=5000),
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
@@ -147,6 +156,36 @@ async def list_bills(
         q = q.where(func.extract("year", Bill.status_date) >= year_from)
     if year_to is not None:
         q = q.where(func.extract("year", Bill.status_date) <= year_to)
+    if effective_from is not None:
+        q = q.where(Bill.effective_date >= effective_from)
+    if effective_to is not None:
+        q = q.where(Bill.effective_date <= effective_to)
+    if activity_from is not None or activity_to is not None:
+        # Activity range on coalesce(last_action_date, status_date). A year-only row (foreign: no
+        # last_action_date + a Jan-1 status_date placeholder) matches on YEAR overlap, so a mid-year
+        # range still includes a bill dated only to that year instead of dropping it on the fake Jan-1.
+        # Rows with no date at all (both NULL) fall out — the NULL comparisons resolve to false. §9b.
+        activity = func.coalesce(Bill.last_action_date, Bill.status_date)
+        is_year_only = and_(
+            Bill.last_action_date.is_(None),
+            func.extract("month", Bill.status_date) == 1,
+            func.extract("day", Bill.status_date) == 1,
+        )
+        status_year = func.extract("year", Bill.status_date)
+        if activity_from is not None:
+            q = q.where(
+                or_(
+                    and_(~is_year_only, activity >= activity_from),
+                    and_(is_year_only, status_year >= activity_from.year),
+                )
+            )
+        if activity_to is not None:
+            q = q.where(
+                or_(
+                    and_(~is_year_only, activity <= activity_to),
+                    and_(is_year_only, status_year <= activity_to.year),
+                )
+            )
     q = q.order_by(Bill.last_action_date.desc().nullslast()).limit(limit).offset(offset)
     rows = (await db.execute(q)).all()
     results = []
@@ -619,7 +658,7 @@ def _parse_iso_date(val) -> date | None:
 
 async def _merge_deadlines(
     db: AsyncSession, *, days_ahead: int, state: str | None, include_past: bool,
-    region: str | None = None,
+    region: str | None = None, regions: list[str] | None = None,
 ) -> list[DeadlineSummary]:
     """The full deadline set the Upcoming Deadlines page needs, merged server-side: explicit
     ComplianceDeadline rows plus the implementation/enforcement dates the classifier pulled into each
@@ -630,9 +669,15 @@ async def _merge_deadlines(
     horizon = today + timedelta(days=days_ahead)
     floor = today - timedelta(days=DEADLINE_PAST_CAP_DAYS) if include_past else today
     state_u = state.upper() if state else None
-    # Default to US so the existing (US) deadline calendar isn't polluted by EU rows; region="all"
-    # spans every region, an explicit code filters to it.
-    region_u = None if (region and region.lower() == "all") else (region or "US").upper()
+    # Region scoping, in precedence order:
+    #   regions=[..]  -> multi-select: rows/bills whose region is IN the list (the deadline page's
+    #                    RegionFilter uses this for 2+ picks).
+    #   region="all"  -> span every region (the page's "All regions" default).
+    #   region=CODE   -> a single region.
+    #   (neither)     -> default US, so a bare caller (e.g. JurisdictionProfile) keeps the US calendar
+    #                    and isn't polluted by EU rows.
+    regions_u = [r.upper() for r in regions if r] if regions else None
+    region_u = None if (regions_u or (region and region.lower() == "all")) else (region or "US").upper()
 
     seen: set[tuple] = set()
     out: list[DeadlineSummary] = []
@@ -658,7 +703,9 @@ async def _merge_deadlines(
     q = select(ComplianceDeadline, Bill.bill_number, Bill.title, Bill.material_categories).outerjoin(
         Bill, ComplianceDeadline.bill_id == Bill.id
     )
-    if region_u:
+    if regions_u:
+        q = q.where(ComplianceDeadline.region.in_(regions_u))
+    elif region_u:
         q = q.where(ComplianceDeadline.region == region_u)
     for row in (await db.execute(q)).all():
         cd = row.ComplianceDeadline
@@ -670,7 +717,9 @@ async def _merge_deadlines(
 
     # 2. Dates embedded in each EPR bill's compliance_details.
     bq = select(Bill).where(Bill.ce_relevant == True).where(Bill.compliance_details.isnot(None))  # noqa: E712
-    if region_u:
+    if regions_u:
+        bq = bq.where(Bill.region.in_(regions_u))
+    elif region_u:
         bq = bq.where(Bill.region == region_u)
     for bill in (await db.execute(bq)).scalars().all():
         details = bill.compliance_details or {}
@@ -725,6 +774,7 @@ async def list_upcoming_deadlines(
     days_ahead: int = 90,
     state: str | None = None,
     region: str | None = None,  # US (default), EU, or "all"
+    regions: str | None = None,  # csv of region codes (multi-select); takes precedence over `region`
     materials: str | None = None,  # csv; scopes the FREE teaser so the taste is relevant (Pro ignores)
     states: str | None = None,  # csv; ditto
     is_pro: bool = Depends(get_optional_pro),
@@ -734,7 +784,8 @@ async def list_upcoming_deadlines(
     "include past" toggle works client-side). Everyone else gets the soonest few upcoming rows as a
     teaser — the full calendar is the paid product. Counts for the metric cards come from
     /deadlines/summary, which stays public."""
-    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=is_pro, region=region)
+    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=is_pro,
+                                    region=region, regions=_csv(regions))
     if is_pro:
         return merged
     today = date.today()
@@ -748,6 +799,7 @@ async def deadlines_summary(
     days_ahead: int = 1095,
     state: str | None = None,
     region: str | None = None,  # US (default), EU, or "all"
+    regions: str | None = None,  # csv of region codes (multi-select); takes precedence over `region`
     materials: str | None = None,
     states: str | None = None,
     db: AsyncSession = Depends(get_db),
@@ -755,7 +807,8 @@ async def deadlines_summary(
     """Ungated aggregate counts (total/within-30/within-90/nearest + which states), optionally scoped
     to the reader's materials/states. Powers the metric cards and the scoped deadline banner for free
     visitors without handing over the deadline rows themselves."""
-    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=False, region=region)
+    merged = await _merge_deadlines(db, days_ahead=days_ahead, state=state, include_past=False,
+                                    region=region, regions=_csv(regions))
     scoped = _scope_filter(merged, materials=_csv(materials), states=_csv(states))  # already upcoming-only
     today = date.today()
     within_30 = sum(1 for d in scoped if (d.deadline_date - today).days <= 30)

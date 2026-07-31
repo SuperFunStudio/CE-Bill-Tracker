@@ -11,13 +11,13 @@ import { ScopeOnboarding } from '@/components/scope/ScopeOnboarding';
  * Squarespace Code Block) and let the iframe size itself to the content. Every
  * other route gets the standard masthead + scroll shell.
  */
-// Pages where the global jurisdiction filter is meaningless and only sends mixed signals: Upcoming
-// Deadlines + Federal Actions are US-only datasets, and Packaging Studio quotes fixed foreign fee
-// schedules (UK pEPR, JP JCPRA) that a US-state region selector would contradict. Ask the Bills scopes
-// geography from the QUESTION TEXT (resolve_facets), so the bar is a dead control there — it never
-// reached the request. The home page ('/') now hosts the Regions selector inside its own explorer
-// filter box (BillFilters showRegion), folding the bar into the unified filter set as the Atlas
-// migration intended, so the global bar is hidden there too.
+// Pages where the global jurisdiction bar is redundant or sends mixed signals, so each hosts its own
+// scope control instead: '/compliance' now carries its own multi-select Regions filter (deadlines +
+// the "does this apply to me" checker read it — it is NOT US-only anymore; the corpus spans 40+
+// regions). '/federal' genuinely is US-only (federal actions). Packaging Studio quotes fixed foreign
+// fee schedules (UK pEPR, JP JCPRA) that a US-state selector would contradict. Ask the Bills scopes
+// geography from the QUESTION TEXT (resolve_facets), so the bar never reached the request. The home
+// page ('/') hosts the Regions selector inside its own explorer filter box (BillFilters showRegion).
 const REGION_BAR_HIDDEN = ['/', '/compliance', '/federal', '/studio', '/ask'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

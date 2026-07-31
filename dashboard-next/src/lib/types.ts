@@ -79,6 +79,14 @@ export interface BillSummary {
   title: string | null;
   status: string | null;
   last_action_date: string | null;
+  /** Date of the most recent status transition. Backs the activity axis for foreign rows (no
+   *  last_action_date). May be a Jan-1 year-only placeholder — see date_precision. */
+  status_date?: string | null;
+  /** Extracted compliance/effective date (when obligations bind) — the CSO's forward-planning date.
+   *  Day-precise; null when not extracted or only a year was recoverable. */
+  effective_date?: string | null;
+  /** "day" | "year" — render a year-only activity date as "YYYY (year)" rather than a false day. */
+  date_precision?: string | null;
   ce_relevant: boolean;
   confidence_score: number | null;
   material_categories: string[] | null;
@@ -680,6 +688,14 @@ export interface BillParams {
   /** Inclusive status_date year range — per-cycle (biennium) drill-down. */
   year_from?: number;
   year_to?: number;
+  /** Inclusive DATE bounds (YYYY-MM-DD) for "search by date" (§9). effective_* ranges the extracted
+   *  compliance date; activity_* ranges coalesce(last_action_date, status_date) with year-overlap for
+   *  year-only foreign rows. Server-side params (mirror `dimensions`), though the explorer also filters
+   *  client-side via applyBillFilters since it loads the full corpus. */
+  effective_from?: string;
+  effective_to?: string;
+  activity_from?: string;
+  activity_to?: string;
   /** Confidence floor (momentum drill-down passes 0.7 to match the chart). */
   min_confidence?: number;
   /** CSV of compliance-dimension keys (eco_modulation,collection_targets…) — a bill matches only if
@@ -691,6 +707,10 @@ export interface BillParams {
 export interface DeadlineParams {
   days_ahead?: number;
   state?: string;
+  /** Single region: US (default when omitted), EU, or "all" (spans every region). */
+  region?: string;
+  /** csv of region codes (multi-select); takes precedence over `region`. */
+  regions?: string;
   /** csv of material_category slugs — scopes the free teaser + the stats counts. */
   materials?: string;
   /** csv of two-letter state codes — ditto. */

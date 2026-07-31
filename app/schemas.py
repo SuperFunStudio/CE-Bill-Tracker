@@ -14,6 +14,13 @@ class BillSummary(BaseModel):
     title: str | None
     status: str | None
     last_action_date: date | None
+    # Date fields for "search by date" (§9). status_date backs the activity axis for foreign rows (which
+    # have no last_action_date); effective_date is the extracted compliance date (when obligations bind);
+    # date_precision ("day"|"year") tells the UI to render a Jan-1 year-only foreign date as "YYYY (year)"
+    # rather than a false day. See app/models.Bill.date_precision.
+    status_date: date | None = None
+    effective_date: date | None = None
+    date_precision: str | None = None
     ce_relevant: bool
     confidence_score: float | None
     material_categories: list | None

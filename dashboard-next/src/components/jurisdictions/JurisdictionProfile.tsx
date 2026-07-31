@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useBills } from '@/hooks/useBills';
 import { useDeadlines } from '@/hooks/useDeadlines';
-import { useCompliancePathways } from '@/hooks/useCompliancePathways';
+import { usePathwaysScoped } from '@/hooks/useCompliancePathways';
 import { PathwayCard } from '@/components/compliance/PathwayCard';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTable } from '@/components/bills/BillTable';
@@ -59,9 +59,11 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
   // every non-US jurisdiction page showing "0 tracked bills" (billMatcher keys on region/state).
   const { data: bills = [], isLoading } = useBills({ ce_relevant: true, limit: 5000, regions: 'all' });
   const { data: deadlines = [] } = useDeadlines();
-  // Compliance pathways carry the US EPR action taxonomy (PRO/individual-plan); only fetch for US.
+  // Pathways now exist for every region (build_compliance_pathways --region ALL). A US state scopes by
+  // `state`; a foreign/EU jurisdiction scopes by `region` (the country/EU code) — so non-US profiles
+  // finally show their action layer instead of hiding it behind the old isUS gate.
   const { data: pathways = [], isLoading: pathwaysLoading, isError: pathwaysError } =
-    useCompliancePathways(isUS ? code : undefined);
+    usePathwaysScoped(isUS ? { state: code } : { region });
   const programs = isUS ? programsForState(code) : [];
 
   // Compliance pathways exist only for enacted laws. Split into actionable obligations
@@ -164,9 +166,10 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
         <Stat label="In motion" value={stats.inMotion} hint="active bills, introduced through enacted" />
       </section>
 
-      {/* How to comply — the action layer: each enacted law → its next step. US-only: the pathway
-          action taxonomy (PRO / individual plan / register) is specific to US EPR programs. */}
-      {isUS && (
+      {/* How to comply — the action layer: each enacted law → its next step. Region-generic: pathways
+          are built for US, EU, and every foreign jurisdiction (the empty states cover regions with no
+          enacted law yet). */}
+      {(
         <section className="space-y-3">
           <div>
             <h2 className="font-serif text-lg text-text-primary">How to comply</h2>

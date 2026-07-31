@@ -398,7 +398,7 @@ export async function fetchCompanyObligations(companyId: string): Promise<Compan
 /** Compliance pathways — one "how do I comply" record per enacted law. Scope by `state` (a US state
  *  profile) and/or `region` (US default, EU, or "all" for the self-serve checker across a region). */
 export async function fetchCompliancePathways(
-  params: { state?: string; region?: string },
+  params: { state?: string; region?: string; regions?: string },
 ): Promise<CompliancePathway[]> {
   return apiFetch<CompliancePathway[]>(buildUrl('/compliance/pathways', params));
 }

@@ -76,6 +76,14 @@ async def _run(regions: list[str] | None, include_us: bool, refresh: bool, max_b
                     region=bill.region,
                 )
                 bill.compliance_details = extraction.raw_json
+                # Promote the headline effective date to the indexable column (migration 043) so the
+                # bills list can range-filter on it. Day-precise only: a year-only value stays NULL.
+                eff = extraction.effective_date
+                if eff:
+                    try:
+                        bill.effective_date = date.fromisoformat(eff[:10])
+                    except (ValueError, TypeError):
+                        bill.effective_date = None
 
                 # Replace this bill's deadlines so a --refresh re-run doesn't accumulate duplicates.
                 existing = (

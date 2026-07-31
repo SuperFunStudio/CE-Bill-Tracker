@@ -10,6 +10,7 @@ import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { UpcomingDeadlinesLock } from '@/components/compliance/UpcomingDeadlinesLock';
 import { DeadlinesTabs } from '@/components/compliance/DeadlinesTabs';
 import { ComplianceChecker } from '@/components/compliance/ComplianceChecker';
+import { RegionFilter } from '@/components/insights/RegionFilter';
 import { LockIcon } from '@/components/ui/icons';
 import { deadlineInScope } from '@/lib/scope';
 import { formatMaterial } from '@/components/scope/ScopeOnboarding';
@@ -55,6 +56,10 @@ const TONE: Record<Tone, { tag: string; date: string }> = {
 export default function CompliancePage() {
   const [daysAhead, setDaysAhead] = useState(1095);
   const [stateFilter, setStateFilter] = useState('');
+  // Region scope for the calendar. Empty = All regions (spans US + EU + every foreign jurisdiction) —
+  // the deadline endpoints default to US-only otherwise, which hid the EU/UK/foreign deadlines (e.g.
+  // PPWR's 12 Aug 2026). One pick -> single region; 2+ -> the `regions` CSV param.
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [includePast, setIncludePast] = useState(false);
   const [showAllLater, setShowAllLater] = useState(false);
   const [selected, setSelected] = useState<DeadlineSummary | null>(null);
@@ -70,15 +75,24 @@ export default function CompliancePage() {
   // free → the soonest few rows. Pass scope only on the free path so the teaser stays relevant.
   const scopeMaterials = scopeActive && scope.materials.length ? scope.materials.join(',') : undefined;
   const scopeStates = scopeActive && scope.states.length ? scope.states.join(',') : undefined;
+  // 0 regions selected → span everything ("all"); 1 → that single region; 2+ → the CSV `regions` param.
+  const regionParams: { region?: string; regions?: string } =
+    selectedRegions.length === 0
+      ? { region: 'all' }
+      : selectedRegions.length === 1
+        ? { region: selectedRegions[0] }
+        : { regions: selectedRegions.join(',') };
   const { data: deadlines = [], isLoading } = useDeadlines({
     days_ahead: daysAhead,
     state: stateFilter || undefined,
+    ...regionParams,
     materials: proView ? undefined : scopeMaterials,
     states: proView ? undefined : scopeStates,
   });
   const { data: stats } = useDeadlineStats({
     days_ahead: daysAhead,
     state: stateFilter || undefined,
+    ...regionParams,
     materials: scopeMaterials,
     states: scopeStates,
   });
@@ -211,6 +225,7 @@ export default function CompliancePage() {
             ))}
           </select>
         </label>
+        <RegionFilter selected={selectedRegions} onChange={setSelectedRegions} />
         <label className="flex items-center gap-1.5 text-xs text-text-muted uppercase tracking-wider">
           State
           <select value={stateFilter} onChange={e => setStateFilter(e.target.value)} className={controlCls}>
@@ -355,7 +370,7 @@ export default function CompliancePage() {
           Not sure what applies to you? Check which laws hit your products →
         </summary>
         <div className="px-4 pb-4">
-          <ComplianceChecker />
+          <ComplianceChecker regionParams={regionParams} />
         </div>
       </details>
 

@@ -2,9 +2,11 @@
 the long-form /research/drafts pipeline (app/api/research.create_content_draft).
 
 Where that endpoint stitches whole thread turns into a full Substack post, this crops each answer to its
-sharpest point. Two shapes:
+sharpest point. Three shapes:
 
   crop  (default) — one research turn -> the single most impactful finding, tightened to ~150-220 words.
+  fact            — one turn -> ONE bite-sized "Friday Fact": a single striking milestone/number/first,
+                    40-90 words, the punchiest shape (something to leave a reader with over the weekend).
   pair            — one turn -> the 2 or 4 cited bills that form the most illuminating contrast, written
                     up as a ~200-word "side by side".
 
@@ -44,6 +46,7 @@ from app.api.research import (  # noqa: E402
     _candidate_bill_details,
     _cited_ids,
     _crop_editorialize,
+    _fact_editorialize,
     _pair_editorialize,
     _ref_map_for,
     _slugify,
@@ -72,10 +75,11 @@ async def _make_draft(mode: str, turn, pair_size: int) -> dict | None:
     cited = _cited_ids(turn)
     ref = f"session={turn.session_id} seq={turn.seq}"
 
-    if mode == "crop":
+    if mode in ("crop", "fact"):
         if not answer_text.strip():
             return None
-        data = await _crop_editorialize([(turn.question, answer_text)])
+        distill = _crop_editorialize if mode == "crop" else _fact_editorialize
+        data = await distill([(turn.question, answer_text)])
         link_ids = cited
     else:  # pair
         if len(cited) < pair_size:
@@ -149,7 +153,7 @@ async def process(t, sem, args) -> dict:
 
 async def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--mode", choices=["crop", "pair"], default="crop")
+    ap.add_argument("--mode", choices=["crop", "fact", "pair"], default="crop")
     ap.add_argument("--owner-uid", default=OWNER_UID, help="Source-turn owner (ignored if --session set).")
     ap.add_argument("--session", default=None, help="Only turns from this research session id.")
     ap.add_argument("--limit", type=int, default=5, help="Max source turns to distill.")

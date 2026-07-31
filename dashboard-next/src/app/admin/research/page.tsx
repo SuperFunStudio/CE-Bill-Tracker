@@ -16,9 +16,12 @@ import {
   deleteDraft,
   publishDraft,
   unpublishDraft,
+  fetchPulse,
   type ResearchTurnAdminItem,
   type ContentDraft,
   type DraftMode,
+  type PulsePick,
+  type PulseSkip,
 } from '@/lib/research-admin';
 
 type GetToken = () => Promise<string | null>;
@@ -85,14 +88,17 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function Console({ getToken }: { getToken: GetToken }) {
-  const [tab, setTab] = useState<'log' | 'staging'>('log');
+  const [tab, setTab] = useState<'log' | 'pulse' | 'staging'>('log');
   return (
     <Shell>
       <div className="flex gap-2 border-b border-border-default">
         <TabButton active={tab === 'log'} onClick={() => setTab('log')}>Research log</TabButton>
+        <TabButton active={tab === 'pulse'} onClick={() => setTab('pulse')}>Pulse</TabButton>
         <TabButton active={tab === 'staging'} onClick={() => setTab('staging')}>Staging</TabButton>
       </div>
-      {tab === 'log' ? <ResearchLog getToken={getToken} /> : <Staging getToken={getToken} />}
+      {tab === 'log' ? <ResearchLog getToken={getToken} />
+        : tab === 'pulse' ? <Pulse getToken={getToken} />
+        : <Staging getToken={getToken} />}
     </Shell>
   );
 }
@@ -419,6 +425,186 @@ function TurnRow({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Pulse (timeliness ranker → Friday Fact) ──────────────────────────────────
+
+function Pulse({ getToken }: { getToken: GetToken }) {
+  const [allBeats, setAllBeats] = useState(false);
+  const [newsDays, setNewsDays] = useState(28);
+  const [picks, setPicks] = useState<PulsePick[]>([]);
+  const [skipped, setSkipped] = useState<PulseSkip[]>([]);
+  const [meta, setMeta] = useState<{ pool: number; movers: number } | null>(null);
+  const [ran, setRan] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Which pick (session:seq) is mid-generate, and which have already been staged this session.
+  const [drafting, setDrafting] = useState<string | null>(null);
+  const [staged, setStaged] = useState<Set<string>>(new Set());
+
+  async function run() {
+    if (busy) return;
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const res = await fetchPulse(getToken, {
+        mode: allBeats ? 'all_beats' : 'briefing', news_days: newsDays, top: 15,
+      });
+      setPicks(res.picks);
+      setSkipped(res.skipped ?? []);
+      setMeta({ pool: res.pool, movers: res.movers });
+      setRan(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not run the pulse.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function draftFact(p: PulsePick) {
+    const key = `${p.session_id}:${p.seq}`;
+    if (drafting) return;
+    setDrafting(key); setError(null); setNotice(null);
+    try {
+      const draft = await createDraft(getToken, {
+        session_id: p.session_id, seqs: [p.seq], mode: 'fact',
+      });
+      setStaged(prev => new Set(prev).add(key));
+      if (draft.editorial_applied === false) {
+        setError('The Friday Fact pass fell back to verbatim (the LLM pass failed). Edit it in Staging, or retry.');
+      } else {
+        setNotice(`“${draft.title}” staged → see the Staging tab.`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not draft the fact.');
+    } finally {
+      setDrafting(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-text-secondary text-sm">
+        What to write this week. Ranks research answers by what&apos;s moving right now — recent bill
+        activity in the corpus plus recent news headlines — so you distill a timely one. Signal picks the
+        topic; the fact still comes only from the answer&apos;s cited bills. Ranking is instant; nothing
+        publishes until you say so.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={run}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-green-accent text-bg-primary px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+        >
+          {busy ? 'Reading the room…' : ran ? 'Re-run pulse' : 'Run pulse'}
+        </button>
+        <label className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+          <input type="checkbox" checked={allBeats} onChange={e => setAllBeats(e.target.checked)} className="accent-green-accent" disabled={busy} />
+          All beats (one pick per topic)
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+          News window
+          <select
+            value={newsDays}
+            onChange={e => setNewsDays(Number(e.target.value))}
+            disabled={busy}
+            className="rounded-lg border border-border-default bg-bg-primary px-1.5 py-1 text-xs text-text-secondary focus:border-green-accent focus:outline-none disabled:opacity-40"
+          >
+            <option value={14}>2 weeks</option>
+            <option value={21}>3 weeks</option>
+            <option value={28}>4 weeks</option>
+          </select>
+        </label>
+        {meta && <span className="text-text-muted text-xs">{picks.length} pick(s) · pool {meta.pool} · {meta.movers} recent mover(s)</span>}
+      </div>
+
+      {notice && <p className="text-green-accent text-xs">{notice}</p>}
+      {error && <p className="text-red-400 text-xs">{error}</p>}
+
+      <div className="space-y-3">
+        {picks.map((p, i) => (
+          <PulseCard
+            key={`${p.session_id}:${p.seq}`}
+            pick={p}
+            rank={allBeats ? undefined : i + 1}
+            busy={drafting === `${p.session_id}:${p.seq}`}
+            disabled={drafting !== null}
+            staged={staged.has(`${p.session_id}:${p.seq}`)}
+            onDraft={() => draftFact(p)}
+          />
+        ))}
+        {ran && picks.length === 0 && !error && (
+          <p className="text-text-muted text-sm">Nothing scored above zero — try a wider news window or the other mode.</p>
+        )}
+        {!ran && !busy && (
+          <p className="text-text-muted text-sm">Run the pulse to see this week&apos;s ranked candidates.</p>
+        )}
+      </div>
+
+      {skipped.length > 0 && (
+        <div className="rounded-lg border border-border-default/60 bg-bg-secondary/50 p-3">
+          <p className="text-text-muted text-meta uppercase tracking-wider mb-1.5">Beats with no pick</p>
+          <ul className="space-y-0.5">
+            {skipped.map(s => (
+              <li key={s.beat} className="text-text-muted text-xs">
+                <span className="text-text-secondary">{s.beat}</span> — {s.reason} ({s.headlines} headlines)
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PulseCard({
+  pick: p, rank, busy, disabled, staged, onDraft,
+}: {
+  pick: PulsePick;
+  rank?: number;
+  busy: boolean;
+  disabled: boolean;
+  staged: boolean;
+  onDraft: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          {p.beat && <p className="text-green-accent text-meta uppercase tracking-wider mb-0.5">{p.beat}</p>}
+          <p className="text-text-primary text-sm">
+            {rank !== undefined && <span className="text-green-accent font-mono mr-1.5">{rank}.</span>}
+            {p.question}
+          </p>
+          <p className="text-text-muted text-meta mt-1">
+            score {p.score} · corpus {p.corpus} · news {p.news} · {p.cited} cited
+          </p>
+        </div>
+        <button
+          onClick={onDraft}
+          disabled={disabled || staged}
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-green-accent text-bg-primary px-3 py-1.5 text-xs font-medium hover:opacity-90 transition-opacity disabled:opacity-40"
+          title="Distill this answer into a bite-sized Friday Fact, staged for review"
+        >
+          {staged ? 'Staged ✓' : busy ? 'Drafting…' : 'Draft Friday Fact →'}
+        </button>
+      </div>
+
+      {/* Why now — the evidence behind the ranking */}
+      <div className="space-y-1 text-meta">
+        {p.moved_bills.length > 0 && (
+          <p className="text-text-muted"><span className="text-text-secondary">Moved:</span> {p.moved_bills.join(', ')}</p>
+        )}
+        {p.hot_themes.length > 0 && (
+          <p className="text-text-muted"><span className="text-text-secondary">Themes:</span> {p.hot_themes.join(', ')}</p>
+        )}
+        {p.news_terms.length > 0 && (
+          <p className="text-text-muted"><span className="text-text-secondary">In the news:</span> {p.news_terms.join(', ')}</p>
+        )}
       </div>
     </div>
   );

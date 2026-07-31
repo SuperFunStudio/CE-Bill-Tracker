@@ -47,12 +47,17 @@ from app.classification.cycles import materials_for_wing
 from app.config import settings
 from app.database import AsyncSessionLocal, get_db
 from app.models import Bill, BillProductCoverage, BillText, Jurisdiction, LitigationCase
+from app.research import pulse as _pulse
 from app.schemas import (
     BillSummary,
     ContentDraftCreate,
     ContentDraftOut,
     ContentDraftPage,
     ContentDraftPatch,
+    PulsePick,
+    PulseRequest,
+    PulseResponse,
+    PulseSkip,
     ResearchAnswer,
     ResearchAskRequest,
     ResearchBillPage,
@@ -2041,6 +2046,26 @@ Return a JSON object with EXACTLY these keys:
 Output ONLY the JSON object — no preamble, no code fence.
 """
 
+_FACT_SYSTEM = """\
+You are an editor writing a "Friday Fact" for a circular-economy / EPR policy newsletter — ONE bite-sized
+thing to leave the reader with over the weekend. You are given one or more QUESTION/ANSWER pairs from a
+single research thread, each answer in markdown with inline [STATE BILL_NUMBER] citation markers.
+Find the SINGLE most striking, self-contained fact in the material — a first, an inflection year, a hard
+number, a stark contrast — and land it in one tight beat. Favor the concrete milestone over the abstract
+trend: "In 2021 Maine became the first US state to pass packaging EPR" beats "momentum has been building."
+This is the punchiest shape we run — cut everything that isn't the fact and one line of why it matters.
+Return a JSON object with EXACTLY these keys:
+- "title": a "Friday Fact: …" headline (<= 80 chars) that states the fact itself, not the topic.
+- "dek": an optional one-line kicker (<= 120 chars), or null.
+- "body": ONE short markdown paragraph, 40-90 words. Lead with the fact; add at most one sentence of
+  why-it-matters. No subheads, no lists, no call to action. DO NOT invent facts, numbers, dates, or bills
+  beyond the ANSWERS. PRESERVE the legal-status framing: keep a proposed/introduced/pending bill in
+  conditional voice ("would be the first… if enacted"); only bills an answer presents as enacted may be
+  stated as law in force. Keep every [STATE BILL_NUMBER] marker EXACTLY as written, beside the claim it
+  supports — cite only bills already in the ANSWERS.
+Output ONLY the JSON object — no preamble, no code fence.
+"""
+
 _PAIR_SYSTEM = """\
 You are an editor writing a VERY SHORT "bills, side by side" piece for a circular-economy / EPR policy
 newsletter — read by producers, compliance teams, and policy staff. You are given a research QUESTION and
@@ -2098,6 +2123,14 @@ async def _crop_editorialize(pairs: list[tuple[str, str]]) -> dict | None:
     None on failure so the caller falls back to the verbatim combine."""
     convo = "\n\n".join(f"QUESTION {i + 1}: {q}\n\nANSWER {i + 1}:\n{a}" for i, (q, a) in enumerate(pairs))
     return await _shortform_llm(_CROP_SYSTEM, convo)
+
+
+async def _fact_editorialize(pairs: list[tuple[str, str]]) -> dict | None:
+    """Distill a thread's (question, answer) pairs to ONE bite-sized 'Friday Fact' -> {title, dek, body}.
+    The punchiest short-form shape: a single striking milestone/number, not a paragraph of findings. None
+    on failure so the caller falls back to the verbatim combine."""
+    convo = "\n\n".join(f"QUESTION {i + 1}: {q}\n\nANSWER {i + 1}:\n{a}" for i, (q, a) in enumerate(pairs))
+    return await _shortform_llm(_FACT_SYSTEM, convo)
 
 
 async def _candidate_bill_details(db: AsyncSession, ids: list[int]) -> list[dict]:
@@ -2168,7 +2201,8 @@ async def create_content_draft(
     seq order) → editorial/short-form pass + citation link pass → an editable ContentDraft. `seqs` picks
     the turns (tick the questions to keep); `seq` is the legacy single-turn form; neither → the latest
     turn. `mode` picks the shape: "full" (long-form combine, `editorial`-gated), "crop" (short — the
-    thread's single sharpest finding), or "pair" (short — `pair_size` cited bills side by side).
+    thread's single sharpest finding), "pair" (short — `pair_size` cited bills side by side), or "fact"
+    (bite-sized — one striking milestone/number as a "Friday Fact").
     `body_markdown` comes out Substack-ready, [STATE BILL_NUMBER] markers already deep-linked."""
     from app.models import ContentDraft, ResearchTurn
     sess = await _get_session_or_404(db, body.session_id)
@@ -2207,6 +2241,8 @@ async def create_content_draft(
     title, dek, body_src = (sess_title or pairs[0][0])[:300], None, _combine_verbatim(pairs)
     if body.mode == "crop":
         ed = await _crop_editorialize(pairs)
+    elif body.mode == "fact":
+        ed = await _fact_editorialize(pairs)
     elif body.mode == "pair":
         ed = await _pair_editorialize(pairs[0][0], candidates, body.pair_size)
     elif body.editorial:
@@ -2348,6 +2384,42 @@ async def unpublish_content_draft(
     await db.commit()
     await db.refresh(d)
     return _draft_out(d)
+
+
+@router.post("/pulse", response_model=PulseResponse)
+async def research_pulse(
+    body: PulseRequest,
+    _user: AuthedUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> PulseResponse:
+    """Timeliness ranker behind the staging-page 'Pulse' button — ranks candidate research turns by what's
+    moving right now (recent bill movement in our corpus + recent news headlines), so an admin picks a
+    timely turn to distill. Ranking ONLY: no LLM, no writes. The admin turns a pick into a Friday Fact by
+    calling POST /drafts with mode='fact'. Core is app/research/pulse.py, shared with the CLI.
+    mode 'briefing' = one ranked list over all beats; 'all_beats' = one deduped pick per beat."""
+    movers, hot_terms = await _pulse.recent_movers(db, body.days)
+    turns = await _pulse.candidate_turns(db, None, body.pool, body.min_citations)  # all admin-visible turns
+    idf = _pulse.build_idf(turns)
+    beats = body.beats or _pulse.DEFAULT_NEWS_QUERIES
+
+    if body.mode == "all_beats":
+        # Fetch each beat's news OFF the event loop (blocking urllib), then pick one deduped turn per beat.
+        beats_news = []
+        for b in beats:
+            terms, heads = await asyncio.to_thread(_pulse.fetch_news_terms, [b], body.news_days)
+            beats_news.append((b, terms, len(heads)))
+        raw = _pulse.pick_beats(beats_news, turns, movers, hot_terms, idf)
+        picks = [PulsePick(**{k: v for k, v in p.items() if k not in ("skipped", "reason")})
+                 for p in raw if not p.get("skipped")]
+        skipped = [PulseSkip(beat=p["beat"], reason=p["reason"], headlines=p["headlines"])
+                   for p in raw if p.get("skipped")]
+        return PulseResponse(mode="all_beats", pool=len(turns), movers=len(movers),
+                             picks=picks, skipped=skipped)
+
+    terms, _heads = await asyncio.to_thread(_pulse.fetch_news_terms, beats, body.news_days)
+    raw = _pulse.rank_turns(turns, movers, hot_terms, terms, idf, body.top)
+    return PulseResponse(mode="briefing", pool=len(turns), movers=len(movers),
+                         picks=[PulsePick(**p) for p in raw])
 
 
 @router.get("/published/{token}", response_model=PublishedArticleOut)

@@ -100,8 +100,9 @@ export interface ContentDraftPage {
 }
 
 // mode: 'full' (long-form combine, editorial-gated) | 'crop' (short — the thread's sharpest finding) |
-// 'pair' (short — pair_size cited bills side by side). pair_size applies to 'pair' only.
-export type DraftMode = 'full' | 'crop' | 'pair';
+// 'pair' (short — pair_size cited bills side by side) | 'fact' (bite-sized "Friday Fact", one striking
+// milestone/number). pair_size applies to 'pair' only.
+export type DraftMode = 'full' | 'crop' | 'pair' | 'fact';
 
 export const createDraft = (
   getToken: GetToken,
@@ -150,6 +151,56 @@ export const publishDraft = (getToken: GetToken, id: string) =>
 /** Take a published article back down (keeps the token so re-publishing restores the same link). */
 export const unpublishDraft = (getToken: GetToken, id: string) =>
   authedFetch<ContentDraft>(`/research/drafts/${id}/unpublish`, getToken, { method: 'POST' });
+
+// ── Pulse (timeliness ranker for the staging page) ───────────────────────────
+
+// One ranked candidate turn + its "why now" evidence. Turn it into a Friday Fact by calling
+// createDraft({ session_id, seqs:[seq], mode:'fact' }). The pulse never distills itself.
+export interface PulsePick {
+  session_id: string;
+  seq: number;
+  question: string;
+  cited: number;
+  score: number;
+  corpus: number; // corpus-delta signal (recent bill movement this turn cites)
+  news: number;   // news signal (headline-term overlap)
+  moved_bills: string[];
+  hot_themes: string[];
+  news_terms: string[];
+  beat?: string | null;      // all_beats mode: which beat claimed this pick
+  headlines?: number | null; // all_beats mode: headlines seen for that beat
+}
+
+// all_beats mode: a beat that produced no usable pick (surfaced so a silent gap is visible).
+export interface PulseSkip {
+  beat: string;
+  reason: string;
+  headlines: number;
+}
+
+export interface PulseResponse {
+  mode: string; // briefing | all_beats
+  pool: number;
+  movers: number;
+  picks: PulsePick[];
+  skipped: PulseSkip[];
+}
+
+/** Rank candidate research turns by what's moving right now. Ranking only — no LLM, no writes. */
+export const fetchPulse = (
+  getToken: GetToken,
+  body: {
+    mode?: 'briefing' | 'all_beats';
+    news_days?: number;
+    days?: number;
+    top?: number;
+    beats?: string[];
+  } = {},
+) =>
+  authedFetch<PulseResponse>('/research/pulse', getToken, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 
 // ── Public shared session (no auth) ──────────────────────────────────────────
 

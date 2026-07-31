@@ -311,13 +311,14 @@ class ContentDraftCreate(BaseModel):
         runs a light LLM pass for a headline + dek + reshaped lede; off = the linked answers verbatim.
       - "crop": a SHORT piece cropped to the thread's single most impactful finding (~150-220 words).
       - "pair": a SHORT "bills, side by side" piece contrasting `pair_size` (2 or 4) of the cited bills.
-    `editorial` is ignored for crop/pair (their LLM distillation is intrinsic). `pair_size` applies to pair
-    mode only; a thread that cites fewer bills than that degrades to the verbatim combine."""
+      - "fact": a bite-sized "Friday Fact" (~40-90 words) built around one striking milestone/number.
+    `editorial` is ignored for crop/pair/fact (their LLM distillation is intrinsic). `pair_size` applies to
+    pair mode only; a thread that cites fewer bills than that degrades to the verbatim combine."""
     session_id: str
     seqs: list[int] | None = None
     seq: int | None = None
     editorial: bool = True
-    mode: str = "full"          # full | crop | pair
+    mode: str = "full"          # full | crop | pair | fact
     pair_size: int = 2          # pair mode: how many cited bills to contrast (2 or 4)
 
 
@@ -354,6 +355,53 @@ class ContentDraftOut(BaseModel):
 class ContentDraftPage(BaseModel):
     total: int
     items: list[ContentDraftOut]
+
+
+class PulseRequest(BaseModel):
+    """Run the research 'pulse' timeliness ranker (POST /research/pulse) — a social-listening pre-pass that
+    ranks candidate research turns by what's moving right now, so an admin picks a timely one to distill.
+    Ranking only: no LLM, no writes. `mode` "briefing" returns one ranked list over all beats combined;
+    "all_beats" returns one deduped pick per beat. `beats` overrides the default EPR/circular query set."""
+    mode: str = "briefing"          # briefing | all_beats
+    news_days: int = 28             # drop headlines older than this
+    days: int = 30                  # corpus-delta window (recent bill movement)
+    top: int = 12                   # briefing: how many ranked picks to return
+    beats: list[str] | None = None  # override the default news beats
+    min_citations: int = 1
+    pool: int = 200                 # newest turns considered before re-ranking
+
+
+class PulsePick(BaseModel):
+    """One ranked candidate turn + its 'why now' evidence. The admin turns this into a draft by calling
+    POST /research/drafts with {session_id, seqs:[seq], mode:"fact"} — the pulse never distills itself."""
+    session_id: str
+    seq: int
+    question: str
+    cited: int
+    score: float
+    corpus: float
+    news: float
+    moved_bills: list[str] = []     # cited bills that moved in-window (the corpus signal, human-readable)
+    hot_themes: list[str] = []      # materials/instruments moving right now that this turn is about
+    news_terms: list[str] = []      # headline terms this turn overlaps (the news signal)
+    beat: str | None = None         # all_beats mode: which beat claimed this pick
+    headlines: int | None = None    # all_beats mode: headlines seen for that beat
+
+
+class PulseSkip(BaseModel):
+    """all_beats mode: a beat that produced no usable pick (no unclaimed turn, or a dead/too-narrow query
+    whose top turn had zero news signal) — surfaced so a silent gap is visible, not hidden."""
+    beat: str
+    reason: str
+    headlines: int
+
+
+class PulseResponse(BaseModel):
+    mode: str
+    pool: int                       # candidate turns considered
+    movers: int                     # bills that moved in the corpus window
+    picks: list[PulsePick]
+    skipped: list[PulseSkip] = []   # all_beats only
 
 
 class PublishedArticleOut(BaseModel):

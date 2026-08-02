@@ -37,7 +37,13 @@ def _filter_sub(**kw) -> AlertSubscription:
     s.scope = "filter"
     s.firebase_uid = kw.get("firebase_uid")
     s.email = kw.get("email", "filter@example.com")
-    s.states = kw.get("states", ["ALL"])
+    s.states = kw.get("states", ["ALL"])  # legacy column, kept for the merge tests
+    # region_scope is what the matcher reads (migration 032); derive it from `states`: "ALL"/empty
+    # → match-all ({}), otherwise US-scoped to those states.
+    _states = s.states
+    s.region_scope = kw.get(
+        "region_scope", {} if (not _states or "ALL" in _states) else {"US": _states}
+    )
     s.material_categories = kw.get("material_categories", [])
     s.instrument_types = kw.get("instrument_types", ["ALL"])
     s.min_confidence = kw.get("min_confidence", 0.7)
@@ -49,6 +55,7 @@ def _filter_sub(**kw) -> AlertSubscription:
 def _bill(**kw) -> Bill:
     b = MagicMock(spec=Bill)
     b.id = kw.get("id", 1)
+    b.region = kw.get("region", "US")
     b.state = kw.get("state", "CA")
     b.instrument_type = kw.get("instrument_type", "epr")
     b.material_categories = kw.get("material_categories", ["plastic_packaging"])

@@ -35,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   // Upcoming Deadlines is a tabbed surface — Federal Actions is folded in as a subpage tab (see
   // DeadlinesTabs), so /federal lights this item up too. Federal has no top-level nav entry anymore.
   { href: '/compliance', label: 'Upcoming Deadlines', Icon: CalendarIcon, altPaths: ['/federal'] },
-  { href: '/company', label: 'My Library', Icon: FactoryIcon, usOnly: true },
+  { href: '/library', label: 'My Library', Icon: FactoryIcon, usOnly: true },
   // Insights is the analytics briefing room — shown to everyone; the page itself carries the same
   // Pro membership gate as Federal Actions / Packaging Studio, so it does the selling on click.
   { href: '/insights', label: 'Insights', Icon: ChartIcon },

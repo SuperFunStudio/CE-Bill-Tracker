@@ -119,8 +119,8 @@ export function useSavedPackages() {
         showToast(
           <>
             {existing ? 'Updated' : 'Saved'} “{name}” {existing ? 'in' : 'to'}{' '}
-            <Link href="/company" className="text-green-accent underline hover:opacity-80">
-              your portfolio
+            <Link href="/library" className="text-green-accent underline hover:opacity-80">
+              your library
             </Link>
             .
           </>,
@@ -216,8 +216,8 @@ export function SavedPackagesPanel({
           </ul>
           <p className="mt-2.5 text-meta text-text-muted">
             Also in{' '}
-            <Link href="/company" className="text-green-accent hover:underline">
-              My Portfolio →
+            <Link href="/library" className="text-green-accent hover:underline">
+              My Library →
             </Link>
           </p>
         </>
@@ -226,7 +226,7 @@ export function SavedPackagesPanel({
   );
 }
 
-/** "My Portfolio" (/company) section: every package saved from the studio, with a one-line
+/** "My Library" (/library) section: every package saved from the studio, with a one-line
  *  summary decoded from its spec. Opening one deep-links into the studio via the share-link
  *  hash, so the studio restores it through the exact same path as a shared URL. */
 export function SavedPackagesSection() {

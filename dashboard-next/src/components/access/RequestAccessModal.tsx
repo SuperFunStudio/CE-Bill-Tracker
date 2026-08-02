@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { requestAccess, type PlanInterest } from '@/lib/api';
 import { track } from '@/lib/analytics';
+import { getAttribution, attributionParams } from '@/lib/attribution';
 import { CheckIcon } from '@/components/ui/icons';
 
 /**
@@ -12,11 +13,15 @@ export function RequestAccessModal({
   plan,
   planLabel,
   source,
+  heading,
   onClose,
 }: {
   plan: PlanInterest;
   planLabel: string;
   source: string;
+  /** Override the modal heading. Defaults to "Request {planLabel} access" — a walkthrough CTA passes
+   *  "Book a walkthrough" so the form reads as a demo request, not a tier purchase. */
+  heading?: string;
   onClose: () => void;
 }) {
   const [name, setName] = useState('');
@@ -31,6 +36,10 @@ export function RequestAccessModal({
     setStatus('submitting');
     setError('');
     try {
+      // getAttribution() carries UTM + referrer; sent to our own backend so the lead-notification email
+      // names the campaign that drove this request (e.g. "Campaign: linkedin / launch-post-3"). Empty
+      // object when there's no marketing signal — the backend treats it as optional.
+      const attribution = getAttribution();
       await requestAccess({
         email: email.trim(),
         name: name.trim() || undefined,
@@ -38,14 +47,16 @@ export function RequestAccessModal({
         plan_interest: plan,
         message: message.trim() || undefined,
         source,
+        attribution: Object.keys(attribution).length ? attribution : undefined,
       });
-      // Willingness-to-pay conversion. No PII — plan/source enums only (see lib/analytics PII rule).
+      // Willingness-to-pay conversion. No PII — plan/source/utm enums only (see lib/analytics PII rule).
       // Mark as a Key Event in GA Admin to track it as a conversion.
       track('request_access', {
         plan,
         source,
         has_organization: organization.trim().length > 0,
         has_message: message.trim().length > 0,
+        ...attributionParams(),
       });
       setStatus('done');
     } catch (err) {
@@ -70,8 +81,8 @@ export function RequestAccessModal({
             <CheckIcon className="text-3xl mx-auto text-green-accent" />
             <div className="text-text-primary font-semibold">Request received</div>
             <p className="text-text-muted text-sm">
-              We&apos;ll reach out at <span className="text-text-secondary">{email}</span> about
-              the <span className="text-text-secondary">{planLabel}</span> plan.
+              Thanks — we&apos;ll reach out at{' '}
+              <span className="text-text-secondary">{email}</span> shortly.
             </p>
             <button onClick={onClose} className="text-text-muted text-xs underline hover:text-text-secondary">
               Close
@@ -80,7 +91,7 @@ export function RequestAccessModal({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <h2 className="font-serif text-xl text-text-primary">Request {planLabel} access</h2>
+              <h2 className="font-serif text-xl text-text-primary">{heading ?? `Request ${planLabel} access`}</h2>
               <p className="text-text-muted text-sm mt-1">
                 Tell us where to reach you. We&apos;re onboarding early users and finalizing pricing —
                 no charge today.

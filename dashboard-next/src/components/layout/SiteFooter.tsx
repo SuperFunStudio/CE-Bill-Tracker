@@ -105,6 +105,7 @@ export function SiteFooter() {
           <Link href="/faq" className="transition-colors hover:text-text-primary">FAQ</Link>
           <Link href="/methodology" className="transition-colors hover:text-text-primary">Methodology</Link>
           <Link href="/terms" className="transition-colors hover:text-text-primary">Terms</Link>
+          <Link href="/privacy" className="transition-colors hover:text-text-primary">Privacy</Link>
         </nav>
       </div>
     </footer>

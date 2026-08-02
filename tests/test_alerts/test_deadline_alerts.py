@@ -19,8 +19,15 @@ def _sub(**kw) -> AlertSubscription:
     # this, the spec mock returns a truthy MagicMock for firebase_uid and alerts_retained() would
     # call is_pro() on it. See app/alerts/retention.py.
     s.firebase_uid = kw.get("firebase_uid")
+    s.scope = kw.get("scope", "filter")
     s.organization = kw.get("organization")
-    s.states = kw.get("states", ["ALL"])
+    s.states = kw.get("states", ["ALL"])  # legacy column, kept for back-compat
+    # region_scope is what the matcher reads (migration 032); derive it from `states`: "ALL"/empty
+    # → match-all ({}), otherwise US-scoped to those states.
+    _states = s.states
+    s.region_scope = kw.get(
+        "region_scope", {} if (not _states or "ALL" in _states) else {"US": _states}
+    )
     s.material_categories = kw.get("material_categories", [])
     s.instrument_types = kw.get("instrument_types", ["ALL"])
     s.min_confidence = kw.get("min_confidence", 0.7)
@@ -31,6 +38,8 @@ def _sub(**kw) -> AlertSubscription:
 
 def _bill(**kw) -> Bill:
     b = MagicMock(spec=Bill)
+    b.id = kw.get("id", 1)
+    b.region = kw.get("region", "US")
     b.state = kw.get("state", "CA")
     b.instrument_type = kw.get("instrument_type", "epr")
     b.material_categories = kw.get("material_categories", ["plastic_packaging"])
@@ -38,11 +47,12 @@ def _bill(**kw) -> Bill:
     return b
 
 
-def _item(days_until=10, *, bill=None, federal_action_id=None, state="CA",
+def _item(days_until=10, *, bill=None, federal_action_id=None, state="CA", region="US",
           deadline_type="compliance", deadline_date=date(2026, 7, 1)) -> DeadlineItem:
     d = MagicMock(spec=ComplianceDeadline)
     d.bill = bill
     d.federal_action_id = federal_action_id
+    d.region = region
     d.state = state
     d.deadline_type = deadline_type
     d.deadline_date = deadline_date

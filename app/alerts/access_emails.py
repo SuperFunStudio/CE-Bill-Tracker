@@ -73,6 +73,25 @@ def render_notification_subject(email: str, plan: str | None) -> str:
     return f"New {plan_label(plan)} access request — {email}"
 
 
+# UTM keys we surface as human labels in the lead email, in reading order.
+_ATTR_LABELS = [
+    ("utm_source", "Channel"),
+    ("utm_medium", "Medium"),
+    ("utm_campaign", "Campaign"),
+    ("utm_content", "Content"),
+    ("utm_term", "Term"),
+    ("referrer", "Referrer"),
+]
+
+
+def _attribution_rows(attribution: dict[str, str] | None) -> list[tuple[str, str]]:
+    """Turn the captured utm_*/referrer dict into labeled rows, skipping anything absent. Empty list
+    when there's no marketing signal (direct visit) so the lead email stays clean."""
+    if not attribution:
+        return []
+    return [(label, attribution[key]) for key, label in _ATTR_LABELS if attribution.get(key)]
+
+
 def render_notification_html(
     email: str,
     name: str | None,
@@ -80,13 +99,16 @@ def render_notification_html(
     plan: str | None,
     message: str | None,
     source: str | None,
+    attribution: dict[str, str] | None = None,
 ) -> str:
+    attr_rows = _attribution_rows(attribution)
     rows = [
         ("Email", email),
         ("Name", name or "—"),
         ("Organization", organization or "—"),
         ("Tier", plan_label(plan)),
         ("Source", source or "—"),
+        *attr_rows,
         ("Message", message or "—"),
     ]
     table = "".join(
@@ -109,6 +131,7 @@ async def send_access_request_emails(
     plan: str | None,
     message: str | None,
     source: str | None,
+    attribution: dict[str, str] | None = None,
 ) -> None:
     """Best-effort: auto-reply to the requester + notify the team. Never raises."""
     if not settings.sendgrid_api_key:
@@ -126,7 +149,9 @@ async def send_access_request_emails(
             await sender.send_html(
                 notify,
                 render_notification_subject(email, plan),
-                render_notification_html(email, name, organization, plan, message, source),
+                render_notification_html(
+                    email, name, organization, plan, message, source, attribution
+                ),
             )
     except Exception as e:  # never let an email failure surface to the API caller
         log.warning("access_request_emails_failed", email=email, error=str(e))

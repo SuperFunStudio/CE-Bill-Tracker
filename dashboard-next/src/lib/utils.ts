@@ -12,6 +12,37 @@ export function fixEncoding(text: string | null | undefined): string {
     .replace('Ã ', ' ');
 }
 
+/**
+ * URL-safe slug from arbitrary text: ASCII-fold accents, lowercase, non-alphanumerics → single dash,
+ * trim, cap length. So an accented native title degrades to a readable ASCII slug rather than dropping.
+ */
+export function slugify(text: string | null | undefined, maxLen = 70): string {
+  if (!text) return '';
+  return text
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '') // strip combining accents left by NFKD
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
+    .slice(0, maxLen)
+    .replace(/-+$/g, ''); // no dangling dash left by the slice
+}
+
+/**
+ * Canonical URL slug for a bill's page (/bill/[id]/[slug]/). LEADS with the bill number — the term
+ * people actually search ("SB 707") — then appends title keywords for readability. The numeric id in
+ * the route guarantees uniqueness/stability, so this only needs to read well and never has to be
+ * unique. One source of truth for the route, the sitemap, and internal links, so they always agree.
+ */
+export function billSlug(bill: { bill_number?: string | null; title?: string | null }): string {
+  return slugify(`${bill.bill_number ?? ''} ${bill.title ?? ''}`) || 'untitled';
+}
+
+/** The canonical path to a bill's page, e.g. "/bill/48213/sb-707-plastic-pollution-prevention-act/". */
+export function billHref(bill: { id: number; bill_number?: string | null; title?: string | null }): string {
+  return `/bill/${bill.id}/${billSlug(bill)}/`;
+}
+
 /** Format a cost number as "$X.Xm" or "$XXXk" */
 export function formatCost(n: number | null | undefined): string {
   if (n == null) return 'N/A';

@@ -4,6 +4,7 @@ import structlog
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
+from app.alerts.applinks import bill_url
 from app.alerts.email_shell import (
     _ACCENT,
     _INK,
@@ -36,11 +37,20 @@ def html_to_text(html: str) -> str:
     return text.strip()
 
 
-def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context: str = "") -> str:
+# One (bill, its changes) tuple in a consolidated alert. `litigation_context` is the pre-rendered
+# per-bill litigation block (may be empty).
+AlertItem = tuple[Bill, list[BillChange], str]
+
+_ALERT_COLOPHON = "You're receiving this because you subscribed to Atlas Circular bill alerts."
+
+
+def _bill_block(bill: Bill, changes: list[BillChange], litigation_context: str = "") -> str:
+    """Render one bill's section (heading, changes, metadata, CTA) — no shell. Shared by the single
+    and consolidated alert builders. The CTA lands in the in-app bill panel (bill_url), consistent
+    with the new-bill / welcome / onboarding emails, rather than the external legislature page."""
     state_name = bill.state
     bill_num = bill.bill_number or "Unknown"
     title = bill.title or "Untitled"
-    source_url = bill.source_url or "#"
 
     change_lines = ""
     for c in changes:
@@ -65,7 +75,13 @@ def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context:
         f"{litigation_context}</div>"
         if litigation_context else ""
     )
-    body = f"""
+    # Primary CTA in-app; the external legislature link rides along as a muted secondary link.
+    source_link = (
+        f'<a href="{bill.source_url}" style="color:{_MUTED};text-decoration:underline;font:13px {_SERIF};'
+        f'margin-left:14px;">View on the legislature site</a>'
+        if bill.source_url else ""
+    )
+    return f"""
     <h2 style="font:bold 18px {_SERIF};color:{_INK};margin:6px 0 4px;">{state_name} — {bill_num}</h2>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 12px;">{title}</p>
     <ul style="font:15px {_SERIF};color:{_INK};line-height:1.7;margin:0 0 4px;padding-left:20px;">
@@ -80,12 +96,30 @@ def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context:
     </table>
     {summary_html}
     {litigation_html}
-    <p style="margin:18px 0 0;">{cta_button(source_url, "View bill →")}</p>"""
+    <p style="margin:18px 0 0;">{cta_button(bill_url(bill.id), "View bill →")}{source_link}</p>"""
+
+
+def _build_email_html(bill: Bill, changes: list[BillChange], litigation_context: str = "") -> str:
     return render_shell(
-        body,
+        _bill_block(bill, changes, litigation_context=litigation_context),
         tagline="EPR Legislative Update",
-        colophon="You're receiving this because you subscribed to Atlas Circular bill alerts.",
+        colophon=_ALERT_COLOPHON,
     )
+
+
+def _build_consolidated_html(items: list[AlertItem]) -> str:
+    """One email covering every bill that moved for a single recipient this cycle. Blocks are joined
+    by a rule so the recipient gets one message, not one per bill."""
+    divider = f'<div style="border-top:1px solid {_RULE};margin:22px 0 0;"></div>'
+    body = divider.join(_bill_block(b, ch, lit) for b, ch, lit in items)
+    return render_shell(body, tagline="EPR Legislative Update", colophon=_ALERT_COLOPHON)
+
+
+def _consolidated_subject(items: list[AlertItem]) -> str:
+    if len(items) == 1:
+        bill = items[0][0]
+        return f"[Atlas Circular] {bill.state} {bill.bill_number or 'Bill'} — Legislative Update"
+    return f"[Atlas Circular] {len(items)} bills you follow moved"
 
 
 class SendGridSender:
@@ -153,30 +187,34 @@ class SendGridSender:
             log.error("sendgrid_text_alert_failed", error=str(e), to=to_email)
             return False
 
+    async def send_consolidated_alert(
+        self,
+        to_email: str,
+        items: list[AlertItem],
+        list_unsubscribe_url: str | None = None,
+    ) -> bool:
+        """Send ONE email covering every bill that moved for this recipient this cycle. `items` is a
+        list of (bill, changes, litigation_context). Passes the List-Unsubscribe header so the
+        real-time channel matches the digest/new-bill emails' one-click unsubscribe."""
+        if not items:
+            return False
+        subject = _consolidated_subject(items)
+        html_content = _build_consolidated_html(items)
+        return await self.send_html(
+            to_email, subject, html_content, list_unsubscribe_url=list_unsubscribe_url
+        )
+
     async def send_alert(
         self,
         to_email: str,
         bill: Bill,
         changes: list[BillChange],
         litigation_context: str = "",
+        list_unsubscribe_url: str | None = None,
     ) -> bool:
-        bill_num = bill.bill_number or "Bill"
-        subject = f"[Atlas Circular] {bill.state} {bill_num} — Legislative Update"
-        html_content = _build_email_html(bill, changes, litigation_context=litigation_context)
-
-        message = Mail(
-            from_email=settings.sendgrid_from_email,
-            to_emails=to_email,
-            subject=subject,
-            plain_text_content=html_to_text(html_content),
-            html_content=html_content,
+        """Single-bill alert — thin wrapper over the consolidated path so both share one renderer."""
+        return await self.send_consolidated_alert(
+            to_email,
+            [(bill, changes, litigation_context)],
+            list_unsubscribe_url=list_unsubscribe_url,
         )
-        try:
-            response = self._sg.send(message)
-            success = response.status_code in (200, 202)
-            if not success:
-                log.warning("sendgrid_send_failed", status=response.status_code, to=to_email)
-            return success
-        except Exception as e:
-            log.error("sendgrid_exception", error=str(e), to=to_email)
-            return False

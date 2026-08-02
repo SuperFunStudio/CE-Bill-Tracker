@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, microsoftProvider } from '@/lib/firebase';
 import { track } from '@/lib/analytics';
+import { captureAttribution, attributionParams } from '@/lib/attribution';
 import { startProCheckout, startSignupTrial, billingErrorMessage } from '@/lib/billing';
 import { attributeReferral, PENDING_REF_KEY } from '@/lib/referrals';
 
@@ -184,9 +185,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub;
   }, [fetchEntitlement, provisionOnce]);
 
-  // Capture a ?ref= code on first landing and stash it until signup, when it's attributed.
+  // Capture a ?ref= code on first landing and stash it until signup, when it's attributed. Alongside
+  // it, capture marketing attribution (?utm_source=linkedin&utm_campaign=…) so a later sign_up /
+  // request_access can be credited to the campaign that brought the visitor.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    captureAttribution();
     const ref = new URLSearchParams(window.location.search).get('ref');
     if (ref) {
       try {
@@ -243,7 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUpEmail = useCallback(async (email: string, password: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-    track('sign_up', { method: 'email' });
+    track('sign_up', { method: 'email', ...attributionParams() });
     // Start email verification; the trial + referral provision once they verify (H-2). Google sign-ins
     // skip this — their email is already verified, so onIdTokenChanged provisions them immediately.
     try { await sendEmailVerification(cred.user); } catch { /* best-effort */ }
@@ -252,14 +256,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInGoogle = useCallback(async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const isNew = getAdditionalUserInfo(result)?.isNewUser;
-    track(isNew ? 'sign_up' : 'login', { method: 'google' });
+    track(isNew ? 'sign_up' : 'login', { method: 'google', ...(isNew ? attributionParams() : {}) });
     // Provisioning runs via onIdTokenChanged (Google emails are verified).
   }, []);
 
   const signInMicrosoft = useCallback(async () => {
     const result = await signInWithPopup(auth, microsoftProvider);
     const isNew = getAdditionalUserInfo(result)?.isNewUser;
-    track(isNew ? 'sign_up' : 'login', { method: 'microsoft' });
+    track(isNew ? 'sign_up' : 'login', { method: 'microsoft', ...(isNew ? attributionParams() : {}) });
     // Provisioning runs via onIdTokenChanged (Microsoft emails are verified).
   }, []);
 

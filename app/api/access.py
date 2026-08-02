@@ -29,7 +29,10 @@ async def create_access_request(
             status_code=422,
             detail=f"plan_interest must be one of {sorted(_VALID_PLANS)}",
         )
-    req = AccessRequest(**payload.model_dump())
+    data = payload.model_dump()
+    # attribution is passed through to the lead email only — it's not a column on access_requests.
+    attribution = data.pop("attribution", None)
+    req = AccessRequest(**data)
     db.add(req)
     await db.commit()
     await db.refresh(req)
@@ -42,5 +45,6 @@ async def create_access_request(
         req.plan_interest,
         req.message,
         req.source,
+        attribution,
     )
     return req

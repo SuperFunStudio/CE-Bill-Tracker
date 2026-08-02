@@ -12,12 +12,12 @@ import { useBills } from '@/hooks/useBills';
 // paint / offline. `universe` is the OpenStates bulk corpus the engine screens wholesale — verified
 // at 1,490,425 state/D.C./territory bills (1,560,420 incl. federal) in the 2026-06 monthly Postgres
 // dump. `jurisdictions` is the global reach: U.S. states, the EU, and national governments now
-// ingested from official sources — 37 distinct region codes carry relevant law as of 2026-07 (the EU
-// plus 35 national governments across six continents), so 35+ is the honest, still-growing floor.
+// ingested from official sources — 37 distinct region codes carry relevant law as of 2026-08 (the EU
+// plus 35 national governments across six continents), so 37 is the honest, still-growing count.
 const ENGINE = {
   universe: '1.5 million',   // bills in the U.S. legislative corpus screened wholesale
-  jurisdictions: '35+',      // EU + national governments ingested worldwide (37 region codes live)
-  relevant: '2,400',         // fallback only — live count comes from useBills() (~2,399 on 2026-07)
+  jurisdictions: '37',       // EU + national governments ingested worldwide (37 region codes live, 2026-08)
+  relevant: '2,450',         // fallback only — live count comes from useBills() (~2,450 on 2026-08)
 };
 
 const INSTRUMENTS = [
@@ -26,7 +26,10 @@ const INSTRUMENTS = [
   'Right to Repair',
   'Recycled-Content mandates',
   'Financial incentives (grants, tax credits, procurement)',
+  'Disposal & landfill bans',
+  'Organics diversion / composting',
   'Labeling & Disclosure',
+  'Preemption (tracked as a countervailing signal)',
 ];
 
 const MATERIALS = [
@@ -133,6 +136,52 @@ export default function MethodologyPage() {
             or its text changes, it&apos;s re-evaluated so the record stays current.
           </li>
         </ol>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-serif text-xl text-text-primary">Beyond the flag — what we build on it</h2>
+        <p className="text-text-secondary text-body leading-relaxed">
+          Classification is the foundation, not the finish. Once a bill is flagged relevant, the same
+          engine turns it into working intelligence across the platform:
+        </p>
+        <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-body text-text-secondary">
+          <li>
+            <span className="text-text-primary font-medium">Compliance extraction</span> — deadlines,
+            covered products, producer obligations, fees, and penalties pulled from the bill text, on
+            each bill&apos;s{' '}
+            <Link href="/compliance" className="text-green-accent hover:underline">deadline &amp; obligation view</Link>.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">Structured dimensions</span> — eco-modulation,
+            recycled-content and collection targets captured as comparable, citation-backed envelopes.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">Full-text search</span> — the ingested
+            statute text is indexed, so a search reaches inside the law, not just its title.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">Jurisdiction profiles</span> — bill activity
+            rolled up per{' '}
+            <Link href="/states" className="text-green-accent hover:underline">state</Link> and{' '}
+            <Link href="/jurisdictions" className="text-green-accent hover:underline">country</Link>,
+            with cross-border comparison in{' '}
+            <Link href="/insights" className="text-green-accent hover:underline">Insights</Link>.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">Litigation signals</span> — federal
+            preemption and related cases tracked alongside the bills they touch on{' '}
+            <Link href="/federal" className="text-green-accent hover:underline">Federal Actions</Link>.
+          </li>
+          <li>
+            <span className="text-text-primary font-medium">Research</span> — natural-language questions
+            answered against the corpus with cited sources in{' '}
+            <Link href="/ask" className="text-green-accent hover:underline">Ask the Atlas</Link>.
+          </li>
+        </ul>
+        <p className="text-text-muted text-xs leading-relaxed">
+          Every layer above is traceable to the classified bill and its primary source — the same
+          auditable standard as the relevance call itself.
+        </p>
       </section>
 
       <section className="space-y-3">

@@ -1,18 +1,23 @@
 import httpx
 import structlog
 
+from app.alerts.applinks import bill_url
 from app.models import Bill, BillChange
 from app.utils.retry import retry_with_backoff
 
 log = structlog.get_logger()
 
+# One (bill, its changes, litigation block) tuple in a consolidated alert.
+AlertItem = tuple[Bill, list[BillChange], str]
 
-def _build_slack_blocks(bill: Bill, changes: list[BillChange], litigation_context: str = "") -> list[dict]:
+
+def _bill_blocks(bill: Bill, changes: list[BillChange], litigation_context: str = "") -> list[dict]:
+    """Slack blocks for one bill. The button lands in the in-app bill panel (bill_url), consistent
+    with the email alerts and the rest of the notification surface."""
     bill_num = bill.bill_number or "Unknown"
     title = bill.title or "Untitled"
     state = bill.state
     categories = ", ".join(bill.material_categories or []) or "Unclassified"
-    source_url = bill.source_url or ""
 
     change_text = ""
     for c in changes:
@@ -49,18 +54,32 @@ def _build_slack_blocks(bill: Bill, changes: list[BillChange], litigation_contex
             "type": "section",
             "text": {"type": "mrkdwn", "text": litigation_context},
         })
-    if source_url:
-        blocks.append({
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "View Bill"},
-                    "url": source_url,
-                    "style": "primary",
-                }
-            ],
-        })
+    blocks.append({
+        "type": "actions",
+        "elements": [
+            {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "View Bill"},
+                "url": bill_url(bill.id),
+                "style": "primary",
+            }
+        ],
+    })
+    return blocks
+
+
+def _build_slack_blocks(bill: Bill, changes: list[BillChange], litigation_context: str = "") -> list[dict]:
+    return _bill_blocks(bill, changes, litigation_context=litigation_context)
+
+
+def _build_consolidated_blocks(items: list[AlertItem]) -> list[dict]:
+    """One Slack message covering every bill that moved for this webhook this cycle, bills separated
+    by a divider."""
+    blocks: list[dict] = []
+    for i, (bill, changes, litigation) in enumerate(items):
+        if i:
+            blocks.append({"type": "divider"})
+        blocks.extend(_bill_blocks(bill, changes, litigation_context=litigation))
     return blocks
 
 
@@ -76,6 +95,18 @@ class SlackSender:
             return True
 
     @retry_with_backoff(max_attempts=3, base_delay=1.0)
+    async def send_consolidated_alert(self, webhook_url: str, items: list[AlertItem]) -> bool:
+        """Post ONE Slack message covering every bill that moved for this webhook this cycle."""
+        if not items:
+            return False
+        blocks = _build_consolidated_blocks(items)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(webhook_url, json={"blocks": blocks})
+            if resp.status_code != 200:
+                log.warning("slack_send_failed", status=resp.status_code)
+                return False
+            return True
+
     async def send_alert(
         self,
         webhook_url: str,
@@ -83,10 +114,7 @@ class SlackSender:
         changes: list[BillChange],
         litigation_context: str = "",
     ) -> bool:
-        blocks = _build_slack_blocks(bill, changes, litigation_context=litigation_context)
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(webhook_url, json={"blocks": blocks})
-            if resp.status_code != 200:
-                log.warning("slack_send_failed", status=resp.status_code)
-                return False
-            return True
+        """Single-bill alert — thin wrapper over the consolidated path."""
+        return await self.send_consolidated_alert(
+            webhook_url, [(bill, changes, litigation_context)]
+        )

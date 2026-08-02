@@ -9,11 +9,23 @@ from app.alerts.digest import (
 from app.models import AlertSubscription, Bill, FederalAction
 
 
+def _scope_from_states(states: list | None) -> dict:
+    """Translate the legacy flat `states` list into the region-keyed region_scope the matcher now
+    reads (migration 032). "ALL"/empty means match-all → {} ; otherwise US-scoped to those states."""
+    if not states or "ALL" in states:
+        return {}
+    return {"US": states}
+
+
 def _sub(**kw) -> AlertSubscription:
     s = MagicMock(spec=AlertSubscription)
+    s.scope = kw.get("scope", "filter")
+    s.firebase_uid = kw.get("firebase_uid")
     s.email = kw.get("email", "a@example.com")
     s.organization = kw.get("organization")
-    s.states = kw.get("states", ["ALL"])
+    s.states = kw.get("states", ["ALL"])  # legacy column, kept for the merge tests
+    # region_scope is what the matcher actually reads; derive it from `states` (or pass explicitly).
+    s.region_scope = kw.get("region_scope", _scope_from_states(s.states))
     s.material_categories = kw.get("material_categories", [])
     s.instrument_types = kw.get("instrument_types", ["ALL"])
     s.min_confidence = kw.get("min_confidence", 0.7)
@@ -24,6 +36,8 @@ def _sub(**kw) -> AlertSubscription:
 
 def _bill(**kw) -> Bill:
     b = MagicMock(spec=Bill)
+    b.id = kw.get("id", 1)
+    b.region = kw.get("region", "US")
     b.state = kw.get("state", "CA")
     b.instrument_type = kw.get("instrument_type", "epr")
     b.material_categories = kw.get("material_categories", ["plastic_packaging"])
@@ -57,6 +71,35 @@ class TestSubscriptionMatchesBill:
         sub = _sub(material_categories=["plastic_packaging"])
         assert not subscription_matches_bill(sub, _bill(material_categories=["glass"]))
         assert subscription_matches_bill(sub, _bill(material_categories=["plastic_packaging"]))
+
+
+class TestRegionScope:
+    """Direct coverage of the region-keyed scope matching added in migration 032 — a US-scoped
+    subscriber must never receive alerts for another region's bills, and a whole-region wildcard
+    covers every jurisdiction in that region."""
+
+    def test_us_scope_excludes_foreign_region(self):
+        # A subscriber scoped to US states does NOT match an EU-region bill (region isn't a scope key).
+        sub = _sub(region_scope={"US": ["CA", "OR"]})
+        assert not subscription_matches_bill(sub, _bill(region="EU", state="DE"))
+        assert subscription_matches_bill(sub, _bill(region="US", state="CA"))
+
+    def test_whole_region_wildcard_matches_any_jurisdiction(self):
+        sub = _sub(region_scope={"EU": ["*"]})
+        assert subscription_matches_bill(sub, _bill(region="EU", state="FR"))
+        assert subscription_matches_bill(sub, _bill(region="EU", state="IT"))
+        assert not subscription_matches_bill(sub, _bill(region="US", state="CA"))
+
+    def test_multi_region_scope_matches_each(self):
+        sub = _sub(region_scope={"US": ["CA"], "EU": ["*"]})
+        assert subscription_matches_bill(sub, _bill(region="US", state="CA"))
+        assert subscription_matches_bill(sub, _bill(region="EU", state="FR"))
+        assert not subscription_matches_bill(sub, _bill(region="US", state="TX"))
+
+    def test_empty_scope_matches_all_regions(self):
+        sub = _sub(region_scope={})
+        assert subscription_matches_bill(sub, _bill(region="US", state="CA"))
+        assert subscription_matches_bill(sub, _bill(region="EU", state="FR"))
 
 
 class TestSubscriptionMatchesFederal:

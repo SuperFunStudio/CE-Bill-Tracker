@@ -94,6 +94,8 @@ export interface AccessRequestPayload {
   message?: string;
   /** Funnel attribution: "pricing" | "company_gate". */
   source?: string;
+  /** Marketing attribution (utm_* + referrer) captured on landing — surfaced in the lead email. */
+  attribution?: Record<string, string>;
 }
 
 /** Capture a "request access / pricing" click. No billing — just records interest + segment. */

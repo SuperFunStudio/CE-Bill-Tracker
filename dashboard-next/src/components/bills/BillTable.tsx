@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { BillSummary } from '@/lib/types';
-import { fixEncoding, formatDate, formatInstrumentType, isWeakening } from '@/lib/utils';
+import { fixEncoding, formatDate, formatInstrumentType, isWeakening, billHref } from '@/lib/utils';
 import { BillModal } from '@/components/ui/BillModal';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { WatchStar } from '@/components/watchlist/WatchStar';
@@ -129,9 +129,22 @@ export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: Bil
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <div className="text-text-primary truncate max-w-xs" title={fixEncoding(bill.title) ?? ''}>
+                  {/* Real crawlable link to the bill's page. A plain left-click keeps the fast in-app
+                      modal; ⌘/ctrl/shift/middle-click follows the URL into a new tab. stopPropagation
+                      keeps the row's own openBill handler from double-firing. */}
+                  <a
+                    href={billHref(bill)}
+                    onClick={e => {
+                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) { e.stopPropagation(); return; }
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openBill(bill);
+                    }}
+                    className="block text-text-primary truncate max-w-xs hover:text-green-accent hover:underline"
+                    title={fixEncoding(bill.title) ?? ''}
+                  >
                     {fixEncoding(bill.title) || 'Untitled'}
-                  </div>
+                  </a>
                   {bill.material_categories && bill.material_categories.length > 0 && (
                     <div className="text-text-muted text-xs mt-0.5 truncate">
                       {bill.material_categories.slice(0, 3).map(c => c.replace(/_/g, ' ')).join(', ')}
@@ -194,10 +207,19 @@ export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: Bil
               <LitigationBadge bill={bill} />
               <span className="ml-auto"><WatchStar billId={bill.id} /></span>
             </div>
-            {/* Row 2: title (2-line clamp) */}
-            <div className="text-text-primary text-sm line-clamp-2">
+            {/* Row 2: title (2-line clamp) — real link to the bill page (see desktop cell note) */}
+            <a
+              href={billHref(bill)}
+              onClick={e => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) { e.stopPropagation(); return; }
+                e.preventDefault();
+                e.stopPropagation();
+                openBill(bill);
+              }}
+              className="block text-text-primary text-sm line-clamp-2 hover:text-green-accent"
+            >
               {fixEncoding(bill.title) || 'Untitled'}
-            </div>
+            </a>
             {/* Row 3: materials */}
             {bill.material_categories && bill.material_categories.length > 0 && (
               <div className="text-text-muted text-xs">

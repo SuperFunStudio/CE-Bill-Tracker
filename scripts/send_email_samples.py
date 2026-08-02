@@ -217,16 +217,16 @@ def build_registry():
                  welcome_email.render_referral_reward_html(30)),
     ))
 
-    # 10. Subscription welcome (state-of-play).
+    # 10. Subscription welcome (windowed recent-activity roundup).
     def _subscription_welcome():
         sub = make_sub()
         bills = sample_bills()
         enacted = [b for b in bills if b.status in ("enacted", "signed")]
         active = [b for b in bills if b.status not in ("enacted", "signed", "failed", "vetoed")]
         sop = StateOfPlay(
-            total_bills=len(bills),
-            enacted_total=len(enacted),
-            active_total=len(active),
+            scope_total=len(bills),
+            enacted_recent=len(enacted),
+            active_recent=len(active),
             by_state=[
                 StandingRow(label="CA", enacted=1, active=2),
                 StandingRow(label="OR", enacted=0, active=1),
@@ -236,8 +236,8 @@ def build_registry():
                 StandingRow(label="Extended Producer Responsibility", enacted=1, active=1),
                 StandingRow(label="Right to Repair", enacted=0, active=1),
             ],
-            landmark_bills=enacted,
-            active_now=active,
+            recent_enacted=enacted,
+            recent_movement=active,
         )
         html = welcome_email.render_welcome_html(sub, sop, "July 2026", recap=None)
         return welcome_email.render_welcome_subject(sub), html
@@ -402,6 +402,11 @@ def build_registry():
                 email=RECIPIENT, name="Kenny", organization="Superfun Studio",
                 plan="enterprise", message="Interested in API access for a compliance dashboard.",
                 source="pricing-page",
+                attribution={
+                    "utm_source": "linkedin", "utm_medium": "social",
+                    "utm_campaign": "launch", "utm_content": "eco-mod-spread-post",
+                    "referrer": "https://www.linkedin.com/",
+                },
             ),
         ),
     ))

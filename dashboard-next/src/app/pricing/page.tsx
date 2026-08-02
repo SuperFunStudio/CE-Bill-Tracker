@@ -16,13 +16,13 @@ export default function PricingPage() {
   const { isPro, user, openAuth, getToken, entitlement } = useAuth();
   const plan = entitlement?.plan ?? 'free';
   const [period, setPeriod] = useState<BillingPeriod>('annual');
-  const [modal, setModal] = useState<{ plan: PlanInterest; label: string } | null>(null);
+  const [modal, setModal] = useState<{ plan: PlanInterest; label: string; heading?: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // which tier's CTA is mid-flight
   const [error, setError] = useState<string | null>(null);
 
-  function openPlan(p: PlanInterest, label: string) {
+  function openPlan(p: PlanInterest, label: string, heading?: string) {
     track('pricing_cta', { plan: p, plan_label: label });
-    setModal({ plan: p, label });
+    setModal({ plan: p, label, heading });
   }
 
   // Self-serve checkout for pro/research — both bill monthly or annual, so the period toggle applies
@@ -214,12 +214,13 @@ export default function PricingPage() {
               <button onClick={() => startPlan('pro', 'Professionals')} disabled={busy === 'pro'} className={primaryBtn}>
                 {busy === 'pro' ? 'Starting…' : 'Start 90-day trial →'}
               </button>
-              <p className="text-meta text-text-muted text-center">
-                No card required ·{' '}
-                <button onClick={() => openPlan('pro', 'Pro — walkthrough')} className="text-green-accent hover:underline">
-                  book a walkthrough
-                </button>
-              </p>
+              <button
+                onClick={() => openPlan('bespoke', 'a walkthrough', 'Book a walkthrough')}
+                className="w-full rounded-lg border border-green-accent/50 px-4 py-2 text-sm font-medium text-green-accent transition-colors hover:bg-green-dark/30"
+              >
+                Or book a walkthrough →
+              </button>
+              <p className="text-meta text-text-muted text-center">No card required</p>
             </div>
           )}
         </div>
@@ -270,6 +271,7 @@ export default function PricingPage() {
         <RequestAccessModal
           plan={modal.plan}
           planLabel={modal.label}
+          heading={modal.heading}
           source="pricing"
           onClose={() => setModal(null)}
         />

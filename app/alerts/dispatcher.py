@@ -7,6 +7,7 @@ from app.alerts.digest import load_watchlists, subscription_matches_bill
 from app.alerts.retention import filter_retained_subscriptions
 from app.alerts.sendgrid_sender import SendGridSender
 from app.alerts.slack_sender import SlackSender
+from app.alerts.unsubscribe import unsubscribe_url
 from app.config import settings
 from app.models import AlertSubscription, Bill, BillChange, LitigationCase
 
@@ -40,6 +41,38 @@ async def _get_litigation_context(db: AsyncSession, bill_id: int) -> str:
     return "\n\n⚖️ Active Federal Litigation:\n" + "\n".join(lines)
 
 
+class _Bundle:
+    """Accumulates the bills — and the specific changes — one recipient should hear about this cycle.
+
+    Deduped by bill id so two matching subscription rows for the same address (e.g. a filter row and a
+    watch-list row) don't list a bill twice; changes are unioned by object identity so a recipient
+    whose subscriptions asked for different change types on the same bill gets all of them once. `sub`
+    is the first contributing subscription row — used for the recipient address and unsubscribe id.
+    """
+
+    def __init__(self, sub: AlertSubscription):
+        self.sub = sub
+        self._order: list[int] = []
+        self._by_bill: dict[int, tuple[Bill, dict[int, BillChange], str]] = {}
+
+    def add(self, bill: Bill, changes: list[BillChange], litigation: str) -> None:
+        entry = self._by_bill.get(bill.id)
+        if entry is None:
+            entry = (bill, {}, litigation)
+            self._by_bill[bill.id] = entry
+            self._order.append(bill.id)
+        change_map = entry[1]
+        for c in changes:
+            change_map[id(c)] = c  # BillChange may be unpersisted (id None); dedup by identity
+
+    def items(self) -> list[tuple[Bill, list[BillChange], str]]:
+        return [
+            (bill, list(change_map.values()), litigation)
+            for bid in self._order
+            for bill, change_map, litigation in (self._by_bill[bid],)
+        ]
+
+
 class AlertDispatcher:
     def __init__(self):
         self.detector = ChangeDetector()
@@ -49,63 +82,91 @@ class AlertDispatcher:
     async def dispatch_changes(
         self, db: AsyncSession, changes: list[BillChange]
     ) -> None:
+        """Consolidate a cycle's alert-worthy changes into ONE message per recipient.
+
+        Previously this sent one email/Slack per BillChange, so a subscriber whose watch list saw ten
+        bills move in a single cycle got ten separate emails. Now we group the alert-worthy changes by
+        bill, match each bill to its subscribers once, accumulate every (bill, changes) a recipient
+        should hear about, and send a single consolidated message — the same one-message-per-recipient
+        shape the digest and new-bill cycles already use. Every processed change is marked
+        alert_sent regardless of send outcome (as before), so a transient send failure can't loop it.
+        """
+        # 1) Keep only alert-worthy changes, grouped by bill. Non-worthy changes are marked handled.
+        changes_by_bill: dict[int, list[BillChange]] = {}
+        bills_by_id: dict[int, Bill] = {}
         for change in changes:
-            # Load the associated bill
-            bill_result = await db.execute(
-                select(Bill).where(Bill.id == change.bill_id)
-            )
-            bill = bill_result.scalar_one_or_none()
+            bill = (
+                await db.execute(select(Bill).where(Bill.id == change.bill_id))
+            ).scalar_one_or_none()
             if not bill:
                 continue
-
             if not self.detector.is_alert_worthy(change, bill):
-                change.alert_sent = True  # Mark as handled (not worth alerting)
+                change.alert_sent = True  # not worth alerting
                 continue
+            changes_by_bill.setdefault(bill.id, []).append(change)
+            bills_by_id[bill.id] = bill
 
-            # Find matching subscriptions
+        if not changes_by_bill:
+            await db.commit()
+            return
+
+        # 2) Build per-recipient bundles. A bundle collects, per bill, the changes this recipient's
+        #    filters actually asked for (alert_on) — keyed by email (case-insensitively) and by Slack
+        #    webhook, so two matching subscription rows for one address still yield a single message.
+        email_bundles: dict[str, _Bundle] = {}
+        slack_bundles: dict[str, _Bundle] = {}
+        litigation_by_bill: dict[int, str] = {}
+
+        for bill_id, bill_changes in changes_by_bill.items():
+            bill = bills_by_id[bill_id]
             subs = await self._subscriptions_for_bill(db, bill)
             if not subs:
-                change.alert_sent = True
                 continue
-
-            # Gather litigation context once per bill
-            litigation_context = await _get_litigation_context(db, bill.id)
-
-            # One notification per recipient per change: a subscriber who matches this bill via both
-            # their watch list and their topic filters (two rows) should get a single email/Slack.
-            emailed: set[str] = set()
-            slacked: set[str] = set()
             for sub in subs:
                 if not sub.active:
                     continue
-                if change.change_type not in (sub.alert_on or []):
-                    continue
+                # Per-change: only the change types this subscriber opted into, above their floor.
                 if (bill.confidence_score or 0) < (sub.min_confidence or 0):
                     continue
+                wanted = [c for c in bill_changes if c.change_type in (sub.alert_on or [])]
+                if not wanted:
+                    continue
 
-                # Send email
-                if sub.email and settings.sendgrid_api_key and sub.email.lower() not in emailed:
-                    await self.email_sender.send_alert(
-                        sub.email, bill, [change], litigation_context=litigation_context
+                if bill_id not in litigation_by_bill:
+                    litigation_by_bill[bill_id] = await _get_litigation_context(db, bill_id)
+                litigation = litigation_by_bill[bill_id]
+
+                if sub.email and settings.sendgrid_api_key:
+                    email_bundles.setdefault(sub.email.lower(), _Bundle(sub)).add(
+                        bill, wanted, litigation
                     )
-                    emailed.add(sub.email.lower())
-
-                # Send Slack
-                if sub.slack_webhook and sub.slack_webhook not in slacked:
-                    await self.slack_sender.send_alert(
-                        sub.slack_webhook, bill, [change], litigation_context=litigation_context
+                if sub.slack_webhook:
+                    slack_bundles.setdefault(sub.slack_webhook, _Bundle(sub)).add(
+                        bill, wanted, litigation
                     )
-                    slacked.add(sub.slack_webhook)
 
-            change.alert_sent = True
-            log.info(
-                "alert_dispatched",
-                bill_id=bill.id,
-                change_type=change.change_type,
-                subscriber_count=len(subs),
+        # 3) One consolidated send per recipient.
+        for bundle in email_bundles.values():
+            await self.email_sender.send_consolidated_alert(
+                bundle.sub.email,
+                bundle.items(),
+                list_unsubscribe_url=unsubscribe_url(bundle.sub.id),
             )
+        for webhook, bundle in slack_bundles.items():
+            await self.slack_sender.send_consolidated_alert(webhook, bundle.items())
 
+        # 4) Mark every processed change handled and persist.
+        for bill_changes in changes_by_bill.values():
+            for change in bill_changes:
+                change.alert_sent = True
         await db.commit()
+        log.info(
+            "alert_dispatched",
+            bills=len(changes_by_bill),
+            changes=sum(len(v) for v in changes_by_bill.values()),
+            email_recipients=len(email_bundles),
+            slack_recipients=len(slack_bundles),
+        )
 
     async def _subscriptions_for_bill(
         self, db: AsyncSession, bill: Bill

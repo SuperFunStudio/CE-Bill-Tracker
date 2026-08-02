@@ -23,6 +23,8 @@ import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
 import { STATE_NAMES, formatDate, downloadCsv } from '@/lib/utils';
 import { useResearch, ResearchThread, ResearchWall, RESEARCH_EXAMPLES } from '@/components/research/ResearchThread';
+import { RequestAccessModal } from '@/components/access/RequestAccessModal';
+import { track } from '@/lib/analytics';
 import Link from 'next/link';
 
 const StateMap = dynamic(
@@ -113,6 +115,10 @@ export default function HomePage() {
 
   const { isPro, user, openAuth } = useAuth();
   const gatePro = useProGate();
+
+  // Guided-tour capture — the demo-led path (our highest-converting motion for the considered
+  // compliance buyer). Opens the shared request-access form, tagged source="home_walkthrough".
+  const [walkthroughOpen, setWalkthroughOpen] = useState(false);
 
   // The unified surface: one adaptive bar. Typing filters the table live (Explorer); submitting a
   // question routes to the grounded, cited research answer over the same corpus (Ask the Atlas).
@@ -475,8 +481,39 @@ export default function HomePage() {
         {isUsView && <FederalWatchBanner highRiskCount={highPreemption} />}
       </div>
 
+      {/* Guided-tour CTA — a standing home for the demo-led motion, distinct from the free-signup and
+          referral CTAs. A 15-min walkthrough is the highest-converting path for the considered
+          compliance buyer, so it gets its own band above the newsletter signup. */}
+      <section className="border-t border-border-default pt-8">
+        <div className="rounded-xl border border-green-accent/30 bg-green-hero px-5 py-4 sm:px-6 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="max-w-2xl">
+            <h3 className="font-serif text-lg text-text-primary">See Atlas on your own obligations.</h3>
+            <p className="text-text-secondary text-sm mt-0.5 leading-relaxed">
+              Book a 15-minute walkthrough — we&apos;ll map the tracker to the materials and
+              jurisdictions your team actually reports on.
+            </p>
+          </div>
+          <button
+            onClick={() => { track('cta_click', { source: 'home_walkthrough' }); setWalkthroughOpen(true); }}
+            className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-semibold px-5 py-2.5 hover:opacity-90 transition-opacity"
+          >
+            Book a walkthrough →
+          </button>
+        </div>
+      </section>
+
       {/* Get free updates */}
       <SubscribeSection className="border-t border-border-default pt-8" />
+
+      {walkthroughOpen && (
+        <RequestAccessModal
+          plan="bespoke"
+          planLabel="a walkthrough"
+          heading="Book a walkthrough"
+          source="home_walkthrough"
+          onClose={() => setWalkthroughOpen(false)}
+        />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-border-default pt-6 pb-2 text-center">

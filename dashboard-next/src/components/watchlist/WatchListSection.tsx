@@ -18,7 +18,7 @@ import {
 } from '@/lib/userSettings';
 
 /** The user's watch list — their starred bills + per-account alert preferences. Self-gating:
- *  routes anon→sign-in and non-Pro→upgrade. Lives at the top of /company ("My Portfolio"); the
+ *  routes anon→sign-in and non-Pro→upgrade. Lives at the top of /library ("My Library"); the
  *  old standalone /watchlist route now redirects here. */
 export function WatchListSection() {
   const { user, isPro, loading, openAuth, getToken } = useAuth();

@@ -12,6 +12,11 @@ class BillSummary(BaseModel):
     state: str
     bill_number: str | None
     title: str | None
+    # Original-language title for non-English bills (the stored `title` is English), shown beside the
+    # English title with a lang attribute on the public bill page. Null until backfilled — see
+    # app/models.Bill.title_native and migration 044. title_native_lang is a BCP-47 tag.
+    title_native: str | None = None
+    title_native_lang: str | None = None
     status: str | None
     last_action_date: date | None
     # Date fields for "search by date" (§9). status_date backs the activity axis for foreign rows (which
@@ -707,10 +712,20 @@ class AccessRequestCreate(BaseModel):
     plan_interest: str
     message: str | None = None
     source: str | None = None
+    # Marketing attribution (utm_source/medium/campaign/content/term + referrer) captured client-side
+    # on landing. Not persisted to the access_requests table — passed through to the lead-notification
+    # email so a demo request names the campaign that drove it. Optional; {} when there's no signal.
+    attribution: dict[str, str] | None = None
 
 
-class AccessRequestResponse(AccessRequestCreate):
+class AccessRequestResponse(BaseModel):
     id: int
+    email: str
+    name: str | None = None
+    organization: str | None = None
+    plan_interest: str
+    message: str | None = None
+    source: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

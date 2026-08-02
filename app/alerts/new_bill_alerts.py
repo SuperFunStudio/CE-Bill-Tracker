@@ -15,9 +15,10 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.alerts.detector import STALE_STATUS_ACTION_DAYS
 from app.alerts.digest import (
     _ACCENT,
     _INK,
@@ -62,8 +63,21 @@ class NewBillAlertContent:
 
 
 async def _load_new_bills(db: AsyncSession, today: date, window_days: int) -> list[Bill]:
-    """Relevant, not-yet-alerted bills first tracked within the window, newest first."""
+    """Relevant, not-yet-alerted bills first tracked within the window with recent real-world
+    movement, newest first.
+
+    Two independent freshness bounds, both required:
+      - created_at within window_days: don't blast a historical backfill when the flag flips on.
+      - the bill's own action date (last_action_date, else status_date) within
+        STALE_STATUS_ACTION_DAYS: `created_at` is when WE first inserted the row, not when the
+        statehouse moved — a backfill/re-ingest gives an old bill a fresh created_at and it would
+        otherwise look "new" to us. This mirrors the dispatcher's stale-status gate (see
+        detector.STALE_STATUS_ACTION_DAYS) so both alert paths share one definition of "fresh".
+        A bill with no action date at all is suppressed (fail closed): COALESCE(...) is NULL, which
+        never satisfies `>= action_since`, so undated/year-only foreign rows can't trigger an alert.
+    """
     since = today - timedelta(days=window_days)
+    action_since = today - timedelta(days=STALE_STATUS_ACTION_DAYS)
     rows = (
         await db.execute(
             select(Bill)
@@ -71,6 +85,7 @@ async def _load_new_bills(db: AsyncSession, today: date, window_days: int) -> li
                 Bill.ce_relevant.is_(True),
                 Bill.new_bill_alert_sent.is_(False),
                 Bill.created_at >= since,
+                func.coalesce(Bill.last_action_date, Bill.status_date) >= action_since,
             )
             .order_by(Bill.created_at.desc())
         )

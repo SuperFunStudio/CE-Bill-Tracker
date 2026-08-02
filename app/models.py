@@ -52,6 +52,13 @@ class Bill(Base):
     jurisdiction_id: Mapped[int | None] = mapped_column(ForeignKey("jurisdictions.id"), nullable=True)
     bill_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Original-language title for non-English bills (the ingested `title` is stored English). Surfaced
+    # beside the English title on the public bill page with a `lang` attribute so screen readers and
+    # search engines treat it as the native title it is. NULL until the native-title backfill runs (a
+    # separate LLM/source job — this column ships empty; see migration 044). title_native_lang is a
+    # BCP-47 tag ("it","ja") for the lang attribute.
+    title_native: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title_native_lang: Mapped[str | None] = mapped_column(String(16), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status_date: Mapped[date | None] = mapped_column(Date, nullable=True)

@@ -84,13 +84,14 @@ async def run(only_email: str | None, send: bool) -> int:
         print(f"{'SENDING' if send else 'DRY RUN'} — {len(subs)} welcome email(s), as of {as_of}:\n")
         sent = 0
         for sub in subs:
-            sop = await build_state_of_play(db, sub)
+            sop = await build_state_of_play(db, sub, today=now.date())
             recap = await render_recap_paragraph(sub, sop)
             html = render_welcome_html(sub, sop, as_of, recap=recap)
             subject = render_welcome_subject(sub)
             summary = (
-                f"{sop.total_bills} bills "
-                f"({sop.enacted_total} enacted / {sop.active_total} active)"
+                f"{sop.total_recent} recent "
+                f"({sop.enacted_recent} enacted / {sop.active_recent} moving)"
+                f" · {sop.on_the_books_total} undated · {sop.scope_total} in scope"
                 f"{' +recap' if recap else ''}"
             )
             if send and sender is not None:

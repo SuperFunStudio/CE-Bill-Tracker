@@ -77,6 +77,12 @@ export interface BillSummary {
   state: string;
   bill_number: string | null;
   title: string | null;
+  /** Original-language title for non-English bills (e.g. "Decreto Legislativo 116/2020"), shown beside
+   *  the English `title` with a `lang`/`dir` attribute. Null until the native-title backfill runs — the
+   *  UI simply omits it when absent. See app/models.Bill.title_native. */
+  title_native?: string | null;
+  /** BCP-47 language tag for `title_native` (e.g. "it", "ja"), for the `lang` attribute. */
+  title_native_lang?: string | null;
   status: string | null;
   last_action_date: string | null;
   /** Date of the most recent status transition. Backs the activity axis for foreign rows (no

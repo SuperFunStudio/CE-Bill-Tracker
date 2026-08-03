@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
-import { CheckIcon, CloseIcon } from '@/components/ui/icons';
+import { CheckIcon, CloseIcon, CalendarIcon } from '@/components/ui/icons';
 import { useRegion } from '@/components/layout/RegionContext';
 import { RegionFilter } from '@/components/insights/RegionFilter';
 
@@ -244,19 +244,41 @@ export function MultiSelect({
   );
 }
 
-/** A single date bound, styled to match the underline Selects. Native date picker for zero deps. */
+/** A single date bound, styled to match the underline Selects. Native date picker for zero deps.
+ *  The native `::-webkit-calendar-picker-indicator` is hidden and replaced with our own CalendarIcon
+ *  button: `appearance-none` collapses that indicator to a near-invisible thin line on mobile WebKit/
+ *  Blink (fine on desktop), so the tap affordance disappeared on phones. Our overlaid button is visible
+ *  identically on both and opens the native picker via showPicker() (Chrome/Edge 99+, Safari 16+), with
+ *  a focus() fallback where that's unavailable. */
 function DateInput({
   label, value, onChange,
 }: { label: string; value: string; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const openPicker = () => {
+    const el = ref.current as (HTMLInputElement & { showPicker?: () => void }) | null;
+    if (!el) return;
+    try { el.showPicker ? el.showPicker() : el.focus(); } catch { el.focus(); }
+  };
   return (
     <div className="flex flex-col gap-1">
       <label className="font-serif text-text-muted text-meta uppercase tracking-wider">{label}</label>
-      <input
-        type="date"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 text-sm text-text-primary focus:outline-none focus:border-green-accent [color-scheme:light] dark:[color-scheme:dark]"
-      />
+      <div className="relative">
+        <input
+          ref={ref}
+          type="date"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="w-full appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 pr-6 text-sm text-text-primary focus:outline-none focus:border-green-accent [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden"
+        />
+        <button
+          type="button"
+          aria-label={`Open ${label.toLowerCase()} date picker`}
+          onClick={openPicker}
+          className="absolute inset-y-0 right-0 flex items-center pl-2 text-text-muted transition-colors hover:text-green-accent"
+        >
+          <CalendarIcon className="text-base" />
+        </button>
+      </div>
     </div>
   );
 }

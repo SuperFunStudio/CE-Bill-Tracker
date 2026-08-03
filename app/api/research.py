@@ -215,6 +215,56 @@ def _wants_diversity(question: str) -> bool:
     return any(t in question.lower() for t in _DIVERSITY_TRIGGERS)
 
 
+# A superlative-by-DATE lookup ("the oldest / earliest bill", "the most recent law") wants the single
+# extremal-dated bill led and cited — NOT a relevance match. Retrieval normally orders by ts_rank
+# (RULE 1) or recency-desc (RULE 4), so an ASCENDING extremum ("oldest") never reaches the read set and
+# the model, seeing only a bare year in the aggregate, mistakes a legitimate corpus edge (e.g. Japan's
+# 1970 Waste Management Act, whose Japanese body text ranks ~0 under the English tsvector) for a data
+# artifact. When this fires, _relevant_bills orders the in-scope set by status_date so the true extremal
+# bill is row 1 and citable. Kept tight to avoid stealing normal asks: an extremum word must co-occur
+# with a bill-noun, and 'newest' yields to a trend/over-time frame (that's a distribution, not a single
+# bill). 'first' alone is excluded — it usually means "first STATE to…", a ranking, not a date edge.
+_OLDEST_TRIGGERS = ("oldest", "earliest", "longest-standing", "longest standing", "first ever",
+                    "very first", "first enacted", "first-ever", "furthest back", "longest ago")
+_NEWEST_TRIGGERS = ("newest", "latest", "most recent", "most-recent", "youngest", "just passed",
+                    "just enacted", "most recently", "freshest")
+_BILL_NOUNS = ("bill", "law", "act", "measure", "statute", "policy", "regulation", "legislation",
+               "rule", "mandate", "ordinance", "directive")
+# Date-framing tokens stripped from the tsquery on an extremum ask (they describe the SORT, not the
+# subject) so a bare "newest bill you track" doesn't text-match on "recent"/"track" and narrow RULE 1
+# onto an incidental subset — the subject words, if any, still drive the match. Includes the extremum
+# trigger tokens, the generic bill-nouns, and a few corpus-meta words ("track", "atlas", "you").
+_EXTREMUM_WORDS = frozenset({
+    "oldest", "earliest", "longest", "standing", "first", "ever", "furthest", "back", "ago",
+    "newest", "latest", "recent", "recently", "most", "youngest", "just", "passed", "enacted",
+    "freshest", "since", *(_BILL_NOUNS),
+    "track", "tracks", "tracking", "tracked", "atlas", "corpus", "database", "dataset", "catalog",
+    "catalogue", "have", "has", "you", "your", "there",
+})
+
+
+def _date_extremum(question: str) -> str | None:
+    """'oldest' | 'newest' | None — the date edge the question asks to lead with (see the block above)."""
+    q = question.lower()
+    is_old = any(t in q for t in _OLDEST_TRIGGERS)
+    is_new = any(t in q for t in _NEWEST_TRIGGERS)
+    if is_old == is_new:                       # neither present, or an ambiguous both → not an extremum
+        return None
+    if not any(n in q for n in _BILL_NOUNS):   # "latest news" ≠ "latest bill"
+        return None
+    if is_new and _wants_year_chart(question):  # "most recent trend over time" is a distribution ask
+        return None
+    return "oldest" if is_old else "newest"
+
+
+def _date_order_cols(order_date: str):
+    """ORDER BY for the date-extremum path. ASC (oldest) relies on the caller also filtering out NULL
+    status_date; DESC (newest) pushes undated bills last so a real recent date always leads."""
+    if order_date == "asc":
+        return [Bill.status_date.asc(), Bill.id.asc()]
+    return [Bill.status_date.desc().nullslast(), Bill.id.desc()]
+
+
 # A "trend / over time / count-by-year" question wants the year distribution shown as a chart. Cheap
 # deterministic trigger (the shadow router's intent=count is Haiku and not yet driving); the bars come
 # from the SQL year aggregate, so the numbers are exact — the model never fabricates them.
@@ -551,6 +601,14 @@ async def _relevant_bills(
                   or facets.cycle_slugs or facets.product_slugs)
     extra = _scope_extra(facets)
 
+    # Date-extremum override: "the oldest/earliest bill", "the most recent law". When set, the match and
+    # listing builders order by status_date (asc/desc) instead of ts_rank/recency, so the true extremal
+    # bill leads the read set and is citable — and the structured/diversity/broaden rules are skipped
+    # (they'd re-order away from the date edge). A subject still filters (RULE 1 date-orders the match);
+    # a bare "oldest bill [in France]" falls to the date-ordered scope listing (RULE 4).
+    extremum = _date_extremum(question)
+    order_date = "asc" if extremum == "oldest" else "desc" if extremum == "newest" else None
+
     def _cols():
         return (Bill,
                 func.coalesce(lit.c.case_count, 0).label("case_count"),
@@ -583,13 +641,21 @@ async def _relevant_bills(
             q = q.where(rank >= rank_floor)
         for c in extra:
             q = q.where(c)
+        # Date-extremum ask: keep the relevance-filtered match but order it by date so "the oldest bill
+        # about X" leads with the oldest matching bill, not the highest-ranked one. ASC drops undated.
+        if order_date:
+            if order_date == "asc":
+                q = q.where(Bill.status_date.isnot(None))
+            return q.order_by(*_date_order_cols(order_date)).offset(offset).limit(limit or page_size)
         return q.order_by(rank.desc(), Bill.id.desc()).offset(offset).limit(limit or page_size)
 
     async def _match_rows(tsq, rank_floor=0.0):
         # Region-balanced read (relevance-gated) applies only to a corpus-wide ask (no place scoped —
         # a named place already IS the geography, so balancing across countries there is wrong) on the
         # deep-read call. Over-fetch a rank-ordered pool, then rebalance to page_size; else the plain page.
-        if balance_regions and not geo:
+        # Region balancing re-orders for spread, which fights a strict date ordering — skip it on an
+        # extremum ask so the true earliest/latest bill stays at the top of the read set.
+        if balance_regions and not geo and not order_date:
             pool = (await db.execute(_match_page(tsq, limit=_BALANCE_POOL, rank_floor=rank_floor))).all()
             return _balance_read_set(pool, page_size)
         return (await db.execute(_match_page(tsq, rank_floor=rank_floor))).all()
@@ -619,6 +685,12 @@ async def _relevant_bills(
                 order_by=[Bill.status_date.desc().nullslast(), Bill.id.desc()],
             )
             return q.order_by(rn.asc(), country).offset(offset).limit(page_size)
+        # Date-extremum listing (no place-interleave): order the whole in-scope set by status_date so a
+        # bare "oldest/newest bill [in <scope>]" leads with the actual date edge. ASC drops undated.
+        if order_date:
+            if order_date == "asc":
+                q = q.where(Bill.status_date.isnot(None))
+            return q.order_by(*_date_order_cols(order_date)).offset(offset).limit(limit or page_size)
         return q.order_by(Bill.status_date.desc().nullslast(), Bill.id.desc()).offset(offset).limit(limit or page_size)
 
     async def _plain_rows(where_extra, interleave=False):
@@ -630,7 +702,7 @@ async def _relevant_bills(
         # every bill already matches the scope, so balance_rank defaults to 0 and _balance_read_set
         # promotes purely for region spread. A named place (geo) or a 2+-place interleave keeps its exact
         # ordering (balancing off there); table pages pass balance_regions=False so they stay pure too.
-        if balance_regions and not geo and not interleave:
+        if balance_regions and not geo and not interleave and not order_date:
             pool = (await db.execute(
                 _plain_page(where_extra, limit=_BALANCE_POOL, with_country=True))).all()
             return _balance_read_set(pool, page_size)
@@ -664,9 +736,19 @@ async def _relevant_bills(
     terms = facets.meaningful_terms()
     diversity = _wants_diversity(question)
     # On a diversity ask, drop the framing words ("most unique types") from the tsquery so they can't
-    # AND-poison or junk-rank the match — the subject words (if any) still drive RULE 1/3. For a normal
-    # question `substantive` == `terms` (no diversity words present), so nothing changes.
-    substantive = [t for t in terms if t not in _DIVERSITY_WORDS] if diversity else terms
+    # AND-poison or junk-rank the match — the subject words (if any) still drive RULE 1/3. On an extremum
+    # ask, do the same with the date-framing words ("newest bill you track") so a bare "oldest/newest
+    # bill" doesn't spuriously text-match on "recent"/"track" and collapse RULE 1 onto a tiny subset date-
+    # ordered within itself (returning the newest-of-16, not of the corpus). Stripped to empty → RULE 1
+    # skips → the whole in-scope corpus is date-ordered (RULE 4). A real subject survives ("oldest tire
+    # law" → "tire" remains → RULE 1 date-orders the tire match). For a normal question `substantive` ==
+    # `terms`, so nothing changes.
+    if diversity:
+        substantive = [t for t in terms if t not in _DIVERSITY_WORDS]
+    elif extremum:
+        substantive = [t for t in terms if t not in _EXTREMUM_WORDS]
+    else:
+        substantive = terms
 
     # RULE 2 candidacy is resolved up front so RULE 1 can defer a thin match to it: the question must map
     # to a compliance dimension, the user must NOT have scoped (a place/material means "list what's
@@ -674,7 +756,8 @@ async def _relevant_bills(
     # keyword must be a real topic — not merely a word inside an illustrative aside ("...like France's
     # repairability index"), which must never hijack the whole retrieval.
     dim, trig = _map_dimension(question)
-    dim_ok = bool(dim and not scoped and not diversity and not _trigger_is_illustrative(question, trig))
+    dim_ok = bool(dim and not scoped and not diversity and not extremum
+                  and not _trigger_is_illustrative(question, trig))
     # Size the dimension set once (reused by RULE 2), so RULE 1 can compare against it instead of guessing.
     dim_total = await _count_plain([Bill.compliance_details[dim]["status"].astext == "present"]) if dim_ok else 0
 
@@ -695,11 +778,13 @@ async def _relevant_bills(
         defer_to_dim = (dim_ok and n < _MIN_TEXT_HITS and dim_total > n
                         and _dim_is_dominant(substantive, trig))
         # Fix #2: on the router-driven path, a match thinner than the floor is the over-narrow bug — let
-        # it fall through to the structured-scope listing (RULE 4) or the OR-broaden (RULE 3).
-        too_thin = broaden_floor and n < broaden_floor
+        # it fall through to the structured-scope listing (RULE 4) or the OR-broaden (RULE 3). Suspended
+        # for an extremum ask: "the oldest bill about <rare topic>" is expected to be thin, and we want
+        # that thin subject match date-ordered, not broadened away to the whole scope.
+        too_thin = broaden_floor and n < broaden_floor and not extremum
         if n > 0 and not defer_to_dim and not too_thin:
             rows = await _match_rows(tsq, rank_floor=rank_floor)
-            return rows, n, _place_strategy("text")
+            return rows, n, _place_strategy(f"{extremum}·text" if extremum else "text")
 
     # RULE 2 — structured-by-dimension (candidacy computed above; the set is non-empty).
     if dim_ok and dim_total > 0:
@@ -710,14 +795,16 @@ async def _relevant_bills(
     # RULE 2.5 — diversity/outlier spread: "what are the most unique TYPES of bills?" wants a broad
     # sample across the corpus's distinct policy types, not a narrowing filter. Fires even when scoped
     # (e.g. "what's unusual in France" → the spread within France). Falls through to listing if empty.
-    if diversity:
+    # An extremum ask ("the oldest unusual bill") wants the date edge, not a type spread — skip.
+    if diversity and not extremum:
         n = await _count_plain([])
         if n > 0:
             rows = (await db.execute(_diversity_page())).all()
             return rows, n, _place_strategy("diversity")
 
-    # RULE 3 — OR-broaden, only when not scoped and free text found nothing precise.
-    if substantive and not scoped:
+    # RULE 3 — OR-broaden, only when not scoped and free text found nothing precise. Skipped on an
+    # extremum ask: broadening the subject re-ranks by relevance and buries the date edge.
+    if substantive and not scoped and not extremum:
         or_tsq = func.to_tsquery(_ENGLISH, " | ".join(substantive))
         n = await _count_match(db, or_tsq, extra)
         if n > 0:
@@ -732,6 +819,8 @@ async def _relevant_bills(
     base = ("jurisdiction" if geo else "material" if facets.material_slugs
             else "product" if facets.product_slugs
             else "instrument" if facets.instrument_slugs else "all")
+    if extremum:
+        base = f"{extremum}·{base}"
     return rows, n, _place_strategy(base)
 
 
@@ -1533,6 +1622,18 @@ async def ask_the_atlas(
                          "(instrument_type clusters, rarest first — one+ representative each), NOT an "
                          "exhaustive keyword match. Describe the most unique / outlier bill TYPES you "
                          "see, citing representative bills for each; flag true single-bill outliers.")
+    # Date-extremum ask: the read set is ordered by status_date, so the FIRST bill IS the answer. Tell the
+    # model to lead with it by name and exact date rather than second-guessing the year as a data artifact
+    # — a legitimate corpus edge (e.g. a 1970 foreign statute) otherwise reads as suspect to synthesis.
+    _ext = _date_extremum(retrieval_q)
+    if _ext:
+        _edge = "OLDEST (earliest status_date)" if _ext == "oldest" else "NEWEST (most recent status_date)"
+        scope["note"] = (
+            f"This is a DATE-RANKED lookup: the bills are ordered by status_date, so the FIRST cited bill "
+            f"is the {_edge} in scope. Lead your answer by naming that bill, its jurisdiction, and its "
+            f"exact date, and cite it. These dates are real corpus values — do NOT dismiss an early/old "
+            f"year as a data artifact; foreign statutes legitimately predate US bills. If a date looks "
+            f"only year-precise (Jan 1), say so, but still report the bill.")
 
     # Release the request's DB connection before the ~30s synthesis so it isn't held idle (and dropped)
     # across the LLM call; the read data is already materialized and persistence uses a fresh session.

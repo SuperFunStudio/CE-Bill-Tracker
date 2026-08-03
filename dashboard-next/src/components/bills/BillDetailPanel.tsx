@@ -1,9 +1,8 @@
 'use client';
-import { useState } from 'react';
 import Link from 'next/link';
 import type { BillSummary } from '@/lib/types';
-import { fixEncoding, formatDate, formatInstrumentType, isWeakening, resolveSourceLink } from '@/lib/utils';
-import { useBill, useBillText, useBillLitigationCases } from '@/hooks/useBills';
+import { fixEncoding, formatDate, formatInstrumentType, isWeakening, resolveSourceLink, billHref } from '@/lib/utils';
+import { useBill, useBillLitigationCases } from '@/hooks/useBills';
 import { BillComplianceLayers } from '@/components/bills/BillComplianceLayers';
 import { ShareBillButton } from '@/components/bills/ShareBillButton';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
@@ -26,10 +25,6 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
   const { data: litigationCases = [] } = useBillLitigationCases(
     bill.litigation_case_count > 0 ? bill.id : null
   );
-
-  // Full statute text is lazy — only fetched once the reader expands the viewer (it can be long).
-  const [showText, setShowText] = useState(false);
-  const { data: fullText, isLoading: textLoading } = useBillText(bill.id, showText);
 
   return (
     <div className="bg-bg-secondary border border-border-default rounded-lg p-5 space-y-4">
@@ -160,63 +155,32 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
         </div>
       )}
 
-      {/* Full statute text — lazy-loaded on demand (can be long), shown in a scrollable well. Falls
-          back to a "read it at the source" note when we haven't ingested this bill's text yet. */}
-      <div className="border-t border-border-default pt-3">
-        <button
-          onClick={() => setShowText(v => !v)}
-          className="inline-flex items-center gap-1.5 text-green-accent text-sm hover:underline"
-          aria-expanded={showText}
-        >
-          <span aria-hidden className="text-xs">{showText ? '▾' : '▸'}</span>
-          {showText ? 'Hide full bill text' : 'Read full bill text'}
-        </button>
-        {showText && (
-          <div className="mt-2">
-            {textLoading ? (
-              <div className="space-y-2" aria-live="polite">
-                <div className="h-2.5 w-full animate-pulse rounded bg-bg-tertiary" />
-                <div className="h-2.5 w-5/6 animate-pulse rounded bg-bg-tertiary" />
-                <div className="h-2.5 w-2/3 animate-pulse rounded bg-bg-tertiary" />
-                <span className="sr-only">Loading full bill text…</span>
-              </div>
-            ) : fullText?.text ? (
-              <>
-                <div className="max-h-80 overflow-y-auto rounded-lg border border-border-default bg-bg-primary p-3">
-                  <pre className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-text-secondary">
-                    {fullText.text}
-                  </pre>
-                </div>
-                <p className="text-meta text-text-muted mt-1">
-                  Full text as ingested{fullText.source ? ` · via ${fullText.source}` : ''}. Verify against the official source below.
-                </p>
-              </>
-            ) : (
-              <p className="text-meta text-text-muted">
-                We haven&apos;t ingested this bill&apos;s full text yet — use the source link below to read it.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Source link — resolves to the best available target (updated URL on a moved page, a LegiScan
-          backup on a dead one) so a click doesn't drop the user on a connection error. See
-          resolveSourceLink + scripts/audit_bill_source_links.py. */}
+      {/* Actions — the modal is the quick look; the full statute text (and, over time, sponsors and
+          related bills) lives on the bill's own page, the deep view. "Read full bill text" deep-links
+          there; the source link goes to the official page. See resolveSourceLink + the bill route. */}
       {(() => {
         const link = resolveSourceLink(bill);
-        if (!link) return null;
         return (
-          <div className="space-y-1">
-            <a
-              href={link.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-green-accent text-sm hover:underline"
-            >
-              {link.label}
-            </a>
-            {link.note && <p className="text-xs text-text-muted">{link.note}</p>}
+          <div className="border-t border-border-default pt-3 space-y-1">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+              <Link
+                href={`${billHref(bill)}#full-text`}
+                className="inline-flex items-center gap-1 text-green-accent text-sm hover:underline"
+              >
+                Read full bill text →
+              </Link>
+              {link && (
+                <a
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-green-accent text-sm hover:underline"
+                >
+                  {link.label}
+                </a>
+              )}
+            </div>
+            {link?.note && <p className="text-xs text-text-muted">{link.note}</p>}
           </div>
         );
       })()}

@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
-import { fetchBill, fetchBills } from '@/lib/api';
-import type { BillDetail, BillSummary } from '@/lib/types';
+import { fetchBill, fetchBills, fetchBillText } from '@/lib/api';
+import type { BillDetail, BillFullText, BillSummary } from '@/lib/types';
 import {
   billSlug,
   billHref,
@@ -36,6 +36,16 @@ const getBill = cache(async (id: number): Promise<BillDetail | null> => {
 /** The full ce_relevant corpus, fetched once for generateStaticParams. */
 const getAllBills = cache(async (): Promise<BillSummary[]> => {
   return fetchBills({ ce_relevant: true, region: 'all', limit: 5000 });
+});
+
+/** One bill's ingested full statute text — server-rendered into the page (the reason to visit the
+ *  page vs. the quick-look modal, and unique content for search). null when not yet ingested. */
+const getBillText = cache(async (id: number): Promise<BillFullText | null> => {
+  try {
+    return await fetchBillText(id);
+  } catch {
+    return null;
+  }
 });
 
 export async function generateStaticParams(): Promise<{ id: string; slug: string }[]> {
@@ -133,6 +143,7 @@ export default async function BillPage({ params }: { params: { id: string; slug:
   const instruments = (bill.instrument_types?.length ? bill.instrument_types : bill.instrument_type ? [bill.instrument_type] : [])
     .map(formatInstrumentType);
   const link = resolveSourceLink(bill);
+  const fullText = await getBillText(bill.id);
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -234,6 +245,29 @@ export default async function BillPage({ params }: { params: { id: string; slug:
             {link.note && <p className="text-xs text-text-muted">{link.note}</p>}
           </div>
         )}
+
+        {/* ── Full bill text ── the deep view's reason to exist (and unique, indexable content).
+            Server-rendered so it's in the HTML for search engines; the `#full-text` anchor is what the
+            modal's "Read full bill text" link jumps to (scroll-mt clears the sticky masthead). */}
+        <section id="full-text" className="border-t border-border-default pt-4 scroll-mt-24">
+          <h2 className="text-text-primary font-serif text-lg mb-2">Full bill text</h2>
+          {fullText?.text ? (
+            <>
+              <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-border-default bg-bg-primary p-4">
+                <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-text-secondary">
+                  {fullText.text}
+                </pre>
+              </div>
+              <p className="text-xs text-text-muted mt-1">
+                Full text as ingested{fullText.source ? ` · via ${fullText.source}` : ''}. Verify against the official source above.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-text-muted">
+              We haven&apos;t ingested this bill&apos;s full text yet{link ? ' — use the source link above to read it.' : '.'}
+            </p>
+          )}
+        </section>
       </article>
 
       <p className="mt-6 text-sm text-text-muted">

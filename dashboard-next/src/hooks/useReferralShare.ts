@@ -73,7 +73,7 @@ export function useReferralShare(source: string): ReferralShare {
       await navigator.clipboard.writeText(link);
       setCopied(true);
       setShared(true);
-      track('referral_share', { method: 'copy', source });
+      track('referral_share', { method: 'copy', entry_source: source });
     } catch {
       // Clipboard blocked (insecure context / permissions) — tell the user to copy manually.
       setCopyError(true);
@@ -83,7 +83,7 @@ export function useReferralShare(source: string): ReferralShare {
   const share = useCallback(
     async (opts?: { title?: string; text?: string }) => {
       if (!link) return;
-      track('referral_share', { method: 'native', source });
+      track('referral_share', { method: 'native', entry_source: source });
       setShared(true);
       try {
         if (navigator.share) {

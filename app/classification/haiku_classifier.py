@@ -16,8 +16,15 @@ HAIKU_MODEL = "claude-haiku-4-5-20251001"
 # right-to-repair, deposit-return, etc. are tracked policy instruments even though they aren't
 # EPR in the strict sense (e.g. CA SB-244 "Right to Repair Act").
 TRACKED_INSTRUMENTS = frozenset({
-    "epr", "right_to_repair", "recycled_content", "deposit_return",
+    "epr", "right_to_repair", "recycled_content", "deposit_return", "waste_shipment",
 })
+# "waste_shipment" — transboundary / cross-border movement, import/export, and interjurisdictional
+# transfer of WASTE, SCRAP, and RECYCLABLE / SECONDARY materials for recovery, recycling, or disposal
+# (Basel/Waigani-style controls, hazardous-waste export-import regimes, e-scrap and scrap-metal trade).
+# Tracked so a bill the classifier tags with it lands in scope on that basis alone, independent of the
+# narrow is_ce_relevant judgment (which historically, confidently, excluded these). Requested by an
+# e-scrap recovery customer; existing corpus is flipped + tagged adjacency='transboundary' by
+# scripts/backfill_adjacency.py. See docs/SCOPE_FACET_AND_MATERIAL_NAVIGATION.md.
 # The biological cycle of the circular economy — bio-based / biomanufactured materials,
 # regenerative agriculture & soil health, organics recycling / composting — is in scope too,
 # but it's modeled on the MATERIAL axis (material_categories: "biobased", "agriculture",
@@ -140,7 +147,7 @@ Return this exact JSON structure:
   "is_ce_relevant": <true or false>,
   "confidence": <float 0.0-1.0>,
   "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","vehicles","construction","furniture","used_oil","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","hazardous_materials","water","biodiversity","other"]>,
-  "instrument_types": <list of one or more from: "epr","right_to_repair","recycled_content","deposit_return","incentives","labeling","chemical_restriction","preemption","disposal_ban","organics_diversion","budget","other"; put the primary/most-central instrument FIRST. A law is often several at once (e.g. an EPR law with recycled-content + labeling mandates)>,
+  "instrument_types": <list of one or more from: "epr","right_to_repair","recycled_content","deposit_return","incentives","labeling","chemical_restriction","preemption","disposal_ban","organics_diversion","waste_shipment","budget","other"; put the primary/most-central instrument FIRST. A law is often several at once (e.g. an EPR law with recycled-content + labeling mandates)>,
   "stance": <one of: "advances","weakens","neutral">,
   "urgency": <one of: "high","medium","low">,
   "reasoning": "<1 sentence max>"
@@ -214,6 +221,19 @@ Disposal ban vs organics diversion (two mechanism instruments, kept distinct):
     food-rescue requirement. Use this (not "disposal_ban") for organics-specific diversion duties;
     material stays "organics". If an organics bill is ONLY a landfill ban with no diversion duty, use
     "disposal_ban". Do not use either for a purely financial composting grant — that is "incentives".
+
+Waste shipment / transboundary movement: a measure that governs the CROSS-BORDER or INTERJURISDICTIONAL
+MOVEMENT of waste, scrap, or recyclable / secondary materials — import / export controls, transboundary
+or cross-border / interstate / interprovincial shipment, notification-and-consent regimes, or trade of
+these material streams for recovery, recycling, reuse, or disposal. This is the Basel / Waigani
+Convention family and hazardous-waste export-import law, plus e-scrap (used electronics) and scrap-metal
+trade. Set is_ce_relevant=true and put "waste_shipment" FIRST in instrument_types; tag the material
+(e.g. "electronics","batteries","metals","hazardous_materials"). IN SCOPE ONLY when the thing being
+moved is WASTE / SCRAP / END-OF-LIFE / RECYCLABLE / SECONDARY material — NOT ordinary trade or
+import/export of new consumer goods, food / beverages, fuel, alcohol, animal feed, or agricultural
+commodities, which are out of scope regardless of any "import"/"export" wording. Nuclear / radioactive
+waste and medical-waste shipment stay OUT (their own segments) unless the measure also carries a
+circular mechanism (recycling / recovery / reuse / EPR).
 
 Water & biodiversity: two cross-cutting subjects, in scope ONLY through their circular-economy tie —
 NOT as general environmental law. Tag "water" for material LEAKAGE into or RECOVERY from waterways —

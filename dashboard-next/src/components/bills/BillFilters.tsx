@@ -75,8 +75,12 @@ const STATUSES = [
 // (see TRACKED_INSTRUMENTS); budget is generic appropriations and pulls in tangential bills.
 // `incentives` IS surfaced: it's the financial lever (tax credits, grants, funding) for in-scope
 // circular-economy outcomes, and supersedes the in-scope use of budget.
+// `waste_shipment` = transboundary / cross-border movement & import-export of waste, scrap, and
+// recyclable materials (Basel-family controls, e-scrap / scrap-metal trade). A tracked instrument
+// (see TRACKED_INSTRUMENTS) surfaced for the e-scrap recovery customer; its rows also carry
+// adjacency='transboundary' for provenance.
 const INSTRUMENT_TYPES = ['epr', 'deposit_return', 'right_to_repair', 'recycled_content',
-  'incentives', 'labeling', 'preemption', 'disposal_ban', 'organics_diversion', 'other'];
+  'incentives', 'labeling', 'preemption', 'disposal_ban', 'organics_diversion', 'waste_shipment', 'other'];
 // Values must match the material categories in data/seed/epr_keywords.json.
 // biobased / agriculture are the biological cycle of the circular economy (bio-based materials,
 // regenerative ag & soil health); composting/organics-recycling bills tag "organics". These live

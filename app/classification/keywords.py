@@ -108,6 +108,12 @@ class KeywordFilter:
             "deposit_return_keywords",
             "right_to_repair_keywords",
             "pfas_and_chemicals_keywords",
+            # Transboundary / cross-border movement + import-export of waste, scrap, and recyclable
+            # materials (the waste_shipment instrument). Terms are specific multi-word phrases that
+            # require a waste/scrap/recyclable token, so ordinary trade of goods/food/fuel/alcohol —
+            # which carry "import"/"export" but no waste context — do NOT match. See the classifier's
+            # "Waste shipment / transboundary movement" boundary. Requested by the e-scrap customer.
+            "transboundary_and_waste_shipment_keywords",
         ]
         self._tier2 = self._compile([term for k in tier2_keys for term in kw[k]])
 

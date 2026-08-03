@@ -12,12 +12,29 @@ import {
   type User,
 } from 'firebase/auth';
 import { auth, googleProvider, microsoftProvider } from '@/lib/firebase';
-import { track } from '@/lib/analytics';
+import { track, setUserProperties } from '@/lib/analytics';
 import { captureAttribution, attributionParams } from '@/lib/attribution';
 import { startProCheckout, startSignupTrial, billingErrorMessage } from '@/lib/billing';
 import { attributeReferral, PENDING_REF_KEY } from '@/lib/referrals';
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+
+/** Domain half of an email (for the account_domain user property + account_created event) — never the
+ *  full address, per the GA PII rule. */
+function emailDomain(email?: string | null): string | undefined {
+  return email?.split('@')[1]?.toLowerCase() || undefined;
+}
+
+/** Whether a share-to-unlock referral code is pending (captured from ?ref=), so account_created can be
+ *  tagged referred vs organic. */
+function hasPendingReferral(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return !!localStorage.getItem(PENDING_REF_KEY);
+  } catch {
+    return false;
+  }
+}
 
 export interface Entitlement {
   plan: string; // resolved tier: "free" | "student" | "research" | "pro" | "enterprise"
@@ -143,6 +160,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!code) return;
     const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
     const res = await attributeReferral(token, code);
+    // Close the referral loop in GA: the grant is the conversion (mark it a Key Event); a terminal
+    // non-grant records WHY (feeds the `reason` dimension). email_unverified is a deferral, not a
+    // failure — it's retried after verification — so it isn't reported here.
+    if (res.granted) {
+      track('referral_reward_granted');
+    } else if (res.reason && ['invalid_code', 'self', 'already_referred'].includes(res.reason)) {
+      track('referral_attribute_failed', { reason: res.reason });
+    }
     const terminal =
       res.granted || ['invalid_code', 'self', 'already_referred', 'no_code'].includes(res.reason ?? '');
     if (terminal) {
@@ -185,14 +210,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub;
   }, [fetchEntitlement, provisionOnce]);
 
+  // GA4 user properties — the "who is this" that segments EVERY event (free vs pro, which org domain).
+  // plan_tier from the resolved entitlement (→ "free" once signed in, "anonymous" when logged out);
+  // account_domain from the email domain (never the full address). org_name is reserved until
+  // /billing/me returns it. See setUserProperties (undefined values are dropped, so blanks never clobber).
+  useEffect(() => {
+    setUserProperties({
+      plan_tier: entitlement?.plan ?? (user ? 'free' : 'anonymous'),
+      account_domain: emailDomain(user?.email),
+    });
+  }, [user, entitlement]);
+
   // Capture a ?ref= code on first landing and stash it until signup, when it's attributed. Alongside
-  // it, capture marketing attribution (?utm_source=linkedin&utm_campaign=…) so a later sign_up /
+  // it, capture marketing attribution (?utm_source=linkedin&utm_campaign=…) so a later account_created /
   // request_access can be credited to the campaign that brought the visitor.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     captureAttribution();
     const ref = new URLSearchParams(window.location.search).get('ref');
     if (ref) {
+      // Top of the referral funnel: someone arrived on a share link. (The conversion — a granted free
+      // month — fires later from attributePendingReferral.)
+      track('referral_link_landed');
       try {
         localStorage.setItem(PENDING_REF_KEY, ref.trim());
       } catch {
@@ -247,7 +286,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUpEmail = useCallback(async (email: string, password: string) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
-    track('sign_up', { method: 'email', ...attributionParams() });
+    track('account_created', {
+      method: 'email',
+      domain: emailDomain(email),
+      plan: 'free',
+      referred: hasPendingReferral(),
+      ...attributionParams(),
+    });
     // Start email verification; the trial + referral provision once they verify (H-2). Google sign-ins
     // skip this — their email is already verified, so onIdTokenChanged provisions them immediately.
     try { await sendEmailVerification(cred.user); } catch { /* best-effort */ }
@@ -256,14 +301,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInGoogle = useCallback(async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const isNew = getAdditionalUserInfo(result)?.isNewUser;
-    track(isNew ? 'sign_up' : 'login', { method: 'google', ...(isNew ? attributionParams() : {}) });
+    track(isNew ? 'account_created' : 'login', {
+      method: 'google',
+      ...(isNew
+        ? { domain: emailDomain(result.user.email), plan: 'free', referred: hasPendingReferral(), ...attributionParams() }
+        : {}),
+    });
     // Provisioning runs via onIdTokenChanged (Google emails are verified).
   }, []);
 
   const signInMicrosoft = useCallback(async () => {
     const result = await signInWithPopup(auth, microsoftProvider);
     const isNew = getAdditionalUserInfo(result)?.isNewUser;
-    track(isNew ? 'sign_up' : 'login', { method: 'microsoft', ...(isNew ? attributionParams() : {}) });
+    track(isNew ? 'account_created' : 'login', {
+      method: 'microsoft',
+      ...(isNew
+        ? { domain: emailDomain(result.user.email), plan: 'free', referred: hasPendingReferral(), ...attributionParams() }
+        : {}),
+    });
     // Provisioning runs via onIdTokenChanged (Microsoft emails are verified).
   }, []);
 

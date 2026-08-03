@@ -20,7 +20,7 @@ import type { InstrumentMaterialCell } from '@/lib/types';
 // Canonical column order (mirrors INSTRUMENT_TYPES in BillFilters / the classifier enum).
 const INSTRUMENT_ORDER = [
   'epr', 'deposit_return', 'recycled_content', 'right_to_repair', 'incentives', 'labeling', 'preemption',
-  'disposal_ban', 'organics_diversion', 'other',
+  'disposal_ban', 'organics_diversion', 'waste_shipment', 'other',
 ];
 
 export function InstrumentMaterialMatrix({ regions }: { regions?: string } = {}) {

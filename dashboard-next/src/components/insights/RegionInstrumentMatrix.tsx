@@ -21,7 +21,7 @@ import type { InstrumentMaterialCell } from '@/lib/types';
 
 const INSTRUMENT_ORDER = [
   'epr', 'deposit_return', 'recycled_content', 'right_to_repair', 'incentives', 'labeling', 'preemption',
-  'disposal_ban', 'organics_diversion', 'other',
+  'disposal_ban', 'organics_diversion', 'waste_shipment', 'other',
 ];
 
 export function RegionInstrumentMatrix() {

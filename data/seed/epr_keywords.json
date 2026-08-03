@@ -542,6 +542,24 @@
     "per-ton disposal fee",
     "disposal surcharge"
   ],
+  "transboundary_and_waste_shipment_keywords": [
+    "transboundary movement",
+    "transboundary shipment",
+    "waste shipment",
+    "waste shipments",
+    "shipment of waste",
+    "movement of hazardous waste",
+    "cross-border movement of waste",
+    "cross-border waste",
+    "export of waste",
+    "import of waste",
+    "waste export",
+    "waste import",
+    "scrap metal export",
+    "e-waste export",
+    "Basel Convention",
+    "Waigani Convention"
+  ],
   "federal_preemption_keywords": [
     "preemption",
     "federal preemption",

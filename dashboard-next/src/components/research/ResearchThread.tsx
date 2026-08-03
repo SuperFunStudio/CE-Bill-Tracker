@@ -18,6 +18,7 @@ import { ApiError, askResearch, fetchResearchBills, fetchResearchSession } from 
 import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchChart, ResearchCitation } from '@/lib/types';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillModal } from '@/components/ui/BillModal';
+import { track } from '@/lib/analytics';
 import { useChartTheme } from '@/lib/charts/theme';
 
 // Local marker that an anonymous visitor has spent their one free question (server enforces the real
@@ -96,7 +97,17 @@ export function useResearch() {
     setBusy(true); setError(null); setWall(null);
     try {
       const token = await getToken();
+      const t0 = performance.now();
       const a = await askResearch(trimmed, token, sessionId);
+      // Core-value instrumentation: did the ask return something, and how fast. result_count is the
+      // total relevant bills the retrieval found (0 = we couldn't answer from the corpus — its own
+      // event so it's alertable). PII rule: length of the question, never its text.
+      const latencyMs = Math.round(performance.now() - t0);
+      const resultCount = a.bills?.total ?? a.citations?.length ?? 0;
+      track('atlas_query_submitted', { query_length: trimmed.length, result_count: resultCount, latency_ms: latencyMs });
+      if (resultCount === 0) {
+        track('atlas_query_zero_results', { query_length: trimmed.length, latency_ms: latencyMs });
+      }
       setTurns(prev => [...prev, { q: trimmed, answer: a }]);
       setSessionId(a.session_id ?? sessionId);
       setBillPage(a.bills ?? null);
@@ -369,7 +380,7 @@ function CitedBills({ citations, onOpen }: { citations: ResearchCitation[]; onOp
   return (
     <div className="space-y-2">
       <ul className="space-y-2">
-        {citations.map(c => {
+        {citations.map((c, i) => {
           const body = (
             <>
               <div className="text-body text-text-primary">
@@ -384,7 +395,11 @@ function CitedBills({ citations, onOpen }: { citations: ResearchCitation[]; onOp
             <li key={c.bill_id}>
               <button
                 type="button"
-                onClick={() => onOpen(c.bill!)}
+                onClick={() => {
+                  // Did the answer's citation drive the reader to a bill? position = rank in the cited list.
+                  track('atlas_citation_clicked', { bill_id: c.bill!.id, position: i + 1 });
+                  onOpen(c.bill!);
+                }}
                 className="w-full text-left border-l-2 border-green-accent/40 pl-3 rounded-sm hover:bg-bg-secondary focus:outline-none focus:bg-bg-secondary transition-colors"
               >
                 {body}
@@ -512,7 +527,16 @@ function ThreadTurn({ turn, index, total, isLast, billPage, pageBusy, goToPage, 
 
       {answerOpen && (
         <>
-          <AnswerText text={turn.answer.answer} cites={cites} onCite={c => c.bill && onOpenBill(c.bill)} />
+          <AnswerText
+            text={turn.answer.answer}
+            cites={cites}
+            onCite={c => {
+              if (!c.bill) return;
+              // Inline citation click — same signal as the cited-bills list; position = rank in citations.
+              track('atlas_citation_clicked', { bill_id: c.bill.id, position: turn.answer.citations.indexOf(c) + 1 });
+              onOpenBill(c.bill);
+            }}
+          />
 
           {turn.answer.chart && turn.answer.chart.bars.length > 0 && <AnswerChart chart={turn.answer.chart} />}
 

@@ -17,6 +17,19 @@ export function track(event: string, params: Record<string, unknown> = {}): void
 }
 
 /**
+ * Set GA4 user properties — the "who is this" that segments EVERY event (free vs pro behavior, which
+ * org, corporate vs personal). Registered as User-scoped custom dimensions in GA (plan_tier,
+ * account_domain, org_name). Undefined/empty values are dropped so we never overwrite a real value
+ * with blank. Same PII rule as track(): domain and tier only, never the raw email/name.
+ */
+export function setUserProperties(props: Record<string, string | undefined | null>): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(props)) if (v) clean[k] = v;
+  if (Object.keys(clean).length) window.gtag('set', 'user_properties', clean);
+}
+
+/**
  * Human-readable page title per route, so GA4's "page title" report distinguishes every route instead
  * of collapsing them all under the static layout title. Keep in sync with the app/ route folders.
  */

@@ -39,7 +39,7 @@ export function SiteFooter() {
             <div className="space-y-2">
               <button
                 onClick={() => {
-                  track('referral_cta', { source: 'footer', action: 'sign_in' });
+                  track('referral_cta', { entry_source: 'footer', action: 'sign_in' });
                   openAuth();
                 }}
                 className="rounded-lg bg-green-accent px-6 py-2.5 text-sm font-medium text-bg-primary transition-opacity hover:opacity-90"

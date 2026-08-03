@@ -87,7 +87,7 @@ export default function DevelopersPage() {
   const [modal, setModal] = useState(false);
 
   function requestAccess() {
-    track('cta_click', { plan: 'api', source: 'developers' });
+    track('cta_click', { plan: 'api', entry_source: 'developers' });
     setModal(true);
   }
 

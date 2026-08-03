@@ -118,6 +118,15 @@ class Bill(Base):
     # a full YYYY-MM-DD, so a year-only extracted value stays NULL here (year charts use status_date).
     effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
+    # Scope-provenance tag (migration 045). NULL for core circular-economy bills (in scope on their own
+    # merits). Set to a slug — 'transboundary' (cross-border movement of waste & scrap; the e-scrap
+    # recovery customer ask), 'toxics' (chemical-restriction material rules) — when a bill enters the
+    # corpus via a deliberately-opened inclusion net rather than the core classifier judgment. Included
+    # in the default view (list query stays `ce_relevant = true`, no adjacency clause); the tag is
+    # provenance/analysis, NOT a filter gate. Written by scripts/backfill_adjacency.py.
+    # See docs/SCOPE_FACET_AND_MATERIAL_NAVIGATION.md.
+    adjacency: Mapped[str | None] = mapped_column(String(24), nullable=True)
+
     @property
     def date_precision(self) -> str:
         """Granularity of this row's activity date, for honest UI rendering. US rows carry a real
@@ -160,6 +169,11 @@ class Bill(Base):
         Index("idx_bills_last_action", "last_action_date"),
         Index("idx_bills_relevant", "ce_relevant"),
         Index("idx_bills_effective_date", "effective_date"),
+        Index(
+            "idx_bills_adjacency",
+            "adjacency",
+            postgresql_where=sa_text("adjacency IS NOT NULL"),
+        ),
         Index("idx_bills_policy_stance", "policy_stance"),
         Index("idx_bills_material_categories", "material_categories", postgresql_using="gin"),
         Index("idx_bills_instrument_types", "instrument_types", postgresql_using="gin"),

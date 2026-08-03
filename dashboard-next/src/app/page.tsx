@@ -494,7 +494,7 @@ export default function HomePage() {
             </p>
           </div>
           <button
-            onClick={() => { track('cta_click', { source: 'home_walkthrough' }); setWalkthroughOpen(true); }}
+            onClick={() => { track('cta_click', { entry_source: 'home_walkthrough' }); setWalkthroughOpen(true); }}
             className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-semibold px-5 py-2.5 hover:opacity-90 transition-opacity"
           >
             Book a walkthrough →

@@ -211,6 +211,7 @@ const INSTRUMENT_DISPLAY: Record<string, string> = {
   preemption: 'Preemption',
   disposal_ban: 'Disposal Ban',
   organics_diversion: 'Organics Diversion',
+  waste_shipment: 'Waste Shipment',
   other: 'Other',
 };
 

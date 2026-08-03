@@ -5,6 +5,7 @@ import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, isWeakening, resolveSourceLink } from '@/lib/utils';
 import { useBill, useBillText, useBillLitigationCases } from '@/hooks/useBills';
 import { BillComplianceLayers } from '@/components/bills/BillComplianceLayers';
+import { ShareBillButton } from '@/components/bills/ShareBillButton';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { RiskScore } from '@/components/ui/RiskScore';
@@ -49,7 +50,8 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
         </div>
         {/* Follow + close — the star matches every table row, so the deepest bill view can be tracked
             from here too (the affordance was previously missing in the modal). */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <ShareBillButton bill={bill} />
           <WatchStar billId={bill.id} className="text-lg" />
           {onClose && (
             <button

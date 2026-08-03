@@ -14,6 +14,7 @@ import {
 } from '@/lib/utils';
 import { jurisdictionDisplayName } from '@/lib/jurisdictions';
 import { BillComplianceLayers } from '@/components/bills/BillComplianceLayers';
+import { ShareBillButton } from '@/components/bills/ShareBillButton';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { WatchStar } from '@/components/watchlist/WatchStar';
 
@@ -161,7 +162,10 @@ export default async function BillPage({ params }: { params: { id: string; slug:
               )}
               <StatusBadge status={bill.status} showCaption dashWhenEmpty={false} />
             </div>
-            <WatchStar billId={bill.id} className="text-lg shrink-0" />
+            <div className="flex items-center gap-3 shrink-0">
+              <ShareBillButton bill={bill} />
+              <WatchStar billId={bill.id} className="text-lg" />
+            </div>
           </div>
           <h1 lang="en" className="text-text-primary text-xl sm:text-2xl font-bold leading-snug">
             {cleanTitle}

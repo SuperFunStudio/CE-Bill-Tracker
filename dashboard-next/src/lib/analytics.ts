@@ -30,6 +30,17 @@ export function setUserProperties(props: Record<string, string | undefined | nul
 }
 
 /**
+ * Bind the GA4 user_id to the signed-in account (the Firebase uid — a pseudonymous, non-PII id, which
+ * GA permits). This is what lets GA/BigQuery stitch a person's events across devices and sessions and
+ * attribute a funnel to an account — e.g. the referral loop (this user's shares → the signups they
+ * produced). Pass null on sign-out to unbind so a shared browser doesn't blend two accounts.
+ */
+export function setUserId(uid: string | null): void {
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  window.gtag('set', { user_id: uid ?? null });
+}
+
+/**
  * Human-readable page title per route, so GA4's "page title" report distinguishes every route instead
  * of collapsing them all under the static layout title. Keep in sync with the app/ route folders.
  */

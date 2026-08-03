@@ -12,7 +12,7 @@ import {
   type User,
 } from 'firebase/auth';
 import { auth, googleProvider, microsoftProvider } from '@/lib/firebase';
-import { track, setUserProperties } from '@/lib/analytics';
+import { track, setUserProperties, setUserId } from '@/lib/analytics';
 import { captureAttribution, attributionParams } from '@/lib/attribution';
 import { startProCheckout, startSignupTrial, billingErrorMessage } from '@/lib/billing';
 import { attributeReferral, PENDING_REF_KEY } from '@/lib/referrals';
@@ -215,6 +215,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // account_domain from the email domain (never the full address). org_name is reserved until
   // /billing/me returns it. See setUserProperties (undefined values are dropped, so blanks never clobber).
   useEffect(() => {
+    // user_id keys every event to the account (cross-device/session) so per-user funnels — notably the
+    // referral loop's shares→signups — are attributable. The uid is pseudonymous (GA-permitted); null
+    // on sign-out unbinds it.
+    setUserId(user?.uid ?? null);
     setUserProperties({
       plan_tier: entitlement?.plan ?? (user ? 'free' : 'anonymous'),
       account_domain: emailDomain(user?.email),

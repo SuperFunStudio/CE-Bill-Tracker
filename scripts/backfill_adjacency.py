@@ -65,6 +65,19 @@ _TRANSBOUNDARY = re.compile(
     re.IGNORECASE,
 )
 
+# Toxics belong to the SEPARATE (deferred) toxics pass, not this transboundary one. A PFAS /
+# microplastics bill that merely mentions "import of wastes" (e.g. VT H-650) is a chemical-restriction
+# measure, not a waste-trade measure — defer it. Escape hatch: keep it if it ALSO carries a strong,
+# unambiguous transboundary signal (a genuinely cross-border e-scrap bill that happens to name a
+# chemical), so we don't lose a real transboundary bill to the toxics guard.
+_TOXICS_DEFER = re.compile(r"perfluoro|polyfluoro|\bpfas\b|microplastic|forever\s+chemical", re.IGNORECASE)
+_STRONG_TRANSBOUNDARY = re.compile(
+    r"transboundary|basel|waigani|regulation\s+of\s+exports\s+and\s+imports"
+    r"|(?:cross[-\s]?border|inter[-\s]?provincial|inter[-\s]?state)\s+movement"
+    r"|scrap\s+(?:metal|trade)|e-?waste\s+export",
+    re.IGNORECASE,
+)
+
 # Carve-out: these segments stay OUT (their own material-restriction / safety segments) ...
 _CARVE_OUT = re.compile(r"nuclear|radioactive|spent\s+fuel|medical\s+waste|tobacco|cigarette|vaping",
                         re.IGNORECASE)
@@ -80,6 +93,8 @@ def _matches(title: str, description: str) -> bool:
     blob = f"{title or ''}\n{description or ''}"
     if not _TRANSBOUNDARY.search(blob):
         return False
+    if _TOXICS_DEFER.search(blob) and not _STRONG_TRANSBOUNDARY.search(blob):
+        return False  # chemical-restriction bill — belongs to the deferred toxics pass
     if _CARVE_OUT.search(blob) and not _CIRCULAR_OVERRIDE.search(blob):
         return False
     return True

@@ -14,7 +14,13 @@ import { track } from '@/lib/analytics';
  */
 const VARIANT_KEY = 'ac_home_variant';   // 'a' | 'b' — the sticky assignment
 const VISITED_KEY = 'ac_visited';        // set on first ever visit → distinguishes new vs returning
-const B_SHARE = 0.5;                     // fraction routed to Homepage B
+const B_SHARE = 0.5;                     // fraction routed to Homepage B (only when ENABLED)
+
+// Experiment concluded 2026-08-04: keeping Homepage A (the dot-wall reads as noise on mobile; the table
+// is more immediately descriptive). The dot-explorer (BillDotExplorer) is being repurposed for a future
+// interactive Insights infographic instead. Kill switch OFF -> everyone gets A, even devices previously
+// bucketed into B (we ignore the stored value entirely). Flip to `true` to re-run the homepage test.
+const ENABLED = false;
 
 export type HomeVariant = 'a' | 'b';
 
@@ -24,6 +30,7 @@ export function useHomeVariant(): { variant: HomeVariant; ready: boolean } {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    if (!ENABLED) { setVariant('a'); setReady(true); return; } // experiment off: everyone gets Homepage A
     let v: HomeVariant;
     let assigned = false;
     let audience: 'new' | 'returning' = 'returning';

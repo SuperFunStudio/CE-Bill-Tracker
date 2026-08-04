@@ -455,16 +455,9 @@ export default function HomePage() {
       {/* Explore: one adaptive search/ask bar + facets. The "Explore · N bills" title + Export live at
           the top of the page now; this section is just the bar and its controls. */}
       <section>
-        {/* How it works — sits ABOVE the bar so the bar itself reads as the primary action, and so the
-            control row + facets can align directly under the input. */}
-        <p className="mb-2 text-xs text-text-muted">
-          <b className="text-text-secondary font-medium">Type keywords</b> to filter the bills instantly —
-          a material or policy term (&ldquo;textiles&rdquo;, &ldquo;right to repair&rdquo;) also matches laws tagged with it,
-          including ones written in another language ·{' '}
-          <b className="text-text-secondary font-medium">flip on AI Analysis</b> to ask a full question for a grounded, cited answer over the same corpus.
-        </p>
-
-        {/* The search box. Enter submits a question only when AI Analysis is on (submitQuery guards it). */}
+        {/* The search box leads — it sits directly under the globe as the page's primary action, with the
+            one-line explainer beneath it. Enter submits a question only when AI Analysis is on
+            (submitQuery guards it). */}
         <form onSubmit={e => { e.preventDefault(); submitQuery(); }}>
           <div className="flex items-center gap-2 rounded-xl border-2 border-green-accent/60 bg-bg-secondary px-3 py-2 focus-within:border-green-accent transition-colors">
             <span aria-hidden className="text-text-muted text-lg leading-none">⌕</span>
@@ -481,6 +474,13 @@ export default function HomePage() {
             />
           </div>
         </form>
+
+        {/* One line, under the bar: what each mode does, and nothing more — the rotating example
+            questions in the placeholder carry the rest of the context. */}
+        <p className="mt-2 text-xs text-text-muted truncate">
+          <b className="text-text-secondary font-medium">Keywords</b> filter instantly ·{' '}
+          <b className="text-text-secondary font-medium">AI Analysis</b> answers full questions, with citations
+        </p>
 
         {/* Control row UNDER the bar: AI Analysis toggle + Ask (AI mode only) lead; the facets share the
             same row on desktop and wrap below on mobile (toggle+Ask first, then filters). Kept OUT of the

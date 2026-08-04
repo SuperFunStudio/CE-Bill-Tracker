@@ -199,3 +199,43 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .region-map-in { animation: none; }
 }
+
+/* ── Homepage-B "dot explorer" (BillDotExplorer) — every bill as one clickable mark, product-themed.
+   Colors come from the canonical status tokens so light/dark are handled by the token layer. ── */
+.bde-row { display: grid; grid-template-columns: 118px 1fr; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--border-default); }
+.bde-board.ranked .bde-row { grid-template-columns: 208px 1fr; }
+.bde-head { position: sticky; top: 64px; align-self: start; height: max-content; }
+.bde-num { font-family: var(--font-serif), Georgia, serif; font-size: 2rem; line-height: 1; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.bde-rankrow { display: flex; gap: 11px; align-items: baseline; }
+.bde-rank { font-family: var(--font-serif), Georgia, serif; font-size: 1.05rem; color: rgb(var(--green-accent)); min-width: 22px; font-variant-numeric: tabular-nums; }
+.bde-name { font-family: var(--font-serif), Georgia, serif; font-size: 1.2rem; line-height: 1.16; color: var(--text-primary); }
+.bde-count { margin-top: 6px; font-size: 0.8125rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.bde-count b { color: rgb(var(--green-accent)); font-weight: 600; }
+.bde-ytd { margin-left: 5px; font-size: 0.625rem; letter-spacing: 0.1em; color: var(--text-muted); border: 1px solid var(--border-default); border-radius: 4px; padding: 1px 4px; }
+.bde-dots { display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
+.bde-dot { width: 14px; height: 14px; border-radius: 4px; cursor: pointer; background: var(--c); animation: bdeRise 0.45s both; }
+.bde-dot.enacted { --c: var(--status-enacted); }
+.bde-dot.progress { --c: var(--status-introduced); }
+.bde-dot.stalled { --c: var(--status-dormant); opacity: 0.6; }
+.bde-dot:hover, .bde-dot:focus-visible { transform: scale(1.5); z-index: 2; outline: none; box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 3.5px var(--c); }
+@keyframes bdeRise { from { opacity: 0; transform: translateY(5px) scale(0.6); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .bde-dot { animation: none; } }
+.bde-tip { position: fixed; z-index: 60; pointer-events: none; opacity: 0; transition: opacity 0.12s; max-width: 300px; background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 10px; padding: 9px 12px; box-shadow: var(--shadow-panel); }
+.bde-tip.on { opacity: 1; }
+.bde-tip .n { font-size: 0.75rem; font-weight: 600; color: var(--text-primary); }
+.bde-tip .t { font-size: 0.8125rem; color: var(--text-secondary); margin-top: 3px; line-height: 1.4; }
+@media (max-width: 640px) { .bde-row { grid-template-columns: 92px 1fr; } .bde-board.ranked .bde-row { grid-template-columns: 128px 1fr; } .bde-num { font-size: 1.5rem; } .bde-name { font-size: 1rem; } }
+
+/* Homepage-B feedback toast entrance */
+@keyframes voteIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ── Insights bill-flow Sankey (BillFlowSankey) — product-themed, light/dark via tokens ── */
+.bfs-wrap { overflow-x: auto; }
+.bfs-link { fill: rgb(var(--green-accent)); fill-opacity: 0.16; transition: fill-opacity 0.14s; }
+.bfs-link.hot { fill-opacity: 0.5; }
+.bfs-wrap.dim .bfs-link:not(.hot) { fill-opacity: 0.05; }
+.bfs-node.src rect { fill: rgb(var(--green-accent)); }
+.bfs-node.tgt rect { fill: var(--text-muted); }
+.bfs-name { fill: var(--text-secondary); font-size: 12px; font-family: var(--font-sans), sans-serif; }
+.bfs-name .v { fill: var(--text-muted); }
+.bfs-col { fill: var(--text-muted); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-family: var(--font-sans), sans-serif; }

@@ -38,3 +38,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 scripts/.og-preview.html
+
+# render-timeline-banner.mjs regenerated intermediates
+scripts/.timeline-banner*.html

@@ -16,6 +16,7 @@ import { ChampionRoster } from '@/components/insights/ChampionRoster';
 import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
 import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
+import { BillFlowSankey } from '@/components/insights/BillFlowSankey';
 import { useRegion } from '@/components/layout/RegionContext';
 import { useAuth } from '@/components/auth/AuthContext';
 import Link from 'next/link';
@@ -39,6 +40,7 @@ const TABS = [
   { id: 'world', label: 'World' },
   { id: 'momentum', label: 'Momentum' },
   { id: 'coverage', label: 'Coverage' },
+  { id: 'flows', label: 'Flows' },
   { id: 'geography', label: 'Geography · US' },
   { id: 'impact', label: 'Impact' },
 ] as const;
@@ -223,6 +225,17 @@ export default function InsightsPage() {
             <RegionInstrumentMatrix />
           </Section>
         </>
+      )}
+
+      {tab === 'flows' && (
+        <Section kicker="Structure" title="How circular-economy law flows between material, instrument, and jurisdiction">
+          <p className="text-text-secondary text-body leading-relaxed">
+            Two readings of the same corpus: which policy instruments regulate each material, and which
+            materials each jurisdiction legislates. Follow a ribbon to trace a flow, or hover a node to
+            isolate everything touching it.
+          </p>
+          <BillFlowSankey />
+        </Section>
       )}
 
       {tab === 'momentum' && (

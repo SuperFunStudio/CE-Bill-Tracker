@@ -430,7 +430,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
   // the bar stays calm above the ask box.
   if (showRegion) {
     return (
-      <div className="space-y-3 border-y border-text-primary/15 py-4">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
           <RegionFilter selected={regions} onChange={setRegions} />
           {showState && (

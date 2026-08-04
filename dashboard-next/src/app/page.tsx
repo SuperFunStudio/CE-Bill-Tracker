@@ -23,8 +23,12 @@ import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
 import { STATE_NAMES, formatDate, downloadCsv } from '@/lib/utils';
 import { useResearch, ResearchThread, ResearchWall, RESEARCH_EXAMPLES } from '@/components/research/ResearchThread';
+import { AiAnalysisToggle } from '@/components/search/AiAnalysisToggle';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { track } from '@/lib/analytics';
+import { useHomeVariant } from '@/components/experiment/useHomeVariant';
+import { HomeVariantVote } from '@/components/experiment/HomeVariantVote';
+import { BillDotExplorer } from '@/components/explore/BillDotExplorer';
 import Link from 'next/link';
 
 const StateMap = dynamic(
@@ -116,6 +120,10 @@ export default function HomePage() {
   const { isPro, user, openAuth } = useAuth();
   const gatePro = useProGate();
 
+  // Homepage A/B: variant "b" swaps the bill table for the dot-explorer (client-side bucketing, since
+  // the site is a static export). Everything else — ticker, globe, Explore bar — is shared.
+  const { variant, ready } = useHomeVariant();
+
   // Guided-tour capture — the demo-led path (our highest-converting motion for the considered
   // compliance buyer). Opens the shared request-access form, tagged source="home_walkthrough".
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
@@ -124,7 +132,28 @@ export default function HomePage() {
   // question routes to the grounded, cited research answer over the same corpus (Ask the Atlas).
   const research = useResearch();
   const [query, setQuery] = useState('');
+  // "AI Analysis" mode — OFF (default) = classic keyword filtering of the table; ON unlocks asking
+  // grounded, cited questions (and reveals the Ask button). Persisted in localStorage: server render
+  // OFF, read the stored value on mount to avoid a hydration mismatch (mirrors BetaContext).
+  const [aiMode, setAiModeState] = useState(false);
+  useEffect(() => {
+    try { setAiModeState(localStorage.getItem('ai_analysis_mode') === '1'); } catch { /* ignore */ }
+  }, []);
+  const setAiMode = (v: boolean) => {
+    setAiModeState(v);
+    try { localStorage.setItem('ai_analysis_mode', v ? '1' : '0'); } catch { /* ignore */ }
+    // Entering AI mode: the typed text becomes a question, so stop live-filtering the table by it.
+    // Leaving AI mode: resume keyword filtering by whatever is in the box.
+    setBillFilters(prev => ({ ...prev, search: v ? '' : query.trim() }));
+    track('search_mode_toggled', { mode: v ? 'ai_analysis' : 'keyword' });
+  };
+  // In keyword mode typing filters the table live; in AI mode it only composes the question.
+  const onSearchChange = (v: string) => {
+    setQuery(v);
+    if (!aiMode) setBillFilters(prev => ({ ...prev, search: v }));
+  };
   const submitQuery = () => {
+    if (!aiMode) return;             // asking is only possible in AI Analysis mode
     const q = query.trim();
     if (q.length < 3) return;
     research.ask(q);
@@ -307,7 +336,57 @@ export default function HomePage() {
         />
       )}
 
-      {/* Explore: one adaptive search/ask bar + facets, above the map */}
+      {/* Map/globe — moved up to sit right below the ticker. Hidden while a question is active. The
+          Regions selector that drives it lives in the Explore facets just below. */}
+      {!research.active && (
+        <section>
+          {soleRegion && (
+            <div className="mb-2 flex items-center gap-1.5 text-sm text-text-muted">
+              <button onClick={() => setRegions([])} className="text-green-accent hover:underline">← Back to the globe</button>
+              {drilledEuMember && (
+                <>
+                  <span className="mx-0.5">/</span>
+                  <button onClick={() => setRegions(['EU'])} className="text-green-accent hover:underline">European Union</button>
+                  <span className="mx-0.5">/</span>
+                  <span className="text-text-secondary">{regionLabel(soleRegion!)}</span>
+                </>
+              )}
+            </div>
+          )}
+          {/* Keyed by selection so the zoom-settle animation replays on every drill in/out. */}
+          <div key={soleRegion ?? 'all'} className="region-map-in">
+          {!soleRegion ? (
+            <CoverageGlobe onSelect={code => setRegions([code])} />
+          ) : soleRegion === 'US' ? (
+            <StateMap
+              data={mapData}
+              selectedState={billFilters.state || null}
+              onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
+              height={380}
+            />
+          ) : insetHighlightIds.length ? (
+            <RegionInsetMap
+              highlightIds={insetHighlightIds}
+              caption={soleRegion === 'EU' ? 'European Union · 27 member states — click a country to drill in' : `${regionLabel(soleRegion)} · national law`}
+              count={regionCounts[soleRegion]}
+              onCountrySelect={insetHighlightIds.length > 1 ? code => setRegions([code]) : undefined}
+              height={380}
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default bg-bg-secondary/40 text-center px-6 py-10">
+              <div className="text-meta uppercase tracking-wider text-text-muted">
+                {regionLabel(soleRegion)} · national law
+              </div>
+              <p className="mt-2 max-w-md text-sm text-text-secondary">
+                The laws below are the view. A map lights up once we ingest this jurisdiction&apos;s geography.
+              </p>
+            </div>
+          )}
+          </div>
+        </section>
+      )}
+
+      {/* Explore: one adaptive search/ask bar + facets */}
       <section>
         <div className="flex items-baseline justify-between mb-3 gap-3">
           <div className="flex items-baseline gap-3 flex-wrap">
@@ -333,55 +412,63 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* The adaptive bar leads — keywords filter the table instantly; a full question gets a cited
-            answer. It sits ABOVE the facets so it reads as the primary action, not something the filters
-            below it control. */}
-        <form onSubmit={e => { e.preventDefault(); submitQuery(); }} className="mb-3">
+        {/* How it works — sits ABOVE the bar so the bar itself reads as the primary action, and so the
+            control row + facets can align directly under the input. */}
+        <p className="mb-2 text-xs text-text-muted">
+          <b className="text-text-secondary font-medium">Type keywords</b> to filter the bills instantly ·{' '}
+          <b className="text-text-secondary font-medium">flip on AI Analysis</b> to ask a full question for a grounded, cited answer over the same corpus.
+        </p>
+
+        {/* The search box. Enter submits a question only when AI Analysis is on (submitQuery guards it). */}
+        <form onSubmit={e => { e.preventDefault(); submitQuery(); }}>
           <div className="flex items-center gap-2 rounded-xl border-2 border-green-accent/60 bg-bg-secondary px-3 py-2 focus-within:border-green-accent transition-colors">
             <span aria-hidden className="text-text-muted text-lg leading-none">⌕</span>
             <input
               value={query}
-              onChange={e => { setQuery(e.target.value); setBillFilters(prev => ({ ...prev, search: e.target.value })); }}
+              onChange={e => onSearchChange(e.target.value)}
               placeholder={
-                research.hasAsked
-                  ? 'Ask a follow-up — or type keywords to browse'
-                  : typedPlaceholder || 'Search bills, or ask a question…'
+                aiMode
+                  ? (research.hasAsked ? 'Ask a follow-up…' : (typedPlaceholder || 'Ask a question about the corpus…'))
+                  : 'Search bills by keyword…'
               }
-              aria-label="Search bills or ask a question"
+              aria-label={aiMode ? 'Ask a question' : 'Search bills by keyword'}
               className="flex-1 min-w-0 bg-transparent text-body text-text-primary placeholder-text-muted focus:outline-none"
             />
           </div>
-          {/* Ask button sits below the box (not crammed inside it), with the how-it-works hint below. */}
-          <div className="mt-2 flex justify-end">
+        </form>
+
+        {/* Control row UNDER the bar: AI Analysis toggle + Ask (AI mode only) lead; the facets share the
+            same row on desktop and wrap below on mobile (toggle+Ask first, then filters). Kept OUT of the
+            <form> so a facet dropdown can never accidentally submit a question. */}
+        <div className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-text-primary/15 pb-4">
+          <div className="flex items-center gap-3 shrink-0">
+            <AiAnalysisToggle on={aiMode} onChange={setAiMode} />
+            {/* Ask is ALWAYS visible so the capability is discoverable; it's just disabled until AI
+                Analysis is on (and there's a long-enough question). submitQuery no-ops when off. */}
             <button
-              type="submit"
-              disabled={research.busy || query.trim().length < 3}
+              type="button"
+              onClick={submitQuery}
+              disabled={!aiMode || research.busy || query.trim().length < 3}
+              title={!aiMode ? 'Turn on AI Analysis to ask a question' : undefined}
               className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-medium text-sm px-5 py-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {research.busy ? 'Thinking…' : research.hasAsked ? 'Ask follow-up' : 'Ask →'}
             </button>
           </div>
-          <p className="mt-2 text-xs text-text-muted">
-            <b className="text-text-secondary font-medium">Type keywords</b> to filter the bills instantly ·{' '}
-            <b className="text-text-secondary font-medium">ask a full question</b> for a grounded, cited answer over the same corpus.
-          </p>
-        </form>
-
-        {/* Facets below the bar — Region + State up front, the rest behind "More filters" — they narrow
-            the same corpus the bar searches. */}
-        <div className="mb-3">
-          <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
-
-          {region === 'US' && billFilters.state && (
-            <div className="mt-2 text-sm text-text-muted">
-              Showing <span className="text-green-accent font-medium">{STATE_NAMES[billFilters.state] ?? billFilters.state}</span>
-              {' — '}
-              <Link href={`/jurisdictions/us/${billFilters.state.toLowerCase()}/`} className="underline hover:text-text-secondary">view {STATE_NAMES[billFilters.state] ?? billFilters.state} profile</Link>
-              {' · '}
-              <button onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className="underline hover:text-text-secondary">clear</button>
-            </div>
-          )}
+          <div className="min-w-0 flex-1">
+            <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
+          </div>
         </div>
+
+        {region === 'US' && billFilters.state && (
+          <div className="mb-3 text-sm text-text-muted">
+            Showing <span className="text-green-accent font-medium">{STATE_NAMES[billFilters.state] ?? billFilters.state}</span>
+            {' — '}
+            <Link href={`/jurisdictions/us/${billFilters.state.toLowerCase()}/`} className="underline hover:text-text-secondary">view {STATE_NAMES[billFilters.state] ?? billFilters.state} profile</Link>
+            {' · '}
+            <button type="button" onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className="underline hover:text-text-secondary">clear</button>
+          </div>
+        )}
 
       </section>
 
@@ -405,60 +492,10 @@ export default function HomePage() {
         </section>
       ) : (
         <>
-      {/* Map — the Regions dropdown is the primary selector; this shows a *view of that selection*.
-          All regions → a ranked coverage readout. US → the states choropleth. EU → the bloc, cropped
-          to Europe. A single country → a cropped locator. A code with no geometry → a text panel. */}
-      <section>
-        {/* Drilled into a single region → the map shows that jurisdiction; give an explicit way back
-            out to the globe (and, for an EU member, up to the bloc first). */}
-        {soleRegion && (
-          <div className="mb-2 flex items-center gap-1.5 text-sm text-text-muted">
-            <button onClick={() => setRegions([])} className="text-green-accent hover:underline">← Back to the globe</button>
-            {drilledEuMember && (
-              <>
-                <span className="mx-0.5">/</span>
-                <button onClick={() => setRegions(['EU'])} className="text-green-accent hover:underline">European Union</button>
-                <span className="mx-0.5">/</span>
-                <span className="text-text-secondary">{regionLabel(soleRegion!)}</span>
-              </>
-            )}
-          </div>
-        )}
-        {/* Keyed by selection so the zoom-settle animation replays on every drill in/out. */}
-        <div key={soleRegion ?? 'all'} className="region-map-in">
-        {!soleRegion ? (
-          <CoverageGlobe onSelect={code => setRegions([code])} />
-        ) : soleRegion === 'US' ? (
-          <StateMap
-            data={mapData}
-            selectedState={billFilters.state || null}
-            onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
-            height={380}
-          />
-        ) : insetHighlightIds.length ? (
-          <RegionInsetMap
-            highlightIds={insetHighlightIds}
-            caption={soleRegion === 'EU' ? 'European Union · 27 member states — click a country to drill in' : `${regionLabel(soleRegion)} · national law`}
-            count={regionCounts[soleRegion]}
-            // Click-to-drill only on the multi-country bloc; a single-country inset has nowhere to go.
-            onCountrySelect={insetHighlightIds.length > 1 ? code => setRegions([code]) : undefined}
-            height={380}
-          />
-        ) : (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default bg-bg-secondary/40 text-center px-6 py-10">
-            <div className="text-meta uppercase tracking-wider text-text-muted">
-              {regionLabel(soleRegion)} · national law
-            </div>
-            <p className="mt-2 max-w-md text-sm text-text-secondary">
-              The laws below are the view. A map lights up once we ingest this jurisdiction&apos;s geography.
-            </p>
-          </div>
-        )}
-        </div>
-      </section>
+      {/* Map/globe moved up — it now renders right below the ticker (see above). */}
 
-      {/* Bill results table — below the map. The personalize-scope bar (state/material/product) sits
-          here, just above the table, instead of globally under the nav. */}
+      {/* Bill results table. The personalize-scope bar (state/material/product) sits here, just above
+          the table, instead of globally under the nav. */}
       <section>
         <div className="mb-3"><ScopeBar /></div>
         {/* Only fires when live AND snapshot/localStorage all came up empty — otherwise
@@ -466,6 +503,8 @@ export default function HomePage() {
         {billsError && <AlertBanner variant="red" message="We're having trouble loading bill data right now — please refresh in a moment." className="mb-3" />}
         {billsLoading ? (
           <SkeletonList rows={5} />
+        ) : variant === 'b' ? (
+          <BillDotExplorer bills={tableBills} />
         ) : (
           <BillTable bills={tableBills} autoPageSize={5} urlSync />
         )}
@@ -521,6 +560,9 @@ export default function HomePage() {
           Learn more about the project &rarr;
         </Link>
       </footer>
+
+      {/* A/B: ask Homepage-B visitors what they think of the new look (self-dismissing, once per device). */}
+      {ready && variant === 'b' && <HomeVariantVote />}
     </div>
   );
 }

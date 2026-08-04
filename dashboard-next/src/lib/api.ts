@@ -231,9 +231,11 @@ export async function fetchBillText(id: number): Promise<BillFullText> {
 }
 
 /** Full-text search over persisted bill text — returns bills whose statute text matches `q`
- *  (even when the title/summary don't), each with highlighted ts_headline snippets. */
-export async function fetchBillSearch(q: string, limit = 50): Promise<BillSearchHit[]> {
-  return apiFetch<BillSearchHit[]>(buildUrl('/bills/search', { q, limit }));
+ *  (even when the title/summary don't), each with highlighted ts_headline snippets. `regions` is the
+ *  same CSV the bill list takes ("all" / undefined = every region) and is applied server-side before
+ *  the rank cutoff, so a region-scoped explorer never gets out-of-region hits. */
+export async function fetchBillSearch(q: string, limit = 50, regions?: string): Promise<BillSearchHit[]> {
+  return apiFetch<BillSearchHit[]>(buildUrl('/bills/search', { q, limit, regions }));
 }
 
 /** How many bills the full-text search actually covers — for the deep-search coverage note. */

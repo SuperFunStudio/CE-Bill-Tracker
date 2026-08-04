@@ -57,7 +57,8 @@ export const COMPLIANCE_DIMENSIONS: { value: string; label: string }[] = [
 ];
 
 // Example search terms cycled through the placeholder — one bill number, one material, one topic.
-// Search matches bill_number, title, and ai_summary (see applyBillFilters below).
+// Search matches bill_number, title and ai_summary, plus any material / instrument / resin facet the
+// term names (see applyBillFilters below and lib/facetTerms).
 const SEARCH_EXAMPLES = ['SB 707', 'HDPE', 'solar'];
 
 // Values must match the canonical statuses stored on bills (see app/ingestion/coordinator.py).
@@ -85,11 +86,43 @@ const INSTRUMENT_TYPES = ['epr', 'deposit_return', 'right_to_repair', 'recycled_
 // biobased / agriculture are the biological cycle of the circular economy (bio-based materials,
 // regenerative ag & soil health); composting/organics-recycling bills tag "organics". These live
 // on the material axis, not as policy instruments.
+// This list is now the COMPLETE set of category values the classifier has written to
+// bills.material_categories — every tagged bill is reachable by some option. It previously held 19 of
+// them, so several hundred bills (hazardous_materials alone is the 9th-largest category in the corpus)
+// had no filter that could select them. Grouped by stream, roughly by corpus size within each group,
+// catch-all last. Some tail options are genuinely tiny (medical_sharps and nickel_cadmium are one bill
+// each) — kept because a narrow EPR stream is exactly what a specialist comes here to find.
 // Exported so the personalization onboarding (src/components/scope) shares one canonical list.
-export const MATERIAL_CATEGORIES = ['plastic_packaging', 'paper_packaging', 'glass', 'metals',
-  'electronics', 'batteries', 'paint', 'carpet', 'mattresses', 'tires',
-  'pharmaceuticals', 'solar_panels', 'textiles', 'organics', 'biobased', 'agriculture',
-  'water', 'biodiversity', 'other'];
+export const MATERIAL_CATEGORIES = [
+  'plastic_packaging', 'paper_packaging', 'glass', 'metals',
+  'electronics', 'batteries', 'nickel_cadmium', 'vehicles', 'auto_switches', 'construction',
+  'furniture', 'paint', 'carpet', 'mattresses', 'tires', 'textiles', 'lighting', 'thermostats',
+  'pharmaceuticals', 'medical_sharps', 'solar_panels',
+  'used_oil', 'hazardous_materials', 'mercury', 'pesticides',
+  'microplastics', 'marine_debris', 'critical_minerals',
+  'organics', 'biobased', 'agriculture', 'water', 'biodiversity', 'other'];
+
+// The classifier's vocabulary has drifted: a handful of bills carry near-duplicate or vaguer values
+// that never became canonical categories. Rather than offer them as their own (confusing) options,
+// each folds into the canonical category whose filter should find it, so no tagged bill is orphaned.
+// "all" means the law covers every material — it lands in Other rather than acting as a wildcard,
+// since silently adding broad framework laws to a "Carpet" filter would misrepresent the result.
+// The real fix is normalizing these at the data layer; until then this keeps them reachable.
+const CATEGORY_ALIASES: Record<string, string[]> = {
+  plastic_packaging: ['plastics', 'plastic_products'],
+  paper_packaging: ['paper'],
+  // "packaging" (unqualified) could be either stream, so both filters claim it.
+  hazardous_materials: ['hazardous_waste'],
+  other: ['all', 'solid_waste', 'recovered_content'],
+};
+const PACKAGING_ALIAS = 'packaging';
+
+/** Every stored value a given category's filter should match: itself plus its drifted synonyms. */
+function categoryMatchValues(category: string): string[] {
+  const extra = CATEGORY_ALIASES[category] ?? [];
+  const packaging = category.endsWith('_packaging') ? [PACKAGING_ALIAS] : [];
+  return [category, ...extra, ...packaging];
+}
 const URGENCY_LEVELS = ['high', 'medium', 'low'];
 // Resin code → display name. Mirrors the controlled vocabulary in app/classification/polymers.py;
 // codes are written to bills.polymers by scripts/scan_bill_polymers.py. The filter only offers the
@@ -544,6 +577,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
 /** Apply BillFilterState to a bill list client-side */
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding } from '@/lib/utils';
+import { resolveFacetTerm, billMatchesFacets } from '@/lib/facetTerms';
 
 /** Granularity of a bill's activity date. Prefers the server's date_precision; falls back to deriving
  *  it (older/snapshot rows may lack the field): a Jan-1 status_date with no last_action_date is the
@@ -555,7 +589,40 @@ export function billDatePrecision(b: BillSummary): 'day' | 'year' {
   return sd.slice(5) === '01-01' ? 'year' : 'day';
 }
 
+/** Lowercase and drop everything but letters+digits — for comparing bill numbers whose separators
+ *  vary by source ("SB-707" / "SB 707" / "sb707" all squash to "sb707"). */
+const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** Bill numbers are stored inconsistently across adapters ("SB-349" but "HB6053"), so match them with
+ *  separators stripped from both sides — otherwise the "SB 707" the search placeholder advertises finds
+ *  nothing and only the exact hyphenated spelling works. Needs 2+ significant chars so a query of pure
+ *  punctuation can't squash to "" and match every numbered bill. */
+function matchesBillNumber(b: BillSummary, query: string): boolean {
+  if (!b.bill_number) return false;
+  const q = squash(query);
+  return q.length >= 2 && squash(b.bill_number).includes(q);
+}
+
+/** Does a bill match the keyword on its literal text (title / summary / bill number)? The facet bridge
+ *  in applyBillFilters is the separate, tag-based path — callers that need to tell the two apart (e.g.
+ *  the homepage's "N laws matched on the tag alone" notice) use this for the literal half. */
+export function matchesKeywordText(b: BillSummary, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return fixEncoding(b.title).toLowerCase().includes(q)
+    || fixEncoding(b.ai_summary).toLowerCase().includes(q)
+    || matchesBillNumber(b, q);
+}
+
 export function applyBillFilters(bills: BillSummary[], f: BillFilterState): BillSummary[] {
+  // Resolved once per call, not per bill — the box re-filters on every keystroke over the whole
+  // loaded corpus. null when the term names no facet (the common case).
+  const searchFacets = f.search ? resolveFacetTerm(f.search) : null;
+  // Selected categories expanded to include their drifted synonyms (see CATEGORY_ALIASES), also once
+  // per call. null when no material filter is active.
+  const materialValues = f.materialCategories.length
+    ? new Set(f.materialCategories.flatMap(categoryMatchValues))
+    : null;
   return bills.filter(b => {
     if (f.eprOnly && !b.ce_relevant) return false;
     if (f.enactedOnly && b.status?.toLowerCase() !== 'enacted') return false;
@@ -564,8 +631,7 @@ export function applyBillFilters(bills: BillSummary[], f: BillFilterState): Bill
     // Match the instrument anywhere in the law's set (primary + secondary), not just the primary.
     if (f.instrumentType && !(b.instrument_types ?? (b.instrument_type ? [b.instrument_type] : [])).includes(f.instrumentType)) return false;
     if (f.urgency && b.urgency?.toLowerCase() !== f.urgency.toLowerCase()) return false;
-    if (f.materialCategories.length &&
-        !f.materialCategories.some(m => (b.material_categories ?? []).includes(m))) return false;
+    if (materialValues && !(b.material_categories ?? []).some(m => materialValues.has(m))) return false;
     // Resin filter: keep bills naming ANY of the selected resins (OR), mirroring material categories.
     if (f.polymers.length &&
         !f.polymers.some(p => (b.polymers ?? []).includes(p))) return false;
@@ -593,12 +659,13 @@ export function applyBillFilters(bills: BillSummary[], f: BillFilterState): Bill
       }
     }
     if (f.search) {
-      const q = f.search.toLowerCase();
-      const title = fixEncoding(b.title).toLowerCase();
-      const summary = fixEncoding(b.ai_summary).toLowerCase();
-      if (!title.includes(q) && !summary.includes(q) && !b.bill_number?.toLowerCase().includes(q)) {
-        return false;
-      }
+      const textual = matchesKeywordText(b, f.search);
+      // Keyword → facet bridge: when the term names a material / instrument / resin, bills tagged with
+      // it count as matches even though the English string never appears in their title or summary.
+      // Without this, non-English law is unfindable by the obvious word (China's textile-covering
+      // circular-economy statutes have Chinese titles), and framework-titled English law hides too.
+      // Union only — this widens the result set, never narrows it. See lib/facetTerms.
+      if (!textual && !(searchFacets && billMatchesFacets(b, searchFacets))) return false;
     }
     return true;
   });

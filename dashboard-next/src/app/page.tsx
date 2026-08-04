@@ -9,7 +9,7 @@ import { FreshnessNote } from '@/components/ui/FreshnessNote';
 import { FederalWatchBanner } from '@/components/ui/FederalWatchBanner';
 import { StatesTicker } from '@/components/ui/StatesTicker';
 import { BillTable } from '@/components/bills/BillTable';
-import { BillFilters, DEFAULT_FILTERS, applyBillFilters, resinOptionsFromBills, type BillFilterState } from '@/components/bills/BillFilters';
+import { BillFilters, DEFAULT_FILTERS, applyBillFilters, matchesKeywordText, resinOptionsFromBills, type BillFilterState } from '@/components/bills/BillFilters';
 import { SkeletonList } from '@/components/ui/SkeletonList';
 import { ScopedDeadlineBanner } from '@/components/scope/ScopedDeadlineBanner';
 import { ScopeBar } from '@/components/scope/ScopeBar';
@@ -22,6 +22,7 @@ import { inScope } from '@/lib/scope';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
 import { STATE_NAMES, formatDate, downloadCsv } from '@/lib/utils';
+import { resolveFacetTerm, billMatchesFacets } from '@/lib/facetTerms';
 import { useResearch, ResearchThread, ResearchWall, RESEARCH_EXAMPLES } from '@/components/research/ResearchThread';
 import { AiAnalysisToggle } from '@/components/search/AiAnalysisToggle';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
@@ -253,19 +254,57 @@ export default function HomePage() {
 
   // Full-text search: bills whose statute text matches the term (their title/summary may not). These
   // are merged into the one table below so search is just another filter — no separate results list.
-  const { data: textHits = [] } = useBillTextSearch(billFilters.search);
+  // Scoped to the SAME regions as the list fetch: applyBillFilters has no region predicate, so an
+  // unscoped search would append out-of-region bills and silently break the region filter (e.g. China
+  // selected + "textiles" → 50 EU/US hits, since no Chinese bill's text uses the English word).
+  const { data: textHits = [] } = useBillTextSearch(billFilters.search, regionsParam ?? 'all');
 
   const tableBills = useMemo(() => {
     const base = applyBillFilters(tableSource, billFilters);
     const q = (billFilters.search ?? '').trim();
     if (q.length < 2 || textHits.length === 0) return base;
-    // Append full-text-only hits: pass the non-search filters, drop any already shown.
+    // Append full-text-only hits: pass the non-search filters, drop any already shown. The region
+    // check is a client-side belt to the server's braces — it also covers the moment after a region
+    // switch when the previous query's hits are still being kept (keepPreviousData).
     const baseIds = new Set(base.map(b => b.id));
+    const allowedRegions = selectedRegions.length ? new Set(selectedRegions) : null;
     const extra = applyBillFilters(textHits, { ...billFilters, search: '' }).filter(
-      (b) => !baseIds.has(b.id),
+      (b) => !baseIds.has(b.id) && (!allowedRegions || allowedRegions.has(b.region ?? '')),
     );
     return extra.length ? [...base, ...extra] : base;
-  }, [tableSource, billFilters, textHits]);
+  }, [tableSource, billFilters, textHits, selectedRegions]);
+
+  // When the typed term names a material / instrument / resin, say so — and how many of the results
+  // are here on the tag alone rather than on a string match. That count is exactly the set the old
+  // keyword search dropped: mostly non-English law (Chinese titles, English-only tsvector) and
+  // framework-titled statutes. Offering the facet as a real filter turns the accident into a choice.
+  const searchFacets = useMemo(
+    () => (billFilters.search.trim().length >= 2 ? resolveFacetTerm(billFilters.search) : null),
+    [billFilters.search],
+  );
+  const facetOnlyCount = useMemo(() => {
+    if (!searchFacets) return 0;
+    return tableBills.filter(
+      b => !matchesKeywordText(b, billFilters.search) && billMatchesFacets(b, searchFacets),
+    ).length;
+  }, [tableBills, searchFacets, billFilters.search]);
+
+  // Promote the bridged term to the real facet filter: the material dropdown for a material term,
+  // the instrument select for an instrument one. Clears the keyword so the filter alone is the query.
+  function applyFacetFilter() {
+    if (!searchFacets) return;
+    track('search_facet_promoted', { term: billFilters.search.trim(), facets: searchFacets.labels.join(',') });
+    setQuery('');
+    setBillFilters(prev => ({
+      ...prev,
+      search: '',
+      materialCategories: searchFacets.materials.length ? searchFacets.materials : prev.materialCategories,
+      polymers: searchFacets.polymers.length ? searchFacets.polymers : prev.polymers,
+      instrumentType: !searchFacets.materials.length && searchFacets.instruments.length
+        ? searchFacets.instruments[0]
+        : prev.instrumentType,
+    }));
+  }
 
   // CSV export is a Pro feature: gatePro routes anon → sign-in, Free → checkout, Pro → the download.
   function handleExport() {
@@ -316,6 +355,33 @@ export default function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Page masthead: "Explore · N bills" + the CSV export, at the very top of the page. The search
+          bar it used to sit on stays below the globe — this line is the page title, not a section
+          header for the input. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <h1 className="font-serif text-2xl sm:text-3xl text-text-primary">Explore</h1>
+          <span className="text-text-muted text-sm">{tableBills.length} bills</span>
+          <FreshnessNote />
+        </div>
+        {!research.active && (
+          <button
+            onClick={handleExport}
+            disabled={tableBills.length === 0}
+            title={isPro ? undefined : 'CSV export is a Pro feature'}
+            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0 inline-flex items-center gap-1.5"
+          >
+            {!isPro && <LockIcon className="text-xs" />}
+            ↓ Export CSV
+            {!isPro && (
+              <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
+                Pro
+              </span>
+            )}
+          </button>
+        )}
+      </div>
 
       {/* Ranked leaderboard line, right under the nav. Region-aware + enacted-only: umbrella regions
           on "All regions", US states under a US selection, EU member states under an EU/member one
@@ -386,36 +452,15 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Explore: one adaptive search/ask bar + facets */}
+      {/* Explore: one adaptive search/ask bar + facets. The "Explore · N bills" title + Export live at
+          the top of the page now; this section is just the bar and its controls. */}
       <section>
-        <div className="flex items-baseline justify-between mb-3 gap-3">
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <h2 className="font-serif text-2xl text-text-primary">Explore</h2>
-            <span className="text-text-muted text-sm">{tableBills.length} bills</span>
-            <FreshnessNote />
-          </div>
-          {!research.active && (
-            <button
-              onClick={handleExport}
-              disabled={tableBills.length === 0}
-              title={isPro ? undefined : 'CSV export is a Pro feature'}
-              className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0 inline-flex items-center gap-1.5"
-            >
-              {!isPro && <LockIcon className="text-xs" />}
-              ↓ Export CSV
-              {!isPro && (
-                <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
-                  Pro
-                </span>
-              )}
-            </button>
-          )}
-        </div>
-
         {/* How it works — sits ABOVE the bar so the bar itself reads as the primary action, and so the
             control row + facets can align directly under the input. */}
         <p className="mb-2 text-xs text-text-muted">
-          <b className="text-text-secondary font-medium">Type keywords</b> to filter the bills instantly ·{' '}
+          <b className="text-text-secondary font-medium">Type keywords</b> to filter the bills instantly —
+          a material or policy term (&ldquo;textiles&rdquo;, &ldquo;right to repair&rdquo;) also matches laws tagged with it,
+          including ones written in another language ·{' '}
           <b className="text-text-secondary font-medium">flip on AI Analysis</b> to ask a full question for a grounded, cited answer over the same corpus.
         </p>
 
@@ -459,6 +504,25 @@ export default function HomePage() {
             <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
           </div>
         </div>
+
+        {/* Facet-bridge notice: what the term matched beyond the literal words, and an offer to make
+            it a real filter. Only shown when the bridge actually pulled bills in (facetOnlyCount > 0),
+            so it explains a visible difference rather than adding noise. */}
+        {searchFacets && facetOnlyCount > 0 && (
+          <div className="mb-3 text-sm text-text-muted">
+            <span className="text-text-secondary">&ldquo;{billFilters.search.trim()}&rdquo;</span>
+            {' also matches the '}
+            <span className="text-text-secondary">{searchFacets.labels.join(' / ')}</span>
+            {' tag — including '}
+            <span className="text-green-accent">{facetOnlyCount}</span>
+            {facetOnlyCount === 1 ? ' law that never uses' : ' laws that never use'}
+            {' the word (non-English statutes, and framework laws that cover it without naming it).'}
+            {' '}
+            <button type="button" onClick={applyFacetFilter} className="underline hover:text-text-secondary">
+              Filter by {searchFacets.labels.join(' / ')} instead
+            </button>
+          </div>
+        )}
 
         {region === 'US' && billFilters.state && (
           <div className="mb-3 text-sm text-text-muted">

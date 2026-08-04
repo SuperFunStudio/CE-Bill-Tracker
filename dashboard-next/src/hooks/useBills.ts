@@ -30,11 +30,11 @@ export function useBills(params?: BillParams) {
 /** Live full-text search over persisted bill text. Debounced so it doesn't fire per keystroke;
  *  disabled until the (trimmed) term is ≥2 chars; keepPreviousData avoids flicker between queries.
  *  This is the opt-in "deep search" layer — the instant title/summary filter stays client-side. */
-export function useBillTextSearch(query: string) {
+export function useBillTextSearch(query: string, regions?: string) {
   const q = useDebouncedValue(query.trim(), 300);
   return useQuery({
-    queryKey: ['billTextSearch', q],
-    queryFn: () => fetchBillSearch(q, 50),
+    queryKey: ['billTextSearch', q, regions ?? 'all'],
+    queryFn: () => fetchBillSearch(q, 50, regions),
     enabled: q.length >= 2,
     placeholderData: keepPreviousData,
     staleTime: STALE,

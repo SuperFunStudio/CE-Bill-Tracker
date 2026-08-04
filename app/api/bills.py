@@ -214,6 +214,11 @@ _HEADLINE_OPTS = (
 @router.get("/search", response_model=list[BillSearchHit])
 async def search_bills(
     q: str = Query(..., min_length=2, description="Full-text query; supports quoted phrases and OR."),
+    # Same multi-region semantics as GET /bills: CSV of codes narrows, "all"/empty = every region.
+    # Scoping happens BEFORE the rank limit — without it a region-filtered explorer asking for a term
+    # its own jurisdiction never uses would get `limit` out-of-region hits instead of an honest empty
+    # result (the English tsvector ranks US/EU text highest, so the leak is systematically Western).
+    regions: str | None = None,
     limit: int = Query(default=50, le=200),
     db: AsyncSession = Depends(get_db),
 ):
@@ -237,8 +242,11 @@ async def search_bills(
         .where(Bill.ce_relevant.is_(True))
         .where(BillText.text_tsv.op("@@")(tsq))
         .order_by(rank.desc())
-        .limit(limit)
     )
+    region_codes = _parse_regions(regions)
+    if region_codes:
+        stmt = stmt.where(Bill.region.in_(region_codes))
+    stmt = stmt.limit(limit)
     rows = (await db.execute(stmt)).all()
     hits: list[BillSearchHit] = []
     for row in rows:

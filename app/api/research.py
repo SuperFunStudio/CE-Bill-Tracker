@@ -1139,8 +1139,16 @@ Rules:
   `in_committee`, `passed`, `passed_chamber`, `unknown`, …) = a PROPOSAL not yet in effect → use
   conditional voice and name the stage ("SB54, introduced and in committee, WOULD require… IF enacted";
   "producers MAY face…"). `vetoed`/`failed` = did NOT become law → say so ("would have required…, but
-  was vetoed"). When one claim spans bills of mixed status, separate the enacted from the pending rather
-  than lumping them; do not let an enacted example make neighboring proposals read as law.
+  was vetoed"). `repealed` = WAS in force and has since been rolled back (rescinded/superseded/repealed)
+  → past tense, and if the bill carries a `lifecycle` object name the rollback and its date/instrument
+  ("EO 14057 directed agencies to buy recycled-content products, but was rescinded by EO 14148 in
+  January 2025"). Do NOT describe a repealed measure as either a current obligation or a mere proposal.
+  When one claim spans bills of mixed status, separate the enacted from the pending/repealed rather than
+  lumping them; do not let an enacted example make neighboring proposals read as law.
+- GROUNDING — name only laws, regulations, and programs that appear in the BILL MATERIAL. Do NOT
+  introduce statutes, regulations, executive orders, or programs from your own general knowledge (e.g.
+  RCRA, the Bipartisan Infrastructure Law, FAR/CPG, BioPreferred) even as background or context. If the
+  material lacks a relevant framework, say the corpus doesn't cover it — never supply it from memory.
 - Where a requirement/finding recurs across bills, say so and cite several; flag single-bill outliers.
 - You MAY state exact numbers from AGGREGATES. If both a scoped and corpus-wide count are given, reason
   about coverage from them ("122 of the 146 corpus-wide sit in France; the rest are elsewhere").
@@ -1197,13 +1205,19 @@ def _pack_material(rows, passages: dict[int, str]) -> list[dict]:
         present = [d for d in DIMENSION_KEYS if isinstance(cd.get(d), dict) and cd[d].get("status") == "present"]
         excerpt = passages.get(b.id) or (b.ai_summary or "")
         status = (b.status or "unknown")
+        # A repealed/rescinded/superseded law WAS in force and no longer is — a distinct verb
+        # tense from both `enacted` (in force now) and a never-enacted proposal. Surface the
+        # rescission date/instrument so the answer can say "…until rescinded in 2025 by EO 14148".
+        lifecycle = (cd.get("lifecycle") if isinstance(cd, dict) else None) or None
         packed.append({
             "id": b.id, "ref": f"{b.state} {b.bill_number or '?'}", "region": b.region,
             "year": b.status_date.year if b.status_date else None,
             # Legal status drives the answer's verb tense (see _DEEP_SYSTEM): `enacted` = law in force,
-            # anything else = a proposal that is NOT yet law. `in_force` is the pre-chewed flag so the
-            # model never has to remember which status strings mean "enacted".
+            # `repealed` = was in force, now rolled back, anything else = a proposal not yet law.
+            # `in_force` is the pre-chewed flag so the model never has to remember which status
+            # strings mean "enacted".
             "status": status, "in_force": status == "enacted",
+            "lifecycle": lifecycle,  # {status: rescinded|superseded|repealed, date, by} or None
             "title": (b.title or "")[:140], "dimensions": present,
             "excerpt": (excerpt or "").strip()[:800],
         })

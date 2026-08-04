@@ -213,13 +213,16 @@ body {
 .bde-count b { color: rgb(var(--green-accent)); font-weight: 600; }
 .bde-ytd { margin-left: 5px; font-size: 0.625rem; letter-spacing: 0.1em; color: var(--text-muted); border: 1px solid var(--border-default); border-radius: 4px; padding: 1px 4px; }
 .bde-dots { display: flex; flex-wrap: wrap; gap: 5px; align-content: flex-start; }
-.bde-dot { width: 14px; height: 14px; border-radius: 4px; cursor: pointer; background: var(--c); animation: bdeRise 0.45s both; }
+/* No per-dot entrance animation on purpose: the board can hold thousands of marks, so animating each
+   would jank hard (and re-trigger on every rebuild). The board fades in once as a whole instead. */
+.bde-dot { width: 14px; height: 14px; border-radius: 4px; cursor: pointer; background: var(--c); }
 .bde-dot.enacted { --c: var(--status-enacted); }
 .bde-dot.progress { --c: var(--status-introduced); }
 .bde-dot.stalled { --c: var(--status-dormant); opacity: 0.6; }
 .bde-dot:hover, .bde-dot:focus-visible { transform: scale(1.5); z-index: 2; outline: none; box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 3.5px var(--c); }
-@keyframes bdeRise { from { opacity: 0; transform: translateY(5px) scale(0.6); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .bde-dot { animation: none; } }
+.bde-board { animation: bdeFade 0.3s ease-out; }
+@keyframes bdeFade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .bde-board { animation: none; } }
 .bde-tip { position: fixed; z-index: 60; pointer-events: none; opacity: 0; transition: opacity 0.12s; max-width: 300px; background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: 10px; padding: 9px 12px; box-shadow: var(--shadow-panel); }
 .bde-tip.on { opacity: 1; }
 .bde-tip .n { font-size: 0.75rem; font-weight: 600; color: var(--text-primary); }

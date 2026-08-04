@@ -455,7 +455,7 @@ export default function HomePage() {
               {research.busy ? 'Thinking…' : research.hasAsked ? 'Ask follow-up' : 'Ask →'}
             </button>
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="w-full sm:w-auto sm:flex-1 min-w-0">
             <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
           </div>
         </div>

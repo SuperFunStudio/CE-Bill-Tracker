@@ -72,7 +72,19 @@ export function BillDotExplorer({ bills }: { bills: BillSummary[] }) {
     [displayBills],
   );
 
+  // A stable content signature. The homepage recomputes `bills` into a fresh array on nearly every
+  // parent render, so `displayBills` changes reference constantly even when the data is identical.
+  // Keying the (expensive, ~thousands-of-nodes) rebuild on this hash instead of the array reference is
+  // what stops the board from thrashing/never-settling — it only re-renders when the data truly changes.
+  const dataKey = useMemo(() => {
+    let h = 0;
+    for (const b of displayBills) h = (Math.imul(h, 31) + b.id) | 0;
+    return `${view}:${displayBills.length}:${h}`;
+  }, [displayBills, view]);
+
   // Build the mark grid imperatively — thousands of nodes, so we skip React reconciliation for them.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on dataKey (encodes view + data); the
+  // other reads (displayBills, maxYear) are derived from the same data and move in lockstep with it.
   useEffect(() => {
     const el = boardRef.current;
     if (!el) return;
@@ -80,10 +92,10 @@ export function BillDotExplorer({ bills }: { bills: BillSummary[] }) {
 
     const dotsHtml = (list: BillSummary[]) =>
       list
-        .map((b, i) => {
+        .map((b) => {
           const title = fixEncoding(b.title) || 'Untitled';
           const label = `${b.bill_number ? b.bill_number + ': ' : ''}${title}`;
-          return `<span class="bde-dot ${bucketOf(b.status)}" data-id="${b.id}" role="button" tabindex="0" aria-label="${esc(label)}" style="animation-delay:${Math.min(i, 60) * 10}ms"></span>`;
+          return `<span class="bde-dot ${bucketOf(b.status)}" data-id="${b.id}" role="button" tabindex="0" aria-label="${esc(label)}"></span>`;
         })
         .join('');
 
@@ -134,7 +146,7 @@ export function BillDotExplorer({ bills }: { bills: BillSummary[] }) {
       });
     }
     el.innerHTML = html || '<p class="text-text-muted text-sm py-6">No bills match these filters.</p>';
-  }, [view, displayBills, maxYear]);
+  }, [dataKey]);
 
   // Delegated interaction on the imperative board.
   const openFromEvent = (target: EventTarget | null) => {

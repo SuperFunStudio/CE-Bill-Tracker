@@ -46,7 +46,7 @@ const RegionInsetMap = dynamic(
 // + window APIs, so client-only (ssr:false).
 const CoverageGlobe = dynamic(
   () => import('@/components/map/CoverageGlobe').then(m => ({ default: m.CoverageGlobe })),
-  { ssr: false, loading: () => <div className="h-[420px] bg-bg-secondary rounded-lg animate-pulse" /> }
+  { ssr: false, loading: () => <div className="h-[320px] bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
 /**
@@ -428,7 +428,7 @@ export default function HomePage() {
               data={mapData}
               selectedState={billFilters.state || null}
               onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
-              height={380}
+              height={320}
             />
           ) : insetHighlightIds.length ? (
             <RegionInsetMap
@@ -436,7 +436,7 @@ export default function HomePage() {
               caption={soleRegion === 'EU' ? 'European Union · 27 member states — click a country to drill in' : `${regionLabel(soleRegion)} · national law`}
               count={regionCounts[soleRegion]}
               onCountrySelect={insetHighlightIds.length > 1 ? code => setRegions([code]) : undefined}
-              height={380}
+              height={320}
             />
           ) : (
             <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default bg-bg-secondary/40 text-center px-6 py-10">

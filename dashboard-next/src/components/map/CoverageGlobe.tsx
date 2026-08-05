@@ -44,7 +44,9 @@ function regionCodeForCountry(id: string): string | undefined {
   return undefined;
 }
 
-export function CoverageGlobe({ onSelect, height = 420 }: { onSelect: (region: string) => void; height?: number }) {
+// 320px, not the taller hero it started as: the globe is the overview, and the bill table below it is
+// what visitors came for — keeping it short leaves the top of the table above the fold.
+export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: string) => void; height?: number }) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 

@@ -1,23 +1,25 @@
 'use client';
 import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
-import { useBills } from '@/hooks/useBills';
+import { useBills, useLawsInForce } from '@/hooks/useBills';
 
 // Public engine snapshot. Only observable facts live here — the numbers a reader could verify
 // from the site itself (corpus scale, jurisdiction breadth, the live relevant count). The engine
 // internals that make distillation possible — the exact pre-screen lexicon, its weighting/tiering,
 // the model and prompts, confidence thresholds — are deliberately NOT surfaced. Keep it that way:
 // describe the method, not the recipe.
-// `relevant` is pulled live from the bill engine below; the value here is only a fallback for first
-// paint / offline. `universe` is the OpenStates bulk corpus the engine screens wholesale — verified
-// at 1,490,425 state/D.C./territory bills (1,560,420 incl. federal) in the 2026-06 monthly Postgres
-// dump. `jurisdictions` is the global reach: U.S. states, the EU, and national governments now
-// ingested from official sources — 37 distinct region codes carry relevant law as of 2026-08 (the EU
-// plus 35 national governments across six continents), so 37 is the honest, still-growing count.
+// `relevant` and `inForce` are pulled live from the bill engine below; the values here are only a
+// fallback for first paint / offline. `universe` is the OpenStates bulk corpus the engine screens
+// wholesale — verified at 1,490,425 state/D.C./territory bills (1,560,420 incl. federal) in the
+// 2026-06 monthly Postgres dump. `jurisdictions` is the global reach: U.S. states, the EU, and
+// national governments now ingested from official sources — 37 distinct region codes carry relevant
+// law as of 2026-08 (the EU plus 35 national governments across six continents), so 37 is the
+// honest, still-growing count.
 const ENGINE = {
   universe: '1.5 million',   // bills in the U.S. legislative corpus screened wholesale
   jurisdictions: '37',       // EU + national governments ingested worldwide (37 region codes live, 2026-08)
-  relevant: '2,450',         // fallback only — live count comes from useBills() (~2,450 on 2026-08)
+  relevant: '2,544',         // fallback only — live count comes from useBills() (~2,544 on 2026-08)
+  inForce: '1,156',          // fallback only — live count comes from useLawsInForce() (~1,156 on 2026-08)
 };
 
 const INSTRUMENTS = [
@@ -40,9 +42,17 @@ const MATERIALS = [
 ];
 
 export default function MethodologyPage() {
-  // Same query (and cache) the states page uses; snapshot-backed so it's never 0.
-  const { data: bills } = useBills({ ce_relevant: true, limit: 5000 });
+  // regions:'all' — the SAME query the homepage explorer headlines with ("Explore · N bills"), so the
+  // relevance count here is the whole corpus rather than the US-only default (which read ~900 low and
+  // silently contradicted every other surface). Snapshot-backed, so it's never 0.
+  const { data: bills } = useBills({ ce_relevant: true, limit: 5000, regions: 'all' });
   const relevant = bills?.length ? bills.length.toLocaleString() : ENGINE.relevant;
+  // The globe's headline: enacted laws currently in force, from the same endpoint it shades from.
+  // Shown alongside the tracked total so the two figures read as one story, not two conflicting ones.
+  const { data: lawsInForce } = useLawsInForce();
+  const inForce = lawsInForce?.length
+    ? lawsInForce.reduce((s, p) => s + p.count, 0).toLocaleString()
+    : ENGINE.inForce;
 
   return (
     <div className="p-6 space-y-8 max-w-3xl mx-auto">
@@ -77,11 +87,14 @@ export default function MethodologyPage() {
         </div>
         <div className="bg-bg-card p-4 text-center">
           <div className="font-serif text-2xl text-green-accent">{relevant}</div>
-          <div className="mt-1 text-xs text-text-muted leading-snug">flagged as circularity-relevant legislation</div>
+          <div className="mt-1 text-xs text-text-muted leading-snug">measures flagged as circularity-relevant — the tracked corpus</div>
         </div>
       </section>
       <p className="-mt-4 text-center text-xs text-text-muted">
-        A live snapshot — the engine re-runs as bills move and new sessions open.
+        A live snapshot — the engine re-runs as bills move and new sessions open. Of the {relevant} tracked
+        measures, <span className="text-text-secondary">{inForce}</span> are enacted laws in force — the
+        figure the <Link href="/" className="text-green-accent hover:underline">homepage globe</Link> shades
+        jurisdictions by. The rest are pending, failed, or superseded bills we keep on the record.
       </p>
 
       <section className="space-y-3">

@@ -1075,16 +1075,43 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
 # answer degrades to "no estimate can be responsibly cited". That's true but useless. These triggers turn
 # on the fee benchmark block below, which supplies the in-scope figures when they exist AND a directional
 # range from comparable jurisdictions when they don't.
-_COST_TRIGGERS = (
-    "cost", "costs", "how much", "price", "pricing", "expensive", "budget", "fee", "fees",
-    "eco-fee", "ecofee", "levy", "tariff", "charge", "charges", "rate", "rates", "per unit",
-    "per item", "per tonne", "per ton", "financial impact", "what will we pay", "what do we pay",
-)
+# Matched on WORD BOUNDARIES, not as substrings: plain `in` matching fired on "sepaRATE collection",
+# "disCHARGE", "cofFEE pods" and "corpoRATE" — the last three all real questions in this corpus.
+# Bare "rate"/"rates" is deliberately NOT a trigger: recycling rates, collection rates and recovery
+# rates are the corpus's most common non-monetary use of the word. It only counts when qualified
+# ("fee rate", "rate schedule"). "contribution" IS included — éco-contribution is what the French and
+# Italian schemes call the fee, so a producer asking in EU vocabulary must reach the cost path.
+_COST_RE = re.compile(r"""\b(
+      cost|costs|costing|expensive|budget|budgets
+    | fee|fees|eco-?fee|eco-?fees|levy|levies|tariff|tariffs
+    | charge|charges|surcharge|surcharges
+    | price|prices|pricing
+    | contribution|contributions|eco-?contribution|eco-?contributions
+    | invoice|invoiced|invoicing
+    | how\s+much
+    | (?:fee|rate|tariff)\s+(?:rate|schedule|card|table)
+    | per\s+(?:unit|item|tonne|ton|kg|kilogram|kilo|pound|lb)
+    | financial\s+(?:impact|exposure|obligation)
+    | what\s+(?:will|do|would)\s+(?:we|i|they)\s+(?:pay|owe)
+)\b""", re.IGNORECASE | re.VERBOSE)
 
 
-def _wants_cost(question: str) -> bool:
-    q = f" {(question or '').lower()} "
-    return any(t in q for t in _COST_TRIGGERS)
+def _wants_cost(question: str, routed=None) -> bool:
+    """Does this question want money numbers? Two independent signals, either sufficient.
+
+    The regex is the precision half — bounded vocabulary, no dependency on anything else. `routed` is
+    the RECALL half and the whole-question CONTEXT check: the LLM router has already read the question
+    (in _choose_facets, so this costs no extra call) and emits `fee_amounts` among its dimensions when
+    the ask is about money, catching phrasings no keyword list will hold — "what's the financial
+    picture", "how does this hit our margins", a non-English framing.
+
+    A router NEGATIVE deliberately does NOT suppress a keyword hit. The asymmetry is intentional: a
+    false positive costs two lateral scans and an aggregate block the model simply won't cite, while a
+    false negative silently drops the cost answer the customer asked for. The router also isn't driving
+    retrieval by default yet, so it isn't trusted as the sole authority here."""
+    if routed is not None and "fee_amounts" in (getattr(routed, "dimensions", None) or []):
+        return True
+    return bool(_COST_RE.search(question or ""))
 
 
 # A producer's total exposure is not just the recurring fee. RECURRING = what you pay to comply every
@@ -1966,7 +1993,7 @@ async def ask_the_atlas(
             agg_scoped["other_subthemes"] = ot
     # Cost asks get fee bands (in-scope, plus a directional range when the scope states none). Gated on
     # the question so an unrelated ask doesn't pay for two extra lateral scans.
-    if _wants_cost(retrieval_q):
+    if _wants_cost(retrieval_q, routed=rf):
         fb = await _fee_benchmarks(db, geo_extra, focus_materials=facets.material_slugs)
         if fb:
             agg_scoped["fee_benchmarks"] = fb

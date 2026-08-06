@@ -46,6 +46,17 @@ _STOPWORDS = frozenset({
     # _EVERYWHERE_CUES / _COMPARISON_CUES above, not here.
     "learn", "learns", "learned", "teach", "teaches", "lesson", "lessons", "rest", "others",
     "region", "regions", "regional", "jurisdiction", "jurisdictions",
+    # Market-entry chrome — the way a CUSTOMER phrases the core question ("we plan to SELL shoes in the
+    # EU and US MARKETS next year, what OBLIGATIONS do we have and what will our estimated COSTS be?").
+    # These are business framing, not statute vocabulary, so AND-ing them into the tsquery intersects a
+    # correctly-faceted scope down to near-nothing: that exact question resolved places + the footwear
+    # product properly and then collapsed to 3 bills out of 18 in scope. Stripping them lets a
+    # well-faceted market-access ask fall through to the scope listing, which is the honest answer set.
+    # Dimension routing is unaffected — _map_dimension reads the raw question, not these terms.
+    "sell", "sells", "selling", "sold", "market", "markets", "marketplace", "plan", "plans", "planning",
+    "obligation", "obligations", "requirement", "requirements", "cost", "costs", "estimate",
+    "estimated", "estimates", "next", "year", "years", "we", "our", "company", "business",
+    "will", "would", "should", "need", "needs", "want", "wants",  # modals — never statute vocabulary
 })
 
 
@@ -300,15 +311,61 @@ class Facets:
     # constructors (e.g. the shadow router) keep working without supplying it.
     cycle_slugs: list[str] = field(default_factory=list)   # "biological" / "technical"
     cycle_labels: list[str] = field(default_factory=list)
+    # Blocs whose member states were pulled into place_ids ("European Union"). Narration input only —
+    # it tells synthesis the scope spans a framework tier and a transposition tier. See expand_place_ids.
+    bloc_expansions: list[str] = field(default_factory=list)
+    # Jurisdictions that are in scope only as COMPARATORS ("...compare to the EU and US"). A subset of
+    # place_ids, used to down-weight them in the interleave so the subjects keep the bulk of the read
+    # set. Empty for an ordinary multi-place comparison, where every named place is a subject.
+    secondary_place_ids: list[int] = field(default_factory=list)
 
     def meaningful_terms(self) -> list[str]:
         return [w for w in re.findall(r"[a-z0-9]{3,}", self.free_text.lower()) if w not in _STOPWORDS]
 
 
+# Blocs whose named scope is a MARKET, not just the bloc's own acts. The EU sits at `world.eu` with no
+# children — France is `world.fr`, a SIBLING — so subtree expansion alone resolves "the EU" to EU-level
+# acts and nothing else. That is wrong for the question producers actually ask: a directive binds member
+# states, and the obligation that lands on a company placing goods on the market is the national
+# transposition. On prod that gap is the difference between 3 footwear bills and 18 (France alone carries
+# 11), and 218 vs 535 corpus-wide. Membership is a stable published fact, so it lives in code rather than
+# a migration; the member nodes stay separate jurisdictions, so rollups and ranks are unaffected — the
+# expansion widens RETRIEVAL only, and synthesis presents the two tiers separately (see _DEEP_SYSTEM).
+_BLOC_MEMBERS: dict[str, frozenset[str]] = {
+    "EU": frozenset({"AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU",
+                     "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"}),
+}
+
+
 async def _load_nodes(db: AsyncSession):
     return (await db.execute(
-        select(Jurisdiction.id, Jurisdiction.name, Jurisdiction.path, Jurisdiction.aliases)
+        select(Jurisdiction.id, Jurisdiction.name, Jurisdiction.path, Jurisdiction.aliases,
+               Jurisdiction.code, Jurisdiction.level)
     )).all()
+
+
+def expand_place_ids(nodes, matched_paths: set, expand_blocs: bool = True) -> tuple[list[int], list[str]]:
+    """Jurisdiction ids for a set of matched paths: the usual path-subtree expansion, PLUS member states
+    for any matched bloc (see _BLOC_MEMBERS). Returns (ids, expanded_bloc_names) — the second element is
+    narration input so the answer can say the scope covers the bloc and its members, and stays empty when
+    nothing was expanded. Shared by the deterministic resolver and the LLM router so both scope alike."""
+    ids = {n.id for n in nodes
+           if any(n.path == p or n.path.startswith(p + ".") for p in matched_paths)}
+    expanded: list[str] = []
+    # `expand_blocs=False` is for places the question merely COMPARES AGAINST rather than scopes to.
+    # "How does China compare to the EU?" means the EU's own acts; expanding it to 27 member states there
+    # turns a 5-way comparison into a 23-country round-robin that starves the actual subjects (measured:
+    # China dropped to 5 bills and Japan to 4 out of a 100-bill read set).
+    for bloc in ([n for n in nodes if (n.code or "") in _BLOC_MEMBERS and n.path in matched_paths]
+                 if expand_blocs else []):
+        members = _BLOC_MEMBERS[bloc.code]
+        member_nodes = [n for n in nodes if (n.code or "") in members]
+        if member_nodes:
+            expanded.append(bloc.name)
+            for m in member_nodes:
+                ids.update(n.id for n in nodes
+                           if n.path == m.path or n.path.startswith(m.path + "."))
+    return sorted(ids), expanded
 
 
 def _is_us_place(node) -> bool:
@@ -326,6 +383,13 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
     matched: dict[int, object] = {}  # jurisdiction id -> node row (dedupe)
 
     for n in nodes:
+        # The WORLD root is never a place FILTER. Its subtree is every jurisdiction, so scoping to it is a
+        # no-op at best — and actively harmful when unioned with a real anchor: "what can China teach the
+        # rest of the world?" matched World via its 'world' alias, dissolved China's scope into the whole
+        # corpus, and returned EU/US/AU/KE bills and not one Chinese bill. The genuine "search everywhere"
+        # sense is already carried by _EVERYWHERE_CUES, which doesn't need a node to filter on.
+        if (n.level or "") == "world":
+            continue
         for alias in n.aliases:  # stored lowercased
             if len(alias) >= 4:
                 pat = re.compile(r"\b" + re.escape(alias) + r"\b", re.IGNORECASE)
@@ -356,10 +420,8 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
                   free_text=free_text, raw_question=question)
 
     matched_paths = {n.path for n in matched.values()}
-    place_ids = [
-        n.id for n in nodes
-        if any(n.path == p or n.path.startswith(p + ".") for p in matched_paths)
-    ]
+    place_ids, bloc_expansions = expand_place_ids(nodes, matched_paths)
+    common["bloc_expansions"] = bloc_expansions
 
     # 1) Explicit "search everywhere" + a named place → the place is a pure benchmark, don't scope by
     #    jurisdiction (materials/instruments still apply — "carpet EPR like France's everywhere").
@@ -380,10 +442,9 @@ async def resolve_facets(db: AsyncSession, question: str) -> Facets:
             anchors = [n for n in matched.values() if not _is_us_place(n)]
             if anchors:
                 anchor_paths = {n.path for n in anchors}
-                anchor_ids = [n.id for n in nodes
-                              if any(n.path == p or n.path.startswith(p + ".") for p in anchor_paths)]
+                anchor_ids, anchor_blocs = expand_place_ids(nodes, anchor_paths)
                 return Facets(place_ids=anchor_ids, place_labels=sorted({n.name for n in anchors}),
-                              reference_labels=foils, **common)
+                              reference_labels=foils, **{**common, "bloc_expansions": anchor_blocs})
             return Facets(place_ids=[], place_labels=[], reference_labels=place_labels, **common)
 
     # 2) Two or more named places → a head-to-head comparison ("Germany vs China"): scope to ALL of them

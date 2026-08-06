@@ -30,7 +30,7 @@ from app.classification.materials import CANONICAL_MATERIALS
 from app.config import settings
 from app.models import Jurisdiction
 from app.synthesis.product_taxonomy import SLUGS as PRODUCT_SLUGS, vocab_block
-from app.api.research_facets import Facets, _EVERYWHERE_CUES
+from app.api.research_facets import Facets, expand_place_ids, _EVERYWHERE_CUES
 
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
@@ -201,6 +201,8 @@ class RoutedFacets:
     place_labels: list[str] = field(default_factory=list)
     reference_labels: list[str] = field(default_factory=list)
     reference_ids: list[int] = field(default_factory=list)  # subtree ids of reference-role places
+    bloc_expansions: list[str] = field(default_factory=list)  # blocs whose members were pulled into scope
+    secondary_place_ids: list[int] = field(default_factory=list)  # comparators: in scope, but down-weighted
     anchor_references: bool = False  # Fix #1: scope retrieval TO the reference place (still narrate as reference)
     exclude_place_ids: list[int] = field(default_factory=list)
     exclude_place_labels: list[str] = field(default_factory=list)
@@ -237,6 +239,8 @@ class RoutedFacets:
             product_slugs=self.product_slugs,
             product_labels=sorted({s.replace("_", " ") for s in self.product_slugs}),
             free_text=self.free_text, raw_question=self.raw_question,
+            bloc_expansions=self.bloc_expansions,
+            secondary_place_ids=self.secondary_place_ids,
         )
 
 
@@ -253,8 +257,10 @@ def _split_by_role(items, valid: set, roles=("filter", "illustration")):
 
 
 def _subtree_ids(nodes, matched_paths: set) -> list[int]:
-    return [n.id for n in nodes
-            if any(n.path == p or n.path.startswith(p + ".") for p in matched_paths)]
+    # Bloc-aware (shared with the deterministic resolver): "the EU" expands to the bloc AND its member
+    # states, because a directive's producer obligation lives in the national transposition.
+    ids, _ = expand_place_ids(nodes, matched_paths)
+    return ids
 
 
 def _match_place(nodes, name: str):
@@ -266,7 +272,8 @@ def _match_place(nodes, name: str):
 
 async def _bind(db: AsyncSession, data: dict, question: str) -> RoutedFacets:
     nodes = (await db.execute(
-        select(Jurisdiction.id, Jurisdiction.name, Jurisdiction.path, Jurisdiction.aliases))).all()
+        select(Jurisdiction.id, Jurisdiction.name, Jurisdiction.path, Jurisdiction.aliases,
+               Jurisdiction.code, Jurisdiction.level))).all()
 
     filt_paths, ref_labels, excl_paths, filt_labels, excl_labels = set(), [], set(), [], []
     ref_paths: set = set()
@@ -294,15 +301,32 @@ async def _bind(db: AsyncSession, data: dict, question: str) -> RoutedFacets:
     # Fix #1: a reference place with NO filter place and no explicit "search everywhere" cue is still the
     # retrieval anchor (scope to it) — mirrors research_facets RULE 3. An everywhere cue ("across all
     # regions") keeps the place a pure benchmark (no scope), matching the deterministic _EVERYWHERE_CUES.
-    reference_ids = _subtree_ids(nodes, ref_paths)
+    # Reference/comparator places never bloc-expand (see expand_place_ids): as a comparator, "the EU"
+    # means the bloc's own law, not 27 national regimes.
+    reference_ids = expand_place_ids(nodes, ref_paths, expand_blocs=False)[0]
     everywhere = any(cue in f" {question.lower()} " for cue in _EVERYWHERE_CUES)
     anchor_references = bool(reference_ids) and not filt_paths and not everywhere
+    # A COMPARISON names both sides, and both sides need evidence. The router was demoting the
+    # comparators to reference-only ("How does China and Japan compare to EU and US and India?" scoped to
+    # China+Japan, reference EU/US/India) — retrieval then returned 60 JP + 40 CN bills and NOTHING from
+    # the three comparators, so half the comparison rested on bare counts with no citable law. On a
+    # compare intent with both roles present, scope to the UNION; the comparators keep their reference
+    # labels for narration. Mirrors the deterministic RULE 2 (2+ named places -> scope them all).
+    # Not applied when there's no filter place (that's the anchor_references case above) or under an
+    # everywhere cue (the place is a pure benchmark).
+    compare_union = bool(intent == "compare" and filt_paths and reference_ids and not everywhere)
+    filter_ids, filter_blocs = expand_place_ids(nodes, filt_paths)
+    scope_ids = sorted(set(filter_ids) | set(reference_ids)) if compare_union else filter_ids
 
     return RoutedFacets(
         intent=intent,
-        place_ids=_subtree_ids(nodes, filt_paths), place_labels=sorted(set(filt_labels)),
+        place_ids=scope_ids, place_labels=sorted(set(filt_labels)),
         reference_labels=sorted(set(ref_labels)),
         reference_ids=reference_ids, anchor_references=anchor_references,
+        bloc_expansions=filter_blocs,
+        # Comparators are retrieved but down-weighted in the interleave (see _plain_page): the question's
+        # subjects deserve the bulk of the read set, the comparators just enough to cite.
+        secondary_place_ids=sorted(set(reference_ids) - set(filter_ids)) if compare_union else [],
         exclude_place_ids=_subtree_ids(nodes, excl_paths), exclude_place_labels=sorted(set(excl_labels)),
         material_slugs=mat_f, material_illustrations=mat_i,
         instrument_slugs=ins_f, instrument_illustrations=ins_i,

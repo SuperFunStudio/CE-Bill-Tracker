@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 import anthropic
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from sqlalchemy import and_, func, literal_column, or_, select, true
+from sqlalchemy import and_, case, func, literal_column, or_, select, text, true
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -48,6 +48,7 @@ from app.config import settings
 from app.database import AsyncSessionLocal, get_db
 from app.models import Bill, BillProductCoverage, BillText, Jurisdiction, LitigationCase
 from app.research import pulse as _pulse
+from app.synthesis.fee_kind import classify_fee_kind
 from app.schemas import (
     BillSummary,
     ContentDraftCreate,
@@ -680,10 +681,23 @@ async def _relevant_bills(
             # — plain recency buries foreign bills (mostly no status_date), and partitioning by leaf
             # jurisdiction lets the US's 50 state nodes flood France's single node. split_part(path,2)
             # is the country segment ('world.us.us_ca' -> 'us', 'world.fr' -> 'fr').
+            # Within each country, ENACTED law leads (see _enacted_first): a read set that opens with
+            # proposals describes what might happen instead of what binds a producer today.
             rn = func.row_number().over(
                 partition_by=country,
-                order_by=[Bill.status_date.desc().nullslast(), Bill.id.desc()],
+                order_by=[*_enacted_first(), Bill.status_date.desc().nullslast(), Bill.id.desc()],
             )
+            # Weighted round-robin: a place the question merely COMPARES AGAINST advances at half the
+            # rate of a subject, so the subjects keep the bulk of the read set. Flat round-robin gave
+            # every named place an equal slice, which on "China and Japan vs EU, US, India" left the two
+            # SUBJECTS with 5 and 4 bills out of 100. Weight 1 (subject) or 2 (comparator) multiplies the
+            # row number, so comparator slot k competes with subject slot 2k. No secondary ids (the
+            # normal case, incl. every deterministic multi-place comparison) => uniform weight 1 =>
+            # exactly today's behavior.
+            secondary = getattr(facets, "secondary_place_ids", None) or []
+            if secondary:
+                weight = case((Bill.jurisdiction_id.in_(secondary), 2), else_=1)
+                return q.order_by((rn * weight).asc(), country).offset(offset).limit(page_size)
             return q.order_by(rn.asc(), country).offset(offset).limit(page_size)
         # Date-extremum listing (no place-interleave): order the whole in-scope set by status_date so a
         # bare "oldest/newest bill [in <scope>]" leads with the actual date edge. ASC drops undated.
@@ -691,7 +705,8 @@ async def _relevant_bills(
             if order_date == "asc":
                 q = q.where(Bill.status_date.isnot(None))
             return q.order_by(*_date_order_cols(order_date)).offset(offset).limit(limit or page_size)
-        return q.order_by(Bill.status_date.desc().nullslast(), Bill.id.desc()).offset(offset).limit(limit or page_size)
+        return (q.order_by(*_enacted_first(), Bill.status_date.desc().nullslast(), Bill.id.desc())
+                 .offset(offset).limit(limit or page_size))
 
     async def _plain_rows(where_extra, interleave=False):
         # Region-balanced LISTING (relevance-free) — Fix #2. On the deep-read call for a corpus-wide facet
@@ -822,6 +837,16 @@ async def _relevant_bills(
     if extremum:
         base = f"{extremum}·{base}"
     return rows, n, _place_strategy(base)
+
+
+def _enacted_first():
+    """ORDER BY fragment putting law that is IN FORCE ahead of proposals. Legal status is the strongest
+    signal of whether a bill answers "what binds me": an enacted measure states an obligation, an
+    introduced one states a possibility. Used as a leading sort key on the listing paths so the read set
+    (and therefore what synthesis can cite) leads with real law. It is a TIE-BREAK ahead of recency, not a
+    filter — proposals still appear, just after the enacted ones, so "what's coming" questions still work.
+    Deliberately NOT applied to date-extremum asks, where the date edge IS the answer."""
+    return [case((Bill.status == "enacted", 0), else_=1).asc()]
 
 
 def _scope_extra(facets) -> list:
@@ -1045,6 +1070,185 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
     return agg
 
 
+# "What will this cost us?" is one of the most common real customer questions and the corpus answers it
+# badly by default: a bill states a fee only sometimes, so a scoped read set is often silent and the
+# answer degrades to "no estimate can be responsibly cited". That's true but useless. These triggers turn
+# on the fee benchmark block below, which supplies the in-scope figures when they exist AND a directional
+# range from comparable jurisdictions when they don't.
+_COST_TRIGGERS = (
+    "cost", "costs", "how much", "price", "pricing", "expensive", "budget", "fee", "fees",
+    "eco-fee", "ecofee", "levy", "tariff", "charge", "charges", "rate", "rates", "per unit",
+    "per item", "per tonne", "per ton", "financial impact", "what will we pay", "what do we pay",
+)
+
+
+def _wants_cost(question: str) -> bool:
+    q = f" {(question or '').lower()} "
+    return any(t in q for t in _COST_TRIGGERS)
+
+
+# A producer's total exposure is not just the recurring fee. RECURRING = what you pay to comply every
+# period; ONE_OFF = what you pay to get in the door; EXPOSURE = what non-compliance costs (Finland's
+# EUR 500,000 negligence maximum is a real budget line, not noise). They are reported as SEPARATE
+# categories — never summed, never blended into one range — because a fine is a risk-weighted contingency
+# and a per-unit fee is a unit cost, and a range that mixes them describes neither. `incentive` and
+# `threshold` are producer-relevant too: a deposit is money that flows through, a de-minimis threshold may
+# mean no fee is due at all. See app/synthesis/fee_kind for the classifier.
+_FEE_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "recurring_compliance": ("producer_fee",),
+    "one_off": ("registration",),
+    "non_compliance_exposure": ("penalty",),
+    "deposits_and_thresholds": ("incentive", "threshold"),
+    "program_admin": ("admin_cost",),
+}
+_CATEGORY_LABELS = {
+    "recurring_compliance": "recurring compliance fee a covered producer pays (per unit / per tonne / % revenue)",
+    "one_off": "one-off registration, renewal or membership fee",
+    "non_compliance_exposure": "fine or penalty for non-compliance — a contingency, NOT a running cost",
+    "deposits_and_thresholds": "consumer deposit/refund amounts and de-minimis exemption thresholds",
+    "program_admin": "aggregate program/agency cost recovery — not a per-producer charge",
+}
+
+_FEE_RATES_SQL = """
+    SELECT b.region,
+           b.status,
+           b.material_categories AS materials,
+           r->>'basis'    AS basis,
+           upper(r->>'currency') AS currency,
+           r->>'material' AS descriptor,
+           (r->>'amount')::numeric AS amount
+    FROM bills b
+    CROSS JOIN LATERAL jsonb_array_elements(b.compliance_details->'fee_amounts'->'rates') AS r
+    WHERE b.ce_relevant = true
+      AND b.compliance_details->'fee_amounts'->>'status' = 'present'
+      AND r->>'amount' ~ '^[0-9]+(\\.[0-9]+)?$'
+"""
+
+
+def _band(vals: list[float]) -> dict:
+    """Percentile band for one comparable group. The typical (p25–p75) band is the headline because
+    min–max is worthless as a ballpark — a single outlier turns per-unit producer fees into
+    'USD 0.00–26.00'. full_low/full_high stay available so the tail can be named honestly."""
+    vals.sort()
+    n = len(vals)
+    return {
+        "n": n,
+        "typical_low": round(vals[max(0, int(n * 0.25))], 4),
+        "median": round(vals[n // 2], 4),
+        "typical_high": round(vals[min(n - 1, int(n * 0.75))], 4),
+        "full_low": round(vals[0], 4), "full_high": round(vals[-1], 4),
+    }
+
+
+def _summarize_rates(rows, kinds: tuple[str, ...] | None = None) -> list[dict]:
+    """Bands for the given fee kinds, grouped by (basis, currency) — BOTH, because neither alone is
+    comparable: 0.10 USD per unit and 75000 EUR per tonne are different quantities. No currency
+    conversion happens anywhere in this path; an FX rate is not something the corpus knows, and a
+    converted figure would read as more precise than its source."""
+    bands: dict[tuple, list[float]] = {}
+    for r in rows:
+        kind = classify_fee_kind(r.basis, r.descriptor)
+        if kinds and kind not in kinds:
+            continue
+        key = (r.basis or "unspecified", r.currency or "unspecified", kind)
+        bands.setdefault(key, []).append(float(r.amount))
+    out = [{"basis": basis, "currency": currency, "fee_kind": kind, **_band(vals)}
+           for (basis, currency, kind), vals in bands.items()]
+    return sorted(out, key=lambda b: b["n"], reverse=True)
+
+
+def _by_category(rows) -> dict:
+    """Every fee kind present, split into the categories above — so an answer can list a producer's FULL
+    cost picture (recurring fee, entry fee, penalty exposure, deposits) instead of one blended number."""
+    out = {}
+    for cat, kinds in _FEE_CATEGORIES.items():
+        bands = _summarize_rates(rows, kinds)
+        if bands:
+            out[cat] = {"means": _CATEGORY_LABELS[cat], "bands": bands[:6]}
+    return out
+
+
+def _segment_by_material(rows, focus: list[str] | None, limit: int = 4) -> list[dict]:
+    """Split rates by MATERIAL STREAM. Packaging fees and electronics fees are different markets — a
+    single blended 'per-unit producer fee' band mixes a beverage-container eco-fee with a WEEE levy and
+    lands on a number that describes no real product. A bill can cover several streams, so a rate counts
+    under each of its bill's materials; the counts therefore overlap by design and must not be summed.
+    `focus` (the question's material facets) is preferred so a textiles question benchmarks against
+    textiles; otherwise the streams with the most stated rates lead."""
+    buckets: dict[str, list] = {}
+    for r in rows:
+        mats = r.materials if isinstance(r.materials, list) else []
+        for m in mats or ["unspecified"]:
+            buckets.setdefault(m, []).append(r)
+    focus_set = {m for m in (focus or [])}
+    ordered = sorted(buckets.items(),
+                     key=lambda kv: (kv[0] not in focus_set, -len(kv[1])))
+    out = []
+    for material, rs in ordered[:limit]:
+        cats = _by_category(rs)
+        if cats:
+            out.append({"material": material, "in_focus": material in focus_set, "categories": cats})
+    return out
+
+
+async def _fee_benchmarks(db: AsyncSession, extra=(), focus_materials: list[str] | None = None) -> dict | None:
+    """What a producer would actually pay: fee bands stated by the IN-SCOPE measures, plus a corpus-wide
+    DIRECTIONAL range for when the scope is silent.
+
+    Two realities drive this. First, plenty of jurisdictions legislate the duty and leave the schedule to
+    a PRO or competent authority, so the number genuinely does not exist in the law yet. Second, a
+    customer still needs a ballpark to plan against. Answering "no figure is available" when 500 other
+    measures state a per-unit fee is a failure of the corpus, not honesty — so the directional band ships
+    alongside, explicitly labeled as other jurisdictions' figures rather than this market's."""
+    scoped_rows = (await db.execute(text(_FEE_RATES_SQL))).all() if not extra else None
+    if scoped_rows is None:
+        # `extra` is a list of SQLAlchemy clauses against Bill; re-express the scope via a bill-id subquery
+        # so the raw lateral SQL above stays a single readable statement.
+        id_q = select(Bill.id).where(Bill.ce_relevant.is_(True))
+        for c in extra:
+            id_q = id_q.where(c)
+        ids = [r[0] for r in (await db.execute(id_q)).all()]
+        if not ids:
+            return None
+        scoped_rows = (await db.execute(
+            text(_FEE_RATES_SQL + " AND b.id = ANY(:ids)").bindparams(ids=ids))).all()
+    in_scope = _by_category(scoped_rows)
+    corpus_rows = (await db.execute(text(_FEE_RATES_SQL))).all() if extra else scoped_rows
+    if not in_scope and not corpus_rows:
+        return None
+    block: dict = {
+        "note": ("Every monetary amount the in-scope measures state, split by what the money IS. Report "
+                 "the categories SEPARATELY and never sum or blend them: a recurring per-unit fee, a "
+                 "one-off registration fee and a maximum fine are different budget lines, and a producer "
+                 "planning entry needs all of them. Amounts are grouped by basis AND currency and are "
+                 "NEVER converted between currencies — quote them in the currency given. n = number of "
+                 "stated rates, not bills. Quote typical_low–typical_high (the middle half of stated "
+                 "rates) as the range and median as the single number; full_low/full_high are the "
+                 "outlier tail, to be named as a tail and never as the headline range."),
+        "in_scope": in_scope,
+    }
+    recurring = in_scope.get("recurring_compliance")
+    if not recurring:
+        # Segmented by material stream so a textiles question benchmarks against textiles, not against a
+        # blend dominated by whichever stream happens to have the most stated rates.
+        block["directional"] = {
+            "by_material": _segment_by_material(corpus_rows, focus_materials),
+            "note": (
+                "The in-scope measures state NO recurring producer fee. This is normal and not a gap in "
+                "the law: many jurisdictions enact the duty and leave the schedule to the PRO or "
+                "competent authority, so the operative number is set after enactment and is not in the "
+                "bill text. Say that plainly, then give these as a DIRECTIONAL ESTIMATE BASED ON OTHER "
+                "JURISDICTIONS — use that phrasing for any heading, not 'ballpark'. Quote the MATERIAL "
+                "STREAM that matches the question (in_focus marks it); a packaging fee does not estimate "
+                "an electronics fee. Name basis and currency every time. Give the full picture, not just "
+                "the recurring fee: registration costs and the penalty exposure are part of what a "
+                "producer must budget. NEVER present these as this jurisdiction's own rate, never average "
+                "across currencies or bases, and note that material-stream counts overlap where a law "
+                "covers several streams."),
+        }
+    return block
+
+
 def _comparative_context(agg_scoped: dict, agg_corpus: dict | None) -> dict | None:
     """The in-scope set's SHARE of the corpus-wide total, per compliance dimension and per instrument —
     the "N of the M bills corpus-wide carrying eco-modulation are French" claim that only a corpus can
@@ -1255,12 +1459,38 @@ Rules:
   jurisdictions that appear there. If no rank is given for a place — including when by_jurisdiction is
   absent entirely, which happens whenever the question is already scoped to one jurisdiction — report the
   counts and do NOT rank them. A rank you infer will eventually contradict the numbers printed beside it.
-  Write the rank as ordinary prose ("France has the second-most enacted laws in this set"). NEVER name
-  the field, the aggregate, or the pipeline in the answer — no "enacted_rank: 2", no "drawn from the
-  AGGREGATES block". The reader sees an analyst's answer, not the plumbing behind it.
+  Write the rank as ordinary prose ("France has the second-most enacted laws in this set").
+- NO PLUMBING — the reader sees an analyst's answer, never the machinery behind it. Do not name a field,
+  key, block, or internal label anywhere in the prose: no "enacted_rank: 2", no "the `fee_amounts`
+  dimension", no "drawn from the AGGREGATES block", no "in the scoped set" phrasing that only makes sense
+  to whoever built the query. Say what the thing IS in plain words ("the law states a fee", "of the bills
+  covering France"). Square brackets are RESERVED for bill citations — never write a bracketed pointer to
+  anything else, such as "[noted in the fee benchmarks]"; it reads as a citation and links to nothing.
 - STATUS MIX — AGGREGATES.status_breakdown gives exact legal-status counts for the whole in-scope set.
   When the set mixes enacted with non-enacted, name the split early with those numbers ("two are in force;
   six are pending"). Use it in preference to counting statuses off the bills you happened to read.
+- COSTS — "what will this cost us" is a fair question and "no figure is available" is rarely the whole
+  answer. When AGGREGATES.fee_benchmarks is present, give the FULL cost picture, each category kept
+  separate and never summed: the recurring compliance fee, the one-off registration/membership fee, the
+  penalty exposure for non-compliance (a maximum fine is a real budget line, not trivia), and any
+  deposits or de-minimis thresholds. Lead with what the in-scope measures actually state, citing the bill
+  for each figure. Where no recurring fee is stated, say plainly that these measures set the duty but not
+  the schedule — the operative rate is fixed after enactment by the PRO or competent authority — and then
+  give the benchmark figures under the heading "Directional estimate based on other jurisdictions" (use
+  that phrasing; do NOT call it a ballpark). That heading is ONLY for figures drawn from outside the
+  scope: if the in-scope measures state a rate, it is THIS market's stated rate — present it as such and
+  cite the bill, never under a directional/other-jurisdictions banner. Quote the material stream matching the question, name basis
+  and currency every time, quote the typical band rather than the full min–max, and state the number of
+  rates behind it ("across 84 stated rates elsewhere, per-tonne packaging fees typically run EUR 15–150,
+  median EUR 120"). Never present a benchmark as this market's own rate, never average across currencies,
+  bases or materials, and never convert a currency. Close with the cost drivers the material does support
+  — eco-modulation criteria, covered categories, reporting duties — since those decide where in a range a
+  given product lands.
+- BLOC vs NATIONAL LAW — a bloc-level act (an EU directive) generally obliges MEMBER STATES to legislate;
+  the duty a producer carries comes from the national transposition. When SCOPE.bloc_expansion is present
+  the read set deliberately spans both tiers: state the framework first, then what the named markets
+  actually require, citing the national instrument for the producer-facing duty. An EU regulation (not a
+  directive) does apply directly — say which you are looking at when the material makes it clear.
 - READER STANCE — the reader SELLS INTO these jurisdictions; they do not write law. Never close on a
   recommendation to legislators ("jurisdictions should enact a framework statute", "states could
   consider…"). Frame each finding as what changes for a company placing this product on this market:
@@ -1734,6 +1964,12 @@ async def ask_the_atlas(
         ot = await _other_subthemes(db, geo_extra)
         if ot:
             agg_scoped["other_subthemes"] = ot
+    # Cost asks get fee bands (in-scope, plus a directional range when the scope states none). Gated on
+    # the question so an unrelated ask doesn't pay for two extra lateral scans.
+    if _wants_cost(retrieval_q):
+        fb = await _fee_benchmarks(db, geo_extra, focus_materials=facets.material_slugs)
+        if fb:
+            agg_scoped["fee_benchmarks"] = fb
 
     scope: dict = {"total": total, "strategy": strategy, "read": len(packed)}
     if facets.place_labels:
@@ -1744,6 +1980,19 @@ async def ask_the_atlas(
         scope["product"] = facets.product_labels
     if facets.instrument_labels:
         scope["instrument"] = facets.instrument_labels
+    if getattr(facets, "bloc_expansions", None):
+        # Two-tier scope: the bloc's own acts AND its member states' national law are in the read set.
+        # Say so explicitly, because the tiers do different legal work and must not be merged.
+        scope["bloc_expansion"] = {
+            "blocs": facets.bloc_expansions,
+            "note": ("The scope covers each named bloc AND its member states, because a bloc-level "
+                     "DIRECTIVE binds member states rather than producers: the obligation a company "
+                     "actually carries is in the national transposition. Present these as two tiers — "
+                     "the bloc framework (what it requires member states to establish) and then what "
+                     "the national law of the specific markets requires of a producer. Never present a "
+                     "directive as if it were the operative producer obligation, and never imply a "
+                     "member state has no rule because only the bloc act was cited."),
+        }
     if facets.reference_labels:
         scope["reference"] = facets.reference_labels
     if strategy.startswith("diversity"):

@@ -1,6 +1,9 @@
 'use client';
 import { useEffect } from 'react';
 import { BillDetailPanel } from '@/components/bills/BillDetailPanel';
+import { NextSteps } from '@/components/compliance/NextSteps';
+import { useBillPathway } from '@/hooks/useCompliancePathways';
+import { buildNextStep } from '@/lib/nextSteps';
 import { formatDate, daysUntil } from '@/lib/utils';
 import type { BillSummary, DeadlineSummary } from '@/lib/types';
 
@@ -9,9 +12,14 @@ function typeLabel(type: string): string {
   return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-/** Fallback detail when the deadline has no matching loaded bill. */
+/** Fallback detail when the deadline has no matching loaded bill. The step block still resolves here —
+ *  it only needs the pathway, which is keyed by bill id and fetched independently of the bill row. */
 function DeadlineOnlyPanel({ deadline, onClose }: { deadline: DeadlineSummary; onClose: () => void }) {
   const days = daysUntil(deadline.deadline_date);
+  const { data: pathway } = useBillPathway(deadline.bill_id);
+  // Mirrors what NextSteps will decide, so the fallback description box only shows when it renders
+  // nothing (no compliance_details here — this panel exists precisely because the bill didn't load).
+  const step = buildNextStep({ pathway, deadline });
   return (
     <div className="bg-bg-secondary border border-border-default rounded-lg p-5 space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -44,10 +52,16 @@ function DeadlineOnlyPanel({ deadline, onClose }: { deadline: DeadlineSummary; o
         )}
       </div>
 
-      {deadline.description && (
-        <div className="bg-bg-primary rounded p-3 text-body text-text-secondary leading-relaxed">
-          {deadline.description}
-        </div>
+      {/* The step block carries `deadline.description` as its "this date" line, so the standalone
+          description box below would repeat it — keep it only as the fallback when no step renders. */}
+      {step ? (
+        <NextSteps pathway={pathway} deadline={deadline} />
+      ) : (
+        deadline.description && (
+          <div className="bg-bg-primary rounded p-3 text-body text-text-secondary leading-relaxed">
+            {deadline.description}
+          </div>
+        )
       )}
     </div>
   );
@@ -92,7 +106,7 @@ export function DeadlineModal({
         onClick={e => e.stopPropagation()}
       >
         {bill ? (
-          <BillDetailPanel bill={bill} onClose={onClose} />
+          <BillDetailPanel bill={bill} onClose={onClose} deadline={deadline} />
         ) : (
           <DeadlineOnlyPanel deadline={deadline} onClose={onClose} />
         )}

@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
-import { fetchBill, fetchBills, fetchBillText } from '@/lib/api';
-import type { BillDetail, BillFullText, BillSummary } from '@/lib/types';
+import { fetchBill, fetchBills, fetchBillText, fetchCompliancePathways } from '@/lib/api';
+import type { BillDetail, BillFullText, BillSummary, CompliancePathway } from '@/lib/types';
 import {
   billSlug,
   billHref,
@@ -14,6 +14,7 @@ import {
 } from '@/lib/utils';
 import { jurisdictionDisplayName } from '@/lib/jurisdictions';
 import { BillComplianceLayers } from '@/components/bills/BillComplianceLayers';
+import { NextSteps } from '@/components/compliance/NextSteps';
 import { ShareBillButton } from '@/components/bills/ShareBillButton';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { WatchStar } from '@/components/watchlist/WatchStar';
@@ -45,6 +46,20 @@ const getBillText = cache(async (id: number): Promise<BillFullText | null> => {
     return await fetchBillText(id);
   } catch {
     return null;
+  }
+});
+
+/**
+ * Every compliance pathway, indexed by bill id — fetched ONCE for the whole static build (~1k rows)
+ * rather than per page, which would be 2,450 requests. Feeds the page's "What you must do" block.
+ * A failure degrades to no step block, never a failed build.
+ */
+const getPathwayIndex = cache(async (): Promise<Map<number, CompliancePathway>> => {
+  try {
+    const rows = await fetchCompliancePathways({ region: 'all' });
+    return new Map(rows.map(p => [p.bill_id, p]));
+  } catch {
+    return new Map();
   }
 });
 
@@ -144,6 +159,7 @@ export default async function BillPage({ params }: { params: { id: string; slug:
     .map(formatInstrumentType);
   const link = resolveSourceLink(bill);
   const fullText = await getBillText(bill.id);
+  const pathway = (await getPathwayIndex()).get(bill.id) ?? null;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -221,6 +237,10 @@ export default async function BillPage({ params }: { params: { id: string; slug:
           </div>
         )}
 
+        {/* The action layer — what a producer actually does under this law. Server-rendered from the
+            public pathway endpoint, so it's in the HTML for crawlers too. See NextSteps. */}
+        <NextSteps pathway={pathway} details={bill.compliance_details} />
+
         {/* AI summary */}
         {bill.ai_summary && (
           <div className="bg-bg-primary rounded p-3 text-body text-text-secondary leading-relaxed">
@@ -228,8 +248,22 @@ export default async function BillPage({ params }: { params: { id: string; slug:
           </div>
         )}
 
-        {/* Compliance content — shared with the in-app detail panel */}
+        {/* Compliance content — shared with the in-app detail panel. The full extraction, for everyone:
+            this page is built anonymously and GET /bills/{id} is deliberately not entitlement-gated.
+            See the breadth-not-depth note in app/api/bills.py. */}
         <BillComplianceLayers cd={bill.compliance_details} />
+
+        {/* The record is complete; what Pro adds is the cross-bill view, so the CTA points at that
+            rather than implying something is withheld here. */}
+        {(bill.compliance_details?.deadlines?.length ?? 0) > 0 && (
+          <p className="border-t border-border-default pt-3 text-xs text-text-muted leading-relaxed">
+            Tracking dates like these across a whole portfolio of jurisdictions is what{' '}
+            <Link href="/compliance" className="text-green-accent hover:underline">
+              Upcoming Deadlines
+            </Link>{' '}
+            does.
+          </p>
+        )}
 
         {/* Source link */}
         {link && (

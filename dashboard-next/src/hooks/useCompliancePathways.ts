@@ -29,6 +29,24 @@ export function useRegionPathways(region: string) {
 }
 
 /**
+ * One law's pathway, looked up by bill id — the "what you must do" block on the deadline modal and
+ * the bill detail panel. Uses the `bill_ids` form so a foreign law resolves (the region-scoped forms
+ * default to US). Returns undefined when the bill has no pathway, which is a legitimate answer: the
+ * block then falls back to the bill's extracted obligations, or hides.
+ */
+export function useBillPathway(billId: number | null | undefined) {
+  return useQuery({
+    queryKey: ['bill-pathway', billId ?? 0],
+    queryFn: async () => {
+      const rows = await fetchCompliancePathways({ bill_ids: String(billId) });
+      return rows[0] ?? null;
+    },
+    enabled: !!billId,
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+/**
  * Pathways scoped by an arbitrary {state | region | regions} shape — the general form used where a
  * caller has a multi-select region choice (the compliance checker) or a non-US jurisdiction (a
  * foreign profile passes {region: <country>}, a US state passes {state: <code>}). Pathways now exist

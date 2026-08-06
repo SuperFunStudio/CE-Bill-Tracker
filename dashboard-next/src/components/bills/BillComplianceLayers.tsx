@@ -13,6 +13,7 @@ export function BillComplianceLayers({ cd }: { cd: ComplianceDetails | null | un
 
   const hasPrimary = (cd.covered_products?.length ?? 0) > 0
     || (cd.producer_obligations?.length ?? 0) > 0
+    || (cd.exemptions?.length ?? 0) > 0
     || (cd.deadlines?.length ?? 0) > 0;
   const hasSecondary = cd.producer_definition || cd.fees || cd.enforcement || cd.preemption_notes;
   const dimensions = presentDimensions(cd);
@@ -50,6 +51,25 @@ export function BillComplianceLayers({ cd }: { cd: ComplianceDetails | null | un
                   <li key={i} className="text-text-primary text-body flex gap-2">
                     <span className="text-green-accent/60 shrink-0 select-none">·</span>
                     {o}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Exemptions sit with coverage, not in the secondary layer: "am I de minimis / carved out"
+              is the same question as "am I covered", and covered_products alone reads broader than the
+              law is. Extracted since v1 but never surfaced until now. */}
+          {cd.exemptions && cd.exemptions.length > 0 && (
+            <div className="border-l-2 border-green-accent/40 pl-3">
+              <div className="text-text-secondary text-xs font-semibold uppercase tracking-wide mb-1">
+                Exemptions
+              </div>
+              <ul className="space-y-0.5">
+                {cd.exemptions.map((e, i) => (
+                  <li key={i} className="text-text-primary text-body flex gap-2">
+                    <span className="text-green-accent/60 shrink-0 select-none">·</span>
+                    {e}
                   </li>
                 ))}
               </ul>

@@ -28,6 +28,27 @@ Implemented locally (not yet deployed — ships on the next `gcloud builds submi
 - ✅ **L-2 — Firebase ADC-fallback init** now logs loudly instead of swallowing the exception.
 - ✅ **L-3 — pinned** `stripe==15.2.1` and `firebase-admin==7.4.0` (were unpinned floors).
 
+### Deliberate scope change (2026-08-06) — the paywall gates BREADTH, not depth
+
+`GET /bills/{id}` had, at some point after the C-1 fix, also been dropping `compliance_details` for
+non-Pro callers. That extra layer has been **removed on purpose**; the endpoint now returns the full
+extraction to everyone, and the public `/bill/{id}/{slug}` pages render it (fees, deadlines,
+penalties, dimensions included).
+
+Rationale: a single bill's extraction is a reading of statute text we already serve free at
+`/bills/{id}/text` and publish as indexable HTML. Gating a summary of free text while publishing the
+text was gating convenience. What's sold is the corpus-wide view, and those gates are unchanged:
+
+- `/bills` (list) still omits `compliance_details` entirely — the one-call harvest stays closed.
+- `/bills/deadlines/upcoming` still serves non-Pro the teaser rows only; the merged calendar is Pro.
+- `/compliance/fee-amounts` + `/eco-modulation` keep the jurisdiction-breadth gate (US teaser).
+- CSV export, watchlists, and alerts remain Pro.
+
+**Accepted residual risk:** the per-bill extraction can be reassembled by iterating ids (~2.5k
+requests). That is bounded by the H-1 per-IP rate limit (240/min) and is, in any case, equally
+available by crawling the static bill pages — which we publish deliberately, for search. If this
+ever needs tightening, the lever is edge rate-limiting (M-4), not re-gating the record.
+
 Still open (operational / infra — not code):
 - **M-4 — Cloud Armor / IAP in front of `/admin`** (and ideally the whole API) as an edge layer on top of the in-app `require_admin`. Configure in GCP, not the repo.
 - Confirm the **Firebase project is set to one-account-per-email** (the default) so email-keyed entitlements can't collide across providers — the operational complement to M-1.

@@ -400,9 +400,11 @@ export async function fetchCompanyObligations(companyId: string): Promise<Compan
 }
 
 /** Compliance pathways — one "how do I comply" record per enacted law. Scope by `state` (a US state
- *  profile) and/or `region` (US default, EU, or "all" for the self-serve checker across a region). */
+ *  profile) and/or `region` (US default, EU, or "all" for the self-serve checker across a region), or
+ *  by `bill_ids` (CSV) for the per-bill "what you must do" block — that form bypasses the US default,
+ *  so a foreign law's pathway resolves too. */
 export async function fetchCompliancePathways(
-  params: { state?: string; region?: string; regions?: string },
+  params: { state?: string; region?: string; regions?: string; bill_ids?: string },
 ): Promise<CompliancePathway[]> {
   return apiFetch<CompliancePathway[]>(buildUrl('/compliance/pathways', params));
 }

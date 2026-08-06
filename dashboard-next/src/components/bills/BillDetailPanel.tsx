@@ -1,9 +1,11 @@
 'use client';
 import Link from 'next/link';
-import type { BillSummary } from '@/lib/types';
+import type { BillSummary, DeadlineSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, isWeakening, resolveSourceLink, billHref } from '@/lib/utils';
 import { useBill, useBillLitigationCases } from '@/hooks/useBills';
+import { useBillPathway } from '@/hooks/useCompliancePathways';
 import { BillComplianceLayers } from '@/components/bills/BillComplianceLayers';
+import { NextSteps } from '@/components/compliance/NextSteps';
 import { ShareBillButton } from '@/components/bills/ShareBillButton';
 import { ClassificationBadge } from '@/components/bills/ClassificationBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -14,14 +16,20 @@ import { CloseIcon } from '@/components/ui/icons';
 interface BillDetailPanelProps {
   bill: BillSummary;
   onClose?: () => void;
+  /** When the panel was opened FROM a deadline, the step block is framed by that date ("register by
+   *  Aug 12") rather than by the law as a whole. See NextSteps / lib/nextSteps.ts. */
+  deadline?: DeadlineSummary | null;
 }
 
-export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
+export function BillDetailPanel({ bill, onClose, deadline }: BillDetailPanelProps) {
   // compliance_details no longer rides along on the bulk list (it's the paid extraction) — fetch the
   // per-bill detail to populate the compliance layers. Free per-bill detail is intended; the gate is
   // on the *bulk* harvest, not single-bill views.
   const { data: detail, isLoading, isError, refetch } = useBill(bill.id);
   const cd = detail?.compliance_details;
+  // The law's compliance pathway — the concrete counterparty + registration link behind the step
+  // block. Public endpoint (unlike compliance_details), so the step renders for free visitors too.
+  const { data: pathway } = useBillPathway(bill.id);
   const { data: litigationCases = [] } = useBillLitigationCases(
     bill.litigation_case_count > 0 ? bill.id : null
   );
@@ -70,6 +78,13 @@ export function BillDetailPanel({ bill, onClose }: BillDetailPanelProps) {
         }</span></span>
         <span>Last Action: <span className="text-text-secondary">{formatDate(bill.last_action_date)}</span></span>
       </div>
+
+      {/* ── The action layer ── the answer to "now what do I do", above the descriptive layers. Waits
+          on the detail fetch so it can use the extracted obligations rather than flashing a
+          pathway-only version first. Hides itself when nothing is sourced. */}
+      {!isLoading && (
+        <NextSteps pathway={pathway} deadline={deadline} details={cd} />
+      )}
 
       {/* Classification transparency — auto-classified vs reviewed, linked to methodology */}
       <ClassificationBadge bill={bill} showLink className="border-t border-border-default pt-3" />

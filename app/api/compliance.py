@@ -4,6 +4,8 @@ GET /compliance/pathways?state=XX returns one pathway per enacted EPR law in the
 each carrying its next action (join_pro / file_individual_plan / register_with_state / …),
 the administering entity (PRO or agency) inlined, the soonest deadline, and a fee flag.
 Empty list => the state has no enacted EPR law; the frontend renders the "no law" message.
+?bill_ids=1,2,3 is the per-bill form — the "what must I actually do" block on the deadline modal
+and the bill page look their law up by id, so it must not inherit the US region default.
 See app/models.py CompliancePathway/ComplianceEntity and scripts/build_compliance_pathways.py.
 
 GET /compliance/fee-schedule returns the CA SB 54 (2027 draft) producer fee schedule —
@@ -63,6 +65,8 @@ RATES_FINAL_EXPECTED = "October 2026"
 # Breadth gate for the Layer-A row endpoints. A non-Pro caller sees only US rows, capped — the free
 # teaser. The value of the dataset is the 40+-jurisdiction body behind the gate (docs §7).
 FEE_TEASER_REGION = "US"
+# Ceiling on a ?bill_ids= lookup — the callers ask for one bill (modal) or a page's worth, never bulk.
+PATHWAY_BILL_ID_LIMIT = 200
 FEE_TEASER_LIMIT = 25
 _FEE_TEASER_NOTE = (
     "Showing the US teaser. Full cross-jurisdiction fee data (40+ jurisdictions), uncapped, "
@@ -421,11 +425,25 @@ async def eco_modulation(
     )
 
 
+def _parse_bill_ids(raw: str | None) -> list[int] | None:
+    """CSV of bill ids -> int list, capped. Non-numeric entries are dropped rather than 422-ing, so a
+    stray value can't break the deadline modal's lookup. Returns None when nothing usable was given."""
+    if not raw:
+        return None
+    ids = [int(p) for p in (s.strip() for s in raw.split(",")) if p.isdigit()]
+    return ids[:PATHWAY_BILL_ID_LIMIT] or None
+
+
 @router.get("/pathways", response_model=list[CompliancePathwaySummary])
 async def list_pathways(
     state: str | None = Query(default=None, description="Sub-jurisdiction code (e.g. CA, EU)"),
     region: str | None = Query(default=None, description="Jurisdiction family: US (default), EU, or all"),
     regions: str | None = Query(default=None, description="CSV of codes (multi-select); wins over `region`."),
+    bill_ids: str | None = Query(
+        default=None,
+        description="CSV of bill ids. Scopes to exactly those bills and drops the US region default — "
+                    "the per-bill lookup the deadline modal / bill page use.",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     q = (
@@ -438,6 +456,11 @@ async def list_pathways(
             Bill.bill_number,
         )
     )
+    # An explicit bill_ids lookup is its own scope — the caller already knows which laws it wants, so
+    # the US region default must NOT silently drop a foreign bill's pathway.
+    ids = _parse_bill_ids(bill_ids)
+    if ids is not None:
+        q = q.where(CompliancePathway.bill_id.in_(ids))
     # Region scoping: a `regions` CSV or a single `region` win; a bare caller (state-only, no region)
     # keeps the historical US default so existing state-page fetches are unaffected. "all" (or an
     # all-containing CSV) drops the filter entirely — every region's pathways (now that they exist).
@@ -445,7 +468,7 @@ async def list_pathways(
         codes = _resolve_regions(region, regions)
         if codes:
             q = q.where(Bill.region.in_(codes))
-    else:
+    elif ids is None:
         q = q.where(Bill.region == "US")
     if state:
         q = q.where(Bill.state == state.upper())

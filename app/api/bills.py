@@ -594,7 +594,6 @@ async def list_bill_outcomes(
 @router.get("/{bill_id}", response_model=BillDetail)
 async def get_bill(
     bill_id: int,
-    is_pro: bool = Depends(get_optional_pro),
     db: AsyncSession = Depends(get_db),
 ):
     lit_sub = _lit_subquery()
@@ -607,12 +606,14 @@ async def get_bill(
     d = BillDetail.model_validate(row.Bill)
     d.litigation_case_count = row.case_count
     d.max_preemption_risk = row.max_risk
-    # compliance_details is the paid Sonnet extraction. The list endpoint already drops it (BillSummary)
-    # so it can't be bulk-harvested; gate the per-bill detail too, otherwise it's scrapable one id at a
-    # time (iterate 1..N) with no subscription. Non-Pro callers get the bill, minus the paid field.
-    # See docs/SECURITY_ASSESSMENT.md M-new-2.
-    if not is_pro:
-        d.compliance_details = None
+    # compliance_details rides along in full, for everyone. The gate is on BREADTH, not depth: one
+    # bill's record is free (it's a reading of statute text we already serve free at /bills/{id}/text
+    # and publish as HTML on /bill/{id}/{slug}), while every CROSS-bill view stays paid — the list
+    # endpoint omits the field entirely (BillSummary), /bills/deadlines/upcoming serves non-Pro a
+    # teaser, and the /compliance fee-row endpoints keep their jurisdiction-breadth gate. That is the
+    # product: the corpus-wide view, not any single record.
+    # This is the C-1 remediation as written (docs/SECURITY_ASSESSMENT.md: "it lives only on per-bill
+    # BillDetail now"); the later non-Pro drop on this endpoint has been deliberately removed.
     return d
 
 

@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 import anthropic
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from sqlalchemy import func, literal_column, or_, select, true
+from sqlalchemy import and_, func, literal_column, or_, select, true
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -882,10 +882,17 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
     for c in extra:
         basis_q = basis_q.where(c)
     basis_rows = (await db.execute(basis_q.group_by(basis).order_by(func.count().desc()))).all()
-    # Per-dimension "present" counts in one pass.
+    # Per-dimension "present" counts in one pass. The `__enacted` twins ride along in the same query (free
+    # — same scan) and exist ONLY to feed _comparative_context: a scoped-vs-corpus SHARE has to be taken
+    # on an enacted-only basis, because the corpus-wide denominator is inflated by US introduced-but-failed
+    # drafts that foreign law (ingested enacted-only) has no equivalent of. They are stripped before the
+    # aggregates reach the model, so they never become a third category axis to confuse with the other two.
     prev_q = select(
         *[func.count().filter(Bill.compliance_details[d]["status"].astext == "present").label(d)
-          for d in DIMENSION_KEYS]
+          for d in DIMENSION_KEYS],
+        *[func.count().filter(and_(Bill.compliance_details[d]["status"].astext == "present",
+                                   Bill.status == "enacted")).label(f"{d}__enacted")
+          for d in DIMENSION_KEYS],
     ).where(Bill.ce_relevant.is_(True))
     for c in extra:
         prev_q = prev_q.where(c)
@@ -896,7 +903,8 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
     # "how many bills under each instrument category" and the honest basis for an instrument pie/donut.
     # Distinct from dimension_prevalence (overlapping compliance envelopes); do not conflate the two.
     itype = func.coalesce(Bill.instrument_type, "other")
-    itype_q = (select(itype.label("itype"), func.count().label("n"))
+    itype_q = (select(itype.label("itype"), func.count().label("n"),
+                      func.count().filter(Bill.status == "enacted").label("n_enacted"))
                .select_from(Bill).where(Bill.ce_relevant.is_(True)))
     for c in extra:
         itype_q = itype_q.where(c)
@@ -937,6 +945,14 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
     for c in extra:
         undated_q = undated_q.where(c)
     undated = (await db.scalar(undated_q)) or 0
+    # Legal-status split for the whole scoped set. _DEEP_SYSTEM already rules on per-bill status, but the
+    # model could only ever count statuses off the read sample; a set that mixes six pending US bills with
+    # two in-force foreign laws then reads as uniform. These are exact corpus counts, not sample counts.
+    status_q = (select(Bill.status.label("st"), func.count().label("n"))
+                .select_from(Bill).where(Bill.ce_relevant.is_(True)))
+    for c in extra:
+        status_q = status_q.where(c)
+    status_rows = (await db.execute(status_q.group_by(Bill.status).order_by(func.count().desc()))).all()
     # By-jurisdiction ranking — the fair-comparison aggregate. `activity` = all relevant bills
     # (legislative MOTION, where the US legitimately leads on sheer volume); `enacted` = status='enacted'
     # only (what's actually IN FORCE — the honest stringency proxy that doesn't reward a federal system
@@ -978,6 +994,18 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
         "material_coverage": [{"material": r.material, "count": r.n} for r in mat_rows],
         "bills_by_year": [{"year": int(r.yr), "count": r.n} for r in year_rows if r.yr is not None],
         "undated_bills": undated,
+        # Enacted-only basis for _comparative_context; popped before the model sees the aggregates.
+        "_enacted_basis": {
+            "dimensions": {d: getattr(prevalence_row, f"{d}__enacted") for d in DIMENSION_KEYS},
+            "instruments": [{"instrument": r.itype, "count": r.n_enacted} for r in itype_rows],
+        },
+        "status_breakdown": {
+            "note": ("Exact legal-status counts for the in-scope set (the whole set, not the read "
+                     "sample). 'enacted' = in force; every other status is a proposal, a failure, or a "
+                     "rollback. When the set mixes them, say so with these numbers rather than letting "
+                     "an enacted example imply the rest are law."),
+            "counts": [{"status": r.st or "unknown", "count": r.n} for r in status_rows],
+        },
     }
     if pc_rows:
         agg["product_coverage"] = {
@@ -987,8 +1015,22 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
     # Self-gate like product_coverage: only a set that spans ≥2 jurisdictions can be RANKED. A question
     # already scoped to one place (extra pins the jurisdiction) collapses to a single row and is suppressed.
     if len(jur_rows) >= 2:
+        # Emit the ordinal instead of hoping synthesis derives it from an ordered list — a model that
+        # reads the list slightly wrong prints a rank that contradicts the counts beside it. Competition
+        # ranking: ties share the earlier rank and the next distinct value skips (1,2,2,4).
+        ranked, prev_enacted, prev_rank = [], None, 0
+        for i, r in enumerate(jur_rows, start=1):
+            rank = prev_rank if r.enacted == prev_enacted else i
+            prev_enacted, prev_rank = r.enacted, rank
+            ranked.append(
+                {"code": r.code, "name": r.name, "activity_count": r.activity,
+                 "enacted_count": r.enacted, "enacted_rank": rank,
+                 **({"subunit_count": r.subunits} if jurisdiction_granularity != "sub" else {})})
         agg["by_jurisdiction"] = {
             "granularity": jurisdiction_granularity,
+            "rank_note": ("enacted_rank is computed in SQL over this top-30 enacted list. Use it "
+                          "verbatim; NEVER derive a rank yourself from the counts. A jurisdiction absent "
+                          "from this list has no rank — do not assign it one."),
             "note": ("enacted_count = enacted laws only (in force) — the ONLY axis comparable across "
                      "countries, because foreign law is ingested enacted-only (no introduced-but-failed "
                      "drafts), while the US corpus carries the full introduced->enacted funnel. "
@@ -998,14 +1040,52 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
                      "is 'more active' than a foreign country from it. At country granularity US states are "
                      "rolled up to the United States; subunit_count = distinct sub-jurisdictions in the "
                      "rollup. Rank on enacted_count; use activity_count only within the US or as momentum context."),
-            "jurisdictions": [
-                {"code": r.code, "name": r.name, "activity_count": r.activity,
-                 "enacted_count": r.enacted,
-                 **({"subunit_count": r.subunits} if jurisdiction_granularity != "sub" else {})}
-                for r in jur_rows
-            ],
+            "jurisdictions": ranked,
         }
     return agg
+
+
+def _comparative_context(agg_scoped: dict, agg_corpus: dict | None) -> dict | None:
+    """The in-scope set's SHARE of the corpus-wide total, per compliance dimension and per instrument —
+    the "N of the M bills corpus-wide carrying eco-modulation are French" claim that only a corpus can
+    support. Computed here so the model never divides, and so the comparison is available even when it
+    wouldn't have thought to make it.
+
+    Taken on an ENACTED-ONLY basis. Raw bill counts would make every share wrong in the same direction:
+    the corpus-wide denominator carries the full US introduced->enacted funnel while foreign law is
+    ingested enacted-only, so an all-status share systematically understates every non-US scope. Enacted
+    counts compare law in force to law in force. Shares describe CONCENTRATION (where a mechanism lives),
+    not stringency — a small share is not a weak regime.
+
+    Returns None when there is no corpus baseline (an unfaceted question, where scoped IS the corpus)."""
+    if not agg_corpus:
+        return None
+    s_basis = agg_scoped.get("_enacted_basis") or {}
+    c_basis = agg_corpus.get("_enacted_basis") or {}
+    corp_dim = c_basis.get("dimensions") or {}
+    dims = [{"dimension": d, "scoped_enacted": n, "corpus_wide_enacted": corp_dim[d],
+             "share_pct": round(100.0 * n / corp_dim[d], 1)}
+            for d, n in (s_basis.get("dimensions") or {}).items()
+            if n and corp_dim.get(d)]
+    corp_inst = {r["instrument"]: r["count"] for r in (c_basis.get("instruments") or [])}
+    insts = [{"instrument": r["instrument"], "scoped_enacted": r["count"],
+              "corpus_wide_enacted": corp_inst[r["instrument"]],
+              "share_pct": round(100.0 * r["count"] / corp_inst[r["instrument"]], 1)}
+             for r in (s_basis.get("instruments") or [])
+             if r["count"] and corp_inst.get(r["instrument"])]
+    if not dims and not insts:
+        return None
+    return {
+        "note": ("The in-scope set's share of the CORPUS-WIDE total, per compliance dimension and per "
+                 "instrument. Counts are ENACTED ONLY on both sides (law in force vs law in force) — "
+                 "an all-status share would be distorted by US bills that never became law. A high share "
+                 "means this scope is where that mechanism is CONCENTRATED, which is the single most "
+                 "distinctive thing that can be said about it; a low share means it is commonplace "
+                 "elsewhere. This is concentration, NOT stringency. Cite at least one of these, written "
+                 "as plain prose ('28 of the 166 enacted laws worldwide that modulate fees are French')."),
+        "dimensions": sorted(dims, key=lambda x: x["share_pct"], reverse=True),
+        "instruments": sorted(insts, key=lambda x: x["share_pct"], reverse=True),
+    }
 
 
 # --- Deep synthesis: the DEFAULT answer mode. Read full-text passages from the matched set (not 15
@@ -1160,6 +1240,33 @@ Rules:
   bill can have several). For a question about "instrument categories / policy types / mechanisms" use
   instrument_breakdown and call them instruments; for "requirements / provisions" use dimension_prevalence
   and call them dimensions. Do NOT label dimension counts as instruments.
+- THE COMPARISON IS THE STORY — when AGGREGATES.comparative is present it gives the in-scope set's SHARE
+  of the corpus-wide total per dimension and instrument, enacted-only on both sides. Work at least one of
+  these shares into the answer, high share first: it says where a mechanism is CONCENTRATED, which is the
+  one claim a corpus supports and a single-jurisdiction reading cannot. Use the numbers as given — never
+  divide, and never restate a share as evidence that one regime is stricter than another; it measures
+  where law lives, not how demanding it is.
+- CITATIONS DON'T STACK — never run more than three [REF] markers together. When a point rests on many
+  bills, cite the two or three most illustrative inline and state the remainder as a count ("six further
+  decrees extend the same duty to other categories"). Count only bills actually present in the BILL
+  MATERIAL; if you mean a corpus-wide total, take it from AGGREGATES and say so.
+- ORDINALS — never compute a rank, ordinal, or superlative ("third-largest", "leads", "behind only",
+  "the most") from counts. Use `enacted_rank` from AGGREGATES.by_jurisdiction verbatim, and only for
+  jurisdictions that appear there. If no rank is given for a place — including when by_jurisdiction is
+  absent entirely, which happens whenever the question is already scoped to one jurisdiction — report the
+  counts and do NOT rank them. A rank you infer will eventually contradict the numbers printed beside it.
+  Write the rank as ordinary prose ("France has the second-most enacted laws in this set"). NEVER name
+  the field, the aggregate, or the pipeline in the answer — no "enacted_rank: 2", no "drawn from the
+  AGGREGATES block". The reader sees an analyst's answer, not the plumbing behind it.
+- STATUS MIX — AGGREGATES.status_breakdown gives exact legal-status counts for the whole in-scope set.
+  When the set mixes enacted with non-enacted, name the split early with those numbers ("two are in force;
+  six are pending"). Use it in preference to counting statuses off the bills you happened to read.
+- READER STANCE — the reader SELLS INTO these jurisdictions; they do not write law. Never close on a
+  recommendation to legislators ("jurisdictions should enact a framework statute", "states could
+  consider…"). Frame each finding as what changes for a company placing this product on this market:
+  what is required, from when, and what it constrains about how the thing is designed, labeled, or
+  reported. If a finding has no producer-side implication, state the finding and stop — do not
+  manufacture a policy recommendation to fill the slot.
 - If AGGREGATES.other_subthemes is present, the 'Other / Uncategorized' instrument bucket is NOT a single
   theme: describe its main sub-themes from those counts (e.g. organics/food-waste diversion, disposal
   bans, single-use bans, reuse/refill, studies/task-forces). State plainly that this grouping is
@@ -1613,6 +1720,14 @@ async def ask_the_atlas(
     jur_gran = _jurisdiction_granularity(retrieval_q)
     agg_scoped = await _aggregates(db, geo_extra, jurisdiction_granularity=jur_gran)
     agg_corpus = await _aggregates(db, jurisdiction_granularity=jur_gran) if geo_extra else None
+    # Scoped-vs-corpus share, computed here so synthesis never has to divide. Built BEFORE the private
+    # enacted-only basis is stripped off both dicts (it's a means to this end, not an axis the model reads).
+    comparative = _comparative_context(agg_scoped, agg_corpus)
+    agg_scoped.pop("_enacted_basis", None)
+    if agg_corpus is not None:
+        agg_corpus.pop("_enacted_basis", None)
+    if comparative:
+        agg_scoped["comparative"] = comparative
     # When the ask is about instruments / the 'other' bucket, break that catch-all into sub-themes so the
     # answer can describe what's actually in it (not just report "Other: N").
     if _wants_instrument_chart(retrieval_q) or _wants_other_detail(retrieval_q):
@@ -2056,8 +2171,26 @@ and policy staff. You are given one or more QUESTION/ANSWER pairs from a single 
 question and any follow-ups), each answer in markdown with inline [STATE BILL_NUMBER] citation markers.
 Weave them into ONE cohesive article — not a transcript. Merge overlapping points, order for a reader
 who wasn't in the thread, and let the follow-ups deepen the piece rather than repeat it.
+- READER STANCE — the reader SELLS INTO these jurisdictions; they do not write law. Never close a section
+  with a recommendation to legislators ("jurisdictions should enact a framework statute", "states with
+  large retail sectors could consider…"). Convert each finding into something the reader can act on: what
+  changes for a company placing this product on this market, from when, and what it constrains about how
+  the thing is designed or made. If a finding carries no producer-side implication IN THE ANSWERS, state
+  it plainly and stop — do not invent an implication, and do not fall back on a legislative recommendation
+  to fill the slot.
+- STRUCTURE — when the material spans several jurisdictions, organize by MECHANISM (the instrument or
+  compliance requirement), with jurisdictions as evidence inside each section. Do NOT tour one country
+  after another; a reader assessing exposure needs to see the same mechanism answered several ways.
+- THE COMPARISON IS THE STORY — where an answer states a corpus-wide share ("28 of the 166 enacted laws
+  worldwide that modulate fees are French"), anchor a section on it. That scoped-vs-corpus share is the
+  one claim no other publication can make; a piece that only describes the in-scope set reads as desk
+  research anyone could have done. Do NOT compute a share the answers didn't state.
+- STATUS UP FRONT — where the answers give a mixed enacted/pending picture, name the split early with the
+  exact counts the answers state. Do not let an enacted example carry pending proposals along with it.
 Return a JSON object with EXACTLY these keys:
-- "title": a specific, non-clickbait headline (<= 90 chars) — concrete about the finding, not "A look at…".
+- "title": a specific, non-clickbait headline (<= 90 chars). Prefer the FINDING to the inventory: "France
+  runs EPR from one statute and expands it by decree" beats "Ten lessons from France's 122 laws". A count
+  belongs in the title only when the count IS the finding.
 - "dek": one-sentence standfirst saying what the reader will learn (<= 160 chars).
 - "body": the article body in markdown. Open with a 1-2 sentence lede on why this matters, then present
   the substance. You MAY restructure, tighten, and add connective prose, but DO NOT invent facts,
@@ -2066,7 +2199,9 @@ Return a JSON object with EXACTLY these keys:
   "producers may face…"), KEEP it conditional — never upgrade it into settled law ("requires",
   "producers must"). Only bills the answers present as enacted may be stated as law in force. PRESERVE
   every [STATE BILL_NUMBER] citation marker EXACTLY as written and keep it beside the claim it supports
-  (they become links downstream). Use "## " subheads; use "- " bullets where a list genuinely helps and
+  (they become links downstream). You MAY DROP surplus markers where more than three run together — keep
+  the two or three most illustrative, and keep any count the answer gives for the rest ("six further
+  decrees…"). Never alter a marker, never invent one, and never move one onto a different claim. Use "## " subheads; use "- " bullets where a list genuinely helps and
   prose otherwise. Do not repeat the title inside the body.
 Output ONLY the JSON object — no preamble, no code fence.
 """

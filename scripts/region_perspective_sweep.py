@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.database import AsyncSessionLocal  # noqa: E402
 from app.api.research import (  # noqa: E402
     resolve_facets, _relevant_bills, _passages_for, _pack_material,
-    _aggregates, _deep_answer, _scope_extra, _DEEP_READ, _PAGE_SIZE,
+    _aggregates, _comparative_context, _deep_answer, _scope_extra, _DEEP_READ, _PAGE_SIZE,
 )
 
 REGIONS = ["US", "EU", "FR", "JP", "UK", "CA", "CN"]
@@ -49,6 +49,13 @@ async def one(region: str) -> dict:
         packed = _pack_material(read_rows, passages)
         agg_scoped = await _aggregates(db, geo_extra)
         agg_corpus = await _aggregates(db) if geo_extra else None
+        # Mirror the handler: build the scoped-vs-corpus share, then strip the private enacted-only basis.
+        comparative = _comparative_context(agg_scoped, agg_corpus)
+        agg_scoped.pop("_enacted_basis", None)
+        if agg_corpus is not None:
+            agg_corpus.pop("_enacted_basis", None)
+        if comparative:
+            agg_scoped["comparative"] = comparative
         scope = {"total": total, "strategy": strategy, "read": len(packed),
                  "jurisdiction": facets.place_labels, "reference": facets.reference_labels}
     answer = await _deep_answer(question, scope, agg_scoped, agg_corpus, packed)

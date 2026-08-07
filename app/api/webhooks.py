@@ -28,6 +28,14 @@ from app.ingestion.courtlistener import (
     infer_plaintiff_type,
     score_preemption_risk,
 )
+from app.alerts.applinks import litigation_case_url, subscribe_url
+from app.alerts.litigation_alerts import (
+    render_litigation_body,
+    render_litigation_kicker,
+    render_litigation_preheader,
+    render_litigation_subject,
+)
+from app.alerts.unsubscribe import unsubscribe_url
 from app.models import CLAlertSubscription, LitigationCase, LitigationEvent
 
 log = structlog.get_logger()
@@ -333,23 +341,20 @@ async def _dispatch_litigation_alerts(db: AsyncSession) -> None:
         if not case:
             continue
 
-        sig_emoji = "🚨" if event.significance == "critical" else "⚠️"
-        injunction_prefix = ""
-        if case.case_status == "injunction_granted":
-            injunction_prefix = "🚨 ENFORCEMENT STAYED — "
-
-        subject = f"{injunction_prefix}{sig_emoji} EPR Litigation Update: {case.case_name}"
-        body = (
-            f"{injunction_prefix}**{event.event_type.replace('_', ' ').title()}** filed in "
-            f"*{case.case_name}* ({case.court_id.upper() if case.court_id else 'Federal Court'})\n\n"
-            f"**Date**: {event.date_filed or 'Unknown'}\n"
-            f"**Significance**: {event.significance.upper()}\n"
-            f"**Summary**: {event.summary or event.description or 'No summary available.'}\n"
+        # Shared renderer — plain prose (no markdown; the same string goes to Slack AND to an HTML
+        # email) with no URLs in the body. The reader is sent to the case's Atlas Circular page,
+        # which carries the CourtListener docket link and the document. See litigation_alerts.
+        subject = render_litigation_subject(case, event.significance)
+        body = render_litigation_body(
+            case,
+            event_type=event.event_type,
+            date_filed=event.date_filed,
+            significance=event.significance,
+            summary=event.summary or event.description,
         )
-        if case.cl_url:
-            body += f"\n**Case Docket**: {case.cl_url}"
-        if event.document_url:
-            body += f"\n**Document**: {event.document_url}"
+        case_url = litigation_case_url(case.id)
+        kicker = render_litigation_kicker(event.date_filed)
+        preheader = render_litigation_preheader(case, event.event_type, event.significance)
 
         for sub in subs:
             # Only notify subscribers watching the relevant state (or ALL)
@@ -359,12 +364,25 @@ async def _dispatch_litigation_alerts(db: AsyncSession) -> None:
 
             if sub.email and settings.sendgrid_api_key:
                 try:
-                    await email_sender.send_text_alert(sub.email, subject, body)
+                    await email_sender.send_text_alert(
+                        sub.email,
+                        subject,
+                        body,
+                        cta_url=case_url,
+                        kicker=kicker,
+                        preheader=preheader,
+                        # Per-recipient: the token signs THIS subscription's id.
+                        unsubscribe_url=unsubscribe_url(sub.id),
+                        subscribe_url=subscribe_url("litigation_forward"),
+                    )
                 except Exception as e:
                     log.warning("cl_alert_email_failed", error=str(e))
 
             if sub.slack_webhook:
                 try:
-                    await slack_sender.send_text_alert(sub.slack_webhook, body)
+                    # Slack has no button here — append the link so it's still one click away.
+                    await slack_sender.send_text_alert(
+                        sub.slack_webhook, f"{body}\n\n{case_url}"
+                    )
                 except Exception as e:
                     log.warning("cl_alert_slack_failed", error=str(e))

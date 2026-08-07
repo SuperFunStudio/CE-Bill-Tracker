@@ -16,6 +16,7 @@ import { track, setUserProperties, setUserId } from '@/lib/analytics';
 import { captureAttribution, attributionParams } from '@/lib/attribution';
 import { startProCheckout, startSignupTrial, billingErrorMessage } from '@/lib/billing';
 import { attributeReferral, PENDING_REF_KEY } from '@/lib/referrals';
+import { sendBrandedPasswordReset, sendBrandedVerification } from '@/lib/authEmails';
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -272,14 +273,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user]);
 
+  // Both of these prefer our own branded, domain-authenticated send (see lib/authEmails) and fall back
+  // to the Firebase SDK's `noreply@…firebaseapp.com` mailer only if that didn't go out. The fallback is
+  // the point: a SendGrid outage or a flipped flag should cost us the masthead, not the user's ability
+  // to verify an address or recover an account.
   const resendVerification = useCallback(async () => {
-    if (auth.currentUser && !auth.currentUser.emailVerified) {
-      await sendEmailVerification(auth.currentUser);
-    }
+    if (!auth.currentUser || auth.currentUser.emailVerified) return;
+    const sent = await sendBrandedVerification(await auth.currentUser.getIdToken());
+    if (!sent) await sendEmailVerification(auth.currentUser);
   }, []);
 
   const resetPassword = useCallback(async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+    const sent = await sendBrandedPasswordReset(email);
+    // On fallback, let the SDK's errors propagate as before — the caller's copy is deliberately the
+    // same whether or not the address exists, so this still can't be used to enumerate accounts.
+    if (!sent) await sendPasswordResetEmail(auth, email);
     track('password_reset_requested', { method: 'email' });
   }, []);
 
@@ -299,7 +307,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     // Start email verification; the trial + referral provision once they verify (H-2). Google sign-ins
     // skip this — their email is already verified, so onIdTokenChanged provisions them immediately.
-    try { await sendEmailVerification(cred.user); } catch { /* best-effort */ }
+    // Branded send first, Firebase's own mailer as the fallback (see resendVerification).
+    try {
+      const sent = await sendBrandedVerification(await cred.user.getIdToken());
+      if (!sent) await sendEmailVerification(cred.user);
+    } catch { /* best-effort */ }
   }, []);
 
   const signInGoogle = useCallback(async () => {

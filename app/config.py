@@ -13,6 +13,18 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     sendgrid_api_key: str = ""
     sendgrid_from_email: str = "alerts@atlascircular.com"
+    # Where replies go. The From stays alerts@ — that's the warmed, domain-authenticated identity and
+    # moving bulk sends to a new local-part would throw that reputation away — but four templates end
+    # with "or reply to this email" (the cancellation one explicitly asks for churn feedback), and
+    # without this those replies land in a send-only mailbox nobody reads. Same authenticated domain,
+    # so no extra DNS. Set to "" to send with no Reply-To.
+    sendgrid_reply_to: str = "kenny@atlascircular.com"
+    # SendGrid click tracking rewrites every href to the branded click host (url7082.atlascircular.com).
+    # That host's TLS cert doesn't cover it, so every link in every email currently dead-ends on a
+    # browser "Your connection is not private" interstitial. OFF until the cert is fixed in SendGrid
+    # (Sender Authentication → Link Branding → validate SSL); flip back on once a branded link loads
+    # cleanly. With it off, hrefs go out verbatim — no rewrite, no interstitial, no click stats.
+    sendgrid_click_tracking: bool = False
     # Légifrance API via PISTE (France national law — app/ingestion/foreign.py LegifranceClient).
     # Free OAuth2 client-credentials from https://piste.gouv.fr/registration. Empty = FR ingest disabled.
     legifrance_client_id: str = ""
@@ -177,6 +189,14 @@ class Settings(BaseSettings):
     # fine without it, so the recap can stay off until its voice has been reviewed.
     enable_welcome_email: bool = True
     enable_welcome_recap: bool = True
+
+    # Account-security emails (verify address / reset password) sent through OUR SendGrid identity
+    # instead of Firebase's own `noreply@<project>.firebaseapp.com` mailer, so they inherit the
+    # brand-aligned, SPF/DKIM-authenticated domain the rest of our mail uses. Deliberately separate
+    # from enable_welcome_email: that flag gates marketing-ish lifecycle mail, and turning it off
+    # must never take account verification with it. Turning THIS off is safe — the frontend falls
+    # back to the Firebase client SDK's send. See app/alerts/auth_emails.py.
+    enable_auth_emails: bool = True
 
     # Recurring watch-list recap: when an already-onboarded user adds more bills, run_watchlist_recap_cycle
     # batches a 30-min burst into one "you added N bills" email pointing to My Portfolio. Idempotent via

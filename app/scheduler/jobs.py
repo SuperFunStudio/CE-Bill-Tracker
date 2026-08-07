@@ -1177,6 +1177,14 @@ async def refresh_active_cases() -> None:
         score_preemption_risk,
     )
     from app.models import Bill, LitigationCase, LitigationEvent
+    from app.alerts.applinks import litigation_case_url, subscribe_url
+    from app.alerts.litigation_alerts import (
+        render_litigation_body,
+        render_litigation_kicker,
+        render_litigation_preheader,
+        render_litigation_subject,
+    )
+    from app.alerts.unsubscribe import unsubscribe_url
     from app.alerts.sendgrid_sender import SendGridSender
     from app.alerts.slack_sender import SlackSender
     from app.models import AlertSubscription
@@ -1299,17 +1307,22 @@ async def refresh_active_cases() -> None:
 
                     # Dispatch alerts for notable events
                     for notif_case, notif_event, notif_cls in notable_events_for_alert:
-                        sig_emoji = "🚨" if notif_cls["significance"] == "critical" else "⚠️"
-                        inj_prefix = "🚨 ENFORCEMENT STAYED — " if notif_case.case_status == "injunction_granted" else ""
-                        subject = f"{inj_prefix}{sig_emoji} EPR Litigation: {notif_case.case_name}"
-                        body = (
-                            f"{inj_prefix}*{notif_event.event_type.replace('_', ' ').title()}* in "
-                            f"_{notif_case.case_name}_\n"
-                            f"Significance: {notif_cls['significance'].upper()}\n"
-                            f"Summary: {notif_cls['summary'] or notif_event.description or '—'}\n"
+                        # Same shared renderer as the CourtListener webhook path (app/api/webhooks.py):
+                        # plain prose for both channels, and the reader lands on the case's Atlas
+                        # Circular page rather than straight on the external docket.
+                        subject = render_litigation_subject(notif_case, notif_cls["significance"])
+                        body = render_litigation_body(
+                            notif_case,
+                            event_type=notif_event.event_type,
+                            date_filed=notif_event.date_filed,
+                            significance=notif_cls["significance"],
+                            summary=notif_cls["summary"] or notif_event.description,
                         )
-                        if notif_case.cl_url:
-                            body += f"\nDocket: {notif_case.cl_url}"
+                        case_url = litigation_case_url(notif_case.id)
+                        kicker = render_litigation_kicker(notif_event.date_filed)
+                        preheader = render_litigation_preheader(
+                            notif_case, notif_event.event_type, notif_cls["significance"]
+                        )
 
                         for sub in subs:
                             states = sub.states or []
@@ -1317,12 +1330,23 @@ async def refresh_active_cases() -> None:
                                 continue
                             if sub.email and settings.sendgrid_api_key:
                                 try:
-                                    await email_sender.send_text_alert(sub.email, subject, body)
+                                    await email_sender.send_text_alert(
+                                        sub.email,
+                                        subject,
+                                        body,
+                                        cta_url=case_url,
+                                        kicker=kicker,
+                                        preheader=preheader,
+                                        unsubscribe_url=unsubscribe_url(sub.id),
+                                        subscribe_url=subscribe_url("litigation_forward"),
+                                    )
                                 except Exception as e:
                                     log.warning("cl_refresh_email_failed", error=str(e))
                             if sub.slack_webhook:
                                 try:
-                                    await slack_sender.send_text_alert(sub.slack_webhook, body)
+                                    await slack_sender.send_text_alert(
+                                        sub.slack_webhook, f"{body}\n\n{case_url}"
+                                    )
                                 except Exception as e:
                                     log.warning("cl_refresh_slack_failed", error=str(e))
 

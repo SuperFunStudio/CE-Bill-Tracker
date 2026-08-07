@@ -28,14 +28,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # --- App imports (env is now locked in) ----------------------------------------------------------
-from app.alerts import access_emails, deadline_alerts, digest as digest_mod
+from app.alerts import access_emails, auth_emails, deadline_alerts, digest as digest_mod
+from app.alerts import litigation_alerts
+from app.alerts.applinks import litigation_case_url, subscribe_url
+from app.alerts.unsubscribe import unsubscribe_url
 from app.alerts import new_bill_alerts, trial_reminders, watchlist_onboarding, watchlist_recap
 from app.alerts import welcome_email
-from app.alerts.sendgrid_sender import SendGridSender, _build_email_html
+from app.alerts.sendgrid_sender import SendGridSender, _build_email_html, build_text_alert_html
 from app.alerts.welcome_email import StandingRow, StateOfPlay
 
 RECIPIENT = "kenny@superfun.studio"  # ALWAYS and ONLY this address
 SUBJECT_PREFIX = "[Atlas sample] "
+# Synthetic litigation case id for the sample alert's in-app CTA. Points at a real route
+# (/federal?case=…) with an id that won't resolve — the button's styling and target are what's under
+# review here, not the landing content.
+SAMPLE_CASE_ID = 9001
+# Signed into the sample unsubscribe link. Deliberately an id that doesn't exist, so clicking the
+# footer button in a sample can't unsubscribe a real row.
+SAMPLE_SUBSCRIPTION_ID = 999_999
 OUT_DIR = Path(r"c:\Users\kenny\SignalScout\tmp\email_samples")
 
 
@@ -154,17 +164,30 @@ def build_registry():
 
     reg.append(("per_bill_status_alert", "html", _per_bill))
 
-    # 2. Litigation text alert (send_text_alert).
+    # 2. Litigation text alert (send_text_alert) — rendered through the SHARED renderer both live
+    # dispatch paths use (CourtListener webhook + docket refresh cycle), so the sample shows the real
+    # thing: plain prose, no markdown leaking through, and no CourtListener URL in the body. The
+    # in-app case link rides as the CTA button (see TEXT_ALERT_CTA below).
     def _litigation():
-        body = (
-            "A court ruling just landed on a measure you follow.\n\n"
-            "Maryland packaging EPR (HB 0234) — the U.S. District Court denied the trade association's "
-            "motion for a preliminary injunction, so the stewardship-plan filing deadline stands.\n\n"
-            "What it means: producers should keep preparing their plans; the January filing date is "
-            "unchanged pending appeal.\n\n"
-            "We'll email again if the appeal changes the timeline."
+        case = types.SimpleNamespace(
+            id=SAMPLE_CASE_ID,
+            case_name="Nat'l Ass'n of Wholesaler-Distributors v. Maryland Dep't of the Environment",
+            court_id="mdd",
+            case_status="active",
+            preemption_risk=62,
+            cl_url="https://www.courtlistener.com/docket/00000000/naw-v-mde/",
         )
-        return "Litigation update — Maryland packaging EPR", body
+        subject = litigation_alerts.render_litigation_subject(case, "critical")
+        body = litigation_alerts.render_litigation_body(
+            case,
+            event_type="order_on_motion",
+            date_filed=date(2026, 6, 18),
+            significance="critical",
+            summary="The court denied the trade association's motion for a preliminary injunction, so "
+                    "the stewardship-plan filing deadline stands. Producers should keep preparing "
+                    "their plans; the January filing date is unchanged pending appeal.",
+        )
+        return subject, body
 
     reg.append(("litigation_text_alert", "text", _litigation))
 
@@ -411,14 +434,45 @@ def build_registry():
         ),
     ))
 
+    # 20/21. Account-security emails. Rendered against a SYNTHETIC action link — the real ones come
+    # from firebase-admin at send time, and minting a live one here would email a working
+    # verify/reset link for a real account. The link is only there to check the button + fallback
+    # URL wrap; clicking it does nothing.
+    fake_link = (
+        "https://ce-bill-tracker.firebaseapp.com/__/auth/action?mode=verifyEmail"
+        "&oobCode=SAMPLE-not-a-real-code-0000000000&apiKey=SAMPLE&lang=en"
+    )
+    reg.append((
+        "verify_email", "html",
+        lambda: (auth_emails.render_verify_subject(), auth_emails.render_verify_html(fake_link)),
+    ))
+    reg.append((
+        "password_reset", "html",
+        lambda: (auth_emails.render_reset_subject(), auth_emails.render_reset_html(fake_link)),
+    ))
+
     return reg
+
+
+def _text_alert_chrome() -> dict:
+    """Everything the live litigation dispatch wraps around the body — edition line, preview text,
+    CTA and footer actions. The sample is only worth reviewing if it carries the same chrome.
+    The unsubscribe token is signed over a synthetic subscription id, so the link resolves to a
+    "subscription not found" page rather than unsubscribing anyone real."""
+    return {
+        "cta_url": litigation_case_url(SAMPLE_CASE_ID),
+        "kicker": litigation_alerts.render_litigation_kicker(date(2026, 6, 18)),
+        "preheader": "Injunction motion in MDD — a critical step; here's what it means for enforcement.",
+        "unsubscribe_url": unsubscribe_url(SAMPLE_SUBSCRIPTION_ID),
+        "subscribe_url": subscribe_url("litigation_forward"),
+    }
 
 
 # --- Send helpers --------------------------------------------------------------------------------
 async def _send(kind: str, subject: str, payload: str) -> bool:
     sender = SendGridSender()
     if kind == "text":
-        return await sender.send_text_alert(RECIPIENT, subject, payload)
+        return await sender.send_text_alert(RECIPIENT, subject, payload, **_text_alert_chrome())
     return await sender.send_html(RECIPIENT, subject, payload)
 
 
@@ -438,6 +492,13 @@ def main():
             ext = "txt" if kind == "text" else "html"
             out = OUT_DIR / f"{label}.{ext}"
             out.write_text(payload, encoding="utf-8")
+            if kind == "text":
+                # Also write what the EMAIL actually looks like — the text body alone hides the
+                # shell, the edition line, the linkified URLs, the CTA and the footer actions.
+                (OUT_DIR / f"{label}.html").write_text(
+                    build_text_alert_html(payload, **_text_alert_chrome()),
+                    encoding="utf-8",
+                )
             rendered[label] = (kind, subject, payload)
             render_status[label] = "ok"
             print(f"  [render ok ] {label:<28} -> {out}")

@@ -2,6 +2,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.alerts.applinks import litigation_case_url
 from app.alerts.detector import ChangeDetector
 from app.alerts.digest import load_watchlists, subscription_matches_bill
 from app.alerts.retention import filter_retained_subscriptions
@@ -31,11 +32,14 @@ async def _get_litigation_context(db: AsyncSession, bill_id: int) -> str:
         injunction_flag = ""
         if case.case_status == "injunction_granted":
             injunction_flag = " 🚨 ENFORCEMENT STAYED"
-        cl_link = f" — {case.cl_url}" if case.cl_url else ""
+        # The case's Atlas Circular page, not case.cl_url: it carries the docket timeline, the
+        # preemption analysis and an onward CourtListener link. Bare URL because this block is shared
+        # verbatim with Slack; the email sender linkifies it. See applinks.litigation_case_url.
         lines.append(
             f"• {case.case_name}{injunction_flag} "
-            f"[{case.court_id.upper() if case.court_id else 'Federal Court'}]{cl_link} "
-            f"(Risk: {case.preemption_risk or 0}/100)"
+            f"[{case.court_id.upper() if case.court_id else 'Federal Court'}] "
+            f"(Risk: {case.preemption_risk or 0}/100)\n"
+            f"  {litigation_case_url(case.id)}"
         )
 
     return "\n\n⚖️ Active Federal Litigation:\n" + "\n".join(lines)

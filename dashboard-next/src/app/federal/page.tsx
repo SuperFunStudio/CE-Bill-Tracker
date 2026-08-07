@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useFederalActions, useLitigationCases, useLitigationCase } from '@/hooks/useFederal';
@@ -180,11 +180,39 @@ export default function FederalPage() {
   const [materialFilter, setMaterialFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
   const [expandedCaseId, setExpandedCaseId] = useState<number | null>(null);
+  const [pendingCaseScroll, setPendingCaseScroll] = useState<number | null>(null);
 
   // ce_relevant defaults true server-side; pass it explicitly so the page only ever shows
   // classified-relevant federal actions (the API still supports ce_relevant=false to inspect noise).
   const { data: actions = [], isLoading: actionsLoading } = useFederalActions({ limit: 100, ce_relevant: true, days_back: 3650 });
   const { data: cases = [], isLoading: casesLoading } = useLitigationCases();
+
+  // ?case=<id> deep link — litigation alert emails land here rather than sending the reader straight
+  // to CourtListener, so the linked case has to open by itself and scroll into view (it sits below
+  // the federal-actions list, well off the first screen). Read once on mount from location.search
+  // rather than useSearchParams: this page is statically exported, and the hook would force a
+  // Suspense boundary.
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get('case');
+    const id = raw ? Number(raw) : NaN;
+    if (Number.isFinite(id)) {
+      setExpandedCaseId(id);
+      setPendingCaseScroll(id);
+    }
+  }, []);
+  useEffect(() => {
+    if (pendingCaseScroll == null || casesLoading) return;
+    // Only scroll once the case is actually in the loaded list — a stale or unknown id in an old
+    // email should leave the reader at the top of a working page, not scrolled at nothing.
+    if (!cases.some(c => c.id === pendingCaseScroll)) {
+      setPendingCaseScroll(null);
+      return;
+    }
+    document
+      .getElementById(`case-${pendingCaseScroll}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setPendingCaseScroll(null);
+  }, [pendingCaseScroll, casesLoading, cases]);
 
   const filteredActions = useMemo(() => {
     let filtered = actions;
@@ -334,7 +362,7 @@ export default function FederalPage() {
         ) : (
           <div className="space-y-2">
             {cases.map(c => (
-              <div key={c.id}>
+              <div key={c.id} id={`case-${c.id}`}>
                 <LitigationCaseRow
                   caseData={c}
                   onSelect={() => setExpandedCaseId(prev => prev === c.id ? null : c.id)}

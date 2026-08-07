@@ -27,6 +27,27 @@ const STATIC_PATHS = [
 ];
 
 /**
+ * The date the bill pages' rendered CONTENT last materially changed. Bump it by hand whenever we change
+ * what these pages actually say — not for styling, and not on every deploy.
+ *
+ * 2026-08-06: the full compliance record (deadlines, fees, enforcement, dimensions) and the "What you
+ * must do" step block started rendering on every bill page.
+ *
+ * Why this exists: `lastmod` used to be the bill's own status_date — a LEGISLATIVE date. A bill last
+ * acted on in 2022 kept lastmod=2022 however much the page's content changed, so a crawler diffing
+ * lastmod had no reason to recrawl and a sitemap resubmit signalled nothing. Taking the later of the
+ * two makes lastmod mean "when this PAGE last changed", which is what the sitemap spec asks of it.
+ */
+const CONTENT_REVISION = '2026-08-06';
+
+/** Later of the bill's own date and the page-content revision, as YYYY-MM-DD. Bills with no date at
+ *  all (82 of them) now get a lastmod too, where they previously emitted none. */
+function pageLastModified(billDate: string | null | undefined): string {
+  const d = (billDate ?? '').slice(0, 10);
+  return d > CONTENT_REVISION ? d : CONTENT_REVISION;
+}
+
+/**
  * The sitemap is the PRIMARY discovery channel for the ~2,450 bill pages — every ce_relevant bill gets
  * its canonical /bill/[id]/[slug]/ URL here so search engines can crawl the long tail directly, not
  * only via in-app links. Generated at build time (static export), so it hits the prod API once.
@@ -46,7 +67,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const bills = await fetchBills({ ce_relevant: true, region: 'all', limit: 5000 });
     billEntries = bills.map(b => ({
       url: `${SITE_URL}${billHref(b)}`,
-      lastModified: b.status_date || b.last_action_date || undefined,
+      lastModified: pageLastModified(b.status_date || b.last_action_date),
       changeFrequency: 'monthly',
       priority: 0.6,
     }));

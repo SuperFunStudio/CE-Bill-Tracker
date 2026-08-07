@@ -248,15 +248,22 @@ class SendGridSender:
         html: str,
         list_unsubscribe_url: str | None = None,
         text: str | None = None,
+        from_email: str | None = None,
     ) -> bool:
         """Send a fully-rendered HTML email (e.g. the monthly digest).
 
         Always multipart/alternative: pass `text` for a hand-written plain-text part, otherwise one is
         derived from the HTML (an HTML-only body scores worse with spam filters). Pass
         `list_unsubscribe_url` for the recurring/marketing emails so mail clients render a native
-        unsubscribe control and Gmail/Outlook honour one-click (RFC 8058)."""
+        unsubscribe control and Gmail/Outlook honour one-click (RFC 8058).
+
+        `from_email` overrides the sending identity for one send — e.g. a founder-voice broadcast as
+        hello@. Domain authentication covers every local-part on atlascircular.com, so no new DNS or
+        SendGrid setup is needed. Use it sparingly: the automated cycles should stay on the default
+        alerts@, which is the address with the warmed reputation. Replies go to sendgrid_reply_to
+        regardless of who the mail is from."""
         message = Mail(
-            from_email=settings.sendgrid_from_email,
+            from_email=from_email or settings.sendgrid_from_email,
             to_emails=to_email,
             subject=subject,
             plain_text_content=text or html_to_text(html),
@@ -290,6 +297,7 @@ class SendGridSender:
         preheader: str | None = None,
         unsubscribe_url: str | None = None,
         subscribe_url: str | None = None,
+        from_email: str | None = None,
     ) -> bool:
         """Send a plain-text/HTML alert not tied to a Bill object (e.g., litigation events).
 
@@ -314,7 +322,7 @@ class SendGridSender:
         if unsubscribe_url:
             text_part += f"\n\nUnsubscribe: {unsubscribe_url}"
         message = Mail(
-            from_email=settings.sendgrid_from_email,
+            from_email=from_email or settings.sendgrid_from_email,
             to_emails=to_email,
             subject=subject,
             plain_text_content=text_part,

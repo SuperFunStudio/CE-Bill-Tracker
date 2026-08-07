@@ -191,6 +191,17 @@ class TestReplyTo:
         _apply_reply_to(message)
         assert message.get()["reply_to"] == {"email": "kenny@atlascircular.com"}
 
+    def test_reply_to_is_independent_of_who_the_mail_is_from(self, monkeypatch):
+        """A founder-voice send as hello@ still routes replies to the monitored mailbox."""
+        monkeypatch.setattr(settings, "sendgrid_reply_to", "kenny@atlascircular.com")
+        message = Mail(
+            from_email=settings.sendgrid_hello_email, to_emails="a@example.com",
+            subject="s", plain_text_content="t", html_content="<p>t</p>",
+        )
+        _apply_reply_to(message)
+        assert message.get()["from"] == {"email": "hello@atlascircular.com"}
+        assert message.get()["reply_to"] == {"email": "kenny@atlascircular.com"}
+
     def test_unconfigured_sends_exactly_as_before(self, monkeypatch):
         monkeypatch.setattr(settings, "sendgrid_reply_to", "")
         message = Mail(

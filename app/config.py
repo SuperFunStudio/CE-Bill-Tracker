@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # without this those replies land in a send-only mailbox nobody reads. Same authenticated domain,
     # so no extra DNS. Set to "" to send with no Reply-To.
     sendgrid_reply_to: str = "kenny@atlascircular.com"
+    # An alternate sending identity for founder-voice / one-off sends, passed explicitly as
+    # `from_email=` — never the default. The automated cycles stay on sendgrid_from_email, which is
+    # the address carrying the warmed reputation. Needs no mailbox and no new DNS: SendGrid domain
+    # authentication covers every local-part on the domain. Replies still land on sendgrid_reply_to.
+    sendgrid_hello_email: str = "hello@atlascircular.com"
     # SendGrid click tracking rewrites every href to the branded click host (url7082.atlascircular.com).
     # That host's TLS cert doesn't cover it, so every link in every email currently dead-ends on a
     # browser "Your connection is not private" interstitial. OFF until the cert is fixed in SendGrid

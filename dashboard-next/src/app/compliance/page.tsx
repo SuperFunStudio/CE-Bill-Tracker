@@ -65,7 +65,7 @@ export default function CompliancePage() {
   const [selected, setSelected] = useState<DeadlineSummary | null>(null);
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
 
-  const { scope } = useScope();
+  const { scope, openEditor } = useScope();
   const scopeActive = useScopeActive();
   const { isPro, isAdmin, loading } = useAuth();
   const gatePro = useProGate();
@@ -107,7 +107,10 @@ export default function CompliancePage() {
   );
 
   // Overdue is surfaced even when "include past" is off (the Pro fetch already carries recent past dates),
-  // so an overdue obligation never hides — it's the loudest thing on the page.
+  // so an overdue obligation never hides. But it is only alarming when it's *yours*: to an unscoped
+  // reader "820 overdue" is a corpus statistic that reads as personal failure, so the red count (and
+  // the "act now" tag) are gated on an active scope. Unscoped, the same number stays available as a
+  // muted count on the "Include past" toggle — factual, discoverable, not shouted.
   const overdueCount = useMemo(
     () => scoped.filter(d => { const n = daysUntil(d.deadline_date); return n !== null && n < 0 && n >= -PAST_DEADLINE_CUTOFF_DAYS; }).length,
     [scoped],
@@ -212,8 +215,18 @@ export default function CompliancePage() {
         <span className="text-text-primary font-semibold">{totalUpcoming}</span> deadline{totalUpcoming === 1 ? '' : 's'} ahead
         {nextRel && <> · next <span className="text-text-primary font-semibold">{nextRel}</span></>}
         {(stats?.within_30 ?? 0) > 0 && <> · <span className="text-urgency-medium font-semibold">{stats?.within_30} within 30 days</span></>}
-        {overdueCount > 0 && <> · <span className="text-urgency-high font-semibold">{overdueCount} overdue</span></>}
+        {scopeActive && overdueCount > 0 && <> · <span className="text-urgency-high font-semibold">{overdueCount} overdue</span></>}
       </p>
+
+      {/* Unscoped readers get the invitation where the alarm used to be. */}
+      {!scopeActive && (
+        <p className="text-sm text-text-muted -mt-3">
+          Showing every jurisdiction we track.{' '}
+          <button onClick={openEditor} className="text-green-accent hover:underline">
+            Tell us your states, products &amp; materials to see which ones are yours →
+          </button>
+        </p>
+      )}
 
       {/* Quiet inline controls — no boxed filter panel. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -237,6 +250,7 @@ export default function CompliancePage() {
           <label className="flex items-center gap-2 cursor-pointer text-sm text-text-secondary">
             <input type="checkbox" checked={includePast} onChange={e => setIncludePast(e.target.checked)} className="accent-green-accent" />
             Include past
+            {overdueCount > 0 && <span className="text-text-muted tabular-nums">({overdueCount})</span>}
           </label>
         )}
         <button
@@ -319,7 +333,7 @@ export default function CompliancePage() {
                 <div className="flex items-baseline gap-3 mb-2">
                   <h2 className={`font-mono text-xs uppercase tracking-widest font-semibold ${tone.tag}`}>{band.label}</h2>
                   <span className="text-xs text-text-muted">{band.items.length}</span>
-                  {band.key === 'overdue' && <span className="text-xs text-urgency-high">act now</span>}
+                  {band.key === 'overdue' && scopeActive && <span className="text-xs text-urgency-high">act now</span>}
                 </div>
                 <div className="divide-y divide-border-default border-y border-border-default">
                   {items.map((d, i) => {

@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.digest import (
@@ -47,7 +47,7 @@ from app.alerts.digest import (
     subscription_matches_bill,
     topic_label,
 )
-from app.alerts.applinks import bill_url
+from app.alerts.applinks import bill_url, substack_url
 from app.alerts.email_shell import cta_button, render_shell
 from app.alerts.unsubscribe import unsubscribe_url
 from app.config import settings
@@ -120,6 +120,52 @@ class StandingRow:
 
 
 @dataclass
+class CorpusStats:
+    """Atlas-wide numbers for the welcome letter's opening — the "here's how big this is" paragraph.
+
+    Computed live rather than hardcoded: the corpus grows weekly, and a stale "over 2,000 laws" in a
+    welcome email is the kind of small wrongness that makes a compliance reader distrust the rest.
+    """
+    total_bills: int = 0        # every in-scope law/bill in the Atlas
+    enacted_laws: int = 0       # of those, the ones actually on the books — the letter's headline
+    regions: int = 0            # distinct jurisdictions (countries + EU + US)
+    year_bills: int = 0         # bills with a dated action THIS calendar year
+    year: int = 0
+
+
+async def build_corpus_stats(db: AsyncSession, today: date | None = None) -> CorpusStats:
+    """Atlas-wide totals. One cheap aggregate query — no per-subscriber work."""
+    from sqlalchemy import distinct, extract, func, or_
+
+    ref_year = (today or date.today()).year
+    row = (
+        await db.execute(
+            select(
+                func.count(Bill.id),
+                func.count(distinct(Bill.region)),
+                func.count(Bill.id).filter(
+                    or_(
+                        extract("year", Bill.last_action_date) == ref_year,
+                        and_(
+                            Bill.last_action_date.is_(None),
+                            extract("year", Bill.status_date) == ref_year,
+                        ),
+                    )
+                ),
+                func.count(Bill.id).filter(Bill.status.in_(_ENACTED_STATUSES)),
+            ).where(Bill.ce_relevant.is_(True))
+        )
+    ).one()
+    return CorpusStats(
+        total_bills=row[0],
+        regions=row[1],
+        year_bills=row[2],
+        enacted_laws=row[3],
+        year=ref_year,
+    )
+
+
+@dataclass
 class StateOfPlay:
     """Windowed activity roundup for one subscriber's scope — what MOVED recently, not all-time
     standings. `recent_*` cover the 6/12-month windows; `on_the_books` holds undated in-scope bills;
@@ -134,6 +180,11 @@ class StateOfPlay:
     on_the_books: list[Bill] = field(default_factory=list)     # undated in-scope bills (aside)
     on_the_books_total: int = 0     # for the overflow count
     established: list[Bill] = field(default_factory=list)       # fallback when nothing moved recently
+    # Totals captured BEFORE by_state/by_topic are truncated to their display caps — otherwise
+    # "top 8 of N" and the "N others" rollup would both report the truncated length, i.e. 8 of 8.
+    topic_count: int = 0
+    jurisdiction_count: int = 0
+    other_jurisdictions: StandingRow | None = None  # the rolled-up tail below the top 8
 
     @property
     def total_recent(self) -> int:
@@ -212,8 +263,23 @@ async def build_state_of_play(
             else:
                 row.active += 1
 
-    sop.by_state = sorted(state_rows.values(), key=lambda r: (-r.total, r.label))[:_MAX_STANDING_ROWS]
-    sop.by_topic = sorted(topic_rows.values(), key=lambda r: (-r.total, r.label))[:_MAX_STANDING_ROWS]
+    # Count before truncating, and roll the jurisdiction tail into one "N others" row so the table
+    # still adds up to the headline totals — a breakdown whose rows don't sum to the number above it
+    # is worse than no breakdown.
+    sop.topic_count = len(topic_rows)
+    sop.jurisdiction_count = len(state_rows)
+    ranked_states = sorted(state_rows.values(), key=lambda r: (-r.total, r.label))
+    sop.by_state = ranked_states[:_MAX_STANDING_ROWS]
+    tail = ranked_states[_MAX_STANDING_ROWS:]
+    if tail:
+        sop.other_jurisdictions = StandingRow(
+            label=f"{len(tail)} other{'s' if len(tail) > 1 else ''}",
+            enacted=sum(r.enacted for r in tail),
+            active=sum(r.active for r in tail),
+        )
+    # Topics are a closed, short vocabulary (~10 instrument types), so show them all — "top 8 of 9"
+    # would hide one row for no reason.
+    sop.by_topic = sorted(topic_rows.values(), key=lambda r: (-r.total, r.label))
     sop.recent_enacted.sort(key=_recent_action_key)
     sop.recent_movement.sort(key=_recent_action_key)
     sop.recent_enacted = sop.recent_enacted[:_MAX_RECENT]
@@ -237,26 +303,29 @@ async def build_state_of_play(
 RECAP_MODEL = "claude-sonnet-4-6"
 
 _RECAP_SYSTEM = """\
-You are the correspondent for "Atlas Circular", a publication covering circular-economy and Extended \
-Producer Responsibility (EPR) legislation worldwide. The through-line: these laws are how \
-jurisdictions build an economy that uses materials and resources efficiently and lets a regenerative \
-ecosystem stand — because without that ecosystem there is no economy at all. Every EPR law and every \
-right-to-repair win is progress toward that; a veto or a dead bill is ground lost.
+You write the catch-up briefing for "Atlas Circular", which tracks circular-economy and Extended \
+Producer Responsibility (EPR) law worldwide. Your reader is a sustainability or circular-economy \
+program lead at a company. They are not reading for inspiration — they are reading to find out what \
+their company now has to DO, and which fights are still live.
 
-Write a vivid, momentum-aware recap of the RECENT ACTIVITY (roughly the last six months) for a new \
-subscriber. Be BRIEF: TWO short paragraphs, roughly 90-140 words total.
+Write TWO short paragraphs, 90-150 words total.
 
-  1. Open on what's moved lately — who's enacting or advancing the biggest laws and where the \
-momentum is — and keep sight of why these bills matter: a more efficient, regenerative economy.
-  2. Name one or two measures still in play worth watching, and close on the stakes — what's still \
-undecided and why this reader will want to follow it.
+  1. What was ENACTED in their scope: name the specific laws and say, plainly, what obligation each \
+one creates and on whom — "stands up a beverage-container EPR program", "puts battery stewardship \
+obligations onto producers". Close the paragraph by telling the reader what triggers their exposure, \
+e.g. that selling those products into those states attaches a registration or reporting obligation.
+  2. What is still MOVING and worth putting on a calendar: pick the one or two most consequential \
+active bills — prefer the largest markets and the broadest obligations — name their current stage, \
+and say what would change if they pass.
 
-Be evocative but DISCIPLINED: every factual claim — every jurisdiction, count, bill name, or status — \
-must come straight from the recent-activity roundup you are given. This is a window of recent movement, \
-so do NOT imply it is the complete history of these jurisdictions. Do NOT invent bill numbers, vote tallies, dates, \
-sponsors, or outcomes, and do not imply a bill passed or failed unless its status says so. Let the \
-framing carry through one or two sharp lines, not every sentence. Separate paragraphs with a blank \
-line. No markdown, no headings, no lists, no preamble — just the prose.\
+Rules. Every jurisdiction, bill number, status and count must come straight from the roundup you are \
+given; invent nothing — no dates, sponsors, vote tallies, fees, or deadlines that aren't in the input. \
+Never imply a bill passed or failed unless its status says so, and never state what a law requires \
+beyond what its title and status support: if a title only tells you the subject, describe the \
+subject, not the requirement. This is a window of recent movement, not a complete legislative \
+history, so don't imply it's everything. Write plainly and concretely — no throat-clearing, no \
+sustainability boilerplate, no exclamation. Separate the paragraphs with a blank line. No markdown, \
+headings, lists, or preamble — just the prose.\
 """
 
 
@@ -323,10 +392,37 @@ async def render_recap_paragraph(sub: AlertSubscription, sop: StateOfPlay) -> st
 # --- Rendering -----------------------------------------------------------------------------------
 
 
-def render_welcome_subject(sub: AlertSubscription) -> str:
-    # Deliberately NOT "Welcome to…" — the account-signup email owns that, and two near-identical
-    # "Welcome to Atlas Circular" subjects in one inbox read as a confusing duplicate.
-    return "Your Atlas Circular alerts are live — recent activity in your scope"
+def _window_label(d: date) -> str:
+    """'12 February 2026' — spelled out, since a bare numeric date is ambiguous across the
+    US/EU readership."""
+    return d.strftime("%d %B %Y").lstrip("0")
+
+
+def render_welcome_subject(sop: StateOfPlay, window_start: date) -> str:
+    """Lead with the number, not the greeting.
+
+    Deliberately NOT "Welcome to…" — the account-signup email owns that, and two near-identical
+    "Welcome to Atlas Circular" subjects in one inbox read as a duplicate. A count the reader didn't
+    have five minutes ago is a better reason to open than a salutation. Falls back to scope framing
+    when nothing was enacted, rather than boasting a zero.
+    """
+    if sop.enacted_recent:
+        law = "law" if sop.enacted_recent == 1 else "laws"
+        return (
+            f"{sop.enacted_recent} {law} enacted in your scope since {_window_label(window_start)}"
+        )
+    if sop.active_recent:
+        bill = "bill" if sop.active_recent == 1 else "bills"
+        return f"{sop.active_recent} {bill} moving in your scope — your Atlas Circular catch-up"
+    return "Your Atlas Circular alerts are live — here's the state of your scope"
+
+
+def render_welcome_preheader(sub: AlertSubscription, sop: StateOfPlay) -> str:
+    """Inbox preview: what this email is for, in the reader's own scope terms."""
+    scope = _topics_summary(sub)
+    if sop.has_recent:
+        return f"Your catch-up on {scope} — then only what moves."
+    return f"Your scope is set on {scope}. Here's what's on the books today."
 
 
 def _bill_line(b: Bill, badge: str = "") -> str:
@@ -340,6 +436,73 @@ def _bill_line(b: Bill, badge: str = "") -> str:
           <span style="color:{_INK_SOFT};">{(b.title or '')[:140]}</span>
         </td>
       </tr>"""
+
+
+def _date_cell(b: Bill) -> str:
+    """The bill's own action date. Foreign sources often carry only a year (stamped Jan 1), so those
+    render as the year alone with a marker rather than implying a precision we don't have."""
+    d = b.last_action_date or b.status_date
+    if not d:
+        return "—"
+    if b.last_action_date is None and d.month == 1 and d.day == 1:
+        return f"{d.year} <span style='color:#9ca3af;' title='year-only source'>ⓘ</span>"
+    # Built from parts rather than "%-d": the no-pad flag is a glibc extension and raises on Windows,
+    # where the preview script and tests run.
+    return f"{d.day} {d.strftime('%b %Y')}"
+
+
+def _th(label: str, align: str = "left") -> str:
+    return (
+        f'<th style="text-align:{align};padding:0 0 6px;font:11px {_SERIF};text-transform:uppercase;'
+        f'letter-spacing:0.07em;color:{_MUTED};border-bottom:1px solid {_INK};font-weight:bold;">'
+        f"{label}</th>"
+    )
+
+
+def _bill_table(bills: list[Bill], stage_col: bool) -> str:
+    """The enacted / moving tables from the catch-up.
+
+    One row per bill: identifier (linked into the app), topic, date, and — for the "moving now"
+    table — the stage it's reached. The long official title is deliberately NOT a column: it's
+    100+ characters of boilerplate that would crush the layout on mobile. It rides underneath in
+    small type instead, which keeps the table scannable and the title available.
+    """
+    head = _th("Bill") + _th("Topic") + _th("Stage" if stage_col else "Enacted", "right")
+    rows = ""
+    for b in bills:
+        third = _status_label(b.status) if stage_col else _date_cell(b)
+        sub_line = (
+            f'<div style="font:13px {_SERIF};color:{_MUTED};padding-top:2px;">'
+            f"{(b.title or '')[:110]}</div>"
+            if b.title
+            else ""
+        )
+        rows += f"""
+      <tr>
+        <td style="padding:9px 8px 9px 0;border-bottom:1px solid {_RULE};font:15px {_SERIF};
+            vertical-align:top;white-space:nowrap;">
+          <a href="{bill_url(b.id)}" style="color:{_ACCENT};text-decoration:none;font-weight:bold;">
+            {b.state} {b.bill_number or 'Bill'}</a>{sub_line}</td>
+        <td style="padding:9px 8px;border-bottom:1px solid {_RULE};font:14px {_SERIF};
+            color:{_INK_SOFT};vertical-align:top;">{topic_label(b.instrument_type)}</td>
+        <td style="padding:9px 0 9px 8px;border-bottom:1px solid {_RULE};font:14px {_SERIF};
+            color:{_INK_SOFT};vertical-align:top;text-align:right;white-space:nowrap;">{third}</td>
+      </tr>"""
+    return (
+        f'<table style="width:100%;border-collapse:collapse;margin:6px 0 0;">'
+        f"<tr>{head}</tr>{rows}\n  </table>"
+    )
+
+
+def _showing_line(shown: int, total: int, noun: str) -> str:
+    """"Showing 6 of 41." — states the truncation instead of letting the reader assume the table is
+    the whole set."""
+    if total <= shown:
+        return ""
+    return (
+        f'<p style="font:13px {_SERIF};color:{_MUTED};margin:6px 0 0;">'
+        f"Showing {shown} of {total} {noun}.</p>"
+    )
 
 
 def _standings_table(rows: list[StandingRow]) -> str:
@@ -364,16 +527,49 @@ def _section(heading: str, inner: str) -> str:
   {inner}"""
 
 
+def _founder_letter(corpus: CorpusStats) -> str:
+    """The opening letter. Every number in it is computed live (see CorpusStats) — the corpus grows
+    weekly, and a welcome email quoting a stale total is the first thing a careful reader catches.
+
+    This is the one place in the product that speaks in the first person. It earns that by answering
+    the question a new subscriber actually has — why does this exist and should I trust it — before
+    any table appears.
+    """
+    return f"""
+    <p style="font:17px {_SERIF};color:{_INK};margin:6px 0 14px;font-weight:bold;">
+      Hello, and welcome to Atlas Circular.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.7;margin:0 0 12px;">
+      I started this project because sustainability and circular-economy leaders kept telling me the
+      same thing: more time goes into tracking bills than into the actual work those bills are meant
+      to be about.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.7;margin:0 0 12px;">
+      Circular-economy law hit an inflection point in 2020. Today the Atlas covers
+      <strong>{corpus.enacted_laws:,} enacted laws</strong> across {corpus.regions} jurisdictions,
+      from Kentucky to Kenya and Australia to Austria — and it grows every week:
+      {corpus.year_bills:,} bills have already moved in {corpus.year}.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.7;margin:0 0 12px;">
+      Below is your briefing for the jurisdictions and topics you picked. One question while you're
+      here: what are you tracking by hand right now? Reply and tell me — I read every one.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.7;margin:0 0 4px;">
+      Glad you're here,<br>Kenny</p>"""
+
+
 def render_welcome_html(
     sub: AlertSubscription,
     sop: StateOfPlay,
     as_of_label: str,
     recap: str | None = None,
+    corpus: CorpusStats | None = None,
+    window: tuple[date, date] | None = None,
 ) -> str:
-    """Render the welcome email body: confirmation of scope + a windowed recent-activity roundup."""
-    greeting_name = (sub.organization or "").strip()
-    hello = f"Welcome, {greeting_name}" if greeting_name else "Welcome"
+    """Render the welcome email body: a founder letter, then a windowed recent-activity catch-up.
 
+    `corpus` and `window` are optional so existing callers (and the sample script) keep working; the
+    letter and the window dateline are simply omitted when they aren't supplied.
+    """
+    # The letter opens the email, ahead of the scope box — a new reader wants to know what this is
+    # before being shown a summary of their own filter settings.
+    letter = _founder_letter(corpus) if corpus else ""
     sections: list[str] = []
 
     # Headline scoreboard — recent movement, not all-time totals.
@@ -384,12 +580,12 @@ def render_welcome_html(
       <td style="text-align:center;padding:12px;border:1px solid {_RULE};">
         <div style="font:bold 34px {_SERIF};color:{_ACCENT};">{sop.enacted_recent}</div>
         <div style="font:12px {_SERIF};text-transform:uppercase;letter-spacing:0.08em;color:{_MUTED};">
-          enacted recently</div>
+          enacted</div>
       </td>
       <td style="text-align:center;padding:12px;border:1px solid {_RULE};border-left:0;">
         <div style="font:bold 34px {_SERIF};color:{_INK};">{sop.active_recent}</div>
         <div style="font:12px {_SERIF};text-transform:uppercase;letter-spacing:0.08em;color:{_MUTED};">
-          bills on the move</div>
+          advancing</div>
       </td>
     </tr>
   </table>""")
@@ -407,27 +603,48 @@ def render_welcome_html(
   <div style="margin:20px 0 4px;padding:2px 0 2px 18px;border-left:3px solid {_ACCENT};">
     {para_html}</div>""")
 
-    # Recent-activity breakdowns, windowed. Show jurisdiction and topic independently: a subscriber
-    # following multiple states gets the geographic split; one following multiple (or all) topics gets
-    # the topical one — the all/all subscriber sees both. Only rendered when something actually moved.
-    if sop.by_state and len(sop.by_state) > 1:
-        sections.append(_section("Recent Activity by Jurisdiction", _standings_table(sop.by_state)))
-    if sop.by_topic and len(sop.by_topic) > 1:
-        sections.append(_section("Recent Activity by Topic", _standings_table(sop.by_topic)))
-
+    # The two catch-up tables come FIRST, before the aggregate breakdowns: a reader wants the named
+    # laws that affect them, then the shape of the activity around those laws — not the other way up.
     if sop.recent_enacted:
-        rows = "".join(_bill_line(b) for b in sop.recent_enacted)
         sections.append(
-            _section("Recently Enacted",
-                     f'<table style="width:100%;border-collapse:collapse;">{rows}\n  </table>')
+            _section(
+                "Recently Enacted",
+                _bill_table(sop.recent_enacted, stage_col=False)
+                + _showing_line(len(sop.recent_enacted), sop.enacted_recent, "enacted laws"),
+            )
         )
 
     if sop.recent_movement:
-        rows = "".join(_bill_line(b) for b in sop.recent_movement)
         sections.append(
-            _section("Moving Now",
-                     f'<table style="width:100%;border-collapse:collapse;">{rows}\n  </table>')
+            _section(
+                "Moving Now",
+                _bill_table(sop.recent_movement, stage_col=True)
+                + _showing_line(len(sop.recent_movement), sop.active_recent, "advancing bills")
+                + f'<p style="font:14px {_SERIF};margin:10px 0 0;">'
+                f'<a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">'
+                f"See all {sop.active_recent} advancing bills in your scope →</a></p>",
+            )
         )
+
+    # Aggregate breakdowns. Jurisdiction and topic are shown independently: a subscriber following
+    # several states gets the geographic split, one following several topics gets the topical one,
+    # and the all/all subscriber sees both.
+    if sop.by_topic and len(sop.by_topic) > 1:
+        sections.append(
+            _section(
+                f"Where the Activity Is — all {sop.topic_count} topics in scope",
+                _standings_table(sop.by_topic),
+            )
+        )
+    if sop.by_state and len(sop.by_state) > 1:
+        # The tail is rolled into one "N others" row so the column still totals the headline number.
+        rows = sop.by_state + ([sop.other_jurisdictions] if sop.other_jurisdictions else [])
+        heading = (
+            f"By Jurisdiction — top {len(sop.by_state)} of {sop.jurisdiction_count}"
+            if sop.other_jurisdictions
+            else f"By Jurisdiction — all {sop.jurisdiction_count}"
+        )
+        sections.append(_section(heading, _standings_table(rows)))
 
     # Orientation fallback — only when nothing moved in-window (a mature scope). Clearly framed as
     # established, not fresh, so old laws are never dressed up as news.
@@ -442,21 +659,14 @@ def render_welcome_html(
 
     # Undated in-scope bills can't be windowed (year-only/undated foreign rows), so they ride along as
     # a compact aside rather than being dropped or shown as if they were recent.
-    if sop.on_the_books:
-        rows = "".join(_bill_line(b) for b in sop.on_the_books)
-        overflow = ""
-        if sop.on_the_books_total > len(sop.on_the_books):
-            overflow = (
-                f'<p style="font:13px {_SERIF};color:{_MUTED};margin:6px 0 0;">…and '
-                f'{sop.on_the_books_total - len(sop.on_the_books)} more in your scope without a dated '
-                f'action.</p>'
-            )
-        sections.append(
-            _section("Also on the Books",
-                     f'<p style="font:14px {_SERIF};color:{_MUTED};margin:2px 0 6px;">In scope, but '
-                     f'without a dated action to place on the timeline:</p>'
-                     f'<table style="width:100%;border-collapse:collapse;">{rows}\n  </table>{overflow}')
-        )
+    # A compact aside, not a table: these are mostly pre-session filings that may never move, so they
+    # shouldn't occupy the same visual weight as laws that carry an obligation.
+    if sop.on_the_books_total:
+        sections.append(f"""
+  <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:22px 0 0;">
+    Also in scope: <strong>{sop.on_the_books_total}</strong> filings with no dated action yet —
+    mostly pre-session filings that may never move.
+    <a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">Browse them →</a></p>""")
 
     if not sop.has_content:
         sections.append(f"""
@@ -475,32 +685,48 @@ def render_welcome_html(
     scope_bits.append(_jurisdictions_summary(sub))
     scope_line = " · ".join(scope_bits)
 
-    inner = f"""
-    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 4px;font-weight:bold;">{hello}.</p>
-    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 10px;">
-      You're following <strong>{_topics_summary(sub)}</strong>{mat_html} across
-      <strong>{_jurisdictions_summary(sub)}</strong>. To catch you up, here's what's actually moved in
-      that scope over the last six months (a full year for jurisdictions we can only date by the
-      year).</p>
+    inner = f"""{letter}
+    <p style="font:14px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:18px 0 16px;
+        padding:10px 14px;background:{_PAPER};border-left:3px solid {_ACCENT};">
+      <strong>Your watch list</strong> · {scope_line}</p>
     {body}
     <h2 style="font:bold 15px {_SERIF};text-transform:uppercase;letter-spacing:0.06em;color:{_INK};
         border-bottom:1px solid rgba(26,26,46,0.25);padding-bottom:6px;margin:28px 0 8px;">
       What lands in your inbox next</h2>
     <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 14px;">
-      That's the catch-up — from here it's just fresh movement. We'll email you when a new bill matching
+      That's the catch-up — from here it's only fresh movement: a new bill matching
       <strong>{_topics_summary(sub)}</strong>{mat_html} in
-      <strong>{_jurisdictions_summary(sub)}</strong> is tracked, or when one changes status — only for
-      genuinely recent action, never a months-old event dressed up as news. Explore the full picture
-      any time at <a href="{_DASHBOARD_URL}" style="color:{_ACCENT};">the dashboard</a>.</p>"""
+      <strong>{_jurisdictions_summary(sub)}</strong>, or a status change on one you're already
+      tracking. Only genuinely recent action, never a months-old event dressed up as news.
+      Those arrive from <strong>alerts@atlascircular.com</strong> — worth adding to your contacts so
+      they don't land in spam.</p>
+    <p style="margin:16px 0 0;">{cta_button(_DASHBOARD_URL, "Open your dashboard →")}</p>
+    <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
+      For the analysis behind the data — why these laws are landing now, and what they mean —
+      <a href="{substack_url('welcome')}" style="color:{_ACCENT};">read the Atlas on Substack →</a></p>
+    <p style="font:13px {_SERIF};color:{_MUTED};line-height:1.6;margin:20px 0 0;
+        border-top:1px solid {_RULE};padding-top:12px;">
+      A note on dates: where a jurisdiction publishes only a year, we widen the window to the full
+      year and mark it ⓘ in the tables.</p>"""
     colophon = (
         "You're receiving this because you just subscribed to Atlas Circular updates.<br>"
-        f'<a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">'
-        "Unsubscribe</a> · or reply to this email."
+        f'<a href="{_DASHBOARD_URL}" style="color:{_MUTED};text-decoration:underline;">Adjust your '
+        "scope</a> · or just reply to this email."
     )
+    window_part = ""
+    if window:
+        window_part = f"Catch-up window · {_window_label(window[0])} – {_window_label(window[1])}"
+    else:
+        window_part = f"Recent activity as of {as_of_label}"
     return render_shell(
         inner,
-        dateline=f"Recent activity as of {as_of_label} · {scope_line}",
+        kicker=f"STATE OF PLAY · {as_of_label.upper()}",
+        preheader=render_welcome_preheader(sub, sop),
+        dateline=window_part,
         colophon=colophon,
+        # The unsubscribe button lives in the footer actions now, not buried in the colophon.
+        unsubscribe_url=unsubscribe_url(sub.id),
+        tagline=None,
         body_padding="14px 28px 24px",
     )
 
@@ -533,15 +759,29 @@ async def send_welcome_email(db: AsyncSession, sub: AlertSubscription) -> bool:
         from app.alerts.sendgrid_sender import SendGridSender
 
         now = (await db.execute(select(func.now()))).scalar_one()
-        sop = await build_state_of_play(db, sub, today=now.date())
+        today = now.date()
+        sop = await build_state_of_play(db, sub, today=today)
+        corpus = await build_corpus_stats(db, today=today)
         recap = await render_recap_paragraph(sub, sop)
-        html = render_welcome_html(sub, sop, _as_of_label(now), recap=recap)
-        subject = render_welcome_subject(sub)
+        # The window the catch-up actually covers, stated rather than implied. Uses the 6-month
+        # movement window; the 12-month year-only widening is footnoted in the body.
+        window = (today - timedelta(days=RECENT_WINDOW_DAYS), today)
+        html = render_welcome_html(
+            sub, sop, _as_of_label(now), recap=recap, corpus=corpus, window=window
+        )
+        subject = render_welcome_subject(sop, window[0])
         # Pass the List-Unsubscribe header (RFC 8058 one-click), matching the body's link — the
         # roundup is a bulk send and Gmail/Outlook penalise bulk mail without it. Same as the digest
         # and new-bill cycles.
         ok = await SendGridSender().send_html(
-            sub.email, subject, html, list_unsubscribe_url=unsubscribe_url(sub.id)
+            sub.email,
+            subject,
+            html,
+            list_unsubscribe_url=unsubscribe_url(sub.id),
+            # The welcome is the one email written in a person's voice, so it comes from hello@
+            # rather than alerts@ — and its closing tells the reader the automated cycles will
+            # arrive from alerts@ instead. Replies still route to sendgrid_reply_to.
+            from_email=settings.sendgrid_hello_email,
         )
         log.info(
             "welcome_email_sent",

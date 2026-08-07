@@ -34,6 +34,16 @@ def bill_url(bill_id: int) -> str:
     return f"{DASHBOARD_URL}/?bill={bill_id}"
 
 
+# The publication side of Atlas Circular — analysis and context that doesn't belong in a bill record.
+# External (Substack), so it's tagged like any other outbound link but can't be UTM-read by our own
+# GA4; Substack reports its own referrers.
+SUBSTACK_URL = "https://atlascircular.substack.com"
+
+
+def substack_url(campaign: str = "welcome") -> str:
+    return with_utm(SUBSTACK_URL, campaign)
+
+
 def subscribe_url(campaign: str = "forwarded", medium: str = "email") -> str:
     """Where a forwarded-to colleague goes to start their own alerts. Tagged separately from the
     body links so the "someone forwarded this" loop is measurable on its own."""

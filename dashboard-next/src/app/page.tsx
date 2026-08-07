@@ -402,10 +402,18 @@ export default function HomePage() {
         />
       )}
 
+      {/* Compact desktop masthead: the globe drops out of the full-width band and into a fixed 380px
+          right rail (≈ the width it gets on a phone, so the same proportions), with the search bar and
+          facets taking the left column beside it. Below lg the two stack in DOM order — globe first,
+          then the bar — exactly as before. Explicit col/row placement (rather than reordering the DOM)
+          keeps the mobile source order intact. When a question is active the globe is gone, so the
+          grid collapses and the research surface gets the full width. */}
+      <div className={`space-y-8 lg:space-y-0 ${research.active ? '' : 'lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8 lg:items-start'}`}>
+
       {/* Map/globe — moved up to sit right below the ticker. Hidden while a question is active. The
           Regions selector that drives it lives in the Explore facets just below. */}
       {!research.active && (
-        <section>
+        <section className="lg:col-start-2 lg:row-start-1">
           {soleRegion && (
             <div className="mb-2 flex items-center gap-1.5 text-sm text-text-muted">
               <button onClick={() => setRegions([])} className="text-green-accent hover:underline">← Back to the globe</button>
@@ -454,7 +462,7 @@ export default function HomePage() {
 
       {/* Explore: one adaptive search/ask bar + facets. The "Explore · N bills" title + Export live at
           the top of the page now; this section is just the bar and its controls. */}
-      <section>
+      <section className="lg:col-start-1 lg:row-start-1">
         {/* The search box leads — it sits directly under the globe as the page's primary action, with the
             one-line explainer beneath it. Enter submits a question only when AI Analysis is on
             (submitQuery guards it). */}
@@ -500,7 +508,9 @@ export default function HomePage() {
               {research.busy ? 'Thinking…' : research.hasAsked ? 'Ask follow-up' : 'Ask →'}
             </button>
           </div>
-          <div className="w-full sm:w-auto sm:flex-1 min-w-0">
+          {/* On lg the facets sit in the narrow left column beside the globe, so they take their own
+              full-width line under the toggle+Ask row rather than sharing it. */}
+          <div className="w-full min-w-0 sm:w-auto sm:flex-1 lg:w-full lg:flex-none">
             <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
           </div>
         </div>
@@ -535,6 +545,7 @@ export default function HomePage() {
         )}
 
       </section>
+      </div>
 
       {/* When the reader asks a question, the grounded answer + its cited evidence take over from the
           browse view (map + full table); "back to browsing" returns here. Otherwise: Explorer as usual. */}

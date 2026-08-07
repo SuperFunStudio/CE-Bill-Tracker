@@ -501,9 +501,11 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
           )}
         </div>
 
-        {/* Secondary controls — revealed on demand. */}
+        {/* Secondary controls — revealed on demand. Three columns max: on desktop this panel lives in
+            the compact left rail beside the globe, where 4-5 columns squeeze the longer labels
+            ("Materials & Products") to nothing. */}
         {showMore && (
-          <div className={`grid grid-cols-2 gap-3 pt-1 ${showResin ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
+          <div className="grid grid-cols-2 gap-3 pt-1 md:grid-cols-3">
             {secondaryFields}
           </div>
         )}

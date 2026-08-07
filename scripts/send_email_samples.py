@@ -262,8 +262,26 @@ def build_registry():
             recent_enacted=enacted,
             recent_movement=active,
         )
-        html = welcome_email.render_welcome_html(sub, sop, "July 2026", recap=None)
-        return welcome_email.render_welcome_subject(sub), html
+        # Mirrors the live prod aggregate at the time of writing, so the sample reads true.
+        corpus = welcome_email.CorpusStats(
+            total_bills=2544, enacted_laws=1178, regions=37, year_bills=368, year=2026
+        )
+        # A stand-in for the LLM catch-up paragraph, written the way the retuned prompt asks for it:
+        # named laws, the obligation each creates, and what's worth a calendar entry.
+        recap = (
+            "Vermont's H-915 stands up a beverage-container EPR program, and Oregon HB-4144 puts "
+            "battery stewardship obligations onto producers. If you place either of those product "
+            "types on shelves in those states, a registration or reporting obligation now attaches "
+            "to you.\n\n"
+            "Two more are worth a calendar entry. California SB-1180 and New York S-1464 both "
+            "target packaging producer responsibility in the two largest US consumer markets, and "
+            "both are still moving."
+        )
+        window = (date(2026, 2, 1), date(2026, 8, 1))
+        html = welcome_email.render_welcome_html(
+            sub, sop, "August 2026", recap=recap, corpus=corpus, window=window
+        )
+        return welcome_email.render_welcome_subject(sop, window[0]), html
 
     reg.append(("subscription_welcome", "html", _subscription_welcome))
 

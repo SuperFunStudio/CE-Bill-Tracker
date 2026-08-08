@@ -10,7 +10,7 @@ using COURTLISTENER_WEBHOOK_SECRET (if configured).
 """
 import hashlib
 import hmac
-from datetime import date
+from datetime import date, datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -28,6 +28,7 @@ from app.ingestion.courtlistener import (
     infer_plaintiff_type,
     score_preemption_risk,
 )
+from app.ingestion.litigation_relevance import screen_docket
 from app.alerts.applinks import litigation_case_url, subscribe_url
 from app.alerts.litigation_alerts import (
     render_litigation_body,
@@ -75,6 +76,15 @@ async def courtlistener_webhook(
     if not _verify_signature(body, signature):
         log.warning("cl_webhook_invalid_signature")
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
+    # Honour the same kill switch the scheduled jobs honour. This endpoint is push-driven: standing
+    # docket alerts registered with CourtListener keep delivering long after ENABLE_COURTLISTENER is
+    # turned off, so without this check "disabling CourtListener" silenced the polling half of the
+    # integration while the half that actually reaches subscribers' inboxes kept running. Ack rather
+    # than error so CourtListener doesn't retry a delivery we are intentionally dropping.
+    if not settings.enable_courtlistener:
+        log.info("cl_webhook_skipped", reason="enable_courtlistener=false")
+        return {"status": "disabled"}
 
     try:
         payload = await request.json()
@@ -234,6 +244,22 @@ async def _process_search_alert(results: list[dict], db: AsyncSession) -> None:
                 cl_url = f"https://www.courtlistener.com{cl_path}" if cl_path else None
 
                 entries = await cl.get_docket_entries(docket_id)
+
+                # Same gate the polling path uses, for the same reason: a standing search alert
+                # fires on a keyword hit anywhere in a filed PDF, which is how a DOJ constitutional
+                # suit became an "EPR Litigation Update".
+                verdict = await screen_docket(
+                    cl, docket=docket, parties=parties, entries=entries, search_result=result
+                )
+                if not verdict.relevant and not verdict.needs_review:
+                    log.info(
+                        "cl_webhook_case_out_of_scope",
+                        docket_id=docket_id,
+                        case_name=case_name,
+                        reason=verdict.reason,
+                    )
+                    continue
+
                 classified_events = []
                 for entry in entries[:10]:
                     cls = await classify_litigation_event(entry, case_name=case_name, court_id=court_id)
@@ -265,6 +291,10 @@ async def _process_search_alert(results: list[dict], db: AsyncSession) -> None:
                     preemption_risk=preemption_risk,
                     cl_url=cl_url,
                     last_activity_date=date_filed,
+                    ce_relevant=verdict.relevant,
+                    relevance_reason=verdict.reason,
+                    relevance_source=verdict.source,
+                    relevance_checked_at=datetime.now(timezone.utc),
                 )
                 db.add(new_case)
                 await db.flush()
@@ -282,7 +312,12 @@ async def _process_search_alert(results: list[dict], db: AsyncSession) -> None:
                     )
                     db.add(event)
 
-                # Create docket alert for ongoing monitoring
+                # Create docket alert for ongoing monitoring — only for cases we actually track, so
+                # an out-of-scope docket doesn't keep pushing itself back at us indefinitely.
+                if not verdict.relevant:
+                    await db.commit()
+                    log.info("cl_webhook_case_held_for_review", docket_id=docket_id)
+                    continue
                 try:
                     alert = await cl.create_docket_alert(docket_id)
                     db.add(CLAlertSubscription(
@@ -339,6 +374,12 @@ async def _dispatch_litigation_alerts(db: AsyncSession) -> None:
         )
         case = case_result.scalar_one_or_none()
         if not case:
+            continue
+        # The last line of defence, and the one that matters: no subject line reading "EPR
+        # Litigation Update" goes out for a case the relevance gate hasn't affirmatively cleared.
+        # NULL (never screened, i.e. pre-migration-046 rows) is not clearance.
+        if case.ce_relevant is not True:
+            log.info("cl_alert_suppressed_out_of_scope", case_id=case.id, case_name=case.case_name)
             continue
 
         # Shared renderer — plain prose (no markdown; the same string goes to Slack AND to an HTML

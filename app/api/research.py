@@ -504,7 +504,7 @@ def _lit_subquery():
             func.count(LitigationCase.id).label("case_count"),
             func.max(LitigationCase.preemption_risk).label("max_risk"),
         )
-        .where(LitigationCase.case_status == "active")
+        .where(LitigationCase.case_status == "active", LitigationCase.ce_relevant.is_(True))
         .group_by(LitigationCase.related_law_id)
         .subquery()
     )

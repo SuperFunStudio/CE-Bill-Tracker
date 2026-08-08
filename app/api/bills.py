@@ -50,7 +50,10 @@ def _lit_subquery():
             func.count(LitigationCase.id).label("case_count"),
             func.max(LitigationCase.preemption_risk).label("max_risk"),
         )
-        .where(LitigationCase.case_status == "active")
+        # Screened-relevant only. A bill's litigation badge is a claim that its law is under
+        # challenge; before the relevance gate, a bill matched to an unrelated docket carried that
+        # badge — and its preemption risk — on no evidence at all.
+        .where(LitigationCase.case_status == "active", LitigationCase.ce_relevant.is_(True))
         .group_by(LitigationCase.related_law_id)
         .subquery()
     )
@@ -644,7 +647,7 @@ async def get_bill_litigation_cases(bill_id: int, db: AsyncSession = Depends(get
     q = (
         select(LitigationCase, func.coalesce(event_count_sub.c.event_count, 0).label("event_count"))
         .outerjoin(event_count_sub, LitigationCase.id == event_count_sub.c.case_id)
-        .where(LitigationCase.related_law_id == bill_id)
+        .where(LitigationCase.related_law_id == bill_id, LitigationCase.ce_relevant.is_(True))
         .order_by(LitigationCase.preemption_risk.desc().nullslast())
     )
     rows = (await db.execute(q)).all()

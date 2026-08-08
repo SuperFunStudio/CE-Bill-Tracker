@@ -16,13 +16,13 @@ export default function PricingPage() {
   const { isPro, user, openAuth, getToken, entitlement } = useAuth();
   const plan = entitlement?.plan ?? 'free';
   const [period, setPeriod] = useState<BillingPeriod>('annual');
-  const [modal, setModal] = useState<{ plan: PlanInterest; label: string; heading?: string } | null>(null);
+  const [modal, setModal] = useState<{ plan: PlanInterest; label: string; heading?: string; source?: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // which tier's CTA is mid-flight
   const [error, setError] = useState<string | null>(null);
 
-  function openPlan(p: PlanInterest, label: string, heading?: string) {
+  function openPlan(p: PlanInterest, label: string, heading?: string, source?: string) {
     track('pricing_cta', { plan: p, plan_label: label });
-    setModal({ plan: p, label, heading });
+    setModal({ plan: p, label, heading, source });
   }
 
   // Self-serve checkout for pro/research — both bill monthly or annual, so the period toggle applies
@@ -214,12 +214,6 @@ export default function PricingPage() {
               <button onClick={() => startPlan('pro', 'Professionals')} disabled={busy === 'pro'} className={primaryBtn}>
                 {busy === 'pro' ? 'Starting…' : 'Start 90-day trial →'}
               </button>
-              <button
-                onClick={() => openPlan('bespoke', 'a walkthrough', 'Book a walkthrough')}
-                className="w-full rounded-lg border border-green-accent/50 px-4 py-2 text-sm font-medium text-green-accent transition-colors hover:bg-green-dark/30"
-              >
-                Or book a walkthrough →
-              </button>
               <p className="text-meta text-text-muted text-center">No card required</p>
             </div>
           )}
@@ -248,6 +242,26 @@ export default function PricingPage() {
 
       {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
+      {/* Guided-tour band — deliberately under ALL four tiers, not inside the Professional card. The
+          walkthrough is the road into Enterprise as much as Pro: an Enterprise-shaped visitor sees
+          "Start a conversation" with no sense of what that conversation is, and this answers it.
+          Copy mirrors the homepage band (app/page.tsx) — the promise is what sells it. */}
+      <section className="rounded-xl border border-green-accent/30 bg-green-hero px-5 py-4 sm:px-6 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="max-w-2xl">
+          <h3 className="font-serif text-lg text-text-primary">Not sure which tier fits?</h3>
+          <p className="text-text-secondary text-sm mt-0.5 leading-relaxed">
+            Book a 15-minute walkthrough — we&apos;ll map the tracker to the materials and
+            jurisdictions your team actually reports on, and point you at the right membership.
+          </p>
+        </div>
+        <button
+          onClick={() => openPlan('bespoke', 'a walkthrough', 'Book a walkthrough', 'pricing_walkthrough')}
+          className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-semibold px-5 py-2.5 hover:opacity-90 transition-opacity"
+        >
+          Book a walkthrough →
+        </button>
+      </section>
+
       {/* Developers strip — its own section below the grid (different buyer, usage-based metric) */}
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="max-w-2xl">
@@ -272,7 +286,7 @@ export default function PricingPage() {
           plan={modal.plan}
           planLabel={modal.label}
           heading={modal.heading}
-          source="pricing"
+          source={modal.source ?? 'pricing'}
           onClose={() => setModal(null)}
         />
       )}

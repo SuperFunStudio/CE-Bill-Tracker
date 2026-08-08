@@ -108,17 +108,21 @@ async def _verdict_from_metadata(row: dict):
     return await assess_relevance(_metadata_evidence(row), case_name=row["case_name"] or "")
 
 
-async def _verdict_from_fetch(cl, row: dict):
+async def _verdict_from_fetch(cl, row: dict, delay: float = 3.0):
     from app.ingestion.litigation_relevance import RelevanceVerdict, screen_docket
 
+    # Four CourtListener calls per case (docket, parties, entries, document). Across a whole backlog
+    # that is enough to trip the rolling rate limit, and a 429 here doesn't just slow the run — it
+    # turns a rescuable true positive into an unreadable one. Hence the deliberate spacing; the retry
+    # decorator is the backstop, not the plan.
     docket_id = row["courtlistener_id"]
     try:
         docket = await cl.get_docket_details(docket_id)
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(delay)
         parties = await cl.get_parties(docket_id)
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(delay)
         entries = await cl.get_docket_entries(docket_id)
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(delay)
     except Exception as e:  # noqa: BLE001
         return RelevanceVerdict(
             relevant=False,
@@ -140,6 +144,12 @@ async def main() -> None:
         help="Also write ce_relevant=false for cases the gate flagged as uncertain.",
     )
     ap.add_argument("--only-unscreened", action="store_true", help="Skip rows already screened.")
+    ap.add_argument(
+        "--delay",
+        type=float,
+        default=3.0,
+        help="Seconds between CourtListener calls in fetch mode (default 3.0).",
+    )
     args = ap.parse_args()
 
     if not args.dsn:
@@ -173,7 +183,7 @@ async def main() -> None:
         try:
             for row in cases:
                 verdict = (
-                    await _verdict_from_fetch(cl_ctx, row)
+                    await _verdict_from_fetch(cl_ctx, row, args.delay)
                     if args.mode == "fetch"
                     else await _verdict_from_metadata(row)
                 )
@@ -240,12 +250,17 @@ async def main() -> None:
                         "id": row["id"],
                     },
                 )
+                # Commit per case, not once at the end. In fetch mode this run is ~35 minutes of
+                # rate-limited API calls held open over a Cloud SQL proxy; a single dropped
+                # connection at minute 30 must not discard every verdict earned before it. Each
+                # case's verdict is independent, so there is no cross-row transaction to preserve.
+                await session.commit()
         finally:
             if cl_ctx is not None:
                 await cl_ctx.__aexit__()
 
         if args.commit:
-            await session.commit()
+            await session.commit()  # no-op unless the last row's write is still pending
 
     print(f"\nkept {len(kept)} · dropped {len(dropped)} · uncertain {len(uncertain)}")
     if uncertain and not args.commit_uncertain:

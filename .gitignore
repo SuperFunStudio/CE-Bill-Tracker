@@ -23,3 +23,6 @@ tmp/
 
 # transient deadlines batch job state
 .batch_state/
+
+# Local prod DSN scratch (Cloud SQL proxy runs) — contains credentials, never commit
+.prod_dsn.tmp

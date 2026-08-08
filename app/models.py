@@ -803,6 +803,17 @@ class LitigationCase(Base):
     preemption_risk: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
     cl_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_activity_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Relevance verdict from app/ingestion/litigation_relevance.py (migration 046). NULL = never
+    # screened; False = ingested but out of scope (kept for audit, hidden from the API, never
+    # alerted on). CourtListener's search matches the full text of filed PDFs, so a docket landing
+    # in this table is evidence of a keyword hit, not of subject-matter relevance — this column is
+    # what separates the two.
+    ce_relevant: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    relevance_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    relevance_source: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    relevance_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -818,6 +829,7 @@ class LitigationCase(Base):
         Index("idx_litigation_cases_state", "related_state"),
         Index("idx_litigation_cases_law_id", "related_law_id"),
         Index("idx_litigation_cases_region", "region"),
+        Index("idx_litigation_cases_ce_relevant", "ce_relevant"),
     )
 
 

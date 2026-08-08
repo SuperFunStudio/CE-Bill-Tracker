@@ -24,14 +24,37 @@ log = structlog.get_logger()
 
 SONNET_MODEL = "claude-sonnet-4-6"
 
-# EPR seed queries for initial case discovery (Section 10 of spec)
+# Seed queries for case discovery.
+#
+# CourtListener's /search/ is Elasticsearch, and two of its behaviours used to poison this list:
+#
+#   1. **OR binds tighter than the surrounding terms.** `"PACK Act" OR "Packaging Act" preemption`
+#      parses as ("PACK Act") OR ("Packaging Act" AND preemption) — so a docket that merely says
+#      "PACK Act" anywhere qualifies. That one query returned 612 dockets, among them GLP-1 products
+#      liability and Irby v. Girard Police Department, and every one of them was ingested and alerted
+#      on as "EPR Litigation". Same defect in the e-waste query, whose lone `"e-waste"` arm pulled in
+#      patent suits like BelAir Electronics v. Google.
+#   2. **type=r searches the full text of filed PDFs**, not just docket metadata. That is what makes
+#      this source work at all (the true positives carry no EPR signal in their case name, cause, or
+#      nature of suit — NAWD v. Ryan is docketed as "42:1983 Civil Rights Act"), but it also means a
+#      single stray token inside a 300-page exhibit is a match.
+#
+# So: every arm is a quoted multi-word phrase, every OR group is parenthesized, and no bare token is
+# left to float. Breadth is recovered downstream by the relevance gate
+# (app/ingestion/litigation_relevance.py), which reads the complaint itself — a filter that reads the
+# evidence is safe to widen; a query that matches on one word is not.
 EPR_LITIGATION_QUERIES = [
-    ("EPR packaging litigation", '"extended producer responsibility" packaging'),
-    ("EPR commerce clause", '"producer responsibility" "commerce clause"'),
-    ("PACK Act preemption", '"PACK Act" OR "Packaging Act" preemption'),
-    ("e-waste EPR challenge", '"e-waste" OR "electronics" "EPR" challenge'),
-    ("battery EPR challenge", '"battery" "extended producer responsibility"'),
-    ("recycling dormant commerce", '"dormant commerce clause" "recycling"'),
+    ("EPR packaging litigation", '"extended producer responsibility" AND "packaging"'),
+    ("EPR commerce clause", '"producer responsibility" AND "commerce clause"'),
+    (
+        "producer responsibility program challenge",
+        '("extended producer responsibility" OR "producer responsibility organization" '
+        'OR "product stewardship program")',
+    ),
+    ("e-waste EPR challenge", '("electronic waste recycling" OR "e-waste recycling") AND "producer"'),
+    ("battery EPR challenge", '"battery" AND "extended producer responsibility"'),
+    ("recycling dormant commerce", '"dormant commerce clause" AND "recycling"'),
+    ("packaging fee challenge", '("packaging" OR "single-use") AND "producer responsibility"'),
 ]
 
 COURT_NAMES = {
@@ -132,6 +155,25 @@ class CourtListenerClient:
         resp = await self._client.get("/docket-entries/", params=params)
         resp.raise_for_status()
         return resp.json().get("results", [])
+
+    @retry_with_backoff(max_attempts=3, base_delay=2.0)
+    async def get_document_text(self, document_id: int, max_chars: int = 20000) -> str:
+        """Plain text of one RECAP document (the OCR'd/extracted PDF).
+
+        This is the only place the subject matter of a case is actually written down. A docket's
+        metadata says "42:1983 Civil Rights Act" whether the suit is about packaging fees or police
+        conduct; the complaint says which. The relevance gate reads this, so an empty string here
+        means "no evidence", not "not relevant" — callers fall back to metadata and stay conservative.
+
+        Truncated to max_chars: a complaint states what it is about in its opening pages, and the
+        classifier is charged per token.
+        """
+        self._check_client()
+        resp = await self._client.get(
+            f"/recap-documents/{document_id}/", params={"fields": "id,plain_text"}
+        )
+        resp.raise_for_status()
+        return (resp.json().get("plain_text") or "")[:max_chars]
 
     @retry_with_backoff(max_attempts=3, base_delay=2.0)
     async def get_parties(self, docket_id: int) -> list[dict]:

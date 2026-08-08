@@ -21,6 +21,9 @@ async def _get_litigation_context(db: AsyncSession, bill_id: int) -> str:
         select(LitigationCase).where(
             LitigationCase.related_law_id == bill_id,
             LitigationCase.case_status.in_(["active", "injunction_granted", "appealed"]),
+            # Only cases the relevance gate cleared — a bill alert must not tell a compliance team
+            # their law is being litigated on the strength of an unrelated docket.
+            LitigationCase.ce_relevant.is_(True),
         )
     )
     cases = result.scalars().all()

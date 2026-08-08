@@ -237,7 +237,9 @@ async def run_bill_matching_pass(db: AsyncSession) -> dict:
     """
     from app.models import LitigationCase
 
-    result = await db.execute(select(LitigationCase))
+    # Screened-relevant cases only. Matching an out-of-scope docket to a bill is not harmless: the
+    # link is what sets bills.litigation_risk and puts a litigation badge on the bill's page.
+    result = await db.execute(select(LitigationCase).where(LitigationCase.ce_relevant.is_(True)))
     cases = result.scalars().all()
 
     stats = {"matched": 0, "already_linked": 0, "no_state": 0, "no_match": 0, "errors": 0}

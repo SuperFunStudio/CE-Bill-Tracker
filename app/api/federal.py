@@ -69,9 +69,15 @@ async def list_litigation_cases(
     state: str | None = None,
     min_risk: int = Query(default=0, ge=0, le=100),
     limit: int = Query(default=50, le=200),
+    include_out_of_scope: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
-    """List litigation cases tracked from CourtListener."""
+    """List litigation cases tracked from CourtListener.
+
+    Only cases the relevance gate has cleared (`ce_relevant IS TRUE`) are public. Rows it rejected —
+    and rows that predate it, which are the same 33-of-34 unrelated dockets that reached subscribers'
+    inboxes — are kept for audit but hidden. `include_out_of_scope` is for reviewing that backlog.
+    """
     # Subquery: count events per case
     event_count_sub = (
         select(
@@ -88,6 +94,8 @@ async def list_litigation_cases(
         .order_by(LitigationCase.preemption_risk.desc(), LitigationCase.last_activity_date.desc())
         .limit(limit)
     )
+    if not include_out_of_scope:
+        q = q.where(LitigationCase.ce_relevant.is_(True))
     if status:
         q = q.where(LitigationCase.case_status == status)
     if state:
@@ -119,6 +127,11 @@ async def get_litigation_case(
     )
     case = result.scalar_one_or_none()
     if not case:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Litigation case not found")
+    if case.ce_relevant is not True:
+        # 404, not 403: an out-of-scope docket isn't a restricted resource, it's one that should
+        # never have had a page. Alert emails linked here by id, so the URLs are already in inboxes.
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Litigation case not found")
 

@@ -18,10 +18,10 @@ matching movement. render_digest_html() turns one into an email body. The schedu
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.alerts.applinks import bill_url
@@ -206,10 +206,31 @@ class DigestContent:
         )
 
 
+def newly_tracked_activity_floor(since: datetime, now: datetime | None = None) -> date:
+    """Oldest legislative action a *newly tracked* bill may carry and still count as news.
+
+    Three digest windows back: lenient enough that a bill introduced weeks before we first saw it
+    still makes the roundup, strict enough that a historical backfill (2023 and 2025 laws arriving
+    in bulk) cannot present itself as this month's activity.
+    """
+    now = now or datetime.now(since.tzinfo)
+    return (since - (now - since) * 2).date()
+
+
 async def _load_candidates(
     db: AsyncSession, since: datetime
 ) -> tuple[list[StatusChangeItem], list[Bill], list[FederalAction]]:
-    """Load every candidate item in the window once, so per-subscriber filtering is in-memory."""
+    """Load every candidate item in the window once, so per-subscriber filtering is in-memory.
+
+    Every section is bounded by BOTH when we noticed an item and when it actually happened. The
+    detection timestamps (`BillChange.detected_at`, `Bill.created_at`) are what make an item *new to
+    us*; the legislative dates are what make it *news*. Filtering on detection alone is how a
+    subscriber's monthly digest reported the enactment of Illinois HB-3098 (CONSUMER ELECTRONICS
+    RECYCLING) as this month's action — the law was signed 2025-08-15 and merely re-ingested later.
+    Any backfill of historical law would otherwise republish itself as current movement.
+
+    Federal actions were always correct here: they filter on `published_date`, a real-world date.
+    """
     # Status changes: most recent first, joined to their bill.
     change_rows = (
         await db.execute(
@@ -218,6 +239,10 @@ async def _load_candidates(
             .where(
                 BillChange.change_type == "status_change",
                 BillChange.detected_at >= since,
+                # The legislature acted inside the window too — not just our crawler. NULL dates
+                # are excluded rather than trusted: an undated status flip cannot be shown to be
+                # current, and "we can't date it" is not a reason to headline it.
+                func.coalesce(Bill.last_action_date, Bill.status_date) >= since.date(),
             )
             .order_by(BillChange.detected_at.desc())
         )
@@ -232,11 +257,21 @@ async def _load_candidates(
         for c, bill in change_rows
     ]
 
+    # "Newly tracked" legitimately means new to us, so this section keeps its ingestion-time filter —
+    # but a bill is only news if the legislature touched it recently too. The grace window is wider
+    # than the digest's own (a bill introduced six weeks ago and ingested today is still worth
+    # surfacing in a monthly roundup); what it excludes is the historical backfill — laws enacted in
+    # 2023 or 2025 arriving in bulk and reading as this month's activity.
+    stale_before = newly_tracked_activity_floor(since)
     new_bills = list(
         (
             await db.execute(
                 select(Bill)
-                .where(Bill.created_at >= since, Bill.ce_relevant.is_(True))
+                .where(
+                    Bill.created_at >= since,
+                    Bill.ce_relevant.is_(True),
+                    func.coalesce(Bill.last_action_date, Bill.status_date) >= stale_before,
+                )
                 .order_by(Bill.created_at.desc())
             )
         )
@@ -504,6 +539,11 @@ def render_digest_html(
         rows = ""
         for item in content.status_changes:
             b = item.bill
+            # Date the movement in the reader's own terms. The digest is a periodic roundup, so
+            # "Enacted" with no date reads as "this month" — which is precisely the claim that was
+            # wrong when a 2025 enactment was re-ingested into a 2026 digest.
+            acted = b.last_action_date or b.status_date
+            when = f" · {acted.strftime('%d %b %Y').lstrip('0')}" if acted else ""
             stance = ""
             if b.policy_stance == "advances":
                 stance = f' <span style="color:{_ACCENT};">▲ advances</span>'
@@ -515,7 +555,7 @@ def render_digest_html(
           {_byline(b, stance)}<br>
           <span style="color:{_INK_SOFT};">{(b.title or '')[:140]}</span><br>
           <span style="color:{_MUTED};font-size:13px;">
-            {_status_label(item.old_status)} → <strong>{_status_label(item.new_status)}</strong></span>
+            {_status_label(item.old_status)} → <strong>{_status_label(item.new_status)}</strong>{when}</span>
         </td>
       </tr>"""
         sections.append(_section("Bill Status Changes", rows, content.status_overflow))

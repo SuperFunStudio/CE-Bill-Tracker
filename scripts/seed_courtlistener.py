@@ -21,7 +21,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import structlog
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 log = structlog.get_logger()
 
@@ -51,6 +51,7 @@ async def seed():
         EPR_LITIGATION_QUERIES,
     )
     from app.ingestion.bill_matcher import match_case_to_bill
+    from app.ingestion.litigation_relevance import screen_docket
     from sqlalchemy import select
 
     import asyncio as _asyncio
@@ -135,6 +136,23 @@ async def seed():
                         entries = await cl.get_docket_entries(docket_id)
                         await _asyncio.sleep(1.0)
 
+                        # Relevance gate — a search hit is not a circular-economy case. Seeding
+                        # skips clean rejections entirely (they are not worth a row); uncertain
+                        # verdicts are stored with ce_relevant=false so they can be reviewed.
+                        verdict = await screen_docket(
+                            cl, docket=docket, parties=parties, entries=entries, search_result=result
+                        )
+                        await _asyncio.sleep(1.0)
+                        if not verdict.relevant and not verdict.needs_review:
+                            log.info(
+                                "seed_case_out_of_scope",
+                                case_name=case_name,
+                                docket_id=docket_id,
+                                reason=verdict.reason,
+                            )
+                            skipped += 1
+                            continue
+
                         # Classify entries and build events
                         classified_events = []
                         for entry in entries[:20]:  # Cap at 20 initial entries
@@ -189,6 +207,10 @@ async def seed():
                             preemption_risk=preemption_risk,
                             cl_url=cl_url,
                             last_activity_date=date_filed,
+                            ce_relevant=verdict.relevant,
+                            relevance_reason=verdict.reason,
+                            relevance_source=verdict.source,
+                            relevance_checked_at=datetime.now(timezone.utc),
                         )
                         db.add(litigation_case)
                         await db.flush()  # Get the auto-generated ID

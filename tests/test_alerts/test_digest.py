@@ -1,8 +1,12 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from app.alerts.digest import (
+    DigestContent,
+    StatusChangeItem,
     _merge_subs_by_email,
+    newly_tracked_activity_floor,
+    render_digest_html,
     subscription_matches_bill,
     subscription_matches_federal,
 )
@@ -134,3 +138,55 @@ class TestMergeSubsByEmail:
 
     def test_skips_emailless_subs(self):
         assert _merge_subs_by_email([_sub(email=None)]) == []
+
+
+class TestEventDatedWindow:
+    """A subscriber's monthly digest reported Illinois HB-3098 (CONSUMER ELECTRONICS RECYCLING) as
+    an action of that month. The law was signed 2025-08-15; only our ingestion of it was recent.
+
+    Both bill sections filtered purely on ingestion timestamps — `BillChange.detected_at` and
+    `Bill.created_at` — so any re-ingest or historical backfill republished old law as current
+    movement. The SQL now also bounds the legislative date; these tests pin the boundary the query
+    uses and the dateline the reader sees.
+    """
+
+    def test_newly_tracked_floor_is_three_windows_back(self):
+        """Lenient enough for a bill introduced weeks before we first saw it; strict enough that a
+        2025 enactment ingested in 2026 cannot present itself as this month's news."""
+        since = datetime(2026, 7, 8, tzinfo=timezone.utc)
+        now = datetime(2026, 8, 7, tzinfo=timezone.utc)  # 30-day window
+        floor = newly_tracked_activity_floor(since, now)
+        assert floor == date(2026, 5, 9)
+        assert date(2025, 8, 15) < floor  # IL HB-3098's real enactment date, excluded
+
+    def test_floor_scales_with_the_window(self):
+        """A weekly digest gets a proportionally tighter floor than a monthly one — the guard is
+        relative to the cadence, not a hardcoded number of days."""
+        now = datetime(2026, 8, 7, tzinfo=timezone.utc)
+        weekly = newly_tracked_activity_floor(now - timedelta(days=7), now)
+        monthly = newly_tracked_activity_floor(now - timedelta(days=30), now)
+        assert weekly > monthly
+
+    def test_status_change_line_carries_the_action_date(self):
+        """'Enacted' with no date, inside a monthly roundup, asserts 'this month'."""
+        bill = MagicMock(spec=Bill)
+        bill.id = 83341
+        bill.state = "IL"
+        bill.bill_number = "HB-3098"
+        bill.title = "CONSUMER ELECTRONICS RECYCLING"
+        bill.instrument_type = "epr"
+        bill.policy_stance = None
+        bill.last_action_date = date(2025, 8, 15)
+        bill.status_date = date(2025, 8, 15)
+        content = DigestContent(
+            status_changes=[
+                StatusChangeItem(
+                    bill=bill,
+                    old_status="passed",
+                    new_status="enacted",
+                    detected_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
+                )
+            ]
+        )
+        html = render_digest_html(_sub(), content, "monthly")
+        assert "15 Aug 2025" in html

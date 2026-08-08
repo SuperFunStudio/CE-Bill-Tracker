@@ -1000,10 +1000,14 @@ async def run_new_bill_alert_cycle() -> None:
 async def poll_courtlistener_new_cases() -> None:
     """Weekly: search for new EPR-related federal cases filed in the last 7 days.
 
-    For each new case: fetch docket, get parties, classify initial filings,
-    score preemption risk, store in litigation_cases, create docket alert.
+    For each new case: fetch docket, get parties, screen for circular-economy relevance, classify
+    initial filings, score preemption risk, store in litigation_cases, create docket alert.
+
+    The screening step is load-bearing, not a nicety: CourtListener's RECAP search matches the full
+    text of filed PDFs, so a hit means a phrase appeared somewhere in the case file — a Pfizer
+    products-liability suit and a packaging-EPR challenge arrive through the same door.
     """
-    from datetime import date, timedelta
+    from datetime import date, datetime, timedelta, timezone
 
     from sqlalchemy import select
 
@@ -1018,6 +1022,7 @@ async def poll_courtlistener_new_cases() -> None:
         score_preemption_risk,
     )
     from app.ingestion.bill_matcher import match_case_to_bill
+    from app.ingestion.litigation_relevance import screen_docket
     from app.models import CLAlertSubscription, LitigationCase, LitigationEvent
 
     if not settings.enable_courtlistener:
@@ -1027,6 +1032,7 @@ async def poll_courtlistener_new_cases() -> None:
     log.info("cl_new_cases_start")
     filed_after = date.today() - timedelta(days=7)
     added = 0
+    rejected = 0
     errors = 0
 
     import asyncio as _asyncio
@@ -1079,6 +1085,30 @@ async def poll_courtlistener_new_cases() -> None:
                         entries = await cl.get_docket_entries(docket_id)
                         await _asyncio.sleep(1.0)
 
+                        # Screen BEFORE the per-entry classification and the Sonnet risk score: a
+                        # search hit is not a circular-economy case (see litigation_relevance), and
+                        # the rejects used to cost an LLM call per docket entry on their way to a
+                        # false alert. A clean rejection is dropped with a log line; only a verdict
+                        # the gate itself flags as uncertain is persisted, so it stays recoverable.
+                        verdict = await screen_docket(
+                            cl,
+                            docket=docket,
+                            parties=parties,
+                            entries=entries,
+                            search_result=result,
+                        )
+                        await _asyncio.sleep(1.0)
+                        if not verdict.relevant and not verdict.needs_review:
+                            rejected += 1
+                            log.info(
+                                "cl_case_out_of_scope",
+                                case_name=case_name,
+                                docket_id=docket_id,
+                                reason=verdict.reason,
+                                source=verdict.source,
+                            )
+                            continue
+
                         classified_events = []
                         for entry in entries[:10]:
                             cls = await classify_litigation_event(
@@ -1112,6 +1142,10 @@ async def poll_courtlistener_new_cases() -> None:
                             preemption_risk=preemption_risk,
                             cl_url=cl_url,
                             last_activity_date=date_filed,
+                            ce_relevant=verdict.relevant,
+                            relevance_reason=verdict.reason,
+                            relevance_source=verdict.source,
+                            relevance_checked_at=datetime.now(timezone.utc),
                         )
                         db.add(new_case)
                         await db.flush()
@@ -1135,16 +1169,20 @@ async def poll_courtlistener_new_cases() -> None:
                                 significance=cls["significance"],
                             ))
 
-                        try:
-                            alert = await cl.create_docket_alert(docket_id)
-                            db.add(CLAlertSubscription(
-                                alert_type="docket_alert",
-                                cl_alert_id=alert.get("id"),
-                                docket_id=docket_id,
-                                active=True,
-                            ))
-                        except Exception as e:
-                            log.warning("cl_docket_alert_failed", docket_id=docket_id, error=str(e))
+                        # Only subscribe to push updates for cases we actually track. A docket alert
+                        # on an out-of-scope case is a standing invitation for CourtListener to keep
+                        # delivering it to the webhook forever.
+                        if verdict.relevant:
+                            try:
+                                alert = await cl.create_docket_alert(docket_id)
+                                db.add(CLAlertSubscription(
+                                    alert_type="docket_alert",
+                                    cl_alert_id=alert.get("id"),
+                                    docket_id=docket_id,
+                                    active=True,
+                                ))
+                            except Exception as e:
+                                log.warning("cl_docket_alert_failed", docket_id=docket_id, error=str(e))
 
                         await db.commit()
                         added += 1
@@ -1155,7 +1193,7 @@ async def poll_courtlistener_new_cases() -> None:
                         await db.rollback()
                         errors += 1
 
-    log.info("cl_new_cases_complete", added=added, errors=errors)
+    log.info("cl_new_cases_complete", added=added, rejected=rejected, errors=errors)
 
 
 async def refresh_active_cases() -> None:
@@ -1202,8 +1240,15 @@ async def refresh_active_cases() -> None:
 
     async with CourtListenerClient() as cl:
         async with AsyncSessionLocal() as db:
+            # `ce_relevant IS TRUE`, not "not false": a NULL here means the case predates the
+            # relevance gate (migration 046) and has never been screened. Refreshing those would
+            # keep the pre-gate corpus alerting exactly as it did before the fix, so they stay
+            # frozen until scripts/prune_litigation_cases.py has ruled on them.
             result = await db.execute(
-                select(LitigationCase).where(LitigationCase.case_status == "active")
+                select(LitigationCase).where(
+                    LitigationCase.case_status == "active",
+                    LitigationCase.ce_relevant.is_(True),
+                )
             )
             active_cases = result.scalars().all()
 
@@ -1305,8 +1350,17 @@ async def refresh_active_cases() -> None:
 
                     refreshed += 1
 
-                    # Dispatch alerts for notable events
+                    # Dispatch alerts for notable events. The query above already restricts to
+                    # screened-relevant cases; the check is repeated at the point of send because
+                    # this is where a false positive actually reaches a subscriber.
                     for notif_case, notif_event, notif_cls in notable_events_for_alert:
+                        if notif_case.ce_relevant is not True:
+                            log.info(
+                                "cl_alert_suppressed_out_of_scope",
+                                case_id=notif_case.id,
+                                case_name=notif_case.case_name,
+                            )
+                            continue
                         # Same shared renderer as the CourtListener webhook path (app/api/webhooks.py):
                         # plain prose for both channels, and the reader lands on the case's Atlas
                         # Circular page rather than straight on the external docket.

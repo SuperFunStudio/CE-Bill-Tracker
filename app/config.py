@@ -136,6 +136,13 @@ class Settings(BaseSettings):
     courtlistener_webhook_secret: str = ""
     enable_courtlistener: bool = False
     max_cl_cases_per_seed_run: int = 50
+    # CourtListener's binding limit is 50 requests/HOUR (the 5/min throttle is the burst guard on
+    # top of it). Screening a case for relevance costs 4 calls — docket, parties, entries, and the
+    # complaint text — so a run that ingests more than ~12 new cases exhausts the hour and every
+    # case after that comes back unreadable. Unreadable means "held for review", not "alerted on",
+    # so blowing the quota is not dangerous; it just wastes a week's poll. Cap the run instead and
+    # let the remainder arrive next cycle.
+    max_cl_cases_per_poll: int = 10
     # Spacing between successive CourtListener /search/ calls, to reduce how often the seed
     # sweep trips CL's strict search rate limit. Spacing alone can't fully avoid 429s (the
     # throttle window is long), so search_epr_cases also retries patiently on 429; this just

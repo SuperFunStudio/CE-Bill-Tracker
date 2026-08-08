@@ -108,7 +108,20 @@ async def _verdict_from_metadata(row: dict):
     return await assess_relevance(_metadata_evidence(row), case_name=row["case_name"] or "")
 
 
+class RateLimited(Exception):
+    """CourtListener's hourly budget is gone; stop the run rather than grind through it.
+
+    The limit that matters is 50 requests/HOUR (the 5/min throttle is only the burst guard). At four
+    calls per case that is ~12 cases, and once the budget is spent EVERY remaining case comes back
+    unreadable — the first run of this script screened 12 and then reported 22 identical "could not
+    re-fetch" verdicts, which is noise dressed up as findings. Stopping early keeps the report
+    honest: what is unscreened stays visibly unscreened, and --only-unscreened resumes the next hour.
+    """
+
+
 async def _verdict_from_fetch(cl, row: dict, delay: float = 3.0):
+    import httpx
+
     from app.ingestion.litigation_relevance import RelevanceVerdict, screen_docket
 
     # Four CourtListener calls per case (docket, parties, entries, document). Across a whole backlog
@@ -123,6 +136,15 @@ async def _verdict_from_fetch(cl, row: dict, delay: float = 3.0):
         await asyncio.sleep(delay)
         entries = await cl.get_docket_entries(docket_id)
         await asyncio.sleep(delay)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 429:
+            raise RateLimited(e.response.text[:200]) from e
+        return RelevanceVerdict(
+            relevant=False,
+            reason=f"Could not re-fetch docket (HTTP {e.response.status_code}); left for review.",
+            source="llm_unavailable",
+            needs_review=True,
+        )
     except Exception as e:  # noqa: BLE001
         return RelevanceVerdict(
             relevant=False,
@@ -180,13 +202,18 @@ async def main() -> None:
             await cl_ctx.__aenter__()
 
         kept, dropped, uncertain = [], [], []
+        halted = ""
         try:
             for row in cases:
-                verdict = (
-                    await _verdict_from_fetch(cl_ctx, row, args.delay)
-                    if args.mode == "fetch"
-                    else await _verdict_from_metadata(row)
-                )
+                try:
+                    verdict = (
+                        await _verdict_from_fetch(cl_ctx, row, args.delay)
+                        if args.mode == "fetch"
+                        else await _verdict_from_metadata(row)
+                    )
+                except RateLimited as e:
+                    halted = str(e)
+                    break
                 mark = "KEEP  " if verdict.relevant else ("?     " if verdict.needs_review else "DROP  ")
                 print(f"{mark} [{row['id']:>4}] {(row['case_name'] or '')[:62]:<62} "
                       f"{verdict.source:<16} {verdict.reason[:80]}")
@@ -263,6 +290,11 @@ async def main() -> None:
             await session.commit()  # no-op unless the last row's write is still pending
 
     print(f"\nkept {len(kept)} · dropped {len(dropped)} · uncertain {len(uncertain)}")
+    if halted:
+        remaining = len(cases) - len(kept) - len(dropped) - len(uncertain)
+        print(f"\nSTOPPED on CourtListener's hourly limit with {remaining} case(s) unscreened.")
+        print(f"  {halted}")
+        print("  Re-run with --only-unscreened once the window resets (~1h).")
     if uncertain and not args.commit_uncertain:
         print("  uncertain rows left at NULL — re-run with --mode fetch, or --commit-uncertain to "
               "exclude them pending review.")

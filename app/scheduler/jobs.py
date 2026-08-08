@@ -1040,6 +1040,8 @@ async def poll_courtlistener_new_cases() -> None:
     async with CourtListenerClient() as cl:
         async with AsyncSessionLocal() as db:
             for _qi, (query_name, query_str) in enumerate(EPR_LITIGATION_QUERIES):
+                if added >= settings.max_cl_cases_per_poll:
+                    break
                 # Space the /search/ calls — firing the seed queries back-to-back trips 429.
                 if _qi > 0 and settings.courtlistener_request_delay_seconds > 0:
                     await _asyncio.sleep(settings.courtlistener_request_delay_seconds)
@@ -1051,6 +1053,9 @@ async def poll_courtlistener_new_cases() -> None:
                     continue
 
                 for result in cases:
+                    if added >= settings.max_cl_cases_per_poll:
+                        log.info("cl_new_cases_capped", cap=settings.max_cl_cases_per_poll)
+                        break
                     docket_id = result.get("docket_id") or result.get("id")
                     if not docket_id:
                         continue

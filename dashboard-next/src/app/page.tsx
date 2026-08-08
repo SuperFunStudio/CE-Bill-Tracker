@@ -57,11 +57,14 @@ const CoverageGlobe = dynamic(
  * question begins. Returns the display string (typed text + cursor); '' when idle so the caller can
  * fall back to a static placeholder.
  */
-function useTypedPlaceholder(phrases: string[], active: boolean): string {
+function useTypedPlaceholder(phrases: string[], active: boolean, working = false): string {
   const [text, setText] = useState('');
   const [cursorOn, setCursorOn] = useState(true);
   useEffect(() => {
     if (!active) { setText(''); setCursorOn(true); return; }
+    // Working mode narrates a request that's already running, so each line holds only long enough to
+    // read and the next one starts immediately — a pause with an empty box would read as "stalled".
+    const holdMs = working ? 1500 : 3000;
     let phrase = 0, char = 0;
     let timer: ReturnType<typeof setTimeout>;
     // Ease-out per-character delay: a touch deliberate at the start of a question, quickening as it
@@ -78,10 +81,14 @@ function useTypedPlaceholder(phrases: string[], active: boolean): string {
       const current = phrases[phrase % phrases.length];
       char++;
       setText(current.slice(0, char));
-      if (char >= current.length) { timer = setTimeout(vanish, 3000); return; }
+      if (char >= current.length) { timer = setTimeout(vanish, holdMs); return; }
       timer = setTimeout(typeNext, charDelay(current, char));
     };
-    const vanish = () => { setText(''); blink(0); };        // clear the whole line at once
+    const vanish = () => {                                  // clear the whole line at once
+      setText('');
+      if (working) { phrase++; char = 0; timer = setTimeout(typeNext, 260); return; }
+      blink(0);
+    };
     const blink = (n: number) => {
       if (n >= 3) {                                         // ~3 toggles, then the next question
         setCursorOn(true);
@@ -94,11 +101,24 @@ function useTypedPlaceholder(phrases: string[], active: boolean): string {
     };
     timer = setTimeout(typeNext, 650);
     return () => clearTimeout(timer);
-  }, [active, phrases]);
+  }, [active, phrases, working]);
   // Cursor stays solid while typing/holding; the blink state only toggles in the gap between
   // questions. A figure space (U+2007) for the "off" frame keeps the placeholder width steady.
   return active ? text + (cursorOn ? '▏' : ' ') : '';
 }
+
+// What the answer is actually doing while the reader waits — a deep read of up to 100 full bill texts
+// runs the better part of a minute, and a frozen "Thinking…" for that long reads as broken. Module
+// scope so the identity is stable across renders (the typing effect keys off it).
+const WORKING_PHRASES = [
+  'Flipping through pages…',
+  'Reviewing relevant statutes…',
+  'Checking sources…',
+  'Comparing across the corpus…',
+  'Identifying trends…',
+  'Distilling detailed answers…',
+  'Synthesizing a comprehensive response…',
+];
 
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
@@ -168,8 +188,13 @@ export default function HomePage() {
   };
 
   // Cycle the example questions through the search-box placeholder, typewriter-style — but only before
-  // the reader has typed or asked anything, so the animation never fights a real query.
-  const typedPlaceholder = useTypedPlaceholder(RESEARCH_EXAMPLES, !research.hasAsked && query === '');
+  // the reader has typed or asked anything, so the animation never fights a real query. While an ask is
+  // in flight the same bar narrates the work instead (the box is empty then — submitQuery clears it).
+  const typedPlaceholder = useTypedPlaceholder(
+    research.busy ? WORKING_PHRASES : RESEARCH_EXAMPLES,
+    research.busy || (!research.hasAsked && query === ''),
+    research.busy,
+  );
 
   const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
 
@@ -474,7 +499,9 @@ export default function HomePage() {
               onChange={e => onSearchChange(e.target.value)}
               placeholder={
                 aiMode
-                  ? (research.hasAsked ? 'Ask a follow-up…' : (typedPlaceholder || 'Ask a question about the corpus…'))
+                  ? research.busy
+                    ? (typedPlaceholder || 'Working…')
+                    : research.hasAsked ? 'Ask a follow-up…' : (typedPlaceholder || 'Ask a question about the corpus…')
                   : 'Search bills by keyword…'
               }
               aria-label={aiMode ? 'Ask a question' : 'Search bills by keyword'}
@@ -559,7 +586,7 @@ export default function HomePage() {
             </div>
           )}
           <ResearchThread research={research} />
-          {(research.hasAsked || research.wall) && (
+          {(research.hasAsked || research.wall || research.error || research.dropped) && (
             <button type="button" onClick={backToBrowsing} className="text-sm text-green-accent hover:underline">
               ← Back to browsing all bills
             </button>

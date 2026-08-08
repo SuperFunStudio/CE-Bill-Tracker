@@ -47,6 +47,12 @@ export function useResearch() {
   const [busy, setBusy] = useState(false);
   const [pageBusy, setPageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The request never completed (the connection dropped, a browser/proxy cut the long request, the tab
+  // was backgrounded) — distinct from an error the server actually answered with. The server finishes
+  // and PERSISTS the turn regardless, so this state points the reader at their saved copy.
+  const [dropped, setDropped] = useState(false);
+  // The question of the last attempt, so a failed ask can be retried without retyping it.
+  const [lastAsked, setLastAsked] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [restored, setRestored] = useState(false);
 
@@ -94,10 +100,10 @@ export function useResearch() {
     // Wall the right people before spending a request.
     if (user && !canAsk) { setWall('upgrade'); return; }
     if (!user && freeAskUsed) { setWall('signin'); return; }
-    setBusy(true); setError(null); setWall(null);
+    setBusy(true); setError(null); setDropped(false); setWall(null); setLastAsked(trimmed);
+    const t0 = performance.now();
     try {
       const token = await getToken();
-      const t0 = performance.now();
       const a = await askResearch(trimmed, token, sessionId);
       // Core-value instrumentation: did the ask return something, and how fast. result_count is the
       // total relevant bills the retrieval found (0 = we couldn't answer from the corpus — its own
@@ -120,8 +126,15 @@ export function useResearch() {
       if (e instanceof ApiError && e.status === 403) {
         setWall(e.detail === 'ask_upgrade_required' ? 'upgrade' : 'signin');
         if (!user) { try { localStorage.setItem(FREE_ASK_KEY, '1'); } catch { /* ignore */ } setFreeAskUsed(true); }
+      } else if (e instanceof ApiError) {
+        setError(e.message);
       } else {
-        setError(e instanceof Error ? e.message : 'Something went wrong.');
+        // fetch() rejects with a TypeError only when the request never completed — no status, no body.
+        // A deep-read ask can run past a minute, and a browser/proxy network cap (~60s in Safari and
+        // most corporate proxies) cuts it there. The answer isn't lost: the server keeps going and
+        // saves the turn, so `dropped` sends the reader to My Library instead of showing nothing.
+        setDropped(true);
+        track('atlas_query_dropped', { query_length: trimmed.length, latency_ms: Math.round(performance.now() - t0) });
       }
     } finally {
       setBusy(false);
@@ -130,7 +143,7 @@ export function useResearch() {
 
   function newThread() {
     setTurns([]); setSessionId(null); setBillPage(null); setLastQuery('');
-    setError(null); setRestored(false); setWall(null);
+    setError(null); setDropped(false); setLastAsked(''); setRestored(false); setWall(null);
     // Drop ?session= so a fresh thread isn't tied to the reopened one (and a reload starts clean).
     if (typeof window !== 'undefined' && window.location.search.includes('session=')) {
       window.history.replaceState(null, '', window.location.pathname);
@@ -152,12 +165,15 @@ export function useResearch() {
 
   return {
     authLoading, user, canAsk, freeAskUsed,
-    turns, sessionId, billPage, pageBusy, busy, error,
+    turns, sessionId, billPage, pageBusy, busy, error, dropped, lastAsked,
     wall, setWall, restoring, restored,
     ask, newThread, goToPage,
+    retry: () => { if (lastAsked) ask(lastAsked); },
     hasAsked: turns.length > 0,
     // True whenever the reader is in an ask interaction (so a host can swap browse → answer view).
-    active: turns.length > 0 || busy || restoring || wall !== null,
+    // A failure counts: without it the surface unmounted the moment an ask errored, taking the error
+    // message down with it — the reader just saw the page snap back to browsing with no explanation.
+    active: turns.length > 0 || busy || restoring || wall !== null || error !== null || dropped,
   };
 }
 
@@ -579,12 +595,42 @@ function ThreadTurn({ turn, index, total, isLast, billPage, pageBusy, goToPage, 
 /** The conversation: each turn's question, grounded answer, chart, cited bills, and — on the latest
  *  turn — the paginated relevant-bills table (the shared evidence). Owns its own citation modal. */
 export function ResearchThread({ research }: { research: ResearchState }) {
-  const { turns, billPage, pageBusy, busy, error, goToPage } = research;
+  const { turns, billPage, pageBusy, busy, error, dropped, user, retry, goToPage } = research;
   const [modalBill, setModalBill] = useState<BillSummary | null>(null);
 
   return (
     <>
-      {error && <p className="text-sm text-error">{error}</p>}
+      {error && (
+        <div className="space-y-2 rounded-lg border border-border-default bg-bg-secondary p-4">
+          <p className="text-sm text-error">{error}</p>
+          <button type="button" onClick={retry} className="text-sm text-green-accent hover:underline">
+            Ask again
+          </button>
+        </div>
+      )}
+
+      {/* The connection dropped mid-ask. The server finishes the answer and saves it either way, so the
+          honest thing is to say that and point at the saved copy — not to blank the page. */}
+      {dropped && (
+        <div className="space-y-2 rounded-lg border border-border-default bg-bg-secondary p-4">
+          <p className="text-sm text-text-primary">
+            The connection dropped before the answer came back.
+            {user
+              ? ' It was still saved — visit your Library for asked questions and answers.'
+              : ' A long question can take a minute; a steady connection sees it through.'}
+          </p>
+          <div className="flex flex-wrap items-center gap-4">
+            {user && (
+              <Link href="/library" className="text-sm text-green-accent hover:underline">
+                Open My Library →
+              </Link>
+            )}
+            <button type="button" onClick={retry} className="text-sm text-green-accent hover:underline">
+              Ask again
+            </button>
+          </div>
+        </div>
+      )}
 
       {turns.map((t, ti) => (
         <ThreadTurn

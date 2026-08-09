@@ -1,6 +1,6 @@
 'use client';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { fetchBills, fetchBill, fetchBillText, fetchBillSearch, fetchBillTextCoverage, fetchMapSummary, fetchBillLitigationCases, fetchLawsInForce } from '@/lib/api';
+import { fetchBills, fetchBill, fetchBillText, fetchBillSearch, fetchBillTextCoverage, fetchMapSummary, fetchBillLitigationCases, fetchLawsInForce, fetchBillTimeline } from '@/lib/api';
 import { resilient, getSnapshot } from '@/lib/snapshot';
 import { useDebouncedValue } from './useDebouncedValue';
 import type { BillParams, BillSummary, StateMapSummary } from '@/lib/types';
@@ -67,6 +67,17 @@ export function useBillText(id: number | null, enabled: boolean) {
     queryKey: ['billText', id],
     queryFn: () => fetchBillText(id!),
     enabled: id !== null && enabled,
+    staleTime: STALE,
+  });
+}
+
+/** Per-year × status × region bill counts — a server-side aggregate, so it's cheap enough to ask for
+ *  just to count things. The pricing page's coverage ledger sums it rather than hardcoding totals,
+ *  which is the only way those figures stay true as the corpus grows. */
+export function useBillTimeline(params?: { instrument_type?: string; material_category?: string; regions?: string }) {
+  return useQuery({
+    queryKey: ['billTimeline', params ?? null],
+    queryFn: () => fetchBillTimeline(params),
     staleTime: STALE,
   });
 }

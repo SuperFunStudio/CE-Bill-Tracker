@@ -11,10 +11,10 @@
  *                   and the paginated relevant-bills table on the latest turn. Owns its citation modal.
  * ResearchWall    — the sign-in / upgrade wall shown when the reader hits their access limit.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CAP, useAuth } from '@/components/auth/AuthContext';
-import { ApiError, askResearch, fetchResearchBills, fetchResearchSession } from '@/lib/api';
+import { ApiError, askResearch, fetchMyResearchSessions, fetchResearchBills, fetchResearchSession } from '@/lib/api';
 import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchChart, ResearchCitation } from '@/lib/types';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillModal } from '@/components/ui/BillModal';
@@ -24,6 +24,19 @@ import { useChartTheme } from '@/lib/charts/theme';
 // Local marker that an anonymous visitor has spent their one free question (server enforces the real
 // per-IP/day limit; this just avoids a wasted round-trip and shows the wall immediately).
 const FREE_ASK_KEY = 'atlas_free_ask_used';
+
+/**
+ * Whether an anonymous visitor has already spent their one free question — readable WITHOUT hosting the
+ * ask state machine, so the homepage can show its "start free" pitch to someone who hit the limit over
+ * on /ask. Mirrors the marker useResearch() writes; the server enforces the real per-IP/day limit.
+ */
+export function useFreeAskUsed(): boolean {
+  const [used, setUsed] = useState(false);
+  useEffect(() => {
+    try { setUsed(localStorage.getItem(FREE_ASK_KEY) === '1'); } catch { /* ignore */ }
+  }, []);
+  return used;
+}
 
 export const RESEARCH_EXAMPLES = [
   'Do bills measure collection targets by weight or by value recovered?',
@@ -53,6 +66,10 @@ export function useResearch() {
   const [dropped, setDropped] = useState(false);
   // The question of the last attempt, so a failed ask can be retried without retyping it.
   const [lastAsked, setLastAsked] = useState('');
+  // Chasing the saved copy of an answer whose connection dropped (see recoverAnswer).
+  const [recovering, setRecovering] = useState(false);
+  // Generation token: a newer ask / new thread invalidates an in-flight recovery poll.
+  const recoverGen = useRef(0);
   const [restoring, setRestoring] = useState(false);
   const [restored, setRestored] = useState(false);
 
@@ -94,12 +111,74 @@ export function useResearch() {
     }
   }, [user]);
 
+  /**
+   * The connection dropped, but the server keeps going and PERSISTS the finished turn — so the answer
+   * exists, it just never reached this page. Poll the reader's own saved threads until it lands and show
+   * it here, rather than making them go find it in My Library. Members only (an anonymous ask is
+   * stateless — nothing was saved, so there is nothing to recover).
+   *
+   * `sid` is set on a follow-up (we already know the thread); on a first turn it's null and the new
+   * session is matched by title, which `_persist_turn` stores as the question's first 200 chars. Newest
+   * first, so re-asking a question you asked before still finds THIS one. A recovered turn carries no
+   * citations (they aren't persisted per turn), so its [STATE BILL_NUMBER] markers read as plain text —
+   * the same limitation as reopening a thread from My Library.
+   */
+  async function recoverAnswer(q: string, sid: string | null, priorTurns: number, windowMs = 150_000) {
+    if (!user) return false;
+    const gen = ++recoverGen.current;
+    const title = q.slice(0, 200).trim();
+    setRecovering(true);
+    const deadline = performance.now() + windowMs;
+    try {
+      while (performance.now() < deadline) {
+        await new Promise(r => setTimeout(r, 3000));
+        if (recoverGen.current !== gen) return false;   // superseded by a retry or a new thread
+        try {
+          const token = await getToken();
+          let targetId = sid;
+          if (!targetId) {
+            const list = await fetchMyResearchSessions(token);
+            targetId = list.find(s => (s.title ?? '').trim() === title)?.session_id ?? null;
+          }
+          if (!targetId) continue;
+          const s = await fetchResearchSession(targetId, token);
+          if (s.turns.length <= priorTurns) continue;   // the turn hasn't been written yet
+          if (recoverGen.current !== gen) return false;
+          setTurns(s.turns.map(t => ({
+            q: t.question,
+            answer: { answer: t.answer ?? '', citations: [] } as ResearchAnswer,
+          })));
+          setSessionId(s.session_id);
+          setDropped(false);
+          track('atlas_query_recovered', { query_length: q.length });
+          return true;
+        } catch { /* transient — keep polling until the deadline, then leave the Library link */ }
+      }
+    } finally {
+      if (recoverGen.current === gen) setRecovering(false);
+    }
+    return false;
+  }
+
+  /**
+   * Pick a question back up after a reload. /ask keeps the question in the URL while it's in flight, so
+   * a refresh mid-ask would otherwise fire a SECOND deep read — real money, for an answer the server is
+   * already writing. Look for the saved copy first (short window: if it isn't there in ~20s the original
+   * request probably never reached synthesis), and only ask fresh when there's nothing to pick up.
+   */
+  async function resume(q: string) {
+    const found = await recoverAnswer(q, null, turns.length, 20_000);
+    if (!found) await ask(q);
+  }
+
   async function ask(q: string) {
     const trimmed = q.trim();
     if (trimmed.length < 3 || busy) return;
     // Wall the right people before spending a request.
     if (user && !canAsk) { setWall('upgrade'); return; }
     if (!user && freeAskUsed) { setWall('signin'); return; }
+    recoverGen.current++;                       // a fresh ask supersedes any in-flight recovery poll
+    setRecovering(false);
     setBusy(true); setError(null); setDropped(false); setWall(null); setLastAsked(trimmed);
     const t0 = performance.now();
     try {
@@ -135,6 +214,7 @@ export function useResearch() {
         // saves the turn, so `dropped` sends the reader to My Library instead of showing nothing.
         setDropped(true);
         track('atlas_query_dropped', { query_length: trimmed.length, latency_ms: Math.round(performance.now() - t0) });
+        void recoverAnswer(trimmed, sessionId, turns.length);
       }
     } finally {
       setBusy(false);
@@ -142,6 +222,7 @@ export function useResearch() {
   }
 
   function newThread() {
+    recoverGen.current++; setRecovering(false);
     setTurns([]); setSessionId(null); setBillPage(null); setLastQuery('');
     setError(null); setDropped(false); setLastAsked(''); setRestored(false); setWall(null);
     // Drop ?session= so a fresh thread isn't tied to the reopened one (and a reload starts clean).
@@ -165,15 +246,15 @@ export function useResearch() {
 
   return {
     authLoading, user, canAsk, freeAskUsed,
-    turns, sessionId, billPage, pageBusy, busy, error, dropped, lastAsked,
+    turns, sessionId, billPage, pageBusy, busy, error, dropped, recovering, lastAsked,
     wall, setWall, restoring, restored,
-    ask, newThread, goToPage,
+    ask, resume, newThread, goToPage,
     retry: () => { if (lastAsked) ask(lastAsked); },
     hasAsked: turns.length > 0,
     // True whenever the reader is in an ask interaction (so a host can swap browse → answer view).
     // A failure counts: without it the surface unmounted the moment an ask errored, taking the error
     // message down with it — the reader just saw the page snap back to browsing with no explanation.
-    active: turns.length > 0 || busy || restoring || wall !== null || error !== null || dropped,
+    active: turns.length > 0 || busy || restoring || recovering || wall !== null || error !== null || dropped,
   };
 }
 
@@ -595,7 +676,7 @@ function ThreadTurn({ turn, index, total, isLast, billPage, pageBusy, goToPage, 
 /** The conversation: each turn's question, grounded answer, chart, cited bills, and — on the latest
  *  turn — the paginated relevant-bills table (the shared evidence). Owns its own citation modal. */
 export function ResearchThread({ research }: { research: ResearchState }) {
-  const { turns, billPage, pageBusy, busy, error, dropped, user, retry, goToPage } = research;
+  const { turns, billPage, pageBusy, busy, error, dropped, recovering, user, retry, goToPage } = research;
   const [modalBill, setModalBill] = useState<BillSummary | null>(null);
 
   return (
@@ -609,16 +690,26 @@ export function ResearchThread({ research }: { research: ResearchState }) {
         </div>
       )}
 
+      {/* Picking a question back up after a reload (resume) — no drop happened, so no alarm. */}
+      {recovering && !dropped && (
+        <div className="space-y-3 border-t border-border-default pt-6">
+          <p className="text-sm text-text-secondary">Picking up where you left off — fetching your answer…</p>
+          <div className="h-24 w-full animate-pulse rounded-lg bg-bg-tertiary" />
+        </div>
+      )}
+
       {/* The connection dropped mid-ask. The server finishes the answer and saves it either way, so the
           honest thing is to say that and point at the saved copy — not to blank the page. */}
       {dropped && (
-        <div className="space-y-2 rounded-lg border border-border-default bg-bg-secondary p-4">
+        <div className="space-y-3 rounded-lg border border-border-default bg-bg-secondary p-4">
           <p className="text-sm text-text-primary">
             The connection dropped before the answer came back.
-            {user
-              ? ' It was still saved — visit your Library for asked questions and answers.'
-              : ' A long question can take a minute; a steady connection sees it through.'}
+            {!user && ' A long question can take a minute; a steady connection sees it through.'}
+            {user && (recovering
+              ? ' It was still saved — fetching your copy now…'
+              : ' It was still saved — visit your Library for asked questions and answers.')}
           </p>
+          {recovering && <div className="h-16 w-full animate-pulse rounded-lg bg-bg-tertiary" />}
           <div className="flex flex-wrap items-center gap-4">
             {user && (
               <Link href="/library" className="text-sm text-green-accent hover:underline">

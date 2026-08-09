@@ -200,6 +200,31 @@ body {
   .region-map-in { animation: none; }
 }
 
+/* ── Explore → Ask the Atlas handoff ──
+   Pressing Ask navigates from / to /ask. Both surfaces mark their search bar with
+   view-transition-name: ask-bar, so the browser carries that one element across the navigation while
+   everything else cross-fades: the bar the reader just typed into stays put and the page rearranges
+   around it. Reads as "I'll take you over here" rather than as a page load.
+
+   Only the browsers with the View Transitions API get this; navigateWithTransition() falls back to a
+   plain push elsewhere and skips it entirely under reduced-motion, so the ::view-transition rules below
+   simply never fire in those cases. 260ms — long enough to follow, short enough not to feel like wait. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+::view-transition-old(ask-bar),
+::view-transition-new(ask-bar) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}
+
 /* ── Homepage-B "dot explorer" (BillDotExplorer) — every bill as one clickable mark, product-themed.
    Colors come from the canonical status tokens so light/dark are handled by the token layer. ── */
 .bde-row { display: grid; grid-template-columns: 118px 1fr; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--border-default); }

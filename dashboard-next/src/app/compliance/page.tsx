@@ -208,7 +208,7 @@ export default function CompliancePage() {
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <DeadlinesTabs />
-      <GazetteHeader title="Upcoming Deadlines" subtitle="What you must do, and by when." />
+      <GazetteHeader title="Upcoming Deadlines" subtitle="Next steps for producers, and by when." />
 
       {/* One honest summary line — replaces the four metric tiles. */}
       <p className="text-body text-text-secondary">

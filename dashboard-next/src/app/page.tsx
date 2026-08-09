@@ -1,6 +1,7 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { useBills, useBillTextSearch, useLawsInForce } from '@/hooks/useBills';
 import { useFederalActions } from '@/hooks/useFederal';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
@@ -23,7 +24,8 @@ import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
 import { STATE_NAMES, formatDate, downloadCsv } from '@/lib/utils';
 import { resolveFacetTerm, billMatchesFacets } from '@/lib/facetTerms';
-import { useResearch, ResearchThread, ResearchWall, RESEARCH_EXAMPLES } from '@/components/research/ResearchThread';
+import { RESEARCH_EXAMPLES, useFreeAskUsed } from '@/components/research/ResearchThread';
+import { useTypedPlaceholder } from '@/components/research/useTypedPlaceholder';
 import { AiAnalysisToggle } from '@/components/search/AiAnalysisToggle';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { track } from '@/lib/analytics';
@@ -50,79 +52,29 @@ const CoverageGlobe = dynamic(
 );
 
 /**
- * Types the example questions out, one character at a time, as the search box's placeholder — a hint
- * that the bar answers real questions, not just keyword filters. Runs only while `active` (input empty
- * and no thread yet). Types a question with an eased, human rhythm, holds it long enough to read, then
- * the whole line vanishes at once (no backspacing) and a cursor blinks for a beat before the next
- * question begins. Returns the display string (typed text + cursor); '' when idle so the caller can
- * fall back to a static placeholder.
+ * Run a client navigation inside a view transition where the browser supports one, so the shared ask bar
+ * (view-transition-name: ask-bar, set on both surfaces) flies from its place here to the top of /ask
+ * instead of the page snapping. Falls back to a plain push in browsers without the API, and honors
+ * prefers-reduced-motion — a cut is the correct transition for a reader who asked for less motion.
  */
-function useTypedPlaceholder(phrases: string[], active: boolean, working = false): string {
-  const [text, setText] = useState('');
-  const [cursorOn, setCursorOn] = useState(true);
-  useEffect(() => {
-    if (!active) { setText(''); setCursorOn(true); return; }
-    // Working mode narrates a request that's already running, so each line holds only long enough to
-    // read and the next one starts immediately — a pause with an empty box would read as "stalled".
-    const holdMs = working ? 1500 : 3000;
-    let phrase = 0, char = 0;
-    let timer: ReturnType<typeof setTimeout>;
-    // Ease-out per-character delay: a touch deliberate at the start of a question, quickening as it
-    // flows, with an extra beat after punctuation. Reads as typed by a person, not a metronome.
-    const charDelay = (s: string, i: number) => {
-      const prev = s[i - 1];
-      if (prev === ',') return 240;
-      if (prev === '.' || prev === '?') return 300;
-      const p = i / s.length;              // 0 → 1 across the question
-      const ease = 1 - 0.6 * p * (2 - p);  // ease-out: ~1.0 early → ~0.4 late
-      return 34 + 46 * ease;               // ~80ms at the start → ~52ms by the end
-    };
-    const typeNext = () => {
-      const current = phrases[phrase % phrases.length];
-      char++;
-      setText(current.slice(0, char));
-      if (char >= current.length) { timer = setTimeout(vanish, holdMs); return; }
-      timer = setTimeout(typeNext, charDelay(current, char));
-    };
-    const vanish = () => {                                  // clear the whole line at once
-      setText('');
-      if (working) { phrase++; char = 0; timer = setTimeout(typeNext, 260); return; }
-      blink(0);
-    };
-    const blink = (n: number) => {
-      if (n >= 3) {                                         // ~3 toggles, then the next question
-        setCursorOn(true);
-        phrase++; char = 0;
-        timer = setTimeout(typeNext, 260);
-        return;
-      }
-      setCursorOn(c => !c);
-      timer = setTimeout(() => blink(n + 1), 420);
-    };
-    timer = setTimeout(typeNext, 650);
-    return () => clearTimeout(timer);
-  }, [active, phrases, working]);
-  // Cursor stays solid while typing/holding; the blink state only toggles in the gap between
-  // questions. A figure space (U+2007) for the "off" frame keeps the placeholder width steady.
-  return active ? text + (cursorOn ? '▏' : ' ') : '';
+function navigateWithTransition(go: () => void) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (!doc.startViewTransition || reduced) { go(); return; }
+  doc.startViewTransition(go);
 }
-
-// What the answer is actually doing while the reader waits — a deep read of up to 100 full bill texts
-// runs the better part of a minute, and a frozen "Thinking…" for that long reads as broken. Module
-// scope so the identity is stable across renders (the typing effect keys off it).
-const WORKING_PHRASES = [
-  'Flipping through pages…',
-  'Reviewing relevant statutes…',
-  'Checking sources…',
-  'Comparing across the corpus…',
-  'Identifying trends…',
-  'Distilling detailed answers…',
-  'Synthesizing a comprehensive response…',
-];
 
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
   const { region, regionsParam, regions: selectedRegions, setRegions, isUsView } = useRegion();
+  const router = useRouter();
+
+  // Legacy deep links: saved threads used to open on the homepage (?session=). They live at /ask now —
+  // forward them rather than 404 the reader's own bookmarks, My Library links, and older emails.
+  useEffect(() => {
+    const sid = new URLSearchParams(window.location.search).get('session');
+    if (sid) router.replace(`/ask/?session=${encodeURIComponent(sid)}`);
+  }, [router]);
 
   // The global region filter (under the nav) drives which jurisdictions the server returns. undefined
   // = "All regions" -> send "all" so the explorer shows every region (not the US-only default).
@@ -149,10 +101,12 @@ export default function HomePage() {
   // compliance buyer). Opens the shared request-access form, tagged source="home_walkthrough".
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
 
-  // The unified surface: one adaptive bar. Typing filters the table live (Explorer); submitting a
-  // question routes to the grounded, cited research answer over the same corpus (Ask the Atlas).
-  const research = useResearch();
+  // One adaptive bar with two jobs. Typing filters the table live (Explorer); submitting a question
+  // ROUTES to /ask, which owns the conversation. The homepage deliberately doesn't host the answer any
+  // more: state that lives only here dies on a nav, a reload, or a discarded tab, which is exactly how
+  // long asks were being lost. See docs/ASK_SURFACE_SPEC.md.
   const [query, setQuery] = useState('');
+  const freeAskUsed = useFreeAskUsed();
   // "AI Analysis" mode — OFF (default) = classic keyword filtering of the table; ON unlocks asking
   // grounded, cited questions (and reveals the Ask button). Persisted in localStorage: server render
   // OFF, read the stored value on mount to avoid a hydration mismatch (mirrors BetaContext).
@@ -173,28 +127,22 @@ export default function HomePage() {
     setQuery(v);
     if (!aiMode) setBillFilters(prev => ({ ...prev, search: v }));
   };
+  // Ask hands off to /ask with the question in the URL; that page owns the request and the thread. The
+  // view transition carries the bar across so it reads as "let me take you over here" rather than as a
+  // page load — see navigateWithTransition.
   const submitQuery = () => {
     if (!aiMode) return;             // asking is only possible in AI Analysis mode
     const q = query.trim();
     if (q.length < 3) return;
-    research.ask(q);
     setQuery('');
     setBillFilters(prev => ({ ...prev, search: '' }));
-  };
-  const backToBrowsing = () => {
-    research.newThread();
-    setQuery('');
-    setBillFilters(prev => ({ ...prev, search: '' }));
+    navigateWithTransition(() => router.push(`/ask/?q=${encodeURIComponent(q)}`));
   };
 
-  // Cycle the example questions through the search-box placeholder, typewriter-style — but only before
-  // the reader has typed or asked anything, so the animation never fights a real query. While an ask is
-  // in flight the same bar narrates the work instead (the box is empty then — submitQuery clears it).
-  const typedPlaceholder = useTypedPlaceholder(
-    research.busy ? WORKING_PHRASES : RESEARCH_EXAMPLES,
-    research.busy || (!research.hasAsked && query === ''),
-    research.busy,
-  );
+  // Cycle the example questions through the search-box placeholder, typewriter-style — only in AI mode
+  // (in keyword mode the placeholder is the static "Search bills…" line, so the timers would run for a
+  // string nobody sees) and only before the reader types, so the animation never fights a real query.
+  const typedPlaceholder = useTypedPlaceholder(RESEARCH_EXAMPLES, aiMode && query === '');
 
   const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
 
@@ -350,10 +298,10 @@ export default function HomePage() {
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
       {/* Value prop + primary CTA — held back until a signed-out visitor has spent their one free
-          question and is reaching for a second (research.freeAskUsed). A fresh visitor gets the clean
-          Explore/Ask surface first; the "start free" pitch only lands once they've engaged and hit the
-          limit. Never shown to users who've already converted. */}
-      {!user && research.freeAskUsed && (
+          question and is reaching for a second (useFreeAskUsed reads the marker /ask writes). A fresh
+          visitor gets the clean Explore surface first; the "start free" pitch only lands once they've
+          engaged and hit the limit. Never shown to users who've already converted. */}
+      {!user && freeAskUsed && (
         <section className="rounded-xl border border-green-accent/30 bg-green-hero p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="max-w-2xl">
             <h1 className="font-serif text-2xl sm:text-3xl text-text-primary leading-tight text-balance">
@@ -390,8 +338,7 @@ export default function HomePage() {
           <span className="text-text-muted text-sm">{tableBills.length} bills</span>
           <FreshnessNote />
         </div>
-        {!research.active && (
-          <button
+        <button
             onClick={handleExport}
             disabled={tableBills.length === 0}
             title={isPro ? undefined : 'CSV export is a Pro feature'}
@@ -404,8 +351,7 @@ export default function HomePage() {
                 Pro
               </span>
             )}
-          </button>
-        )}
+        </button>
       </div>
 
       {/* Ranked leaderboard line, right under the nav. Region-aware + enacted-only: umbrella regions
@@ -431,14 +377,12 @@ export default function HomePage() {
           right rail (≈ the width it gets on a phone, so the same proportions), with the search bar and
           facets taking the left column beside it. Below lg the two stack in DOM order — globe first,
           then the bar — exactly as before. Explicit col/row placement (rather than reordering the DOM)
-          keeps the mobile source order intact. When a question is active the globe is gone, so the
-          grid collapses and the research surface gets the full width. */}
-      <div className={`space-y-8 lg:space-y-0 ${research.active ? '' : 'lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8 lg:items-start'}`}>
+          keeps the mobile source order intact. */}
+      <div className="space-y-8 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8 lg:items-start">
 
-      {/* Map/globe — moved up to sit right below the ticker. Hidden while a question is active. The
-          Regions selector that drives it lives in the Explore facets just below. */}
-      {!research.active && (
-        <section className="lg:col-start-2 lg:row-start-1">
+      {/* Map/globe — moved up to sit right below the ticker. The Regions selector that drives it lives
+          in the Explore facets just below. */}
+      <section className="lg:col-start-2 lg:row-start-1">
           {soleRegion && (
             <div className="mb-2 flex items-center gap-1.5 text-sm text-text-muted">
               <button onClick={() => setRegions([])} className="text-green-accent hover:underline">← Back to the globe</button>
@@ -482,8 +426,7 @@ export default function HomePage() {
             </div>
           )}
           </div>
-        </section>
-      )}
+      </section>
 
       {/* Explore: one adaptive search/ask bar + facets. The "Explore · N bills" title + Export live at
           the top of the page now; this section is just the bar and its controls. */}
@@ -491,7 +434,7 @@ export default function HomePage() {
         {/* The search box leads — it sits directly under the globe as the page's primary action, with the
             one-line explainer beneath it. Enter submits a question only when AI Analysis is on
             (submitQuery guards it). */}
-        <form onSubmit={e => { e.preventDefault(); submitQuery(); }}>
+        <form onSubmit={e => { e.preventDefault(); submitQuery(); }} style={{ viewTransitionName: 'ask-bar' }}>
           <div className="flex items-center gap-2 rounded-xl border-2 border-green-accent/60 bg-bg-secondary px-3 py-2 focus-within:border-green-accent transition-colors">
             <span aria-hidden className="text-text-muted text-lg leading-none">⌕</span>
             <input
@@ -499,9 +442,7 @@ export default function HomePage() {
               onChange={e => onSearchChange(e.target.value)}
               placeholder={
                 aiMode
-                  ? research.busy
-                    ? (typedPlaceholder || 'Working…')
-                    : research.hasAsked ? 'Ask a follow-up…' : (typedPlaceholder || 'Ask a question about the corpus…')
+                  ? (typedPlaceholder || 'Ask a question about the corpus…')
                   : 'Search bills by keyword…'
               }
               aria-label={aiMode ? 'Ask a question' : 'Search bills by keyword'}
@@ -528,11 +469,11 @@ export default function HomePage() {
             <button
               type="button"
               onClick={submitQuery}
-              disabled={!aiMode || research.busy || query.trim().length < 3}
+              disabled={!aiMode || query.trim().length < 3}
               title={!aiMode ? 'Turn on AI Analysis to ask a question' : undefined}
               className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-medium text-sm px-5 py-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {research.busy ? 'Thinking…' : research.hasAsked ? 'Ask follow-up' : 'Ask →'}
+              Ask →
             </button>
           </div>
           {/* On lg the facets sit in the narrow left column beside the globe, so they take their own
@@ -574,28 +515,6 @@ export default function HomePage() {
       </section>
       </div>
 
-      {/* When the reader asks a question, the grounded answer + its cited evidence take over from the
-          browse view (map + full table); "back to browsing" returns here. Otherwise: Explorer as usual. */}
-      {research.active ? (
-        <section className="space-y-5">
-          {research.wall && <ResearchWall wall={research.wall} onSignIn={openAuth} />}
-          {research.restoring && (
-            <div className="space-y-2 border-t border-border-default pt-6">
-              <div className="h-6 w-2/3 animate-pulse rounded bg-bg-tertiary" />
-              <div className="h-24 w-full animate-pulse rounded-lg bg-bg-tertiary" />
-            </div>
-          )}
-          <ResearchThread research={research} />
-          {(research.hasAsked || research.wall || research.error || research.dropped) && (
-            <button type="button" onClick={backToBrowsing} className="text-sm text-green-accent hover:underline">
-              ← Back to browsing all bills
-            </button>
-          )}
-        </section>
-      ) : (
-        <>
-      {/* Map/globe moved up — it now renders right below the ticker (see above). */}
-
       {/* Bill results table. The personalize-scope bar (state/material/product) sits here, just above
           the table, instead of globally under the nav. */}
       <section>
@@ -611,8 +530,6 @@ export default function HomePage() {
           <BillTable bills={tableBills} autoPageSize={5} urlSync />
         )}
       </section>
-        </>
-      )}
 
       {/* Alerts, bundled below the table (out of the way of the bills, which are what visitors came
           for). The scoped deadline count is here rather than at the top so it informs without leading

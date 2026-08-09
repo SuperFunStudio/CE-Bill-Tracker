@@ -8,7 +8,7 @@ import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
 import {
   HomeIcon, CalendarIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
-  LabelIcon, ScaleIcon, ChartIcon, CapitolIcon,
+  LabelIcon, ScaleIcon, ChartIcon, CapitolIcon, AskIcon,
 } from '@/components/ui/icons';
 
 // `usOnly` items are hidden outside the US (company impact scoring is US-only; Federal Actions, now a
@@ -25,10 +25,13 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  // Explore is the unified surface: the faceted bill browse AND "Ask the Atlas" share one adaptive
-  // bar (keywords filter; a question gets a grounded, cited answer over the same corpus). /ask
-  // redirects here, preserving ?session= so saved research threads still open.
+  // Explore is the browse surface: the faceted bill table, the globe, and one adaptive bar whose two
+  // modes are keyword filtering and asking. Submitting a question routes to /ask.
   { href: '/', label: 'Explore', Icon: HomeIcon },
+  // Ask the Atlas is the home for questions — the thread, its follow-ups, and every saved conversation
+  // (?session=). Nav entry so the primary AI surface is somewhere you can go, not only somewhere you
+  // land after typing. See docs/ASK_SURFACE_SPEC.md.
+  { href: '/ask', label: 'Ask the Atlas', Icon: AskIcon },
   // Rankings is the global two-column activity tracker (national law by country + sub-national) —
   // global, so no usOnly gate. /states adapts to the region selection (US momentum / EU / two-column).
   { href: '/states', label: 'Rankings', Icon: CapitolIcon },

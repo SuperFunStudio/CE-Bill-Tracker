@@ -68,7 +68,7 @@ export function AskHistorySection() {
           {sessions.map(s => (
             <li key={s.session_id}>
               <Link
-                href={`/?session=${s.session_id}`}
+                href={`/ask/?session=${s.session_id}`}
                 className="block border-l-2 border-green-accent/40 pl-3 py-1 rounded-sm hover:bg-bg-secondary focus:outline-none focus:bg-bg-secondary transition-colors group"
               >
                 <div className="flex items-center gap-2">

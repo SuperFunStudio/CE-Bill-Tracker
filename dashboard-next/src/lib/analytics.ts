@@ -46,6 +46,7 @@ export function setUserId(uid: string | null): void {
  */
 const ROUTE_TITLES: Record<string, string> = {
   '/': 'Bills (Home)',
+  '/ask': 'Ask the Atlas',
   '/compliance': 'Compliance & Deadlines',
   '/watchlist': 'Watchlist',
   '/design-guide': 'Design Guide',

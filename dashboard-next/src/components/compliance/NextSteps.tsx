@@ -3,7 +3,9 @@ import { buildNextStep } from '@/lib/nextSteps';
 import type { ComplianceDetails, CompliancePathway, DeadlineSummary } from '@/lib/types';
 
 /**
- * The "What you must do" block — the step between "this law exists" and "here's the action".
+ * The "Next steps for producers" block — the step between "this law exists" and "here's the action".
+ * Stated as guidance, not as an order: we don't know the reader's role or whether a given law reaches
+ * them, and the "Applies to" line below carries that qualification.
  *
  * Renders at the top of the deadline modal (framed by that date: pass `deadline`) and on the bill
  * detail panel / bill page (framed by the law as a whole: omit it). Pure and props-only, hook-free,
@@ -29,11 +31,11 @@ export function NextSteps({
 
   return (
     <section
-      aria-label="What you must do"
+      aria-label="Next steps for producers"
       className="rounded-lg border border-green-accent/40 bg-green-accent/[0.06] p-4 space-y-2.5"
     >
       <div className="text-meta font-mono uppercase tracking-widest text-green-accent">
-        What you must do
+        Next steps for producers
       </div>
 
       <p className="text-text-primary text-base font-medium leading-snug">{step.action}</p>

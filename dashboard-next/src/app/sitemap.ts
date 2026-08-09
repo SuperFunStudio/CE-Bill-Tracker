@@ -38,7 +38,7 @@ const STATIC_PATHS = [
  * lastmod had no reason to recrawl and a sitemap resubmit signalled nothing. Taking the later of the
  * two makes lastmod mean "when this PAGE last changed", which is what the sitemap spec asks of it.
  */
-const CONTENT_REVISION = '2026-08-06';
+const CONTENT_REVISION = '2026-08-08';
 
 /** Later of the bill's own date and the page-content revision, as YYYY-MM-DD. Bills with no date at
  *  all (82 of them) now get a lastmod too, where they previously emitted none. */

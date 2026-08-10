@@ -4,8 +4,11 @@ substitutions:
   _INSTANCE_CONNECTION_NAME: ce-bill-tracker:us-central1:signalscout-pg
   _API_IMAGE: us-central1-docker.pkg.dev/ce-bill-tracker/signalscout-images/signalscout-api
   _JOB_IMAGE: us-central1-docker.pkg.dev/ce-bill-tracker/signalscout-images/signalscout-pipeline-job
-  # Set _API_URL after first deploy: gcloud run services describe signalscout-api --region=us-central1 --format='value(status.url)'
-  _API_URL: https://signalscout-api-36712717703.us-central1.run.app
+  # Custom domain mapped to the signalscout-api Cloud Run service (CNAME api -> ghs.googlehosted.com
+  # on the Squarespace-hosted atlascircular.com zone). The generated *.run.app URLs keep serving the
+  # same revisions indefinitely, so anything still pointing at them — notably the hackathon/ projects
+  # — is unaffected by this cutover.
+  _API_URL: https://api.atlascircular.com
 
 # The full pipeline (build 2 images, migrate, deploy API, build+deploy dashboard) runs ~10-11 min,
 # right at the default 10-min ceiling. Give it a generous margin so a slow step doesn't TIMEOUT.

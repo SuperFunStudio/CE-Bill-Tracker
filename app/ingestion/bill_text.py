@@ -13,7 +13,16 @@ tag-stripped and whitespace-normalized so it is suitable for BOTH the regex resi
 Postgres FTS / ts_headline — no HTML tags leak into the tsvector or the highlighted snippets.
 
 `fetch_clean_text` is duck-typed on the bill: it needs `.state`, `.bill_number`, `.openstates_id`,
-`.legiscan_bill_id`, `.source_url` (a SQLAlchemy row or any object with those attrs).
+`.legiscan_bill_id`, `.source_url` (a SQLAlchemy row or any object with those attrs), plus
+`.status_date` / `.last_action_date` — read via getattr, so an older caller that omits them still
+works, it just loses the LegiScan search rung (see below).
+
+SESSION SAFETY: legislatures reuse bill numbers every session, so resolving a LegiScan id by
+(state, bill_number) alone can attach a *different* bill's text — CA SB 54 is packaging EPR in
+2021-22 and court fee waivers in 2025-26. Search is therefore constrained by the bill's own year and
+the resolved bill's session window is verified before its text is accepted. A bill we cannot pin to
+a session yields NO text rather than someone else's: silent wrong text reads as a real extraction
+and gets cited, which is far worse than an unindexed bill (a case every consumer already handles).
 """
 from __future__ import annotations
 
@@ -82,29 +91,77 @@ def clean_text(raw: str) -> str:
     return cleaned
 
 
-async def _resolve_legiscan_id(client: LegiScanClient, b) -> int | None:
-    """LegiScan bill_id: the stored id, else an exact bill#/state search match."""
-    if b.legiscan_bill_id:
-        return int(b.legiscan_bill_id)
-    target = canon_bill_number(b.bill_number)
-    if not target:
-        return None
-    try:
-        res = await client.search((b.bill_number or "").replace("-", " "), state=b.state)
-    except Exception:  # noqa: BLE001
-        return None
-    for r in res:
-        if r.get("state") == b.state and canon_bill_number(r.get("bill_number")) == target:
-            return int(r["bill_id"])
+def bill_year(b) -> int | None:
+    """The session year to match a bill on — status_date, else last_action_date. None when neither
+    is known, which is the signal that we cannot safely resolve this bill by search."""
+    for attr in ("status_date", "last_action_date"):
+        d = getattr(b, attr, None)
+        if d is not None and getattr(d, "year", None):
+            return d.year
     return None
 
 
-async def _legiscan_text(client: LegiScanClient, legiscan_bill_id: int) -> str:
+# Legislatures reuse bill numbers every session — "CA SB 54" exists in 2021-22 (packaging EPR) and
+# again in 2025-26 (court fee waivers). A session window may legitimately end the year before a
+# bill's recorded status_date (a measure signed or chaptered after the session closed), so allow a
+# year of slack; the collisions this guards against are two or more sessions apart.
+_SESSION_YEAR_SLACK = 1
+
+
+def _session_matches(bill_data: dict, year: int) -> bool:
+    """Does the LegiScan bill's session window plausibly contain `year`? Unknown window → False:
+    an unverifiable match is exactly the case that attached the wrong statute."""
+    session = bill_data.get("session") or {}
+    start, end = session.get("year_start"), session.get("year_end")
+    if not start or not end:
+        return False
+    return int(start) - _SESSION_YEAR_SLACK <= year <= int(end) + _SESSION_YEAR_SLACK
+
+
+async def _resolve_legiscan_id(client: LegiScanClient, b) -> tuple[int | None, bool]:
+    """Returns ``(legiscan_bill_id, needs_session_check)``.
+
+    A stored id is trusted — it was captured alongside the bill record, so it cannot be a
+    number collision. A search-resolved id is not: getSearch matches on number + state and skews
+    to the CURRENT session, so an older bill would silently adopt a same-numbered new bill's text.
+    We constrain the search by year AND make the caller verify the session window before storing.
+    """
+    if b.legiscan_bill_id:
+        return int(b.legiscan_bill_id), False
+    target = canon_bill_number(b.bill_number)
+    year = bill_year(b)
+    # No year to match on means no way to tell the sessions apart. Fall through to the other rungs
+    # rather than guess — wrong text is far more damaging than no text, because it reads as a real
+    # extraction and gets cited.
+    if not target or year is None:
+        return None, False
+    try:
+        res = await client.search(
+            (b.bill_number or "").replace("-", " "), state=b.state, year=year
+        )
+    except Exception:  # noqa: BLE001
+        return None, False
+    for r in res:
+        if r.get("state") == b.state and canon_bill_number(r.get("bill_number")) == target:
+            return int(r["bill_id"]), True
+    return None, False
+
+
+async def _legiscan_text(
+    client: LegiScanClient, legiscan_bill_id: int, expect_year: int | None = None
+) -> str:
     """Full bill text from LegiScan: pick the best text doc, decode HTML/PDF/plain.
+
+    When `expect_year` is given the resolved bill's session window must contain it, otherwise we
+    return no text. This is the guard on a search-resolved id: getBill carries the authoritative
+    session, so it is the last point at which a same-numbered bill from another session can be
+    caught before its text is stored under the wrong record.
 
     Returns text with PDFs already extracted; HTML is still tagged here and is cleaned by the
     caller via clean_text() (so the >400-char substance gate below sees the raw document)."""
     bill = await client.get_bill(int(legiscan_bill_id))
+    if expect_year is not None and not _session_matches(bill, expect_year):
+        return ""
     docs = bill.get("texts") or []
 
     def rank(d):
@@ -160,9 +217,11 @@ async def fetch_clean_text(
             except Exception:  # noqa: BLE001
                 pass  # fall through to the generic rungs
     try:
-        lid = await _resolve_legiscan_id(ls_client, b)
+        lid, needs_session_check = await _resolve_legiscan_id(ls_client, b)
         if lid:
-            txt = await _legiscan_text(ls_client, lid)
+            txt = await _legiscan_text(
+                ls_client, lid, expect_year=bill_year(b) if needs_session_check else None
+            )
             if txt:
                 return clean_text(txt), SOURCE_LEGISCAN
     except Exception:  # noqa: BLE001

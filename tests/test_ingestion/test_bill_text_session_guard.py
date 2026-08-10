@@ -1,0 +1,120 @@
+"""Pins the session guard on the LegiScan text ladder.
+
+Bill numbers reset every session, so a (state, bill_number) match can resolve a completely different
+statute. Prod evidence: CA SB-54 (2022 packaging EPR) had the 2025-26 SB 54 "court fee waivers" text
+attached, and the extractor — correctly, given what it was handed — reported every circular-economy
+dimension as not_applicable. These tests hold the two defenses: the search is constrained by the
+bill's year, and the resolved bill's session window is verified before its text is accepted.
+"""
+import types
+
+import pytest
+
+from app.ingestion.bill_text import (
+    _legiscan_text,
+    _resolve_legiscan_id,
+    _session_matches,
+    bill_year,
+)
+
+
+def _bill(**kw):
+    base = dict(
+        state="CA", bill_number="SB-54", legiscan_bill_id=None,
+        openstates_id=None, source_url=None, status_date=None, last_action_date=None,
+    )
+    base.update(kw)
+    return types.SimpleNamespace(**base)
+
+
+class _FakeDate:
+    def __init__(self, year):
+        self.year = year
+
+
+class _FakeClient:
+    """Records how search was called and serves a canned bill."""
+
+    def __init__(self, results=None, bill=None):
+        self.results = results or []
+        self.bill = bill or {}
+        self.search_kwargs = None
+
+    async def search(self, query, state=None, year=None, page=1):
+        self.search_kwargs = {"query": query, "state": state, "year": year}
+        return self.results
+
+    async def get_bill(self, bill_id):
+        return self.bill
+
+
+# --- session window matching ---------------------------------------------------------------
+
+def test_session_window_contains_the_year():
+    assert _session_matches({"session": {"year_start": 2021, "year_end": 2022}}, 2022)
+
+
+def test_session_window_two_sessions_away_is_rejected():
+    # The exact CA SB-54 failure: a 2022 bill offered 2025-26 text.
+    assert not _session_matches({"session": {"year_start": 2025, "year_end": 2026}}, 2022)
+
+
+def test_one_year_of_slack_for_bills_chaptered_after_the_session_closed():
+    assert _session_matches({"session": {"year_start": 2021, "year_end": 2022}}, 2023)
+
+
+def test_unknown_session_window_is_not_a_match():
+    # An unverifiable match is precisely the case that attached the wrong statute.
+    assert not _session_matches({}, 2022)
+
+
+# --- year resolution ------------------------------------------------------------------------
+
+def test_bill_year_prefers_status_date_then_last_action():
+    assert bill_year(_bill(status_date=_FakeDate(2022), last_action_date=_FakeDate(2025))) == 2022
+    assert bill_year(_bill(last_action_date=_FakeDate(2025))) == 2025
+    assert bill_year(_bill()) is None
+
+
+# --- id resolution --------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_search_is_constrained_by_the_bills_own_year():
+    client = _FakeClient(results=[{"state": "CA", "bill_number": "SB54", "bill_id": 111}])
+    lid, needs_check = await _resolve_legiscan_id(client, _bill(status_date=_FakeDate(2022)))
+    assert (lid, needs_check) == (111, True)
+    # Without year=, LegiScan's getSearch skews to the current session — that was the bug.
+    assert client.search_kwargs["year"] == 2022
+
+
+@pytest.mark.asyncio
+async def test_stored_id_is_trusted_and_skips_the_session_check():
+    client = _FakeClient()
+    lid, needs_check = await _resolve_legiscan_id(client, _bill(legiscan_bill_id=999))
+    assert (lid, needs_check) == (999, False)
+    assert client.search_kwargs is None  # no search at all
+
+
+@pytest.mark.asyncio
+async def test_a_bill_with_no_year_is_not_resolved_by_search():
+    client = _FakeClient(results=[{"state": "CA", "bill_number": "SB54", "bill_id": 111}])
+    lid, _ = await _resolve_legiscan_id(client, _bill())
+    assert lid is None  # falls through to OpenStates / source_url rather than guessing
+
+
+# --- the guard actually withholds text ------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_wrong_session_text_is_withheld():
+    client = _FakeClient(bill={
+        "session": {"year_start": 2025, "year_end": 2026},
+        "texts": [{"doc_id": 1, "mime": "text/html"}],
+    })
+    assert await _legiscan_text(client, 111, expect_year=2022) == ""
+
+
+@pytest.mark.asyncio
+async def test_expect_year_none_does_not_gate_a_trusted_id():
+    # Stored ids must keep working even when the session block is absent from getBill.
+    client = _FakeClient(bill={"texts": []})
+    assert await _legiscan_text(client, 111, expect_year=None) == ""  # no docs, but no crash

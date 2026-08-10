@@ -14,7 +14,8 @@
       "Bash(python3 -c \"import re;h=open\\('/tmp/e',encoding='utf-8',errors='replace'\\).read\\(\\);t=re.sub\\(r'<[^>]+>',' ',h\\);t=re.sub\\(r'\\\\s+',' ',t\\);print\\('  ',t[:200]\\)\")",
       "WebFetch(domain:www.verpackungsgesetz.com)",
       "WebFetch(domain:circularcitiesdeclaration.eu)",
-      "WebFetch(domain:ec.europa.eu)"
+      "WebFetch(domain:ec.europa.eu)",
+      "Bash(curl -s -o /dev/null -w \"pricing \\(followed\\): %{http_code} -> %{url_effective}\\\\n\" -L https://www.atlascircular.com/pricing)"
     ],
     "additionalDirectories": [
       "c:\\Users\\kenny\\.claude\\projects\\c--Users-kenny-SignalScout\\memory"

@@ -1,16 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
+import { fetchBillTextCoverage, fetchFeeSummary } from '@/lib/api';
 import { track } from '@/lib/analytics';
 
 // Developer docs — the public API surface, drafted for the "Developers — build on the data" buyer.
 // Read endpoints are open + rate-limited today (no key); write/LLM endpoints (evaluate, ask) are Pro.
 // Higher volume, commercial terms, and bulk/webhook access are lead-captured via the request modal.
 
-const API_BASE = 'https://signalscout-api-36712717703.us-central1.run.app';
+// Same env var the rest of the app reads, so the pending api.atlascircular.com cutover is one
+// environment change rather than a string edit here that would drift from what the client calls.
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'https://signalscout-api-36712717703.us-central1.run.app';
+
+// Real ids, verified against prod. A placeholder id here used to 404 (and, before that fix, 500) —
+// the first request a developer copies out of our own docs has to succeed.
+const EXAMPLE_BILL_ID = 72452; // OR SB-582, Recycling Modernization Act — a densely extracted record.
 
 interface Endpoint {
   method: 'GET' | 'POST';
@@ -22,7 +30,7 @@ interface Endpoint {
 const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
   {
     title: 'Bills',
-    blurb: 'The core dataset — circular-economy bills across all 50 US states, the EU, and 25+ national jurisdictions, kept current with extracted compliance detail.',
+    blurb: 'The core dataset — circular-economy bills across all 50 US states, the EU, and 35+ national jurisdictions, kept current with extracted compliance detail. compliance_details is served in full on the per-bill record, free and unauthenticated; the bulk list omits it.',
     endpoints: [
       { method: 'GET', path: '/bills', desc: 'List / filter bills. Params: ce_relevant, state, region, regions (CSV), status, instrument_type, material_category, policy_stance, urgency, limit, offset.' },
       { method: 'GET', path: '/bills/{id}', desc: 'One bill in full, including the extracted compliance_details (the 8 dimension envelopes).' },
@@ -62,6 +70,7 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
     blurb: 'Structured judgment over the corpus. These accept a request body and are Pro-gated (Bearer token).',
     endpoints: [
       { method: 'POST', path: '/research/ask', desc: 'Ask a natural-language question over the corpus; returns a cited answer + optional SQL-backed chart.', auth: 'pro' },
+      { method: 'POST', path: '/evaluate/bill', desc: 'Score a draft or enacted bill against the regime baseline for its material — where it is strong, where it is thin.', auth: 'pro' },
     ],
   },
 ];
@@ -80,6 +89,45 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="font-serif text-xl text-text-primary border-b border-border-default pb-1">{title}</h2>
       {children}
     </section>
+  );
+}
+
+/** What the corpus actually holds, read live from the two open aggregate endpoints rather than
+ *  hardcoded — a stale number on a docs page is worse than no number. Renders nothing until both
+ *  land, so a fetch failure degrades to the prose above instead of showing zeroes. */
+function CorpusStats() {
+  const [stats, setStats] = useState<{ label: string; value: string }[] | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    Promise.all([fetchBillTextCoverage(), fetchFeeSummary()])
+      .then(([coverage, fees]) => {
+        if (!live) return;
+        setStats([
+          { label: 'bills tracked', value: coverage.total_bills.toLocaleString() },
+          { label: 'cited fee rates', value: fees.total_rate_entries.toLocaleString() },
+          { label: 'jurisdictions with fee data', value: String(fees.by_region.length) },
+          { label: 'currencies', value: String(fees.by_currency.length) },
+        ]);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (!stats) return null;
+  return (
+    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-px overflow-hidden rounded-lg border border-border-default bg-border-default">
+      {stats.map(s => (
+        <div key={s.label} className="bg-bg-tertiary px-3 py-3 text-center">
+          <dt className="font-serif text-xl text-text-primary">{s.value}</dt>
+          <dd className="text-[11px] uppercase tracking-wide text-text-muted mt-0.5 leading-tight">
+            {s.label}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -103,7 +151,17 @@ export default function DevelopersPage() {
         over a plain REST/JSON API. <strong className="text-text-primary">Read endpoints are open and
         rate-limited</strong> — no key needed to start. For production volume, commercial terms, bulk
         exports, or webhooks, <button onClick={requestAccess} className="text-green-accent hover:underline">request
-        API access</button>.
+        API access</button> — see <Link href="/pricing" className="text-green-accent hover:underline">pricing</Link>.
+      </p>
+
+      <CorpusStats />
+
+      <p className="text-text-secondary text-sm leading-relaxed">
+        Extracted figures are <strong className="text-text-primary">grounded</strong>: every fee rate,
+        target, and deadline carries a <code className="text-green-accent">source_excerpt</code> quoting
+        the enacting text verbatim, so you can render the citation next to the number instead of asking
+        your users to trust a model. Rows we could not tie back to statutory language are flagged rather
+        than dropped.
       </p>
 
       <Section title="Base URL">
@@ -117,8 +175,17 @@ export default function DevelopersPage() {
       <Section title="Quickstart">
         <p className="text-text-secondary text-sm">The 25 most recent enacted EPR laws, newest first:</p>
         <CodeBlock>{`curl "${API_BASE}/bills?ce_relevant=true&status=enacted&limit=25"`}</CodeBlock>
-        <p className="text-text-secondary text-sm">One bill in full, with extracted compliance detail:</p>
-        <CodeBlock>{`curl "${API_BASE}/bills/12345"`}</CodeBlock>
+        <p className="text-text-secondary text-sm">
+          One bill in full — Oregon’s Recycling Modernization Act, with its extracted compliance detail:
+        </p>
+        <CodeBlock>{`curl "${API_BASE}/bills/${EXAMPLE_BILL_ID}"`}</CodeBlock>
+        <p className="text-text-secondary text-sm leading-relaxed rounded-lg border border-border-default bg-bg-tertiary p-3">
+          <strong className="text-text-primary">Note:</strong> list results omit{' '}
+          <code className="text-green-accent">compliance_details</code> by design — the extraction is
+          per-bill, and shipping it on every row of a bulk list would make the corpus-wide dataset a
+          single call. Fetch it from <code className="text-green-accent">/bills/{'{id}'}</code>, which is
+          free and needs no key. If the field looks missing, you’re reading a list response.
+        </p>
       </Section>
 
       <Section title="Authentication & limits">
@@ -159,26 +226,47 @@ export default function DevelopersPage() {
       </Section>
 
       <Section title="Example response">
-        <p className="text-text-secondary text-sm"><code className="text-green-accent">GET /bills/{'{id}'}</code> returns the bill plus its extracted compliance envelopes:</p>
+        <p className="text-text-secondary text-sm">
+          <code className="text-green-accent">GET /bills/{EXAMPLE_BILL_ID}</code> returns the bill plus its
+          extracted compliance envelopes — abridged here, but every field below is verbatim from the live
+          response:
+        </p>
         <CodeBlock>{`{
-  "id": 12345,
+  "id": ${EXAMPLE_BILL_ID},
   "region": "US",
-  "state": "CA",
-  "bill_number": "SB 54",
-  "title": "Plastic Pollution Producer Responsibility Act",
+  "state": "OR",
+  "bill_number": "SB-582",
+  "title": "Relating to modernizing Oregon's recycling system.",
   "status": "enacted",
   "instrument_type": "epr",
-  "material_categories": ["plastic packaging"],
   "compliance_details": {
+    "extraction_version": 5,
     "collection_targets": {
       "status": "present",
-      "targets": [{ "material": "packaging", "percent": 65, "by_year": "2032", "basis": "weight" }]
+      "targets": [
+        { "material": "Plastic", "percent": 25, "by_year": "2028", "basis": "material_specific" },
+        { "material": "Plastic", "percent": 50, "by_year": "2040", "basis": "material_specific" },
+        { "material": "Plastic", "percent": 70, "by_year": "2050", "basis": "material_specific" }
+      ],
+      "source_excerpt": "It is the goal of the State of Oregon that the statewide recycling rate
+                         for plastic be: (A) At least 25 percent by calendar year 2028…"
     },
-    "pro_structure": { "status": "present", "model": "single_pro" },
-    "eco_modulation": { "status": "present", "criteria": ["recyclability", "recycled_content"] }
+    "pro_structure": { "status": "present", "model": "competitive_pros", "source_excerpt": "…" },
+    "eco_modulation": {
+      "status": "present",
+      "criteria": ["Post-consumer recycled content", "Product-to-package ratio", "Recyclability"],
+      "source_excerpt": "…"
+    }
     // …fee_amounts, penalties, recycled_content, bans_restrictions, labeling
   }
 }`}</CodeBlock>
+        <p className="text-text-muted text-xs leading-relaxed">
+          Each envelope carries a <code className="text-green-accent">status</code> of{' '}
+          <code className="text-green-accent">present</code>,{' '}
+          <code className="text-green-accent">absent</code>, or{' '}
+          <code className="text-green-accent">not_applicable</code> — so a dimension a law genuinely
+          does not address is distinguishable from one we have not extracted.
+        </p>
       </Section>
 
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

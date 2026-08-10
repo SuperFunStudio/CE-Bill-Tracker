@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Integer, and_, case, func, literal_column, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -605,7 +605,12 @@ async def get_bill(
         .outerjoin(lit_sub, Bill.id == lit_sub.c.related_law_id)
         .where(Bill.id == bill_id)
     )
-    row = (await db.execute(q)).one()
+    # one_or_none, not one: an unknown id is a client error, not a server fault. `.one()` raised
+    # NoResultFound here, which surfaced as a bare 500 — so every typo'd or stale bill id looked like
+    # the API was broken rather than the id being wrong.
+    row = (await db.execute(q)).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Bill {bill_id} not found")
     d = BillDetail.model_validate(row.Bill)
     d.litigation_case_count = row.case_count
     d.max_preemption_risk = row.max_risk

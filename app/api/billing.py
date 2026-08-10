@@ -85,13 +85,20 @@ async def founding_seats(request: Request, db: AsyncSession = Depends(get_db)):
     one way — a cancellation shouldn't put a seat back on the shelf and tick the number upward in front
     of someone who is mid-decision. Clamped at the total so an over-subscribed window can't render a
     negative remainder.
+
+    Our own test accounts (settings.internal_emails) are excluded: they carry comped Pro so the paid
+    product can be exercised end-to-end, which made them indistinguishable from real grants here — four
+    of them were consuming founding seats and understating "remaining" on the public pricing page.
     """
+    internal = [e.lower() for e in settings.internal_emails]
     q = select(func.count()).select_from(Entitlement).where(
         or_(
             Entitlement.founding.is_(True),
             and_(Entitlement.comp.is_(True), Entitlement.plan.in_(("pro", "enterprise"))),
         )
     )
+    if internal:
+        q = q.where(func.lower(Entitlement.email).notin_(internal))
     counted = int((await db.execute(q)).scalar() or 0) + _FOUNDING_SEATS_GRANTED_OFF_BOOK
     claimed = min(counted, _FOUNDING_SEATS_TOTAL)
     return {

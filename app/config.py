@@ -293,7 +293,20 @@ class Settings(BaseSettings):
     # ADMIN_EMAILS env var — accepts a comma-separated list ("a@x.com,b@y.com") or a JSON array.
     admin_emails: list[str] = ["kenny@superfun.studio"]
 
-    @field_validator("admin_emails", mode="before")
+    # Our own accounts. They hold complimentary Pro so the paid product can be exercised end-to-end,
+    # which means they look exactly like a real comped grant to any query that counts seats — four of
+    # them were silently consuming founding seats and showing the public pricing page a lower
+    # "remaining" than the truth. Excluded from /billing/founding-seats; deliberately NOT excluded from
+    # the comp that grants them access, since the whole point is that they can use the product. Keep
+    # this to accounts that are genuinely ours: it moves a number a visitor reads.
+    internal_emails: list[str] = [
+        "superfuntester@gmail.com",
+        "kenny.m.arnold@gmail.com",
+        "curiouskenneth@gmail.com",
+        "found@thriftspot.app",
+    ]
+
+    @field_validator("admin_emails", "internal_emails", mode="before")
     @classmethod
     def split_admin_emails(cls, v):
         # Accept a comma-separated string in addition to pydantic's default JSON-list parsing, so the

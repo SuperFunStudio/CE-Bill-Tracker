@@ -12,6 +12,23 @@ import type { BillOutcome } from '@/lib/types';
  * outcomes can't load, it degrades to a plain thank-you.
  */
 
+// Outcome copy is written for the Insights table, where there's room to be thorough. A farewell card
+// has none — clip to whole sentences up to a budget so the fact stays scannable on the way out.
+function clip(text: string | null | undefined, maxChars: number): string {
+  const t = (text || '').trim();
+  if (t.length <= maxChars) return t;
+  const sentences = t.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [t];
+  let out = '';
+  for (const s of sentences) {
+    if (out && (out + s).trim().length > maxChars) break;
+    out += s;
+    if (out.trim().length >= maxChars) break;
+  }
+  out = out.trim();
+  if (!out) out = t.slice(0, maxChars).replace(/\s+\S*$/, '');
+  return out.length < t.length && !/[.!?]$/.test(out) ? `${out}…` : out;
+}
+
 function metricText(o: BillOutcome): string | null {
   if (o.metric_display) return o.metric_display;
   if (o.metric_value != null) {
@@ -51,7 +68,7 @@ export function FarewellModal() {
   const metric = outcome ? metricText(outcome) : null;
   const lawLabel = outcome ? [outcome.state, outcome.bill_number].filter(Boolean).join(' ') : '';
   const shareText = outcome
-    ? `${metric ? metric + (outcome.metric_label ? ` ${outcome.metric_label}` : '') + ' — ' : ''}${outcome.summary}${lawLabel ? ` (${lawLabel})` : ''} · via Atlas Circular`
+    ? `${metric ? metric + (outcome.metric_label ? ` ${clip(outcome.metric_label, 70)}` : '') + ' — ' : ''}${clip(outcome.summary, 180)}${lawLabel ? ` (${lawLabel})` : ''} · via Atlas Circular`
     : '';
 
   async function copyShare() {
@@ -90,14 +107,18 @@ export function FarewellModal() {
               Before you go — a win worth sharing
             </p>
             {metric && (
-              <p className="font-serif text-text-primary">
-                <span className="text-2xl font-bold">{metric}</span>
-                {outcome.metric_label && (
-                  <span className="text-text-secondary text-sm"> {outcome.metric_label}</span>
-                )}
+              <p className="font-serif text-2xl font-bold text-text-primary leading-tight">
+                {metric}
               </p>
             )}
-            <p className="text-text-secondary text-body leading-relaxed">{outcome.summary}</p>
+            {outcome.metric_label && (
+              <p className="text-text-secondary text-sm leading-snug">
+                {clip(outcome.metric_label, 70)}
+              </p>
+            )}
+            <p className="text-text-secondary text-body leading-relaxed">
+              {clip(outcome.summary, 180)}
+            </p>
             <p className="text-text-muted text-xs">
               {lawLabel && <span className="font-medium text-text-secondary">{lawLabel}</span>}
               {outcome.source_url && (

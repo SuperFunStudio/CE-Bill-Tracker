@@ -25,8 +25,18 @@ import asyncpg
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.classification.haiku_classifier import TRACKED_INSTRUMENTS  # noqa: E402
+from app.ingestion.docket import DOCKET_PREFIXES  # noqa: E402
+from app.ingestion.law_dates import derive_status_date  # noqa: E402
 
 MIN_CONFIDENCE = 0.4
+
+# SQL mirror of docket.is_docket_shell, for the set-based promotion below: a pre-filing docket number
+# with no recorded action is a duplicate of the filed bill and must never be promoted back into scope
+# (app/ingestion/docket.py). Kept as one generated clause so the prefix table stays the single source.
+_NOT_DOCKET_SHELL = "NOT (last_action_date IS NULL AND (" + " OR ".join(
+    f"(state = '{st}' AND bill_number ~ '^({'|'.join(pfx)})-[0-9]+$')"
+    for st, pfx in sorted(DOCKET_PREFIXES.items())
+) + "))"
 
 
 async def main() -> None:
@@ -46,7 +56,8 @@ async def main() -> None:
         where = (
             "ce_relevant = false "
             "AND confidence_score >= $1 "
-            "AND instrument_type = ANY($2::text[])"
+            "AND instrument_type = ANY($2::text[]) "
+            f"AND {_NOT_DOCKET_SHELL}"
         )
         to_flip = await conn.fetch(
             f"SELECT state, instrument_type, count(*) AS n FROM bills WHERE {where} "
@@ -71,6 +82,25 @@ async def main() -> None:
             MIN_CONFIDENCE, instruments,
         )
         print(f"\napplied: {updated}")
+
+        # A promotion pulls foreign rows into scope that the (already-run, one-off)
+        # scripts/backfill_foreign_dates.py never saw, so they land permanently undated and surface as
+        # "N bills carry no date" in the /research year aggregate. Date them here rather than leaving
+        # it to someone noticing later. Non-US only: a US status_date means "last action" and belongs
+        # to the source feed. See app/ingestion/law_dates.derive_status_date.
+        dateless = await conn.fetch(
+            "SELECT id, bill_number, title FROM bills "
+            "WHERE ce_relevant AND status_date IS NULL AND region <> 'US'"
+        )
+        dated = 0
+        for r in dateless:
+            derived = derive_status_date(r["bill_number"], r["title"])
+            if derived is not None:
+                await conn.execute(
+                    "UPDATE bills SET status_date = $1 WHERE id = $2", derived, r["id"]
+                )
+                dated += 1
+        print(f"derived a status_date for {dated} of {len(dateless)} dateless foreign row(s)")
     finally:
         await conn.close()
 

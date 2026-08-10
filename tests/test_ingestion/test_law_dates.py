@@ -9,7 +9,12 @@ import datetime
 
 import pytest
 
-from app.ingestion.law_dates import derive_law_year, derive_status_date, derive_title_date
+from app.ingestion.law_dates import (
+    derive_law_year,
+    derive_status_date,
+    derive_title_date,
+    ensure_status_date,
+)
 
 
 def d(s: str) -> datetime.date:
@@ -123,3 +128,42 @@ class TestGuards:
     def test_day_month_without_year_in_phrase(self):
         title = "Real Decreto 1055/2022, de 16 de diciembre, de envases y residuos de envases"
         assert derive_status_date("BOE-A-2022-22690", title) == d("2022-12-16")
+
+
+class TestEnsureStatusDate:
+    """The promotion hook. A reclassify that pulls a foreign law into scope has to date it, or the row
+    sits undated forever — 19 EU/CELEX rows did exactly that after the transboundary promotion, and
+    surfaced as "82 bills carry no date" in a /research answer six weeks later."""
+
+    class _Bill:
+        def __init__(self, region, bill_number, title, status_date=None):
+            self.region, self.bill_number = region, bill_number
+            self.title, self.status_date = title, status_date
+
+    def test_dates_a_dateless_foreign_row_from_its_celex_id(self):
+        b = self._Bill("EU", "32016R1245", "Official Journal of the European Union")
+        assert ensure_status_date(b) is True
+        assert b.status_date == d("2016-01-01")
+
+    def test_title_date_still_wins_over_the_celex_year(self):
+        b = self._Bill("EU", "32022R2400", "REGULATION (EU) 2022/2400 OF THE EUROPEAN PARLIAMENT AND "
+                                           "OF THE COUNCIL of 23 November 2022 amending …")
+        assert ensure_status_date(b) is True
+        assert b.status_date == d("2022-11-23")
+
+    def test_never_overwrites_a_date_the_adapter_already_captured(self):
+        b = self._Bill("JP", "424AC0000000057", "…", status_date=d("2012-08-10"))
+        assert ensure_status_date(b) is False
+        assert b.status_date == d("2012-08-10")
+
+    def test_us_rows_are_left_alone(self):
+        """A US status_date means "date of last action" and is owned by the source feed — deriving a
+        year from the title would silently invent an action date."""
+        b = self._Bill("US", "HD-3107", "An Act to establish a mattress recycling program")
+        assert ensure_status_date(b) is False
+        assert b.status_date is None
+
+    def test_reports_failure_when_nothing_is_derivable(self):
+        b = self._Bill("CN", "CN:flk:4028abcc61277793", "昆明市 再 生 资 源 回收管理条例")
+        assert ensure_status_date(b) is False
+        assert b.status_date is None

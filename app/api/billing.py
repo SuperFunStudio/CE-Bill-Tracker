@@ -19,7 +19,7 @@ import stripe
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -58,6 +58,47 @@ def _research_price_for_period(period: str) -> str:
         "annual": settings.stripe_research_annual_price_id,
         "monthly": settings.stripe_research_monthly_price_id,
     }.get(period, "")
+
+
+# The founding window is advertised as a fixed number of seats rather than a countdown clock, so the
+# number the pricing page shows has to come from the database instead of a constant somebody remembers
+# to edit. Kept in sync with FOUNDING.total in dashboard-next/src/lib/tiers.ts.
+_FOUNDING_SEATS_TOTAL = 50
+
+# Seats granted outside the entitlements table — anything handed out before the `founding` stamp existed
+# or arranged off-platform. Raise this ONLY for seats that genuinely went to someone; it exists so a
+# real grant that the query can't see still consumes a seat, not as a scarcity dial.
+_FOUNDING_SEATS_GRANTED_OFF_BOOK = 0
+
+
+@router.get("/founding-seats")
+@limiter.limit("120/minute")
+async def founding_seats(request: Request, db: AsyncSession = Depends(get_db)):
+    """How many founding seats are gone — the pricing page's seat counter, made true.
+
+    Public and unauthenticated: it's a marketing figure and it leaks nothing but a count.
+
+    A seat counts as taken if it was stamped `founding` at checkout (the coupon actually went on — see
+    the checkout.session.completed webhook) OR it's a complimentary Pro/Enterprise grant, since a comped
+    seat consumes the founding allocation exactly like a paid one; comps at Student/Researcher level
+    don't, as they're not the same offer. Status is deliberately ignored, so the counter only ever moves
+    one way — a cancellation shouldn't put a seat back on the shelf and tick the number upward in front
+    of someone who is mid-decision. Clamped at the total so an over-subscribed window can't render a
+    negative remainder.
+    """
+    q = select(func.count()).select_from(Entitlement).where(
+        or_(
+            Entitlement.founding.is_(True),
+            and_(Entitlement.comp.is_(True), Entitlement.plan.in_(("pro", "enterprise"))),
+        )
+    )
+    counted = int((await db.execute(q)).scalar() or 0) + _FOUNDING_SEATS_GRANTED_OFF_BOOK
+    claimed = min(counted, _FOUNDING_SEATS_TOTAL)
+    return {
+        "total": _FOUNDING_SEATS_TOTAL,
+        "claimed": claimed,
+        "remaining": _FOUNDING_SEATS_TOTAL - claimed,
+    }
 
 
 @router.get("/me")
@@ -150,13 +191,60 @@ class CheckoutRequest(BaseModel):
     amount_cents: int | None = None
 
 
-async def _ensure_customer(db: AsyncSession, ent: Entitlement, user: AuthedUser) -> None:
-    """Make sure the entitlement has a Stripe customer, creating one on first checkout."""
-    if not ent.stripe_customer_id:
-        customer = await run_in_threadpool(
+def _is_missing_customer(e: Exception) -> bool:
+    """True when Stripe rejected a call because the customer id we sent doesn't exist here.
+
+    The usual cause is a row still holding a TEST-mode customer id after the deploy moved to live
+    keys (ids are mode-scoped, so a test `cus_…` is simply absent to a live key); a customer deleted
+    in the Stripe dashboard looks the same. Either way the stored id is dead and must be re-pointed.
+    """
+    return isinstance(e, stripe.InvalidRequestError) and "No such customer" in str(e)
+
+
+async def _repair_customer(db: AsyncSession, ent: Entitlement, user: AuthedUser) -> str:
+    """Re-point an entitlement at a customer that exists in the *current* Stripe account.
+
+    Prefers an existing customer with the same email, so a real subscription created under that
+    customer stays attached to the seat; only mints a new one when there's nothing to adopt.
+    """
+    found = await run_in_threadpool(stripe.Customer.list, email=user.email, limit=1)
+    data = getattr(found, "data", None) or []
+    if data:
+        customer_id = data[0].id
+    else:
+        created = await run_in_threadpool(
             stripe.Customer.create, email=user.email, metadata={"firebase_uid": user.uid}
         )
-        ent.stripe_customer_id = customer.id
+        customer_id = created.id
+    log.warning(
+        "stripe_customer_repaired",
+        email=user.email,
+        stale=ent.stripe_customer_id,
+        customer_id=customer_id,
+        adopted=bool(data),
+    )
+    ent.stripe_customer_id = customer_id
+    await db.commit()
+    return customer_id
+
+
+async def _ensure_customer(db: AsyncSession, ent: Entitlement, user: AuthedUser) -> None:
+    """Make sure the entitlement has a Stripe customer that this API key can actually see, creating
+    one on first checkout and repairing a stale id rather than letting Checkout fail with a 500."""
+    if ent.stripe_customer_id:
+        try:
+            existing = await run_in_threadpool(stripe.Customer.retrieve, ent.stripe_customer_id)
+            if not getattr(existing, "deleted", False):
+                return
+        except Exception as e:
+            if not _is_missing_customer(e):
+                raise
+        await _repair_customer(db, ent, user)
+        return
+    customer = await run_in_threadpool(
+        stripe.Customer.create, email=user.email, metadata={"firebase_uid": user.uid}
+    )
+    ent.stripe_customer_id = customer.id
     await db.commit()
 
 
@@ -260,9 +348,11 @@ async def create_checkout(
     student membership, grant it directly and return a success URL).
 
     Pro: everyone gets the 90-day free trial. The founding coupon (50% off for life) is applied while
-    the founding window is open; once it closes, the coupon's Stripe redeem-by lapses, so we catch the
-    rejection and retry at full price rather than hard-break checkout. `founding` metadata records
-    whether the coupon actually went on, which the webhook reads to stamp the seat.
+    the founding window is open; the window closes when the coupon runs out of redemptions (it is capped
+    at the advertised seat count — see /founding-seats) or its backstop redeem-by lapses, at which point
+    Stripe rejects it, so we catch the rejection and retry at full price rather than hard-break checkout.
+    `founding` metadata records whether the coupon actually went on, which the webhook reads to stamp the
+    seat.
     """
     plan = (payload.plan if payload else "pro").lower().strip()
     period = (payload.period if payload else "annual").lower().strip()
@@ -327,15 +417,28 @@ async def billing_portal(
     user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Stripe-hosted customer portal so subscribers can manage/cancel their plan."""
+    """Stripe-hosted customer portal so subscribers can manage/cancel their plan.
+
+    A seat can hold a customer id Stripe no longer recognises (see _is_missing_customer). That used
+    to surface as a 500 on "Manage plan"; now we re-point the row and open the portal on the good
+    customer instead.
+    """
     ent = await get_entitlement(db, user)
     if not ent or not ent.stripe_customer_id:
         raise HTTPException(status_code=404, detail="no stripe customer")
-    session = await run_in_threadpool(
-        stripe.billing_portal.Session.create,
-        customer=ent.stripe_customer_id,
-        return_url=f"{settings.app_base_url}/account",
-    )
+
+    def _open(customer_id: str):
+        return stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=f"{settings.app_base_url}/account",
+        )
+
+    try:
+        session = await run_in_threadpool(_open, ent.stripe_customer_id)
+    except Exception as e:
+        if not _is_missing_customer(e):
+            raise
+        session = await run_in_threadpool(_open, await _repair_customer(db, ent, user))
     return {"url": session.url}
 
 

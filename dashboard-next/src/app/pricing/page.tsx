@@ -2,14 +2,16 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { CheckIcon } from '@/components/ui/icons';
+import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { useAuth } from '@/components/auth/AuthContext';
 import { startCheckout } from '@/lib/billing';
 import {
-  PRO, RESEARCH, STUDENT, ENTERPRISE, PRICING_HEADER, LEDGER, SCALE, FOUNDING, FAIR_QUESTIONS,
+  PRO, RESEARCH, STUDENT, ENTERPRISE, PRICING_HEADER, LEDGER, SCALE, FOUNDING,
   REGION_COUNT_FALLBACK, type BillingPeriod,
 } from '@/lib/tiers';
 import { useLawsInForce, useBillTimeline } from '@/hooks/useBills';
+import { useFoundingSeats } from '@/hooks/useFoundingSeats';
 import { track } from '@/lib/analytics';
 import type { PlanInterest } from '@/lib/api';
 
@@ -60,7 +62,9 @@ export default function PricingPage() {
   // tracked" argues the opposite of what it is here to argue.
   const num = (n: number) => (n > 0 ? n.toLocaleString('en-US') : '—');
 
-  const seatsRemaining = Math.max(FOUNDING.total - FOUNDING.claimed, 0);
+  // Live from /billing/founding-seats, so the counter moves as seats sell rather than when someone
+  // remembers to edit a constant.
+  const { total: seatsTotal, remaining: seatsRemaining } = useFoundingSeats();
 
   function openPlan(p: PlanInterest, label: string, heading?: string, source?: string) {
     track('pricing_cta', { plan: p, plan_label: label });
@@ -116,15 +120,12 @@ export default function PricingPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
-      {/* ── Masthead — the frame the rest of the page argues from: the price is small next to the thing
-             it prevents. Left-aligned and editorial rather than centred marketing. ── */}
-      <header className="pt-4 space-y-4">
-        <span className={eyebrow}>{PRICING_HEADER.eyebrow}</span>
-        <h1 className="font-serif text-3xl sm:text-4xl leading-tight text-text-primary max-w-[19ch]">
-          {PRICING_HEADER.title}
-        </h1>
-        <p className="text-text-secondary leading-relaxed max-w-[58ch]">{PRICING_HEADER.lede(regionCount)}</p>
-      </header>
+      {/* ── Masthead — the shared GazetteHeader, same as every other page: the pitch rides as the
+             italic tagline rather than getting a pricing-only headline treatment. ── */}
+      <GazetteHeader title={PRICING_HEADER.title} subtitle={PRICING_HEADER.tagline} />
+      <p className="text-text-secondary leading-relaxed max-w-[62ch] mx-auto text-center">
+        {PRICING_HEADER.lede(regionCount)}
+      </p>
 
       {/* ── Coverage ledger — what a seat buys, in numbers, before a price is named. Live counts. ── */}
       <section aria-label="Coverage" className="border-y border-border-default grid grid-cols-2 md:grid-cols-4">
@@ -157,34 +158,16 @@ export default function PricingPage() {
         <span className="text-text-secondary">{LEDGER.noteLead}</span> {LEDGER.noteRest}
       </p>
 
-      {/* ── Reference scale — the category anchor, drawn rather than asserted. The bracket is every
-             Atlas tier; the tick near the right edge is where this category normally opens. ── */}
-      <section aria-label="How Atlas is priced against comparable platforms" className="pt-8 space-y-3">
+      {/* ── Category anchor — stated in prose. An earlier version drew this as a scale bar (Atlas's
+             range bracketed against a tick at the category's entry price); it didn't read at a glance,
+             so the comparison is a sentence now. ── */}
+      <section aria-label="How Atlas is priced against comparable platforms" className="pt-6 space-y-3">
         <span className={eyebrow}>{SCALE.eyebrow}</span>
-        <h2 className="font-serif text-xl text-text-primary">{SCALE.title}</h2>
+        <h2 className="font-serif text-xl leading-snug text-text-primary max-w-[46ch]">{SCALE.title}</h2>
         <p className="text-text-secondary text-sm leading-relaxed max-w-[62ch]">{SCALE.intro}</p>
-
-        <div className="pt-7">
-          <div className="relative h-px bg-border-default">
-            <div className="absolute left-0 top-0 h-7 w-[40%] sm:w-[34%] border-l border-r border-b border-green-accent">
-              <div className="absolute inset-x-0 top-0 h-[3px] bg-green-accent" />
-            </div>
-            <div className="absolute left-[92%] top-0 h-7 w-px bg-text-muted" />
-          </div>
-          <div className="mt-10 flex items-start justify-between gap-6">
-            <div className="max-w-[30ch]">
-              <span className="block font-mono text-text-primary">{SCALE.lowValue}</span>
-              <span className="block text-sm text-text-secondary mt-1 leading-snug">{SCALE.lowLabel}</span>
-            </div>
-            <div className="max-w-[26ch] text-right">
-              <span className="block font-mono text-text-secondary">{SCALE.highValue}</span>
-              <span className="block text-sm text-text-muted mt-1 leading-snug">{SCALE.highLabel}</span>
-            </div>
-          </div>
-          <p className="text-meta text-text-muted leading-relaxed border-t border-border-default mt-6 pt-3">
-            {SCALE.foot}
-          </p>
-        </div>
+        <p className="text-meta text-text-muted leading-relaxed border-t border-border-default pt-3">
+          {SCALE.foot}
+        </p>
       </section>
 
       {/* Billing-period toggle applies to Researchers + Pro (annual is the default, cheaper per month). */}
@@ -293,8 +276,10 @@ export default function PricingPage() {
           </div>
           <div className="mb-3 rounded-lg border border-green-accent/40 bg-green-dark/30 px-3 py-2">
             <p className="text-meta leading-relaxed text-text-primary">{FOUNDING.headline}</p>
-            <p className="font-mono text-meta text-green-accent mt-1.5">
-              {FOUNDING.seatsLine(seatsRemaining, FOUNDING.total)}
+            <p className="text-meta text-text-secondary mt-1.5">{FOUNDING.seatsLine(seatsTotal)}</p>
+            {/* The counter carries the urgency, so it gets the size the sentence above it doesn't. */}
+            <p className="font-mono text-base font-medium tracking-tight text-green-accent mt-0.5">
+              {FOUNDING.remainingLine(seatsRemaining, seatsTotal)}
             </p>
           </div>
           <p className="text-text-muted text-meta mb-4">{PRO.who}</p>
@@ -348,21 +333,8 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* ── Fair questions — the four objections that actually stop a card going in, answered up front
-             instead of buried in a FAQ page. ── */}
-      <section className="pt-10">
-        <span className={eyebrow}>{FAIR_QUESTIONS.eyebrow}</span>
-        <h2 className="font-serif text-2xl text-text-primary mt-3 mb-2">{FAIR_QUESTIONS.title}</h2>
-        <p className="text-text-secondary text-sm leading-relaxed max-w-[58ch] mb-6">{FAIR_QUESTIONS.lede}</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-px rounded-xl border border-border-default bg-border-default overflow-hidden">
-          {FAIR_QUESTIONS.items({ measures: num(ledger.measures), regions: regionCount }).map(item => (
-            <div key={item.q} className="bg-bg-primary p-6">
-              <h3 className="font-serif text-base leading-snug text-text-primary mb-2">{item.q}</h3>
-              <p className="text-text-secondary text-sm leading-relaxed">{item.a}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* The "fair questions" objection grid that used to sit here now lives on /methodology as its FAQ
+          section — same FAIR_QUESTIONS source, one copy of the answers. */}
 
       {/* Developers strip — its own section below the grid (different buyer, usage-based metric) */}
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -383,9 +355,8 @@ export default function PricingPage() {
         </Link>
       </section>
 
-      <p className="border-t border-border-default pt-5 text-meta text-text-muted flex flex-wrap justify-between gap-3">
-        <span>Prices in USD. Annual terms billed once; monthly cancels at the end of the month.</span>
-        <span>Atlas Circular — a SUPERFUN project</span>
+      <p className="border-t border-border-default pt-5 text-meta text-text-muted">
+        Prices in USD. Annual terms billed once; monthly cancels at the end of the month.
       </p>
 
       {modal && (

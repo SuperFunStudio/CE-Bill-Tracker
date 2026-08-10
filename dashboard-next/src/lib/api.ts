@@ -238,6 +238,12 @@ export async function fetchBillSearch(q: string, limit = 50, regions?: string): 
   return apiFetch<BillSearchHit[]>(buildUrl('/bills/search', { q, limit, regions }));
 }
 
+/** Founding-seat counter for the pricing page — { total, claimed, remaining }, counted from stamped
+ *  founding entitlements server-side. Public/unauthenticated; see app/api/billing.py. */
+export async function fetchFoundingSeats(): Promise<{ total: number; claimed: number; remaining: number }> {
+  return apiFetch<{ total: number; claimed: number; remaining: number }>(buildUrl('/billing/founding-seats'));
+}
+
 /** How many bills the full-text search actually covers — for the deep-search coverage note. */
 export async function fetchBillTextCoverage(): Promise<TextCoverageStats> {
   return apiFetch<TextCoverageStats>(buildUrl('/bills/text-coverage'));

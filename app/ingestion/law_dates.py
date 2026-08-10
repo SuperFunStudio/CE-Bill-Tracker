@@ -196,3 +196,25 @@ def derive_status_date(
         return precise
     got = derive_law_year(source_id, title, max_year=max_year)
     return datetime.date(got[0], 1, 1) if got else None
+
+
+def ensure_status_date(bill) -> bool:
+    """Give a dateless non-US bill a derived status_date. Returns True if one was set.
+
+    PROMOTION HOOK. scripts/backfill_foreign_dates.py only walks rows that are ce_relevant AT THE TIME
+    IT RUNS, so any later promotion (a reclassify, scripts/backfill_adjacency.py) pulls fresh foreign
+    rows into scope that nothing ever dates — they show up as "N bills carry no date" in the /research
+    year aggregate. That is exactly how 19 dated-able EU/CELEX rows sat undated for six weeks after the
+    transboundary promotion. So every path that flips ce_relevant True calls this on the way through.
+
+    Duck-typed on anything carrying .region/.bill_number/.title/.status_date (an ORM Bill, an asyncpg
+    Record wrapper) so the ORM and raw-SQL promoters can share one rule. US rows are skipped: their
+    status_date means "date of last action", not "enacted year", and is owned by the source feed.
+    """
+    if (bill.region or "US") == "US" or bill.status_date is not None:
+        return False
+    derived = derive_status_date(bill.bill_number, bill.title)
+    if derived is None:
+        return False
+    bill.status_date = derived
+    return True

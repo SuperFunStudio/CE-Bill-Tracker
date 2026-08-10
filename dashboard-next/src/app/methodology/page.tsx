@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { useBills, useLawsInForce } from '@/hooks/useBills';
+import { FAIR_QUESTIONS } from '@/lib/tiers';
 
 // Public engine snapshot. Only observable facts live here — the numbers a reader could verify
 // from the site itself (corpus scale, jurisdiction breadth, the live relevant count). The engine
@@ -53,6 +54,11 @@ export default function MethodologyPage() {
   const inForce = lawsInForce?.length
     ? lawsInForce.reduce((s, p) => s + p.count, 0).toLocaleString()
     : ENGINE.inForce;
+  // Distinct regions carrying relevant law — the same derivation the pricing page uses, so the FAQ's
+  // breadth answer and ENGINE.jurisdictions can't tell two different stories.
+  const regionCount = lawsInForce?.length
+    ? new Set(lawsInForce.map(p => p.region)).size
+    : Number(ENGINE.jurisdictions);
 
   return (
     <div className="p-6 space-y-8 max-w-3xl mx-auto">
@@ -213,6 +219,28 @@ export default function MethodologyPage() {
         <p className="text-text-secondary text-body leading-relaxed">
           Classifications are automated and can contain errors; always verify against the primary
           source before acting. We continuously expand the reviewed set.
+        </p>
+      </section>
+
+      {/* FAQ — the objections a reader arrives with, answered where the method is already being
+          explained. Copy is shared with the pricing tiers (lib/tiers FAIR_QUESTIONS) so the scale and
+          coverage answers can't drift from the prices they justify; the counts are the live ones above. */}
+      <section className="border-t border-border-default pt-6 space-y-4">
+        <div>
+          <h2 className="font-serif text-xl text-text-primary">{FAIR_QUESTIONS.title}</h2>
+          <p className="text-text-secondary text-body leading-relaxed mt-1">{FAIR_QUESTIONS.lede}</p>
+        </div>
+        <div className="space-y-5">
+          {FAIR_QUESTIONS.items({ measures: relevant, regions: regionCount }).map(item => (
+            <div key={item.q}>
+              <h3 className="font-serif text-base text-text-primary leading-snug">{item.q}</h3>
+              <p className="text-text-secondary text-body leading-relaxed mt-1">{item.a}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-meta text-text-muted">
+          More questions? The <Link href="/faq" className="text-green-accent hover:underline">full FAQ</Link>{' '}
+          covers what&apos;s free vs. Pro, alerts, and the API.
         </p>
       </section>
 

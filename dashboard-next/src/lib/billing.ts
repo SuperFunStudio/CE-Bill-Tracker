@@ -37,6 +37,19 @@ export function billingErrorMessage(e: unknown): string {
   return 'We couldn’t start checkout just now — please try again in a moment.';
 }
 
+/** Same idea as billingErrorMessage, for the "Manage plan" button. A raw transport string
+ *  ("Request failed (500): {"detail":"Internal server error"}") is never something to show a
+ *  subscriber. A 404 is the meaningful case: the seat has no Stripe customer at all (a
+ *  complimentary or manually granted membership), so there is genuinely nothing to manage. */
+export function portalErrorMessage(e: unknown): string {
+  const msg = e instanceof Error ? e.message : '';
+  if (/\(404\)/.test(msg)) {
+    return 'This membership isn’t billed through Stripe, so there’s nothing to manage here. Email us if that looks wrong.';
+  }
+  if (msg && !/Request failed|[{}]|\(\d{3}\)/.test(msg)) return msg;
+  return 'We couldn’t open the billing portal just now — please try again in a moment.';
+}
+
 /** The self-serve membership tiers that go through Stripe Checkout. Enterprise is invoiced (lead
  *  capture), not a checkout plan. */
 export type MembershipPlan = 'pro' | 'student' | 'research';

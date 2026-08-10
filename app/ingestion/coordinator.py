@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.ingestion.docket import is_docket_shell
 from app.ingestion.federal_register import FederalRegisterClient
 from app.ingestion.legiscan import ALL_STATES, LegiScanClient, compute_bill_hash
 from app.ingestion.openstates import OpenStatesClient
@@ -432,6 +433,16 @@ class IngestionCoordinator:
             source_url = _pick_source_url(sources)
             last_action_date = _parse_date(bill_data.get("latest_action_date"))
             status = _infer_openstates_status(bill_data)
+
+            # A pre-filing docket shell (MA HD-/SD-, KY BR- with no action yet) is the same text as
+            # the bill we already track under its filed number — storing it double-counts the bill
+            # and, being action-less, leaves a permanently dateless row. Skipped at the door rather
+            # than ingested-then-hidden; it lands normally once it picks up an action. See
+            # app/ingestion/docket.py.
+            if is_docket_shell(state, bill_number, last_action_date):
+                log.debug("openstates_docket_shell_skipped",
+                          state=state, bill_number=bill_number, openstates_id=openstates_id)
+                return "skipped"
 
             stmt = insert(Bill).values(
                 openstates_id=openstates_id,

@@ -18,7 +18,9 @@ import { ScopeOnboarding } from '@/components/scope/ScopeOnboarding';
 // fee schedules (UK pEPR, JP JCPRA) that a US-state selector would contradict. Ask the Bills scopes
 // geography from the QUESTION TEXT (resolve_facets), so the bar never reached the request. The home
 // page ('/') hosts the Regions selector inside its own explorer filter box (BillFilters showRegion).
-const REGION_BAR_HIDDEN = ['/', '/compliance', '/federal', '/studio', '/ask'];
+// '/pricing' has nothing a jurisdiction filter could scope — the coverage figures there are deliberately
+// whole-corpus, and a filter above them invites the reader to shrink the thing being priced.
+const REGION_BAR_HIDDEN = ['/', '/compliance', '/federal', '/studio', '/ask', '/pricing'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

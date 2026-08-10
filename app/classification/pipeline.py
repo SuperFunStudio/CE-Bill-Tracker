@@ -11,6 +11,8 @@ from app.classification.keywords import KeywordFilter
 from app.classification.materials import normalize_materials
 from app.classification.sonnet_extractor import SonnetExtractor
 from app.config import settings
+from app.ingestion.docket import is_docket_shell
+from app.ingestion.law_dates import ensure_status_date
 from app.models import (
     Bill,
     BillChange,
@@ -40,6 +42,19 @@ class PipelineResult:
     classified_haiku: int = 0
     extracted_sonnet: int = 0
     errors: list[str] = field(default_factory=list)
+
+
+def _apply_scope_invariants(bills: list[Bill]) -> None:
+    """Give every newly in-scope foreign law a derived status_date.
+
+    Called immediately before each commit rather than at the four separate points that assign
+    ce_relevant, because those branches (keyword-only, LLM-disabled, Haiku, Haiku-failed) are each a
+    way around it. Without this, a promotion drops a dateless row into the corpus that only a manual
+    scripts/backfill_foreign_dates.py run would ever fix — see law_dates.ensure_status_date.
+    """
+    for b in bills:
+        if b.ce_relevant:
+            ensure_status_date(b)
 
 
 class ClassificationPipeline:
@@ -74,6 +89,15 @@ class ClassificationPipeline:
                     b.title or "", b.description or ""
                 )
             ]
+        # A pre-filing docket shell is out of scope no matter how well it scores: it is the same text
+        # as the bill already tracked under its filed number (app/ingestion/docket.py). Dropped from
+        # `candidates` rather than demoted after classification, so it never costs a Haiku call and
+        # the loop below marks it not-relevant through the ordinary non-candidate path. Ingest already
+        # refuses to store new ones; this is what keeps a reclassify from re-promoting those on disk.
+        candidates = [
+            b for b in candidates
+            if not is_docket_shell(b.state, b.bill_number, b.last_action_date)
+        ]
         result.passed_keyword = len(candidates)
         log.info(
             "keyword_filter_done",
@@ -90,6 +114,7 @@ class ClassificationPipeline:
                 bill.ce_relevant = False
 
         if not candidates:
+            _apply_scope_invariants(bills)
             await db.commit()
             return result
 
@@ -102,6 +127,7 @@ class ClassificationPipeline:
                 kw_score = self.keyword_filter.score(bill.title or "", bill.description or "")
                 if kw_score.material_hints:
                     bill.material_categories = normalize_materials(kw_score.material_hints)
+            _apply_scope_invariants(bills)
             await db.commit()
             return result
 
@@ -202,6 +228,7 @@ class ClassificationPipeline:
                 bill_obj.confidence_score = -1.0
                 bill_obj.ce_relevant = True
 
+        _apply_scope_invariants(bills)
         await db.commit()
 
         # Stage 3: Sonnet extraction for high-confidence bills

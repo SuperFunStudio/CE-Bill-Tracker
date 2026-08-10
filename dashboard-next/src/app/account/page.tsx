@@ -6,7 +6,7 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { LockIcon, StarIcon } from '@/components/ui/icons';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useBeta } from '@/components/settings/BetaContext';
-import { openBillingPortal, deleteAccount } from '@/lib/billing';
+import { openBillingPortal, portalErrorMessage, deleteAccount } from '@/lib/billing';
 import { PRO } from '@/lib/tiers';
 import { track } from '@/lib/analytics';
 
@@ -131,7 +131,7 @@ function PlanCard({
     try {
       await openBillingPortal(getToken);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not open the billing portal.');
+      setError(portalErrorMessage(e));
       setBusy(false);
     }
   }

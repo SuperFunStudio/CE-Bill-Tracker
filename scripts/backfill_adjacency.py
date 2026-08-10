@@ -42,6 +42,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from app.ingestion.law_dates import derive_status_date  # noqa: E402
 from scripts.add_bill_from_legiscan import _normalize_dsn  # noqa: E402
 
 ADJACENCY = "transboundary"
@@ -129,7 +130,7 @@ async def main() -> None:
     # NULL. Pull candidates that at least mention a waste/movement-ish term to keep the scan cheap; the
     # precise net + carve-out are applied in Python so the logic lives in one auditable place.
     sql = (
-        "SELECT id, region, state, bill_number, title, description, status, "
+        "SELECT id, region, state, bill_number, title, description, status, status_date, "
         "       ce_relevant, confidence_score, instrument_type, instrument_types, needs_review, adjacency "
         "FROM bills "
         "WHERE ce_relevant = false "
@@ -163,6 +164,7 @@ async def main() -> None:
         return
 
     now = datetime.now(timezone.utc)
+    dated = 0
     async with Session() as db:
         for r in matched:
             old = {
@@ -190,6 +192,17 @@ async def main() -> None:
                 ),
                 {"adj": ADJACENCY, "its": _dump(new_types), "id": r["id"]},
             )
+            # Promotion pulls foreign rows into scope that the (already-run) date backfill never saw,
+            # so they land permanently undated and show up as "N bills carry no date" in the /research
+            # year aggregate. This run is exactly how 19 EU/CELEX rows did. Date them on the way in.
+            if r["region"] != "US" and r["status_date"] is None:
+                derived = derive_status_date(r["bill_number"], r["title"])
+                if derived is not None:
+                    await db.execute(
+                        text("UPDATE bills SET status_date = :d WHERE id = :id"),
+                        {"d": derived, "id": r["id"]},
+                    )
+                    dated += 1
             await db.execute(
                 text(
                     "INSERT INTO classification_changes (bill_id, run_id, old_value, new_value, created_at) "

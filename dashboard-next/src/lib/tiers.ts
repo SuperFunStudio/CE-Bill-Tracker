@@ -18,13 +18,16 @@ export type BillingPeriod = 'monthly' | 'annual';
 // paint before that data lands, so no line ever flashes "0 regions".
 export const REGION_COUNT_FALLBACK = 37;
 
+// Rendered through the shared GazetteHeader like every other page, so the masthead face, rules and
+// italic tagline match /methodology, /states and the rest — hence a plain page title with the pitch as
+// the tagline, rather than a bespoke pricing-only headline treatment.
 export const PRICING_HEADER = {
-  eyebrow: 'Atlas Circular · Pricing',
-  title: 'Every price on this page is smaller than one missed deadline.',
+  title: 'Pricing',
+  tagline:
+    'Cheaper than missing a PRO registration deadline, and more valuable than an outdated spreadsheet',
   lede: (regions: number) =>
     `Atlas tracks circular economy law as it moves — bills, enacted statutes, producer fee schedules ` +
-    `and compliance dates — across ${regions} regions, national and supranational, including US state ` +
-    `law. Start with what's in it, then decide what a seat is worth.`,
+    `and compliance dates — across ${regions} regions, national and supranational, including US state law.`,
 };
 
 /** Coverage ledger, directly above the tiers: what you are actually buying, in numbers, before a
@@ -36,42 +39,43 @@ export const LEDGER = {
     'citation and read the source yourself.',
 };
 
-// Reference scale — the category-anchoring block. Legislative-intelligence platforms are sold to
-// government-affairs teams with government-affairs budgets; the point of the bar is that Atlas's whole
-// price range sits inside the rounding error of one of those contracts. The high figure is an
-// approximate published entry price, so it is labelled as approximate and footnoted, not asserted.
+// Category anchor. Legislative-intelligence platforms are sold to government-affairs teams with
+// government-affairs budgets; the point is that every Atlas tier fits inside the rounding error of one
+// of those contracts. Stated in prose — the bracket-and-tick diagram this replaced didn't read at a
+// glance. The $50k is an approximate published entry price, so the footnote says so rather than
+// letting the headline pass it off as surveyed fact.
 export const SCALE = {
   eyebrow: 'What this normally costs',
-  title: 'Legislative intelligence was built for lobbyists, and priced for them.',
+  title:
+    'Legislative intelligence can cost over $50,000 a year. We make it accessible for the teams that ' +
+    'need it the most.',
   intro:
     'Platforms in this category are sold to government affairs teams with government affairs budgets. ' +
     'Atlas is built for the people who have to comply — designers, consultants, counsel, and ' +
-    'sustainability teams — so it is priced against their budget instead.',
-  lowValue: '$0 – $1,800 / yr',
-  lowLabel: 'Every Atlas tier, from a student seat to a full professional seat.',
-  highValue: '≈ $50,000 / yr',
-  highLabel: 'Typical entry price for a legislative intelligence platform.',
+    'sustainability teams — so it is priced against their budget instead. Every tier on this page, from ' +
+    'a student seat to a full professional seat, falls between free and $1,800 a year.',
   foot:
-    'Comparison figure is an approximate published entry price for the category, shown for scale. ' +
+    'The comparison figure is an approximate published entry price for the category, shown for scale. ' +
     'Enterprise engagements are scoped separately and sit outside this range.',
 };
 
 // Founding window, expressed as seats rather than a countdown clock — a seat count is a number we can
-// actually stand behind, and it stops being true the moment we inflate it. CLAIMED must be set from the
-// real Stripe subscription count before each deploy; until a seat sells we say how many exist rather
-// than parading "50 of 50 remaining".
+// actually stand behind. The live figure comes from GET /billing/founding-seats (see
+// hooks/useFoundingSeats), which counts stamped founding entitlements, so the counter moves on its own
+// as seats sell; `total`/`claimed` here are only the fallback for first paint or a failed call.
 //
-// SERVER-SIDE CAVEAT: app/api/billing.py closes the founding offer on the Stripe coupon's redeem-by
-// DATE, not on a seat count. Keep the coupon's redeem-by well beyond the window and retire it by hand
-// when CLAIMED hits TOTAL, or this copy and what Stripe charges will disagree.
+// Stripe now enforces the same window: coupon `FoundingMember50` (50% off, forever) carries
+// max_redemptions=47 — 50 seats minus the 3 comped ones, which never pass through Stripe and so can't
+// consume a redemption — plus a 2027-12-31 backstop redeem_by in case the seats never sell out. So the
+// counter running to 0/50 and checkout stopping at the founding price happen together. If the comp count
+// changes, Stripe's cap has to be re-cut: max_redemptions is immutable, so that means a new coupon.
 export const FOUNDING = {
   total: 50,
   claimed: 0,
-  headline: 'Founding rate. Locked for as long as you stay, whatever the list price does.',
-  seatsLine: (remaining: number, total: number) =>
-    remaining >= total
-      ? `${total} founding seats at this rate`
-      : `${total} founding seats — ${remaining} remaining`,
+  headline: 'Founding rate. Locked for as long as you stay.',
+  seatsLine: (total: number) => `${total} founding seats at this rate`,
+  // "N/50 seats available" rather than "N remaining" — same number, but it reads as a stock level.
+  remainingLine: (remaining: number, total: number) => `${remaining}/${total} seats available`,
 };
 
 // Student — verified-edu, free. The return to us is distribution, not revenue: students carry Atlas
@@ -129,13 +133,16 @@ export const PRO = {
   // Used on in-app upgrade gates too (UpcomingDeadlinesLock, WatchListSection), so it has to read as a
   // whole sentence on its own — the pricing card pairs it with the seat counter (see FOUNDING).
   foundingNote: 'Founding rate, locked for as long as you stay — 50 seats at this price.',
+  // Each bullet names something a Pro seat can actually do today. "Check which laws hit your products"
+  // is the ComplianceChecker on /compliance (materials + jurisdictions in, applicable laws out) — the
+  // earlier "know which products fall out of compliance, and where" implied a product-portfolio monitor
+  // we don't ship; that's Company Impact, still gated and post-launch.
   features: [
     'Everything in Researcher',
-    'Know which products fall out of compliance, and where',
+    'Check which laws hit your products, by material and jurisdiction',
     'Get told before a deadline, not after',
     'Turn a jurisdiction scan into a client-ready brief',
     'Packaging studio and federal actions',
-    'Say which jurisdiction we add next — paying seats set the order',
   ],
 };
 
@@ -159,7 +166,6 @@ export const ENTERPRISE = {
 // asked rather than buried in a FAQ page. Counts are injected from live corpus data (same numbers as
 // the ledger) so an answer about scale can't quietly go stale.
 export const FAIR_QUESTIONS = {
-  eyebrow: 'Before you decide',
   title: "Fair questions we'd ask too",
   lede:
     'These are the things people want to know before they put a card in, so here they are with the ' +

@@ -51,6 +51,12 @@ concerning provide provides providing amend amends amending certain other relate
 section sections code chapter law laws bill new requirement requirements program programs""".split())
 
 _WORD_RE = re.compile(r"[a-z]{4,}")
+# Fraction of a title's distinctive words that must appear in the extraction's own quoted excerpts
+# for the extraction to count as still describing this bill. Calibrated on the twelve fee-dataset
+# rows reviewed by hand: the seven correct RI beverage-deposit extractions scored 75-76%, while MA
+# H-916 — a carryout-bag statute filed under a mattress-recycling title — scored 20% purely on the
+# shared stem "recycl". 0.35 separates them with room on both sides.
+_EXTRACTION_AGREEMENT = 0.35
 # "2025-2026 REGULAR SESSION" / "2025–2026 Regular Session" — the en-dash variant matters, CA uses it.
 _SESSION_RE = re.compile(r"(20\d{2})\s*[-–—]\s*20\d{2}\s+REGULAR\s+SESSION", re.I)
 # "THIRTY-THIRD LEGISLATURE, 2025" (HI and friends).
@@ -76,6 +82,27 @@ def title_overlap(title: str | None, body: str) -> float | None:
     if not t:
         return None
     return len(t & _tokens(body[:6000])) / len(t)
+
+
+def extraction_agrees(title: str | None, compliance_details: dict | None) -> bool | None:
+    """Does the stored extraction still describe THIS bill?
+
+    Compares the title against the verbatim source_excerpts the extractor quoted — deliberately
+    NOT against the stored text, because the text is the thing under suspicion. An extraction can
+    be correct while the text beside it is junk (it was extracted before the text was overwritten).
+    None when there is no extraction, or none with excerpts, to score.
+    """
+    if not compliance_details:
+        return None
+    excerpts = " ".join(
+        v.get("source_excerpt") or ""
+        for v in compliance_details.values()
+        if isinstance(v, dict)
+    )
+    t, e = _tokens(title), _tokens(excerpts)
+    if not t or not e:
+        return None
+    return len(t & e) / len(t) >= _EXTRACTION_AGREEMENT
 
 
 def text_session_year(body: str) -> int | None:
@@ -110,7 +137,7 @@ async def main() -> None:
     sql = (
         "select b.id, b.region, b.state, b.bill_number, b.title, b.legiscan_bill_id, "
         "       extract(year from coalesce(b.status_date, b.last_action_date))::int as bill_year, "
-        "       t.source, t.text "
+        "       b.compliance_details, t.source, t.text "
         "from bills b join bill_texts t on t.bill_id = b.id "
         "where t.text is not null "
         + ("" if args.all_sources else "and t.source is not null ")
@@ -127,6 +154,7 @@ async def main() -> None:
 
     flagged: list[dict] = []
     reasons: Counter = Counter()
+    buckets: Counter = Counter()
     unscoreable = 0
 
     for r in rows:
@@ -150,8 +178,21 @@ async def main() -> None:
             reasons.update(codes)
             if len(codes) > 1:
                 reasons.update(["both_signals"])
+            agrees = extraction_agrees(r.title, r.compliance_details)
+            # Two failure modes wear the same symptom but need OPPOSITE repairs. A session
+            # collision poisons the extraction too, so both must go. A scraped page shell only
+            # ruins the stored text — the extraction may predate it and still be right (seven RI
+            # beverage-deposit bills held real $0.10/$0.04 figures behind a nav-menu scrape), and
+            # clearing it would destroy good data to fix a text problem. The stored text cannot
+            # tell them apart; whether the EXTRACTION still agrees with the bill's own title can.
+            bucket = ("no_extraction" if agrees is None
+                      else "text_only_keep_extraction" if agrees
+                      else "clear_text_and_extraction")
+            buckets.update([bucket])
             flagged.append({
                 "signals": codes,
+                "bucket": bucket,
+                "extraction_agrees": agrees,
                 "bill_id": r.id, "region": r.region, "state": r.state,
                 "bill_number": r.bill_number, "bill_year": r.bill_year,
                 "title": r.title, "source": r.source,
@@ -173,6 +214,10 @@ async def main() -> None:
     from_search = sum(1 for f in flagged if not f["had_stored_legiscan_id"])
     print(f"  of which resolved via the search fallback (the known bug): {from_search}")
     print(f"  with a stored legiscan_bill_id (investigate separately):   {len(flagged) - from_search}")
+    print("\n  repair bucket:")
+    for b in ("clear_text_and_extraction", "text_only_keep_extraction", "no_extraction"):
+        if buckets.get(b):
+            print(f"    {b:28s} {buckets[b]}")
 
     for f in flagged[: args.show]:
         print(f"\n  id={f['bill_id']} {f['state'] or f['region']} {f['bill_number']} ({f['bill_year']}) "

@@ -56,6 +56,16 @@ _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 # query matched 41 OR bills on the testimony form). None of these strings occur in real statutory
 # text, so their presence means we grabbed a page, not a bill → treat the fetch as no-text.
 _WEB_CHROME_MARKERS = ("toggle navigation", "register to testify", "staff login")
+# Site FOOTER furniture. Checked only in the document's tail, because these strings can legitimately
+# appear mid-text — a data-privacy bill says "privacy policy", a copyright bill says "all rights
+# reserved" — but a statute does not END on one. RI's bill pages slipped past the markers above
+# (their chrome is a bare menu: "Senate House Auditor General Captiol Television…") and were stored
+# as bill text, so seven RI beverage-deposit bills held a page shell instead of their statute.
+_PAGE_FOOTER_MARKERS = (
+    "all rights reserved", "privacy policy", "terms of use", "terms of service",
+)
+# How much of the tail counts as "the footer".
+_FOOTER_WINDOW = 400
 
 
 def canon_bill_number(num: str | None) -> str:
@@ -87,6 +97,8 @@ def clean_text(raw: str) -> str:
     # Scraped web-app shell, not a bill document → skip (the bill shows as not-indexed).
     low = cleaned.lower()
     if any(m in low for m in _WEB_CHROME_MARKERS):
+        return ""
+    if any(m in low[-_FOOTER_WINDOW:] for m in _PAGE_FOOTER_MARKERS):
         return ""
     return cleaned
 

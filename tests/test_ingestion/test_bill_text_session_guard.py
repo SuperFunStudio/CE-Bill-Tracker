@@ -118,3 +118,22 @@ async def test_expect_year_none_does_not_gate_a_trusted_id():
     # Stored ids must keep working even when the session block is absent from getBill.
     client = _FakeClient(bill={"texts": []})
     assert await _legiscan_text(client, 111, expect_year=None) == ""  # no docs, but no crash
+
+
+# --- scraped page shells ----------------------------------------------------------------------
+
+def test_page_footer_in_the_tail_is_rejected():
+    from app.ingestion.bill_text import clean_text
+    # The exact RI shape: a bill page whose document ends on the site's copyright footer.
+    ri = ("Senate House Auditor General Captiol Television House Fiscal " + "statutory body " * 60
+          + "Home | Privacy Policy © 2026 State of Rhode Island General Assembly. All Rights Reserved.")
+    assert clean_text(ri) == ""
+
+
+def test_the_same_words_mid_document_are_kept():
+    from app.ingestion.bill_text import clean_text
+    # A privacy bill legitimately says "privacy policy" in its body — only the TAIL is furniture,
+    # so keying on the phrase anywhere would silently drop real statutes.
+    body = ("A controller shall publish a privacy policy describing the categories of personal data "
+            "collected. " + "and further provided that the controller shall comply. " * 40)
+    assert clean_text(body) != ""

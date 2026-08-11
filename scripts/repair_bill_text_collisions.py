@@ -81,7 +81,10 @@ async def _load_ids(args) -> list[int]:
         # session_year is proof (a document cannot postdate its own bill); title_overlap is a
         # heuristic that will carry some detector false positives.
         rows = [r for r in rows if "session_year" in (r.get("signals") or [])]
-    return [int(r["bill_id"]) for r in rows]
+    if args.bucket:
+        rows = [r for r in rows if r.get("bucket") == args.bucket]
+    ids = [int(r["bill_id"]) for r in rows]
+    return ids[: args.limit] if args.limit else ids
 
 
 async def _fee_dataset_ids(db, ids: list[int]) -> list[int]:
@@ -124,6 +127,14 @@ async def main() -> None:
                     help="Only bills flagged by the session_year signal (proof, not heuristic).")
     ap.add_argument("--fee-only", action="store_true",
                     help="Only bills with a PRESENT fee_amounts envelope — the paid dataset.")
+    ap.add_argument("--bucket", choices=("clear_text_and_extraction", "text_only_keep_extraction",
+                                         "no_extraction"),
+                    help="Only bills the detector put in this repair bucket.")
+    ap.add_argument("--keep-extraction", action="store_true",
+                    help="Replace the text but leave compliance_details alone. Required for the "
+                         "text_only_keep_extraction bucket, where the extraction is correct and "
+                         "only the stored text is junk.")
+    ap.add_argument("--limit", type=int, help="Cap the batch (LegiScan quota is finite).")
     ap.add_argument("--apply", action="store_true", help="Actually write. Default is a dry run.")
     ap.add_argument("--backup", default="bill_text_repair_backup.json",
                     help="Where to write the pre-change snapshot (required for --apply).")
@@ -173,13 +184,18 @@ async def main() -> None:
             await engine.dispose()
             return
 
-        # 2. Clear the wrong text and the extraction derived from it.
+        # 2. Clear the wrong text, and the extraction only when it is also wrong. Keeping a correct
+        # extraction beside a cleared text is the whole point of the bucket split — the RI
+        # beverage-deposit bills hold real $0.10/$0.04 figures that a blanket clear would delete.
         await db.execute(text("delete from bill_texts where bill_id = any(:ids)"), {"ids": ids})
-        await db.execute(
-            text("update bills set compliance_details = null where id = any(:ids)"), {"ids": ids}
-        )
+        if args.keep_extraction:
+            print(f"\ncleared text for {len(ids)} bills; compliance_details preserved")
+        else:
+            await db.execute(
+                text("update bills set compliance_details = null where id = any(:ids)"), {"ids": ids}
+            )
+            print(f"\ncleared text + compliance_details for {len(ids)} bills")
         await db.commit()
-        print(f"\ncleared text + compliance_details for {len(ids)} bills")
 
         # 3. Re-fetch through the fixed ladder.
         if args.refetch:

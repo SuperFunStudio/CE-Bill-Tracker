@@ -1,0 +1,202 @@
+"""Query GA4 (property 529411970) via the Data API and print a report to the terminal.
+
+GA4's own UI is slow to answer the questions we actually ask ("did anyone hit the pro gate
+last week", "which events fired at all"), and its exploration reports can't be diffed or
+committed. This pulls the same numbers over the Data API so they can be piped, grepped and
+pasted into a doc.
+
+Auth: a service account key JSON. The account (ga4-reader@ce-bill-tracker.iam.gserviceaccount.com)
+must be added as a Viewer under GA4 Admin -> Property access management -- GCP IAM roles grant
+nothing here, GA4 keeps its own access list. Key path defaults to ~/.gcp/ga4-reader.json and can
+be overridden with --key or GA4_KEY_FILE.
+
+Reports:
+  events    event_name x eventCount/totalUsers      (default -- what fired, how much)
+  pages     pageTitle/pagePath x screenPageViews
+  funnel    the gate_hit -> pricing_cta -> purchase conversion spine
+  raw       whatever you pass to --dimensions/--metrics
+
+Usage:
+  venv/Scripts/python scripts/ga4_report.py                            # events, last 28 days
+  venv/Scripts/python scripts/ga4_report.py --days 7
+  venv/Scripts/python scripts/ga4_report.py --report pages --limit 30
+  venv/Scripts/python scripts/ga4_report.py --report funnel --days 90
+  venv/Scripts/python scripts/ga4_report.py --report events --filter atlas_    # prefix match
+  venv/Scripts/python scripts/ga4_report.py --report raw \
+      --dimensions eventName,country --metrics eventCount --days 30
+  venv/Scripts/python scripts/ga4_report.py --report raw --event gate_hit \
+      --dimensions customEvent:gate,customEvent:outcome,customEvent:feature --metrics eventCount
+  venv/Scripts/python scripts/ga4_report.py --start 2026-06-01 --end 2026-06-30
+  venv/Scripts/python scripts/ga4_report.py --json                     # machine-readable
+"""
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+import requests
+from google.oauth2 import service_account
+from google.auth.transport.requests import Request as AuthRequest
+
+PROPERTY_ID = "529411970"
+SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
+API = "https://analyticsdata.googleapis.com/v1beta/properties/{prop}:runReport"
+DEFAULT_KEY = Path.home() / ".gcp" / "ga4-reader.json"
+
+# The funnel spine. Each step is an event name; ordering is ours, not GA4's -- the Data API
+# funnel endpoint needs a paid property, so we just pull counts per step and let the reader
+# eyeball the dropoff.
+FUNNEL_STEPS = [
+    "page_view",
+    "bill_open",
+    "gate_shown",  # paywall IMPRESSION, every wall app-wide. The only passive step; the rest are clicks.
+    "gate_hit",    # paywall INTENT -- someone acted at a gate. gate_shown->gate_hit is the see-to-act rate.
+    "pricing_cta",
+    "purchase",
+]
+
+REPORTS = {
+    "events": (["eventName"], ["eventCount", "totalUsers"]),
+    "pages": (["pageTitle", "pagePath"], ["screenPageViews", "totalUsers"]),
+    "funnel": (["eventName"], ["eventCount", "totalUsers"]),
+}
+
+
+def credentials(key_path: Path):
+    if not key_path.exists():
+        sys.exit(
+            f"No service account key at {key_path}\n"
+            "Create one with:\n"
+            "  gcloud iam service-accounts keys create ~/.gcp/ga4-reader.json \\\n"
+            "    --iam-account=ga4-reader@ce-bill-tracker.iam.gserviceaccount.com"
+        )
+    creds = service_account.Credentials.from_service_account_file(
+        str(key_path), scopes=[SCOPE]
+    )
+    creds.refresh(AuthRequest())
+    return creds
+
+
+def run_report(creds, dimensions, metrics, start, end, limit, event=None):
+    body = {
+        "dateRanges": [{"startDate": start, "endDate": end}],
+        "dimensions": [{"name": d} for d in dimensions],
+        "metrics": [{"name": m} for m in metrics],
+        "limit": limit,
+    }
+    if event:
+        # Server-side filter, not a post-filter -- custom dimension breakdowns explode the row count
+        # fast, and the API's `limit` applies before we'd ever see the rows we wanted.
+        body["dimensionFilter"] = {
+            "filter": {
+                "fieldName": "eventName",
+                "stringFilter": {"matchType": "EXACT", "value": event},
+            }
+        }
+    resp = requests.post(
+        API.format(prop=PROPERTY_ID),
+        headers={"Authorization": f"Bearer {creds.token}"},
+        json=body,
+        timeout=60,
+    )
+    if resp.status_code == 403:
+        sys.exit(
+            "403 from the Data API. The service account almost certainly isn't a GA4 Viewer yet:\n"
+            "  GA4 Admin -> Property access management -> + -> add\n"
+            "  ga4-reader@ce-bill-tracker.iam.gserviceaccount.com as Viewer\n"
+            f"\nGA4 said: {resp.text[:400]}"
+        )
+    if resp.status_code != 200:
+        sys.exit(f"HTTP {resp.status_code} from the Data API:\n{resp.text[:800]}")
+    return resp.json()
+
+
+def to_rows(payload):
+    """Flatten the API's dimensionValues/metricValues shape into plain lists of strings."""
+    rows = []
+    for row in payload.get("rows", []):
+        dims = [d.get("value", "") for d in row.get("dimensionValues", [])]
+        mets = [m.get("value", "0") for m in row.get("metricValues", [])]
+        rows.append(dims + mets)
+    return rows
+
+
+def print_table(headers, rows, totals=None):
+    if not rows:
+        print("(no rows -- either no traffic in this window, or the events never fired)")
+        return
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(str(cell)))
+    line = "  ".join(h.ljust(widths[i]) for i, h in enumerate(headers))
+    print(line)
+    print("  ".join("-" * w for w in widths))
+    for row in rows:
+        print("  ".join(str(c).ljust(widths[i]) for i, c in enumerate(row)))
+    if totals:
+        print("  ".join("-" * w for w in widths))
+        print("  ".join(str(c).ljust(widths[i]) for i, c in enumerate(totals)))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--report", default="events", choices=[*REPORTS, "raw"])
+    ap.add_argument("--days", type=int, default=28, help="lookback window (ignored if --start given)")
+    ap.add_argument("--start", help="YYYY-MM-DD or a GA4 relative date like 28daysAgo")
+    ap.add_argument("--end", default="today")
+    ap.add_argument("--limit", type=int, default=100)
+    ap.add_argument("--filter", help="keep only rows whose first dimension contains this substring")
+    ap.add_argument("--event", help="restrict to a single eventName (server-side filter)")
+    ap.add_argument("--dimensions", help="comma-separated, for --report raw")
+    ap.add_argument("--metrics", help="comma-separated, for --report raw")
+    ap.add_argument("--key", type=Path, default=Path(os.environ.get("GA4_KEY_FILE", DEFAULT_KEY)))
+    ap.add_argument("--json", action="store_true", help="emit JSON instead of a table")
+    args = ap.parse_args()
+
+    start = args.start or f"{args.days}daysAgo"
+
+    if args.report == "raw":
+        if not args.dimensions or not args.metrics:
+            sys.exit("--report raw needs both --dimensions and --metrics")
+        dimensions = args.dimensions.split(",")
+        metrics = args.metrics.split(",")
+    else:
+        dimensions, metrics = REPORTS[args.report]
+
+    creds = credentials(args.key)
+    payload = run_report(creds, dimensions, metrics, start, args.end, args.limit, args.event)
+    rows = to_rows(payload)
+
+    if args.report == "funnel":
+        # Reorder into funnel order and surface the steps that never fired at all, which is the
+        # interesting case -- a missing step reads as "instrumented but dead", not "no data".
+        counts = {r[0]: r[1:] for r in rows}
+        rows = [[step, *counts.get(step, ["0", "0"])] for step in FUNNEL_STEPS]
+    elif args.filter:
+        rows = [r for r in rows if args.filter in r[0]]
+
+    headers = dimensions + metrics
+
+    if args.json:
+        print(json.dumps(
+            {"property": PROPERTY_ID, "start": start, "end": args.end,
+             "headers": headers, "rows": rows},
+            indent=2,
+        ))
+        return
+
+    print(f"GA4 property {PROPERTY_ID} | {start} to {args.end} | report={args.report}")
+    print()
+    totals = None
+    for t in payload.get("totals", []):
+        vals = [m.get("value", "") for m in t.get("metricValues", [])]
+        totals = ["TOTAL"] + [""] * (len(dimensions) - 1) + vals
+    print_table(headers, rows, totals if args.report != "funnel" else None)
+    print()
+    print(f"{len(rows)} rows")
+
+
+if __name__ == "__main__":
+    main()

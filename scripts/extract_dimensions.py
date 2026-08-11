@@ -67,11 +67,16 @@ def _normalize_dsn(dsn: str) -> str:
 
 
 async def _candidates(db: AsyncSession, regions: list[str] | None, only_stale: bool,
-                      limit: int) -> list:
+                      limit: int, ids: list[int] | None = None) -> list:
     # JOIN bill_texts so we extract from stored full text (no re-fetch); this also means a bill with
     # no stored text is simply not a candidate yet (its text backfill has to land first).
     clauses = ["b.ce_relevant = true", "bt.text IS NOT NULL"]
     params: dict = {"limit": limit, "ver": EXTRACTION_VERSION}
+    if ids:
+        # Targeted re-extraction after a text repair: --limit alone can't reach a specific bill,
+        # since candidates are ordered by status_date and the one you fixed may be anywhere in them.
+        clauses.append("b.id = ANY(:ids)")
+        params["ids"] = ids
     if regions:
         clauses.append("b.region = ANY(:regions)")
         params["regions"] = regions
@@ -96,6 +101,8 @@ async def main() -> None:
     ap.add_argument("--region", default=None,
                     help="Comma-separated region codes to target (e.g. FR,DE,JP). Omit = all regions.")
     ap.add_argument("--limit", type=int, default=20)
+    ap.add_argument("--ids", default=None,
+                    help="Comma-separated bill ids to re-extract (targets a specific set, e.g. bills whose text was just repaired).")
     ap.add_argument("--concurrency", type=int, default=6,
                     help="How many extractions to run at once. LLM latency (~25s/bill) dominates, so "
                     "overlapping calls cuts a ~1000-bill run from hours to ~1h. DB writes stay serial.")
@@ -118,7 +125,8 @@ async def main() -> None:
     haiku = SonnetExtractor(model=HAIKU_TRIAGE_MODEL) if args.triage else None
 
     async with Session() as db:
-        bills = await _candidates(db, regions, only_stale=not args.all, limit=args.limit)
+        ids = [int(x) for x in args.ids.split(',') if x.strip()] if args.ids else None
+        bills = await _candidates(db, regions, only_stale=not args.all, limit=args.limit, ids=ids)
         print(f"{len(bills)} candidate bills (regions={regions or 'all'}, "
               f"{'all' if args.all else f'below v{EXTRACTION_VERSION}'}, limit={args.limit})\n")
 

@@ -72,6 +72,20 @@ _PAGE_FOOTER_MARKERS = (
 # How much of the tail counts as "the footer".
 _FOOTER_WINDOW = 400
 
+# LegiScan document `type`, ranked by how close it is to being the operative law. Compliance
+# obligations are what we extract, and those are what the FINAL text says — an amended or chaptered
+# version can be twenty times the size of the introduced draft it replaced. Unknown types sort to 0,
+# below everything named, so an unrecognised label never outranks a known-final version; among equal
+# stages the later date wins.
+_DOC_STAGE = {
+    "chaptered": 6, "enacted": 6, "act": 6,
+    "enrolled": 5,
+    "engrossed": 4,
+    "amended": 3,
+    "comm sub": 2, "substitute": 2,
+    "prefiled": 1, "introduced": 1,
+}
+
 
 def canon_bill_number(num: str | None) -> str:
     """Normalize a bill number for cross-source matching (drop punctuation, zero-pad)."""
@@ -182,7 +196,13 @@ async def _legiscan_text(
     docs = bill.get("texts") or []
 
     def rank(d):
-        return 1 if "html" in (d.get("mime") or "").lower() else 0
+        # Prefer the version that IS the law. LegiScan returns versions oldest-first and the old
+        # ranking only preferred HTML — a stable sort then kept "Introduced" at the front, so an
+        # enacted bill was extracted from its original draft. CA SB 54 stored a 9.8 KB introduced
+        # shell instead of the 208 KB chaptered Plastic Pollution Prevention Act, and every
+        # compliance dimension came back empty because the obligations arrived by later amendment.
+        stage = _DOC_STAGE.get((d.get("type") or "").strip().lower(), 0)
+        return (stage, d.get("date") or "", 1 if "html" in (d.get("mime") or "").lower() else 0)
 
     for d in sorted(docs, key=rank, reverse=True):
         doc_id = d.get("doc_id")

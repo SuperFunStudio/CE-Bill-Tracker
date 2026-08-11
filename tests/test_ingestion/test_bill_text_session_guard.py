@@ -166,3 +166,57 @@ async def test_a_junk_rung_falls_through_instead_of_ending_the_ladder():
     txt, src = await fetch_clean_text(_LS(), _OS(), bill)
     assert src == SOURCE_OPENSTATES
     assert "producer shall register" in txt
+
+
+# --- document version selection ----------------------------------------------------------------
+
+class _DocClient:
+    """Serves a bill with several text versions; records which doc_id was actually fetched."""
+
+    def __init__(self, docs):
+        self.docs = docs
+        self.fetched = []
+
+    async def get_bill(self, _id):
+        return {"session": {"year_start": 2021, "year_end": 2022}, "texts": self.docs}
+
+    async def _get(self, _op, id):  # noqa: A002
+        self.fetched.append(id)
+        import base64
+        return {"text": {"doc": base64.b64encode(b"SECTION 1. " + b"x" * 900).decode()}}
+
+
+# The real CA SB 54 document set, in the order LegiScan returns it (oldest first).
+_SB54_DOCS = [
+    {"doc_id": 2218821, "type": "Introduced", "date": "2020-12-07", "mime": "text/html"},
+    {"doc_id": 2313600, "type": "Amended", "date": "2021-02-25", "mime": "text/html"},
+    {"doc_id": 2600074, "type": "Enrolled", "date": "2022-06-30", "mime": "text/html"},
+    {"doc_id": 2600075, "type": "Chaptered", "date": "2022-06-30", "mime": "text/html"},
+]
+
+
+@pytest.mark.asyncio
+async def test_the_chaptered_version_wins_not_the_introduced_draft():
+    client = _DocClient(list(_SB54_DOCS))
+    await _legiscan_text(client, 111, expect_year=2022)
+    assert client.fetched[0] == 2600075  # Chaptered — the text that IS the law
+
+
+@pytest.mark.asyncio
+async def test_later_date_wins_within_the_same_stage():
+    client = _DocClient([
+        {"doc_id": 1, "type": "Amended", "date": "2022-06-16", "mime": "text/html"},
+        {"doc_id": 2, "type": "Amended", "date": "2022-06-24", "mime": "text/html"},
+    ])
+    await _legiscan_text(client, 111, expect_year=2022)
+    assert client.fetched[0] == 2
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_type_never_outranks_a_chaptered_version():
+    client = _DocClient([
+        {"doc_id": 9, "type": "Some New Label", "date": "2023-01-01", "mime": "text/html"},
+        {"doc_id": 2600075, "type": "Chaptered", "date": "2022-06-30", "mime": "text/html"},
+    ])
+    await _legiscan_text(client, 111, expect_year=2022)
+    assert client.fetched[0] == 2600075

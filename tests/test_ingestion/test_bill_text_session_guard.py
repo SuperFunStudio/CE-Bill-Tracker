@@ -137,3 +137,32 @@ def test_the_same_words_mid_document_are_kept():
     body = ("A controller shall publish a privacy policy describing the categories of personal data "
             "collected. " + "and further provided that the controller shall comply. " * 40)
     assert clean_text(body) != ""
+
+
+def test_javascript_shell_is_not_bill_text():
+    from app.ingestion.bill_text import clean_text
+    assert clean_text("<div>You need to enable JavaScript to run this app.</div>") == ""
+
+
+@pytest.mark.asyncio
+async def test_a_junk_rung_falls_through_instead_of_ending_the_ladder():
+    """A scrape that cleans to nothing must not mask a good document on a later rung."""
+    from app.ingestion.bill_text import SOURCE_OPENSTATES, fetch_clean_text
+
+    class _LS:
+        async def search(self, *a, **k):
+            return []
+
+    class _OS:
+        async def get_bill_text(self, _id):
+            return "SECTION 1. A producer shall register with the department. " * 20
+        async def get_text_from_source(self, _url):
+            return "You need to enable JavaScript to run this app."
+
+    # legiscan resolves nothing; openstates has the real document. Before the fix, a bill whose
+    # earlier rung returned un-cleanable bytes returned ("", that_source) and never got here.
+    bill = _bill(state="MT", openstates_id="ocd-bill/1", source_url="https://x", 
+                 status_date=_FakeDate(2025))
+    txt, src = await fetch_clean_text(_LS(), _OS(), bill)
+    assert src == SOURCE_OPENSTATES
+    assert "producer shall register" in txt

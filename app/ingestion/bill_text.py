@@ -55,7 +55,12 @@ _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 # whose chrome ("Toggle navigation", "Register to Testify") pollutes full-text search (e.g. a "phone"
 # query matched 41 OR bills on the testimony form). None of these strings occur in real statutory
 # text, so their presence means we grabbed a page, not a bill → treat the fetch as no-text.
-_WEB_CHROME_MARKERS = ("toggle navigation", "register to testify", "staff login")
+_WEB_CHROME_MARKERS = (
+    "toggle navigation", "register to testify", "staff login",
+    # A client-rendered legislature site (MT's, among others) serves an empty SPA shell to a plain
+    # HTTP fetch. 25 bills had this stored as their statute text.
+    "enable javascript",
+)
 # Site FOOTER furniture. Checked only in the document's tail, because these strings can legitimately
 # appear mid-text — a data-privacy bill says "privacy policy", a copyright bill says "all rights
 # reserved" — but a statute does not END on one. RI's bill pages slipped past the markers above
@@ -217,35 +222,40 @@ async def fetch_clean_text(
     passed and enabled (authoritative + plain text); LegiScan is primary elsewhere; the OpenStates
     versions API is the throttled fallback (`os_delay` seconds before each call to respect the
     free-tier limit); the source_url scrape is last. Empty text → ("", "none").
+
+    Each rung is cleaned BEFORE it is accepted, so a rung that returns bytes which clean_text
+    rejects (a page shell, an SPA stub, site chrome) falls through to the next rung instead of
+    ending the ladder with an empty result. Testing the raw response and cleaning at the return
+    meant one junk scrape could mask a perfectly good OpenStates document.
     """
     if b.state == "NY" and ny_client is not None and ny_client.is_enabled:
         session = session_year_for(b)
         print_no = canon_bill_number(b.bill_number)
         if session and print_no:
             try:
-                txt = await ny_client.get_bill_text(session, print_no)
+                txt = clean_text(await ny_client.get_bill_text(session, print_no))
                 if txt:
-                    return clean_text(txt), SOURCE_NYSENATE
+                    return txt, SOURCE_NYSENATE
             except Exception:  # noqa: BLE001
                 pass  # fall through to the generic rungs
     try:
         lid, needs_session_check = await _resolve_legiscan_id(ls_client, b)
         if lid:
-            txt = await _legiscan_text(
+            txt = clean_text(await _legiscan_text(
                 ls_client, lid, expect_year=bill_year(b) if needs_session_check else None
-            )
+            ))
             if txt:
-                return clean_text(txt), SOURCE_LEGISCAN
+                return txt, SOURCE_LEGISCAN
     except Exception:  # noqa: BLE001
         pass
     if b.openstates_id and not str(b.openstates_id).startswith("hist:"):
         if os_delay:
             await asyncio.sleep(os_delay)  # respect OpenStates free-tier rate limit
-        txt = await os_client.get_bill_text(b.openstates_id)
+        txt = clean_text(await os_client.get_bill_text(b.openstates_id))
         if txt:
-            return clean_text(txt), SOURCE_OPENSTATES
+            return txt, SOURCE_OPENSTATES
     if b.source_url:
-        txt = await os_client.get_text_from_source(b.source_url)
+        txt = clean_text(await os_client.get_text_from_source(b.source_url))
         if txt:
-            return clean_text(txt), SOURCE_URL
+            return txt, SOURCE_URL
     return "", SOURCE_NONE

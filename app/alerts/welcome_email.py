@@ -728,6 +728,7 @@ def render_welcome_html(
         unsubscribe_url=unsubscribe_url(sub.id),
         tagline=None,
         body_padding="14px 28px 24px",
+        referral=True,
     )
 
 
@@ -849,6 +850,7 @@ def render_account_welcome_html() -> str:
     return render_shell(
         inner,
         colophon="You're receiving this because you just created an Atlas Circular account.",
+        referral=True,
     )
 
 
@@ -909,6 +911,8 @@ def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
     return render_shell(
         inner,
         colophon="You're receiving this because you were granted complimentary access to Atlas Circular.",
+        referral=True,
+        referral_is_pro=True,
     )
 
 
@@ -989,6 +993,8 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
     return render_shell(
         inner,
         colophon="You're receiving this because you subscribed to Atlas Circular Pro.",
+        referral=True,
+        referral_is_pro=True,
     )
 
 
@@ -1022,10 +1028,26 @@ async def send_pro_welcome(email: str, is_trial: bool = False, founding: bool = 
 # and best-effort so a send failure can never surface into the Stripe webhook / referral caller.
 
 
-def _lifecycle_shell(title_line: str, body_inner: str, colophon: str) -> str:
+def _lifecycle_shell(
+    title_line: str,
+    body_inner: str,
+    colophon: str,
+    *,
+    referral: bool = False,
+    referral_is_pro: bool = False,
+) -> str:
     """Thin wrapper over the shared email shell, kept so the lifecycle notices below read cleanly.
-    `title_line` becomes the masthead tagline; `body_inner` is the HTML between masthead and colophon."""
-    return render_shell(body_inner, tagline=title_line, colophon=colophon)
+    `title_line` becomes the masthead tagline; `body_inner` is the HTML between masthead and colophon.
+
+    `referral` defaults OFF here on purpose: two of the three lifecycle notices are a failed payment
+    and a cancellation, and asking someone to recruit a colleague at either moment reads badly."""
+    return render_shell(
+        body_inner,
+        tagline=title_line,
+        colophon=colophon,
+        referral=referral,
+        referral_is_pro=referral_is_pro,
+    )
 
 
 # Backwards-compatible alias — the lifecycle notices below call _cta_button; it's the shared button now.
@@ -1166,6 +1188,10 @@ def render_referral_reward_html(days: int) -> str:
         "Tracking circularity globally",
         body,
         "You're receiving this because a friend signed up using your Atlas Circular referral link.",
+        # The one lifecycle notice that earns the ask: this reader just proved the loop works for them.
+        # is_pro because the reward they were just granted makes them Pro at time of send.
+        referral=True,
+        referral_is_pro=True,
     )
 
 

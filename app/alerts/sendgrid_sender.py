@@ -227,6 +227,7 @@ def _build_consolidated_html(
         colophon=_ALERT_COLOPHON,
         unsubscribe_url=unsubscribe_url,
         subscribe_url=subscribe_url("bill_alert_forward"),
+        referral=True,
     )
 
 

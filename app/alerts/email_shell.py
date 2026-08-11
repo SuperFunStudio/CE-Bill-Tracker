@@ -78,14 +78,56 @@ def _preheader(text: str) -> str:
     )
 
 
-def _footer_actions(unsubscribe_url: str | None, subscribe_url: str | None) -> str:
-    """The two footer affordances: leave, or — if this was forwarded to you — join.
+# The referral note's deep link. Points at the sitewide footer CTA (SiteFooter.tsx `id="refer"`), which
+# already handles both cases — signed-in readers get their share link, signed-out get a sign-in prompt —
+# so email doesn't need to embed a per-recipient code. The UTM tags are what make this measurable: GA's
+# captureAttribution reads them on landing, so we can tell whether email is a viable referral channel at
+# all. Without them the visit is indistinguishable from organic and the experiment answers nothing.
+REFERRAL_URL = (
+    f"{DASHBOARD_URL}/?utm_source=email&utm_medium=footer&utm_campaign=referral#refer"
+)
+
+
+def _referral_note(is_pro: bool) -> str:
+    """The quiet referral line.
+
+    Leads with what the reader GETS and states the condition in the same breath, so it reads as a
+    reward rather than a request. The earlier "give a month, get a month" phrasing put the ask first
+    and left "and it costs you nothing" implicit.
+
+    Pro members still benefit (a referral extends their membership), so their variant shifts from
+    "get a free month" to "add one to your membership" — offering Pro to someone already paying for
+    it is the fastest way to make the whole line scan as boilerplate.
+    """
+    text = (
+        "Add a free month of Pro to your membership when you share the Atlas with a friend using"
+        " your link."
+        if is_pro
+        else "Get a free month of Pro when you share the Atlas with a friend using your link."
+    )
+    return (
+        f'<p style="font:13px {_SERIF};color:{_MUTED};margin:0 0 10px;">{text} '
+        f'<a href="{REFERRAL_URL}" style="color:{_ACCENT};text-decoration:underline;">'
+        f"Get your link →</a></p>"
+    )
+
+
+def _footer_actions(
+    unsubscribe_url: str | None,
+    subscribe_url: str | None,
+    referral: bool | None = None,
+    referral_is_pro: bool = False,
+) -> str:
+    """The footer affordances: refer a colleague, leave, or — if this was forwarded — join.
 
     Deliberately below the colophon and visually quiet. The unsubscribe is a real button rather than
     a buried link: making it hard to leave is what earns spam complaints, which cost far more
-    deliverability than the unsubscribe itself.
+    deliverability than the unsubscribe itself. The referral note is opt-in per caller for the same
+    reason — see render_shell's `referral` arg for which emails should NOT carry it.
     """
     parts = []
+    if referral:
+        parts.append(_referral_note(referral_is_pro))
     if subscribe_url:
         parts.append(
             f'<p style="font:13px {_SERIF};color:{_MUTED};margin:0 0 10px;">'
@@ -116,6 +158,8 @@ def render_shell(
     dateline: str | None = None,
     unsubscribe_url: str | None = None,
     subscribe_url: str | None = None,
+    referral: bool = False,
+    referral_is_pro: bool = False,
     body_padding: str = "18px 28px 24px",
 ) -> str:
     """Wrap `body_inner` in the shared Atlas Circular masthead + colophon.
@@ -130,6 +174,12 @@ def render_shell(
       says what this email is (two labels for one message is one too many).
     - `dateline`: optional italic dateline bar between masthead and body (digests/welcomes use it).
     - `unsubscribe_url` / `subscribe_url`: footer actions — see _footer_actions.
+    - `referral`: add the "give a month, get a month" note. Opt-in, and deliberately NOT default-on:
+      it belongs on engagement mail (digest, alerts, welcomes) but not on anything transactional or
+      adversarial — a failed payment, a cancellation, or a password reset is the wrong moment to ask
+      for a favour, and on the security mails any extra link is a phishing-shaped thing to teach.
+    - `referral_is_pro`: flips the copy from "get a month" to "give a month / extend yours", so the
+      offer reads honestly to someone who already subscribes.
     """
     dateline_html = ""
     if dateline:
@@ -148,7 +198,7 @@ def render_shell(
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
     {colophon}
-  </div>{_footer_actions(unsubscribe_url, subscribe_url)}
+  </div>{_footer_actions(unsubscribe_url, subscribe_url, referral, referral_is_pro)}
  </div>
 </body></html>
 """

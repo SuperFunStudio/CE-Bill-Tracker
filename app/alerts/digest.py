@@ -599,7 +599,13 @@ def render_digest_html(
         f'<a href="{unsubscribe_url(sub.id)}" style="color:{_MUTED};text-decoration:underline;">'
         "Unsubscribe</a> · or reply to this email."
     )
-    return render_shell(body, dateline=dateline, colophon=colophon, body_padding="8px 28px 24px")
+    return render_shell(
+        body,
+        dateline=dateline,
+        colophon=colophon,
+        body_padding="8px 28px 24px",
+        referral=True,  # recurring engagement mail to an opted-in reader — the best-fit surface
+    )
 
 
 def _section(heading: str, rows: str, overflow: int = 0) -> str:

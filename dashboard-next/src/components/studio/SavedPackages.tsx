@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { useAuth } from '@/components/auth/AuthContext';
 import { fetchSettings, patchSettings } from '@/lib/userSettings';
 import { decodeSpecFromHash, encodeSpecToHash, type StudioSpec } from '@/lib/studio';
-import { track } from '@/lib/analytics';
+import { track, trackGateHit } from '@/lib/analytics';
 import { formatDate } from '@/lib/utils';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 
@@ -93,6 +93,7 @@ export function useSavedPackages() {
   const save = useCallback(
     async (spec: StudioSpec) => {
       if (!user) {
+        trackGateHit('account', 'sign_in', 'studio_save_package');
         openAuth();
         return;
       }

@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Scope, EMPTY_SCOPE, isEmptyScope, loadScope, saveScope, clearScope } from '@/lib/scope';
 import { useAuth } from '@/components/auth/AuthContext';
 import { fetchSettings, patchSettings } from '@/lib/userSettings';
+import { trackGateHit } from '@/lib/analytics';
 
 interface ScopeContextValue {
   /** True once we've read localStorage — guards against SSR/first-paint flash. */
@@ -151,6 +152,7 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
   // can't live for anonymous visitors. A signed-out tap prompts sign-in and defers opening the editor.
   const openEditor = useCallback(() => {
     if (!user) {
+      trackGateHit('account', 'sign_in', 'scope_personalization');
       setPendingEditor(true);
       openAuth();
       return;

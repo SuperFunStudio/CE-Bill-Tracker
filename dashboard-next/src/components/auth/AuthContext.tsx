@@ -12,7 +12,7 @@ import {
   type User,
 } from 'firebase/auth';
 import { auth, googleProvider, microsoftProvider } from '@/lib/firebase';
-import { track, setUserProperties, setUserId } from '@/lib/analytics';
+import { track, trackGateHit, setUserProperties, setUserId } from '@/lib/analytics';
 import { captureAttribution, attributionParams } from '@/lib/attribution';
 import { startProCheckout, startSignupTrial, billingErrorMessage } from '@/lib/billing';
 import { attributeReferral, PENDING_REF_KEY } from '@/lib/referrals';
@@ -394,18 +394,18 @@ export function useProGate(): (action: () => void, feature?: string) => boolean 
       // gate_hit captures the conversion decision at every gated feature: did it wall the visitor at
       // sign-in, send a Free user to checkout, or pass a subscriber through? `feature` says which CTA.
       if (!user) {
-        track('gate_hit', { gate: 'pro', outcome: 'sign_in', feature });
+        trackGateHit('pro', 'sign_in', feature ?? 'unlabeled');
         openAuth();
         return false;
       }
       if (!isPro) {
-        track('gate_hit', { gate: 'pro', outcome: 'checkout', feature });
+        trackGateHit('pro', 'checkout', feature ?? 'unlabeled');
         // startProCheckout redirects to Stripe on success; on failure it rejects. Catch it so a
         // failed checkout gives the user feedback instead of a dead click + unhandled rejection.
         startProCheckout(getToken).catch(e => showToast(billingErrorMessage(e)));
         return false;
       }
-      track('gate_hit', { gate: 'pro', outcome: 'allowed', feature });
+      trackGateHit('pro', 'allowed', feature ?? 'unlabeled');
       action();
       return true;
     },
@@ -427,16 +427,16 @@ export function useCapabilityGate(
   return useCallback(
     (action: () => void, feature?: string) => {
       if (!user) {
-        track('gate_hit', { gate: capability, outcome: 'sign_in', feature });
+        trackGateHit(capability, 'sign_in', feature ?? 'unlabeled');
         openAuth();
         return false;
       }
       if (!hasCapability(capability)) {
-        track('gate_hit', { gate: capability, outcome: 'pricing', feature });
+        trackGateHit(capability, 'pricing', feature ?? 'unlabeled');
         if (typeof window !== 'undefined') window.location.href = '/pricing';
         return false;
       }
-      track('gate_hit', { gate: capability, outcome: 'allowed', feature });
+      trackGateHit(capability, 'allowed', feature ?? 'unlabeled');
       action();
       return true;
     },

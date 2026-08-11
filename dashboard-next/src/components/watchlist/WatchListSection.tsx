@@ -5,6 +5,7 @@ import { BillTable } from '@/components/bills/BillTable';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { SkeletonList } from '@/components/ui/SkeletonList';
 import { StarIcon, LockIcon } from '@/components/ui/icons';
+import { GateCard } from '@/components/ui/GateCard';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useWatchlist } from '@/components/watchlist/WatchlistContext';
 import { startProCheckout } from '@/lib/billing';
@@ -37,7 +38,10 @@ export function WatchListSection() {
       {loading ? (
         <SkeletonList rows={4} />
       ) : !user ? (
-        <Gate
+        <GateCard
+          gate="pro"
+          feature="watchlist"
+          outcome="sign_in"
           icon={<StarIcon className="text-2xl text-green-accent" />}
           title="Sign in to use watch lists"
           body="Star any bill to follow it, and it'll show up here across all your devices."
@@ -45,7 +49,10 @@ export function WatchListSection() {
           onClick={openAuth}
         />
       ) : !isPro ? (
-        <Gate
+        <GateCard
+          gate="pro"
+          feature="watchlist"
+          outcome="checkout"
           icon={<LockIcon className="text-2xl text-green-accent" />}
           title="Watch lists are a Pro feature"
           body={`Follow bills, get alerts when they move, and track the deadlines that matter to you. ${PRO.foundingNote}`}
@@ -136,24 +143,6 @@ function NotifyPrefs() {
           </label>
         ))}
       </div>
-    </div>
-  );
-}
-
-function Gate({ icon, title, body, cta, onClick }: {
-  icon: React.ReactNode; title: string; body: string; cta: string; onClick: () => void;
-}) {
-  return (
-    <div className="rounded-xl border border-green-accent bg-green-dark/20 p-8 text-center space-y-3 max-w-xl mx-auto">
-      <div>{icon}</div>
-      <h2 className="font-serif text-xl text-text-primary">{title}</h2>
-      <p className="text-text-secondary text-sm leading-relaxed">{body}</p>
-      <button
-        onClick={onClick}
-        className="inline-flex items-center gap-2 rounded-lg bg-green-accent text-bg-primary px-5 py-2.5 font-medium text-sm hover:opacity-90 transition-opacity"
-      >
-        {cta}
-      </button>
     </div>
   );
 }

@@ -5,8 +5,11 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { startProCheckout } from '@/lib/billing';
 import { PRO, upgradeLabel } from '@/lib/tiers';
 import { useReferralShare } from '@/hooks/useReferralShare';
-import { track } from '@/lib/analytics';
+import { track, trackGateShown, trackGateHit } from '@/lib/analytics';
 import { LockIcon } from '@/components/ui/icons';
+
+/** GA `feature` label for every gate event this card emits — keep in sync with the useProGate callers. */
+const FEATURE = 'upcoming_deadlines';
 
 /**
  * The unlock card shown below the free teaser rows (the soonest few deadlines a non-Pro visitor is
@@ -24,10 +27,17 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
 
   useEffect(() => {
     setMounted(true); // triggers the fade-in transition
-    track('deadlines_lock_shown');
+    // Impression. deadlines_lock_shown is kept alongside the generic gate_shown purely to preserve the
+    // existing time series — new analysis should use gate_shown, which every wall now emits.
+    track('deadlines_lock_shown', { feature: FEATURE });
+    trackGateShown('pro', FEATURE);
   }, []);
 
   const startTrial = useCallback(async () => {
+    // This card hand-rolls what useProGate does (openAuth vs startProCheckout), so it never emitted
+    // gate_hit and stayed invisible in the conversion funnel despite being the highest-volume paywall
+    // on the site. Mirror the hook's exact param shape (gate/outcome/feature) so the two are comparable.
+    trackGateHit('pro', user ? 'checkout' : 'sign_in', FEATURE);
     track('deadlines_lock_cta', { action: 'trial' });
     if (!user) {
       openAuth();
@@ -99,7 +109,12 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
           </p>
           {!user ? (
             <button
-              onClick={openAuth}
+              onClick={() => {
+                // The referral escape hatch is its own gate — a separate feature label keeps it from
+                // blending into the trial CTA when comparing which way out of the wall people take.
+                trackGateHit('pro', 'sign_in', 'deadlines_referral_link');
+                openAuth();
+              }}
               className="w-full rounded-lg border border-green-accent bg-green-dark px-4 py-2 text-sm font-medium text-green-accent hover:opacity-90 transition-opacity"
             >
               Sign in to get your link →

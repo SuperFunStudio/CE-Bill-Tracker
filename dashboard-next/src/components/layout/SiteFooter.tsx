@@ -25,8 +25,10 @@ export function SiteFooter() {
 
   return (
     <footer className="mt-16 border-t border-border-default bg-bg-secondary">
-      {/* Referral CTA band — the central end of the funnel. */}
-      <section className="border-b border-border-default px-4 py-12">
+      {/* Referral CTA band — the central end of the funnel. The id is the deep-link target for the
+          referral note in the email footer (app/alerts/email_shell.py), so a recipient lands on the
+          offer rather than the top of the page. Renaming it breaks those links silently. */}
+      <section id="refer" className="scroll-mt-24 border-b border-border-default px-4 py-12">
         <div className="mx-auto max-w-2xl text-center space-y-5">
           <div className="inline-flex items-center gap-2 rounded-full border border-green-accent/40 bg-green-dark/30 px-3 py-1 text-meta uppercase tracking-wider text-green-accent">
             <GiftIcon className="text-sm" />

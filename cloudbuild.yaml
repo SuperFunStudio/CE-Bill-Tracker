@@ -161,7 +161,12 @@ steps:
       - --platform=managed
       - --min-instances=1
       - --cpu-boost
-      - --max-instances=3
+      # max-instances=10 (was 3). Cloud Run bills per request-second, not per configured ceiling, so
+      # a higher cap costs nothing until it's used — it only stops the ceiling being what breaks under
+      # a shared-link spike. At 3 instances x 80 concurrency, a homepage burst was queueing behind
+      # multi-second corpus responses. Postgres is the next limit after this, which is what the
+      # Cache-Control on /bills is for.
+      - --max-instances=10
       - --concurrency=80
       # ENABLE_COURTLISTENER is back on, after being pinned false while the relevance gate shipped
       # and the pre-gate backlog was re-screened (scripts/prune_litigation_cases.py --mode fetch).

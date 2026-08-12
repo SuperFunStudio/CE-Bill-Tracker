@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Integer, and_, case, func, literal_column, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -107,8 +107,21 @@ async def list_bills(
     activity_to: date | None = None,
     limit: int = Query(default=100, le=5000),
     offset: int = 0,
+    response: Response = None,  # noqa: B008 — FastAPI injects; used only to set Cache-Control
     db: AsyncSession = Depends(get_db),
 ):
+    # Shared-cacheable for 5 minutes. This is the hottest endpoint on the site — the homepage asks for
+    # the whole relevant corpus on every load — and it was going out with no Cache-Control at all, so
+    # every visitor round-tripped to Postgres for a corpus that only changes on an ingestion cadence.
+    # A traffic spike therefore hit the DB once per visitor for identical bytes.
+    #
+    # 300s is chosen against how the data actually moves (ingestion is hourly at best), not against
+    # how fresh it feels: a bill that appears five minutes late is invisible to a reader, while a
+    # thundering herd on a shared link is not. stale-while-revalidate lets a CDN keep serving during
+    # the refresh instead of stampeding the origin at expiry.
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+
     lit_sub = _lit_subquery()
     q = (
         select(Bill, func.coalesce(lit_sub.c.case_count, 0).label("case_count"), lit_sub.c.max_risk)

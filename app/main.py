@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -59,6 +60,18 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# Response compression. The homepage fetches the whole relevant corpus in one call
+# (/bills?ce_relevant=true&region=all&limit=5000) and that response was going out RAW: 2,634,807
+# bytes per visitor, ~2-5s, with the client's `Accept-Encoding: gzip` ignored because nothing was
+# installed to honour it. gzip takes the same payload to 355,538 bytes — 7.4x — which is the
+# difference between 13 GB and 1.8 GB of egress on a 5,000-visit traffic spike, and the difference
+# between a 4-second and a sub-second first paint for someone arriving from a link.
+#
+# minimum_size=1000 leaves small responses alone (compressing a 200-byte 204/error costs more CPU
+# than it saves bytes). Added BEFORE the security/logging middlewares so it sits inside them: the
+# logger still sees the real status, and the security headers still land on the compressed response.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Per-IP rate limiting (H-1). The blanket default lives on the limiter; abuse-prone POSTs tighten it
 # with @limiter.limit(...) decorators in their routers.

@@ -69,24 +69,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `(function(){try{var t=localStorage.getItem('theme');if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}if(t==='dark'){document.documentElement.classList.add('dark');}var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute('content',t==='dark'?'#111827':'#ffffff');}}catch(e){}})();`,
           }}
         />
+        {/* gtag SHIM — must run during HTML parse, before React hydrates. `window.gtag` only queues
+            into dataLayer; the remote gtag/js script below drains that queue when it finishes loading,
+            so nothing fired before load is lost.
+
+            This used to be an afterInteractive <Script>, which raced RouteAnalytics: its mount effect
+            runs at hydration, and lib/analytics track() silently no-ops when window.gtag is undefined.
+            The initial page_view lost that race on most loads — GA recorded 419 session_start users
+            against only 104 page_view users, and 74% of sessions had landingPage "(not set)". Defining
+            the shim synchronously is what makes the first page_view of a session reliable. */}
+        <Script id="gtag-shim" strategy="beforeInteractive">
+          {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=gtag;gtag('js',new Date());gtag('config','G-S858LD2MMN',{send_page_view:false});`}
+        </Script>
         <Providers>
           <AppShell>{children}</AppShell>
           <RouteAnalytics />
         </Providers>
+        {/* send_page_view:false is set in the shim above — RouteAnalytics owns page_view so SPA route
+            changes are tracked and the initial load isn't double-counted. */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-S858LD2MMN"
           strategy="afterInteractive"
         />
-        <Script id="gtag-init" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            // send_page_view:false — RouteAnalytics owns page_view so SPA route changes are tracked
-            // and the initial load isn't double-counted.
-            gtag('config', 'G-S858LD2MMN', { send_page_view: false });
-          `}
-        </Script>
       </body>
     </html>
   );

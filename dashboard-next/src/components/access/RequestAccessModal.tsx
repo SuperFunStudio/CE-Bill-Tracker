@@ -51,9 +51,13 @@ export function RequestAccessModal({
       });
       // Willingness-to-pay conversion. No PII — plan/source/utm enums only (see lib/analytics PII rule).
       // Mark as a Key Event in GA Admin to track it as a conversion.
+      // entry_source, NOT source: `source` is a reserved GA4 event parameter that overrides session
+      // attribution, so sending the CTA label here rewrote the visitor's acquisition channel (real
+      // Direct/LinkedIn sessions were reported as sessionSource "pricing" / "home_walkthrough").
+      // The API payload above still sends `source` — that's our own access_requests column, unrelated.
       track('request_access', {
         plan,
-        source,
+        entry_source: source,
         has_organization: organization.trim().length > 0,
         has_message: message.trim().length > 0,
         ...attributionParams(),

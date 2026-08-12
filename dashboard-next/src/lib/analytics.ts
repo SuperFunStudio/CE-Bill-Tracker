@@ -3,16 +3,42 @@
 //
 // PII rule: never pass email, name, or free-text into GA params — GA's terms prohibit it and it bloats
 // the property. Send counts, flags, and enums instead.
+//
+// RESERVED-NAME rule: GA4 treats `source`, `medium`, `campaign`, `campaign_id`, `term` and `content` as
+// traffic-attribution parameters. Sending one as an ordinary event param does NOT create a custom
+// dimension — it OVERWRITES the visitor's acquisition channel for the whole session. We learned this the
+// expensive way: passing a UI label as `source` reported ~135 real Direct/LinkedIn sessions under
+// invented sources like "region_instrument_matrix" and "pricing", and the damage isn't reprocessable.
+// Prefix instead: entry_source, search_term. `utm_*` names are safe (see lib/attribution).
 
 declare global {
   interface Window {
     gtag?: (command: string, ...args: unknown[]) => void;
+    // gtag's queue. Present so track() can install the standard stub when the tag hasn't loaded yet.
+    dataLayer?: IArguments[];
   }
 }
 
-/** Fire a GA4 event. No-op on the server or before gtag has loaded. */
+/**
+ * Fire a GA4 event. No-op on the server; on the client it can never be too early.
+ *
+ * This used to `return` when window.gtag was undefined, which silently dropped every event fired
+ * before the tag loaded — in practice the first page_view of most sessions, because RouteAnalytics'
+ * mount effect races the gtag script. GA showed 419 session_start users against 104 page_view users.
+ *
+ * Instead we install gtag's own standard stub (push the arguments object onto dataLayer) when it's
+ * missing. gtag/js drains that queue when it finishes loading, so an early event is delayed, not lost,
+ * and the ordering of the tag scripts stops mattering.
+ */
 export function track(event: string, params: Record<string, unknown> = {}): void {
-  if (typeof window === 'undefined' || typeof window.gtag !== 'function') return;
+  if (typeof window === 'undefined') return;
+  if (typeof window.gtag !== 'function') {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function gtag() {
+      // eslint-disable-next-line prefer-rest-params
+      window.dataLayer!.push(arguments);
+    };
+  }
   window.gtag('event', event, params);
 }
 

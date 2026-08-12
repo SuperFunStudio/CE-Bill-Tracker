@@ -988,6 +988,46 @@ class UserSettings(Base):
     )
 
 
+class AnonScope(Base):
+    """The scope an ANONYMOUS visitor chose — the signed-out counterpart to
+    UserSettings.prefs['scope'], keyed by a UUID the browser mints and keeps in localStorage.
+
+    Why this exists: personalization used to require an account, so the largest and most engaged
+    cohort on the site (returning visitors who never sign in) left no trace of what they cared about.
+    A visitor's states + materials are the same signal that makes the subscriber list legible
+    ("Panasonic: US, solar panels") — this captures it without asking anyone for an email.
+
+    `client_id` is pseudonymous by construction: browser-generated, never derived from IP or user
+    agent, and cleared with the browser. No PII, no free-text, no request metadata is stored here —
+    only the closed vocabularies the bill filters already use. See migration 047.
+    """
+
+    __tablename__ = "anon_scope"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    client_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    states: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    material_categories: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
+    # `configured` = been through onboarding at all (an explicit "show everything" skip counts);
+    # `scoped` = filtering is currently on. A configured row with an empty scope is a real answer.
+    configured: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    scoped: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (Index("idx_anon_scope_updated", "updated_at"),)
+
+
 class WatchlistItem(Base):
     """A bill an account follows — the Pro 'personal watch list'. Keyed by Firebase uid + bill, with
     ON DELETE CASCADE so a removed bill drops out of every watch list. Pro-gated at the API layer

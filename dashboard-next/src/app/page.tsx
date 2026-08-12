@@ -266,7 +266,9 @@ export default function HomePage() {
   // the instrument select for an instrument one. Clears the keyword so the filter alone is the query.
   function applyFacetFilter() {
     if (!searchFacets) return;
-    track('search_facet_promoted', { term: billFilters.search.trim(), facets: searchFacets.labels.join(',') });
+    // search_term, NOT term: `term` is a reserved GA4 traffic-source parameter (campaign keyword) and
+    // would overwrite the visitor's acquisition attribution with whatever they typed into the bill search.
+    track('search_facet_promoted', { search_term: billFilters.search.trim(), facets: searchFacets.labels.join(',') });
     setQuery('');
     setBillFilters(prev => ({
       ...prev,

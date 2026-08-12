@@ -1,7 +1,8 @@
+import re
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class BillSummary(BaseModel):
@@ -1029,6 +1030,53 @@ class FeeScheduleResponse(BaseModel):
     categories: list[FeeScheduleCategory]
 
 
+# --- Producer attribution (WHO owes it) ---
+# app/scoring/producer_attribution.py. Distinct from every fee layer: this answers whether the
+# caller is the obligated party at all, before any rate is applied. Nested blocks (thresholds,
+# authorised_representative, registration_identifier) are deliberately loosely typed — they are
+# curated legal reference data whose shape differs per jurisdiction and will keep moving, and
+# over-constraining them here would force lossy edits to the source of truth.
+
+
+class ProducerAttributionRow(BaseModel):
+    """One (jurisdiction, regime) attribution rule with its statutory grounding.
+
+    `rule` is the mechanism (franchisor | first_seller | brand_owner | packer_filler |
+    importer | supplier_discharged) — these are not synonyms for "producer", they attach
+    liability to different parties. `confidence` records where the rule lives (statutory /
+    regulatory / guidance / unresolved), because a regulation is amended more easily than a
+    statute and guidance binds nobody. `quote` is verbatim primary-source text or null —
+    never a paraphrase presented as a quotation.
+    """
+    jurisdiction: str
+    jurisdiction_label: str
+    regime: str
+    rule: str
+    liable_party: str | None = None
+    because: str
+    citation: str
+    quote: str | None = None
+    confidence: str
+    sourcing_sensitive: bool = False
+    covers_food_service_ware: bool | None = None
+    threshold_summary: str | None = None
+    thresholds: dict | None = None
+    exemptions: list[dict] = []
+    authorised_representative: dict | None = None
+    registration_identifier: dict | None = None
+    open_questions: list[str] = []
+    source_url: str | None = None
+    notes: dict[str, str] = {}
+
+
+class ProducerAttributionResponse(BaseModel):
+    """Rows plus an honest breadth statement — `coverage.unresolved_questions` is reported
+    alongside the counts so a caller can see the table's own gaps, not just its size."""
+    rows: list[ProducerAttributionRow]
+    count: int
+    coverage: dict
+
+
 # --- Bill-sourced fee amounts (compliance_details.fee_amounts envelope) ---
 # Layer A of the fee API: the fee facts a measure actually STATES, cited to a verbatim source_excerpt.
 # Distinct from FeeScheduleResponse above (Layer B — the curated CA/UK/JP rate-table engine). See
@@ -1148,3 +1196,35 @@ class BillOutcomeSummary(BaseModel):
     remediated_by_bill_id: int | None = None
 
     model_config = {"from_attributes": True}
+
+
+# crypto.randomUUID() shape. Hex + dashes only, length-bounded — see AnonScopeUpsert.client_id.
+_CLIENT_ID_RE = re.compile(r"^[0-9a-fA-F-]{16,64}$")
+
+
+class AnonScopeUpsert(BaseModel):
+    """An anonymous visitor's chosen scope. Written by POST /anon-scope (no auth).
+
+    Every field is a closed vocabulary or a boolean on purpose — this endpoint is unauthenticated, so
+    it must not accept anything that could carry PII or free text. The API layer caps list lengths and
+    drops unrecognised slugs rather than 422ing, because a stale client shipping one unknown material
+    shouldn't lose the whole (still useful) rest of the signal.
+    """
+
+    # The browser-minted UUID from localStorage (crypto.randomUUID). Validated HERE rather than in the
+    # endpoint body so a malformed id is a 422 from request parsing, with the offending field named,
+    # instead of a hand-rolled raise further in. Accepting only this shape keeps the column bounded
+    # and makes a hand-crafted id (a would-be tracking key, an email, a Firebase uid) a rejection.
+    client_id: str
+    states: list[str] = []
+    material_categories: list[str] = []
+    configured: bool = False
+    scoped: bool = False
+
+    @field_validator("client_id")
+    @classmethod
+    def _uuid_shaped(cls, v: str) -> str:
+        v = v.strip()
+        if not _CLIENT_ID_RE.match(v):
+            raise ValueError("client_id must be a UUID-shaped browser id")
+        return v

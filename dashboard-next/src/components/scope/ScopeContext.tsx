@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Scope, EMPTY_SCOPE, isEmptyScope, loadScope, saveScope, clearScope } from '@/lib/scope';
 import { useAuth } from '@/components/auth/AuthContext';
 import { fetchSettings, patchSettings } from '@/lib/userSettings';
-import { trackGateHit } from '@/lib/analytics';
+import { clearAnonId, postAnonScope } from '@/lib/anonScope';
 
 interface ScopeContextValue {
   /** True once we've read localStorage — guards against SSR/first-paint flash. */
@@ -41,14 +41,12 @@ const ScopeContext = createContext<ScopeContextValue>({
 });
 
 export function ScopeProvider({ children }: { children: React.ReactNode }) {
-  const { user, getToken, openAuth } = useAuth();
+  const { user, getToken } = useAuth();
   const [ready, setReady] = useState(false);
   const [scope, setScope] = useState<Scope>(EMPTY_SCOPE);
   const [isConfigured, setIsConfigured] = useState(false);
   const [scoped, setScoped] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
-  // Set when a signed-out reader taps "Personalize"; we prompt sign-in and open the editor once they're in.
-  const [pendingEditor, setPendingEditor] = useState(false);
 
   // localStorage is the immediate / anonymous / offline source — read it first for instant paint.
   useEffect(() => {
@@ -61,10 +59,23 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, []);
 
-  // Best-effort push of scope state to the backend (cross-device persistence) when signed in.
+  // Best-effort push of scope state to the backend. Two destinations, same call site:
+  //   signed in  → /me/settings, keyed by uid (cross-device truth)
+  //   signed out → /anon-scope, keyed by a browser-minted UUID (no account, no PII)
+  // The anonymous branch exists because signed-out returning visitors are the largest and most
+  // engaged cohort on the site, and gating personalization behind an account meant they told us
+  // nothing about what they came for. See lib/anonScope.
   const persist = useCallback(
     async (next: { scope: Scope; isConfigured: boolean; scoped: boolean }) => {
-      if (!user) return;
+      if (!user) {
+        await postAnonScope({
+          states: next.scope.states,
+          material_categories: next.scope.materials,
+          configured: next.isConfigured,
+          scoped: next.scoped,
+        });
+        return;
+      }
       try {
         // PATCH merges server-side — only scope keys are touched, other features' keys survive.
         await patchSettings(await getToken(), {
@@ -137,8 +148,12 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     setIsConfigured(false);
     setScoped(true);
     setEditorOpen(false);
+    // Push the cleared state BEFORE dropping the anonymous id, so the existing row reads as
+    // "reset" rather than being orphaned — then start a genuinely new identity. "Reset" has to
+    // mean reset; leaving the id in place would quietly re-link the next scope to the old one.
     persist({ scope: EMPTY_SCOPE, isConfigured: false, scoped: true });
-  }, [persist]);
+    if (!user) clearAnonId();
+  }, [persist, user]);
 
   const setScopedPersist = useCallback(
     (v: boolean) => {
@@ -148,25 +163,14 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     [persist, scope, isConfigured],
   );
 
-  // Personalization requires a (free) account — the scope follows the reader across devices, so it
-  // can't live for anonymous visitors. A signed-out tap prompts sign-in and defers opening the editor.
+  // Personalization is open to everyone. It used to prompt sign-in first, on the reasoning that a
+  // scope should follow the reader across devices — but that gate was hit 3 times by 1 user in 28
+  // days while 62 returning visitors browsed anonymously, so it converted nobody and cost us the one
+  // signal those visitors were willing to give. Anonymous scope persists via /anon-scope; signing in
+  // is now an upgrade (cross-device sync), not a toll gate.
   const openEditor = useCallback(() => {
-    if (!user) {
-      trackGateHit('account', 'sign_in', 'scope_personalization');
-      setPendingEditor(true);
-      openAuth();
-      return;
-    }
     setEditorOpen(true);
-  }, [user, openAuth]);
-
-  // Once the deferred sign-in lands, open the editor we held back.
-  useEffect(() => {
-    if (user && pendingEditor) {
-      setPendingEditor(false);
-      setEditorOpen(true);
-    }
-  }, [user, pendingEditor]);
+  }, []);
 
   const value = useMemo<ScopeContextValue>(
     () => ({

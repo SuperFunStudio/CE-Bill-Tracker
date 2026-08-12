@@ -4,6 +4,8 @@ import { STATE_NAMES } from '@/lib/utils';
 import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
 import { CheckIcon } from '@/components/ui/icons';
 import { useScope } from './ScopeContext';
+import { useAuth } from '@/components/auth/AuthContext';
+import { track } from '@/lib/analytics';
 import { EMPTY_SCOPE, type Scope } from '@/lib/scope';
 
 export function formatMaterial(slug: string): string {
@@ -21,8 +23,13 @@ const STATE_ENTRIES = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeComp
  */
 export function ScopeOnboarding() {
   const { ready, isConfigured, editorOpen, scope, saveAndClose, skip, closeEditor } = useScope();
+  const { user, openAuth } = useAuth();
   const open = ready && editorOpen;
   const editing = isConfigured; // opened via "Edit" rather than the first-run invitation
+  // The account pitch, for signed-out readers only. This modal used to be behind a sign-in prompt;
+  // now it's open to everyone and the account is an UPGRADE (this scope, on your other devices)
+  // rather than a toll. Framed as an addition to something they already have, never as a warning.
+  const showSyncPitch = open && !user;
 
   const [states, setStates] = useState<string[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
@@ -34,6 +41,13 @@ export function ScopeOnboarding() {
       setMaterials(scope.materials);
     }
   }, [open, scope]);
+
+  // Impression for the pitch. Removing the sign-in gate deleted the only signal we had about whether
+  // the account ask lands (it fired 3 times in 28 days), so the replacement has to report itself or
+  // we've traded a bad number for no number.
+  useEffect(() => {
+    if (showSyncPitch) track('scope_sync_shown', { feature: 'scope_editor' });
+  }, [showSyncPitch]);
 
   const draft: Scope = useMemo(() => ({ states, materials }), [states, materials]);
 
@@ -120,6 +134,28 @@ export function ScopeOnboarding() {
           </p>
         </fieldset>
         </div>
+
+        {/* Cross-device upsell — signed-out only. Sits above the actions rather than inside the
+            scrollable body so it can't be scrolled past, and reads AFTER the reader has made their
+            selections, so it lands as "keep this" rather than "sign in to continue". */}
+        {showSyncPitch && (
+          <div className="shrink-0 border-t border-border-default px-4 sm:px-6 py-3">
+            <p className="text-text-muted text-xs leading-relaxed">
+              Saved on this device.{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  track('scope_sync_cta', { feature: 'scope_editor' });
+                  openAuth();
+                }}
+                className="text-green-accent hover:underline font-medium"
+              >
+                Create a free account
+              </button>{' '}
+              to keep this scope on your other devices — and to watch individual bills.
+            </p>
+          </div>
+        )}
 
         <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border-default p-4 sm:px-6">
           <button

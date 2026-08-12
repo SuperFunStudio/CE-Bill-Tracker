@@ -50,7 +50,10 @@ function BillRow({ bill, source }: { bill: BillSummary; source: string }) {
             href={bill.source_url}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => track('insights_drilldown_source', { source, bill_id: bill.id })}
+            // entry_source, NOT source: `source` is a reserved GA4 event parameter that overrides
+            // session attribution, so sending a UI label here rewrote the visitor's acquisition
+            // channel (56 sessions landed under sessionSource "region_instrument_matrix").
+            onClick={() => track('insights_drilldown_source', { entry_source: source, bill_id: bill.id })}
             className="text-[rgb(var(--green-accent))] hover:underline"
           >
             View source ↗

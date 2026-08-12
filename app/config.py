@@ -50,6 +50,15 @@ class Settings(BaseSettings):
     # Empty = NY-direct fetch disabled (ladder falls back to LegiScan/OpenStates as before).
     nys_api_key: str = ""
 
+    # The physical mailing address printed in every email footer. CAN-SPAM §7704(a)(5) requires a
+    # valid postal address on commercial mail, and SendGrid enforces it at account review — mail sent
+    # without one is what gets a sending account suspended, not just filtered. Deliberately env-only
+    # with an empty default so the address isn't in git; set BUSINESS_ADDRESS in .env locally and in
+    # the Cloud Run service env in prod. Newlines or " | " separate lines; the footer joins them.
+    # Empty = the address line is omitted (renders, doesn't crash) — so a missing env var degrades to
+    # a non-compliant footer rather than a failed send. Check it after any deploy that resets env.
+    business_address: str = ""
+
     @field_validator(
         "anthropic_api_key",
         "legiscan_api_key",

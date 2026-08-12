@@ -31,6 +31,11 @@ DASHBOARD_URL = "https://www.atlascircular.com"
 
 TAGLINE = "Tracking the circular economy"
 
+PUBLISHER_NAME = "SUPERFUN STUDIO"
+PUBLISHER_URL = "https://www.superfun.studio"
+PRIVACY_URL = f"{DASHBOARD_URL}/privacy"
+TERMS_URL = f"{DASHBOARD_URL}/terms"
+
 # The rule-bounded line above the wordmark. It used to read "SUPERFUN STUDIO · PRESENTS" on every
 # email — publisher ego in the most expensive real estate we own. Worse, it was also the *preheader*:
 # the snippet Gmail shows next to the subject in the inbox list read "SUPERFUN STU…", so the one line
@@ -148,6 +153,61 @@ def _footer_actions(
     )
 
 
+def _business_address_lines() -> list[str]:
+    """The configured postal address, split into display lines.
+
+    Env-only (`BUSINESS_ADDRESS`) so the address isn't committed. Accepts newline- or `|`-separated
+    lines; blank/absent yields `[]` and the address line is simply omitted rather than raising — a
+    missing env var must not take down every outbound email.
+    """
+    from app.config import settings
+
+    raw = (settings.business_address or "").replace("|", "\n")
+    return [line.strip() for line in raw.splitlines() if line.strip()]
+
+
+def _identity_block() -> str:
+    """Sender identity: who sent this, from what postal address, under which policies.
+
+    On **every** email, transactional included. CAN-SPAM §7704(a)(5) only compels the postal address
+    on commercial mail, but the line SendGrid's compliance review draws is at the account, not the
+    message — one bulk send lacking an identifiable sender risks the sending identity we've spent
+    months warming. And the cost of carrying it on a password reset is four lines of grey 11px type.
+
+    The wordmark is the brand; the publisher sits under it in smaller type and carries the link, so
+    the reader sees "Atlas Circular" first and can still verify a real company stands behind it.
+    """
+    address = _business_address_lines()
+    address_html = (
+        f'<div style="margin:0 0 4px;">{" · ".join(address)}</div>' if address else ""
+    )
+    return f"""
+  <div style="padding:0 28px 24px;text-align:center;font:11px {_SERIF};color:{_MUTED};
+       line-height:1.6;">
+    <div style="font:13px {_HEADING};letter-spacing:0.04em;color:{_INK_SOFT};margin:0 0 1px;">
+      Atlas Circular</div>
+    <div style="margin:0 0 6px;">a <a href="{PUBLISHER_URL}"
+       style="color:{_MUTED};text-decoration:underline;">{PUBLISHER_NAME}</a> project</div>{address_html}
+    <div><a href="{PRIVACY_URL}" style="color:{_MUTED};text-decoration:underline;">Privacy Policy</a>
+      &nbsp;·&nbsp;
+      <a href="{TERMS_URL}" style="color:{_MUTED};text-decoration:underline;">Terms</a></div>
+  </div>"""
+
+
+def identity_text() -> str:
+    """The plain-text twin of `_identity_block`, for hand-written `text/plain` parts.
+
+    Bodies derived from the HTML pick the identity up automatically via `html_to_text`; the two
+    senders that hand-build their text part append this instead, so both MIME parts carry the same
+    sender identity. A spam filter comparing the parts is one more reason not to let them diverge.
+    """
+    lines = [f"Atlas Circular — a {PUBLISHER_NAME} project ({PUBLISHER_URL})"]
+    lines.extend(_business_address_lines())
+    lines.append(f"Privacy Policy: {PRIVACY_URL}")
+    lines.append(f"Terms: {TERMS_URL}")
+    return "\n\n--\n" + "\n".join(lines)
+
+
 def render_shell(
     body_inner: str,
     *,
@@ -198,7 +258,7 @@ def render_shell(
   <div style="padding:18px 28px;font:italic 12px {_SERIF};color:{_MUTED};text-align:center;
        border-top:3px double {_INK};">
     {colophon}
-  </div>{_footer_actions(unsubscribe_url, subscribe_url, referral, referral_is_pro)}
+  </div>{_footer_actions(unsubscribe_url, subscribe_url, referral, referral_is_pro)}{_identity_block()}
  </div>
 </body></html>
 """

@@ -494,7 +494,74 @@ async def _send(kind: str, subject: str, payload: str) -> bool:
     return await sender.send_html(RECIPIENT, subject, payload)
 
 
+def _write_contact_sheet(rendered: dict, render_status: dict) -> None:
+    """One page showing every template, for attaching to a compliance review.
+
+    An ESP asks for "a content sample" and gets, at best, one screenshot of one email. This renders
+    all of them stacked in iframes so the whole sending programme — what's transactional, what's
+    opt-in, and the identical compliance footer on each — is legible in a single attachment. Print it
+    to PDF and attach that; the iframes carry `srcdoc`, so the file stands alone with no siblings.
+    """
+    import html as _html
+
+    cards = []
+    for label, _kind, _builder in build_registry():
+        if render_status.get(label) != "ok":
+            cards.append(f"<h2>{label}</h2><p class='err'>render failed — not included</p>")
+            continue
+        kind, subject, payload = rendered[label]
+        # The text alert's payload is prose; show the email it actually becomes, same as the file pass.
+        doc = build_text_alert_html(payload, **_text_alert_chrome()) if kind == "text" else payload
+        cards.append(
+            f"<section><h2>{label}</h2>"
+            f"<p class='subj'>Subject: {_html.escape(subject)}</p>"
+            f'<iframe srcdoc="{_html.escape(doc, quote=True)}" loading="lazy"></iframe></section>'
+        )
+    page = f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Atlas Circular — every outbound email template</title>
+<style>
+ body {{ font:14px -apple-system,Segoe UI,sans-serif; background:#eceff1; margin:0; padding:32px; }}
+ h1 {{ font-size:20px; margin:0 0 4px; }}
+ .lede {{ color:#546e7a; max-width:60em; margin:0 0 28px; line-height:1.5; }}
+ section {{ margin:0 0 34px; }}
+ h2 {{ font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#37474f; margin:0 0 2px; }}
+ .subj {{ color:#607d8b; margin:0 0 8px; font-size:13px; }}
+ .err {{ color:#c62828; }}
+ iframe {{ width:100%; max-width:680px; height:900px; border:1px solid #b0bec5; background:#fff; }}
+ @media print {{ body {{ background:#fff; }} section {{ break-inside:avoid; }} }}
+</style></head><body>
+<h1>Atlas Circular — every outbound email template</h1>
+<p class="lede">All {len(rendered)} templates this account sends, rendered with synthetic data. Every
+one carries the same footer: sender identity, publisher, physical mailing address, Privacy Policy and
+Terms. The opt-in editorial and alert mail additionally carries an unsubscribe button and a one-click
+List-Unsubscribe header; the account-security messages (verify address, password reset) deliberately
+do not, as they are transactional.</p>
+{"".join(cards)}
+</body></html>
+"""
+    (OUT_DIR / "index.html").write_text(page, encoding="utf-8")
+
+
+def safe_print(line: str) -> None:
+    """Print without letting the console encoding kill the run.
+
+    Subjects carry emoji (🚨 on the deadline alerts) and the Windows console is cp1252, so a plain
+    print raises UnicodeEncodeError mid-send-pass — and it did: the script died after two templates,
+    inside the *exception handler* for a failed send, so the summary that would have told us WHY was
+    never printed. A progress line is not worth aborting a send run for.
+    """
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        enc = sys.stdout.encoding or "ascii"
+        print(line.encode(enc, "replace").decode(enc, "replace"))
+
+
 def main():
+    # `--render-only` stops after the dry pass: files on disk, not one API call to SendGrid. Use it
+    # for anything that only changes chrome (footer, masthead, copy) — you can read the result in a
+    # browser, and a render check has no business touching a sending reputation that's under review.
+    render_only = "--render-only" in sys.argv
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     registry = build_registry()
 
@@ -519,13 +586,21 @@ def main():
                 )
             rendered[label] = (kind, subject, payload)
             render_status[label] = "ok"
-            print(f"  [render ok ] {label:<28} -> {out}")
+            safe_print(f"  [render ok ] {label:<28} -> {out}")
         except Exception as e:
             render_status[label] = f"render FAILED: {e!r}"
-            print(f"  [render ERR] {label:<28} {e!r}")
+            safe_print(f"  [render ERR] {label:<28} {e!r}")
+
+    _write_contact_sheet(rendered, render_status)
+    safe_print(f"  [contact sheet] {OUT_DIR / 'index.html'}")
 
     # --- SEND pass ------------------------------------------------------------------------------
     print()
+    if render_only:
+        print("=" * 72)
+        print(f"RENDER-ONLY — nothing sent. Open {OUT_DIR} to review.")
+        print("=" * 72)
+        return
     print("=" * 72)
     print(f"SEND PASS — one sample of each to {RECIPIENT}")
     print("=" * 72)
@@ -539,10 +614,10 @@ def main():
         try:
             ok = asyncio.run(_send(kind, full_subject, payload))
             send_status[label] = "SENT ok" if ok else "send FAILED"
-            print(f"  [{'SENT' if ok else 'FAIL'}] {label:<28} {full_subject}")
+            safe_print(f"  [{'SENT' if ok else 'FAIL'}] {label:<28} {full_subject}")
         except Exception as e:
             send_status[label] = f"send FAILED: {e!r}"
-            print(f"  [ERR ] {label:<28} {e!r}")
+            safe_print(f"  [ERR ] {label:<28} {e!r}")
 
     # --- FINAL SUMMARY --------------------------------------------------------------------------
     print()

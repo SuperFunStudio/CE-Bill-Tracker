@@ -14,6 +14,7 @@ from app.alerts.email_shell import (
     _RULE,
     _SERIF,
     cta_button,
+    identity_text,
     render_shell,
 )
 from app.config import settings
@@ -267,7 +268,9 @@ class SendGridSender:
             from_email=from_email or settings.sendgrid_from_email,
             to_emails=to_email,
             subject=subject,
-            plain_text_content=text or html_to_text(html),
+            # A caller-supplied text part skips the HTML, so it'd otherwise ship without the sender
+            # identity the HTML footer carries; derived parts already include it via html_to_text.
+            plain_text_content=(text + identity_text()) if text else html_to_text(html),
             html_content=html,
         )
         if list_unsubscribe_url:
@@ -322,6 +325,7 @@ class SendGridSender:
         text_part = f"{body_text}\n\n{cta_label.rstrip(' →')}: {cta_url}" if cta_url else body_text
         if unsubscribe_url:
             text_part += f"\n\nUnsubscribe: {unsubscribe_url}"
+        text_part += identity_text()
         message = Mail(
             from_email=from_email or settings.sendgrid_from_email,
             to_emails=to_email,

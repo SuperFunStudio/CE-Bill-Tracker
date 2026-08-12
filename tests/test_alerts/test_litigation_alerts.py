@@ -88,9 +88,17 @@ class TestMastheadAndPreheader:
     expensive real estate we own, and (because it sat first in the body) the inbox preview snippet
     as well."""
 
-    def test_shell_has_no_studio_attribution_anywhere(self):
+    def test_studio_attribution_lives_only_in_the_footer(self):
+        """The byline was banned from the masthead, not from the email.
+
+        It used to sit above the wordmark, which spent the reader's first glance — and the inbox
+        preview snippet — on the publisher. It now sits once in the footer identity block, where
+        SendGrid's compliance review and CAN-SPAM both want an identifiable sender.
+        """
         html = build_text_alert_html("body", kicker="LITIGATION ALERT · 18 JUNE 2026")
-        assert "SUPERFUN" not in html.upper()
+        upper = html.upper()
+        assert upper.count("SUPERFUN STUDIO") == 1  # the name once; the link is the other match
+        assert upper.index("SUPERFUN") > upper.index("</H1>")  # after the masthead, not above it
 
     def test_kicker_is_the_edition_line(self):
         assert render_litigation_kicker(date(2026, 6, 18)) == "LITIGATION ALERT · 18 JUNE 2026"

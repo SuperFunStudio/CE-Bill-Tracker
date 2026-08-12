@@ -138,7 +138,12 @@ function Section({ title, action, children }: { title: string; action?: React.Re
   );
 }
 
-function Pill({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 'muted' | 'green' | 'amber' | 'red' }) {
+function Pill({ children, tone = 'muted', title }: {
+  children: React.ReactNode;
+  tone?: 'muted' | 'green' | 'amber' | 'red';
+  // Hover detail — lets a status pill carry its "when/why" without widening the column.
+  title?: string;
+}) {
   const tones: Record<string, string> = {
     muted: 'text-text-muted border-border-default',
     green: 'text-green-accent border-green-accent/40',
@@ -146,7 +151,10 @@ function Pill({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 
     red: 'text-red-400 border-red-400/40',
   };
   return (
-    <span className={`text-meta uppercase tracking-wider border rounded-full px-1.5 py-0.5 ${tones[tone]}`}>
+    <span
+      title={title}
+      className={`text-meta uppercase tracking-wider border rounded-full px-1.5 py-0.5 ${tones[tone]}`}
+    >
       {children}
     </span>
   );
@@ -593,7 +601,25 @@ function SubscribersPanel({ getToken, reloadKey }: { getToken: GetToken; reloadK
                 <Td className="text-text-muted max-w-[12rem]">{(s.instrument_types || []).join(', ') || '—'}</Td>
                 <Td className="text-text-muted">{(s.states || []).join(', ') || '—'}</Td>
                 <Td className="text-text-secondary whitespace-nowrap">{fmtDate(s.created_at)}</Td>
-                <Td>{s.active ? <Pill tone="green">Active</Pill> : <Pill tone="red">Muted</Pill>}</Td>
+                {/* An admin mute and a real unsubscribe used to render identically as "Muted",
+                    which made a testing artefact look like churn and vice versa. They're opposite
+                    signals, so they get different labels and tones — and a row we genuinely can't
+                    explain (pre-048) says so rather than picking one. */}
+                <Td>
+                  {s.active ? (
+                    <Pill tone="green">Active</Pill>
+                  ) : s.deactivation_source === 'self_unsubscribe' ? (
+                    <Pill tone="red" title={`Unsubscribed ${fmtDate(s.deactivated_at)}`}>Unsubscribed</Pill>
+                  ) : s.deactivation_source === 'admin_mute' ? (
+                    <Pill tone="amber" title={`Muted by admin ${fmtDate(s.deactivated_at)}`}>Muted</Pill>
+                  ) : s.deactivation_source === 'self_prefs' ? (
+                    <Pill tone="amber" title={`Alerts off ${fmtDate(s.deactivated_at)}`}>Alerts off</Pill>
+                  ) : (
+                    <Pill tone="amber" title="Deactivated before we recorded the reason (pre-048)">
+                      Inactive (unknown)
+                    </Pill>
+                  )}
+                </Td>
                 <Td>
                   <button
                     onClick={() => toggle(s)}

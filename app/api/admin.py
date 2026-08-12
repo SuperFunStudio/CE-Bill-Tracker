@@ -176,6 +176,10 @@ async def list_subscribers(
                 "instrument_types": s.instrument_types or [],
                 "material_categories": s.material_categories or [],
                 "active": s.active,
+                # Provenance of an inactive row (migration 048). NULL source on an inactive row means
+                # it predates the migration — the UI must show that as "unknown", never guess.
+                "deactivated_at": s.deactivated_at.isoformat() if s.deactivated_at else None,
+                "deactivation_source": s.deactivation_source,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
             }
             for s in rows
@@ -202,9 +206,16 @@ async def set_subscriber_active(
     ).scalar_one_or_none()
     if not sub:
         raise HTTPException(status_code=404, detail="subscription not found")
-    sub.active = payload.active
+    # 'admin_mute' — WE stopped emailing them; they didn't ask us to. Kept distinct from
+    # self_unsubscribe so a churn report can't read a testing mute as a lost subscriber.
+    sub.set_active(payload.active, source="admin_mute")
     await db.commit()
-    return {"id": sub.id, "active": sub.active}
+    return {
+        "id": sub.id,
+        "active": sub.active,
+        "deactivated_at": sub.deactivated_at,
+        "deactivation_source": sub.deactivation_source,
+    }
 
 
 @router.get("/access-requests")

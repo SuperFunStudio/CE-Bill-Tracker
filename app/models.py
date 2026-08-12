@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -486,8 +486,38 @@ class AlertSubscription(Base):
     watchlist_recap_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # WHY this subscription went inactive — `active` alone can't say, because an admin muting someone
+    # and the recipient unsubscribing wrote the identical boolean. Those are opposite signals: one is
+    # us choosing to stop, the other is them asking us to. Set together whenever active goes false and
+    # CLEARED together on reactivation, so the pair always describes the current inactive spell.
+    # NULL source on an inactive row means "deactivated before migration 048" — unknowable, not
+    # assumed. See migration 048 and set_deactivation() below.
+    deactivated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # 'admin_mute' | 'self_unsubscribe' | 'self_prefs' | None
+    deactivation_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     __table_args__ = (Index("idx_alert_sub_uid_scope", "firebase_uid", "scope"),)
+
+    def set_active(self, active: bool, source: str | None = None) -> None:
+        """Flip `active` and keep the provenance columns honest in one place.
+
+        Every writer goes through this so the three columns can't drift apart — the bug this fixes
+        was precisely that two call sites wrote `active` directly and neither recorded who did it.
+        Only stamps deactivated_at on a real transition, so re-muting an already-muted row doesn't
+        overwrite when they actually left.
+        """
+        if not active:
+            if self.active:  # active -> inactive: this is the moment that matters
+                self.deactivated_at = datetime.now(timezone.utc)
+                self.deactivation_source = source
+        else:
+            # Reactivation ends the spell; leaving stale values would misreport a live subscriber
+            # as churned.
+            self.deactivated_at = None
+            self.deactivation_source = None
+        self.active = active
 
 
 class AccessRequest(Base):

@@ -52,6 +52,15 @@ export interface Subscriber {
   instrument_types: string[];
   material_categories: string[];
   active: boolean;
+  /** When `active` last went false. Null while active, or for rows deactivated before migration 048. */
+  deactivated_at: string | null;
+  /**
+   * WHY they're inactive. 'admin_mute' = we stopped emailing them; 'self_unsubscribe' = they asked
+   * us to; 'self_prefs' = the account owner turned their own watch-list alerts off. Null on an
+   * inactive row means it predates migration 048 and is genuinely unknowable — render that as
+   * "unknown", never fold it into either bucket.
+   */
+  deactivation_source: 'admin_mute' | 'self_unsubscribe' | 'self_prefs' | null;
   created_at: string | null;
 }
 

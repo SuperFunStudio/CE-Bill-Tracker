@@ -223,7 +223,10 @@ async def put_watchlist_prefs(
     cleaned = [e for e in payload.alert_on if e in WATCHLIST_ALERT_EVENTS]
     sub = await _ensure_watchlist_subscription(db, user)
     sub.alert_on = cleaned
-    sub.active = payload.active
+    # 'self_prefs' — the account owner turned their own watch-list alerts off from /account. Distinct
+    # from self_unsubscribe (a one-click opt-out of everything from an email footer): this one is
+    # reversible in the UI and doesn't mean they've left. See migration 048.
+    sub.set_active(payload.active, source="self_prefs")
     await db.commit()
     return _prefs_payload(sub)
 

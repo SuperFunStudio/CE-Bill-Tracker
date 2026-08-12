@@ -49,7 +49,10 @@ async def unsubscribe(token: str = "", db: AsyncSession = Depends(get_db)):
             status_code=404,
         )
     if sub.active:
-        sub.active = False
+        # 'self_unsubscribe' — the recipient asked us to stop. Recorded because this is
+        # indistinguishable from an admin mute otherwise, and they mean opposite things. See
+        # migration 048.
+        sub.set_active(False, source="self_unsubscribe")
         await db.commit()
     return HTMLResponse(
         _unsubscribe_page(

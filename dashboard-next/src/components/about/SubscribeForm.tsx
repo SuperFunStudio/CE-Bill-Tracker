@@ -274,6 +274,19 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
       >
         {status === 'submitting' ? 'Signing you up…' : 'Get free updates'}
       </button>
+
+      {/* The consent statement. Not decoration: an ESP's compliance review asks for the opt-in page
+          and expects to see what the subscriber agreed to receive, that leaving is free, and where
+          the privacy policy is. Keeping it at the point of submission — rather than only in the
+          emails — is what makes this a documented opt-in rather than an address capture. */}
+      <p className="text-text-muted text-xs leading-relaxed">
+        By subscribing you agree to receive email updates about legislation matching your selections.
+        Every email includes an unsubscribe link and you can leave at any time. See our{' '}
+        <a href="/privacy" className="underline hover:text-text-secondary">
+          Privacy Policy
+        </a>
+        .
+      </p>
     </form>
   );
 }

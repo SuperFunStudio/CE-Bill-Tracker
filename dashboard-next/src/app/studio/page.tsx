@@ -71,6 +71,11 @@ const useFmt = () => useContext(FmtCtx);
  *  fetch; the rest are built from registered engine Schedules (feeSchedule.ts). */
 const SCHEDULE_OPTIONS: { id: string; label: string; jurisdiction: string | null }[] = [
   { id: 'ca', label: 'California SB-54', jurisdiction: null },
+  // Oregon and Colorado are the only CONFIRMED, binding, currently-invoiced US
+  // schedules — California's 2027 rates are still explicitly non-binding. Each
+  // option's `provenance` says which it is, so the distinction reaches the user.
+  { id: 'US-OR', label: 'Oregon (CAA)', jurisdiction: 'US-OR' },
+  { id: 'US-CO', label: 'Colorado (CAA)', jurisdiction: 'US-CO' },
   { id: 'UK', label: 'UK pEPR', jurisdiction: 'UK' },
   { id: 'JP', label: 'Japan JCPRA', jurisdiction: 'JP' },
 ];

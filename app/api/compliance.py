@@ -42,6 +42,8 @@ from app.schemas import (
     FeeScheduleRate,
     FeeScheduleResponse,
     KeyCount,
+    ProducerAttributionResponse,
+    ProducerAttributionRow,
 )
 from app.scoring.ca_sb54_fees import (
     _PLASTIC_PPMF_ADDER,
@@ -54,6 +56,11 @@ from app.scoring.ca_sb54_fees import (
     _cents_lb_to_per_tonne,
 )
 from app.scoring.materials import _CANONICAL_ALIASES
+from app.scoring.producer_attribution import (
+    coverage as attribution_coverage,
+    jurisdictions_for_regime,
+    resolve_attribution,
+)
 from app.synthesis.fee_kind import classify_fee_kind
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
@@ -124,6 +131,63 @@ async def fee_schedule():
             total_cents_per_lb=_PLASTIC_REUSE_ADDER + _PLASTIC_PPMF_ADDER,
         ),
         categories=categories,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Producer attribution — WHO owes it, before any rate is applied
+# ---------------------------------------------------------------------------
+
+
+# include_in_schema=False: /docs and /openapi.json are public, so a listed route is a published one.
+# Producer attribution is the wedge this product is being built around and it has no frontend caller
+# yet — keeping it out of the public schema lets it ship with everything else without announcing it.
+# Drop this flag when the UI is ready to use it; add Depends(require_admin) instead if it should be
+# genuinely closed rather than merely unlisted.
+@router.get(
+    "/producer-attribution",
+    response_model=ProducerAttributionResponse,
+    include_in_schema=False,
+)
+async def producer_attribution(
+    jurisdiction: str | None = Query(
+        default=None, description="Jurisdiction code, e.g. US-OR, UK, FR. Omit for all."
+    ),
+    regime: str = Query(
+        default="packaging_epr",
+        description="packaging_epr (default) | plastic_tax | sup_levy | drs | carryout_bag. "
+                    "Attribution differs BY REGIME within one jurisdiction.",
+    ),
+    franchised: bool = Query(
+        default=False, description="Business operates wholly or partly as a franchise."
+    ),
+    sourcing: str | None = Query(
+        default=None,
+        description="domestic_supplier | self_import | own_brand. Selects the branch in "
+                    "jurisdictions where sourcing route flips liability (DE, IT, ES).",
+    ),
+):
+    """Which party owes the packaging obligation, per jurisdiction and regime, with citations.
+
+    Open and unauthenticated, deliberately — the same posture as /pathways and /fee-schedule.
+    Knowing you are a covered producer in Oregon is the fact that makes someone subscribe;
+    putting it behind the paywall would sell a locked answer to a question they can't yet ask.
+
+    An absent (jurisdiction, regime) pair returns no row. Callers MUST render that as
+    "unknown — verify this yourself", never as "not obligated": silence here means we hold
+    no cited rule, which is not the same as an exemption.
+    """
+    codes = [jurisdiction] if jurisdiction else jurisdictions_for_regime(regime)
+    rows = [
+        r for r in (
+            resolve_attribution(code, regime, franchised=franchised, sourcing=sourcing)
+            for code in codes
+        ) if r is not None
+    ]
+    return ProducerAttributionResponse(
+        rows=[ProducerAttributionRow(**r) for r in rows],
+        count=len(rows),
+        coverage=attribution_coverage(),
     )
 
 

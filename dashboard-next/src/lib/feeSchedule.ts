@@ -376,7 +376,27 @@ export const UNPRICED_JURISDICTIONS: Record<string, UnpricedJurisdiction> = {
  * California SB 54 — the existing studio.ts schedule expressed in the new model.
  * The plastic PPMF+reuse adder (21¢/lb) becomes the sole modulation rule, scoped
  * to plastic categories; the best/worst palette formats become base-rate tiers.
- * Proves the general engine reproduces today's numbers.
+ *
+ * ⚠️ STATUS: ILLUSTRATIVE, AND THE RATES BELOW NEED RE-VERIFICATION.
+ * CAA published a "California Illustrative Fees" table on 1 May 2026 that is
+ * explicitly "not final fees… good faith, non-binding"; final rates land with the
+ * program plan in October 2026. Two known problems with what is encoded here:
+ *
+ *   1. The values predate the 1 May 2026 publication and are believed stale.
+ *   2. `pp_ps` at 98¢/lb is labelled "PP bottle / PS foam — hard to recycle", but
+ *      98 is reported to correspond to *Other/Mixed Plastics — Textiles* in the
+ *      published table, i.e. the LABEL and the RATE may describe different rows.
+ *
+ * These have NOT been corrected here because the source PDF could not be retrieved
+ * to verify replacements, and the governing rule (docs/PRO_TARIFF_INGESTION_PLAN.md)
+ * is that a rate is never taken from a summary — a hallucinated tariff is worse than
+ * no tariff because it looks authoritative. Fix by ingesting the CAA table directly.
+ *
+ * ⚠️ MISSING DIMENSION: California also levies a PPMF *component-based* fee of
+ * ~$0.0010–0.0012 per plastic COMPONENT UNIT (20% of the $500M/yr fund, allocated
+ * by piece count, not weight). This model has no piece-count input, so that charge
+ * cannot be expressed at all. For a QSR shipping ~1bn lids/straws/sauce cups a year
+ * it is a seven-figure line item. See docs/EXPOSURE_CALCULATOR_SPEC.md §4.
  */
 export function caSb54Schedule(): Schedule {
   const plasticAdderPerTonne = toRatePerTonne(21.0, 'cents_per_lb'); // PPMF 17 + Reuse 4
@@ -393,7 +413,7 @@ export function caSb54Schedule(): Schedule {
     effectiveFrom: '2027-01-01',
     citation: 'Circular Action Alliance — California SB 54 EPR Program Plan, Ch. 9 Table 5 (draft; final Oct 2026).',
     sourceUrl: 'https://circularactionalliance.org/',
-    provenance: 'CA SB-54 draft 2027 rates — final Oct 2026',
+    provenance: 'CA SB-54 2027 ILLUSTRATIVE (non-binding) — final Oct 2026; rates predate the 1 May 2026 table',
     formats: [
       // base ¢/lb from Table 5 (low scenario); mirrors studio.ts FALLBACK_PALETTE.
       { id: 'pet_clear', label: 'PET / HDPE bottle — clear or natural', category: 'plastic_packaging', baseRateNative: 29, tier: 'best', recyclable: true, tag: 'best-in-class plastic' },
@@ -425,15 +445,49 @@ export function caSb54Schedule(): Schedule {
 /**
  * UK pEPR (PackUK) — the cleanest new jurisdiction. Base fees are the Year-2
  * (2026-27) illustrative AMBER column (£/tonne); RAM grade sets the base via a
- * mutually-exclusive multiplier: red = 1.2× (escalates 1.6× in 27-28, 2.0× in
- * 28-29), green = a revenue-neutral discount (~0.9×, data-dependent — illustrative).
- * Selector composition: exactly one grade applies, no further stacking today.
+ * mutually-exclusive multiplier. Selector composition: exactly one grade applies.
+ *
+ * THE RED ESCALATOR IS THE HEADLINE NUMBER
+ * ----------------------------------------
+ * PackUK's modulation statement sets red at 1.2× for 2026-27, 1.6× for 2027-28
+ * and 2.0× for 2028-29 — so a red-rated portfolio roughly DOUBLES its disposal
+ * fee by 28-29 with zero change in tonnage. QSR formats (PE-lined paper cups,
+ * black plastic, composite clamshells, laminated wraps) skew red, which makes
+ * this projection more valuable than the current-year rate. Pass `programYear`
+ * to price a future year.
+ *
+ * WHY GREEN IS NOT A RATE
+ * -----------------------
+ * Green is NOT a published multiplier. The red premium forms a redistribution
+ * pot that PackUK spreads as an EQUAL PERCENTAGE DISCOUNT across all green-rated
+ * material — so the actual discount is arithmetically dependent on the red/amber/
+ * green mix of the whole market and cannot be known before the year is assessed.
+ * PackUK's own Y2 working estimate is ~9%, and it is an estimate, not a rate.
+ * (An earlier revision of this file hardcoded 0.9 as if it were published. It
+ * isn't — hence the explicit label, which travels into the UI via
+ * AppliedModulation.label so a user never sees the discount presented as fact.)
+ *
+ * NOTE ON LAG: modulated fees for 2026-27 are calculated from packaging supplied
+ * in 2025. A redesign made today does not move the bill for ~18 months. Callers
+ * showing "switch this format, save £X" must also say WHEN it lands.
  */
-export function ukPeprSchedule(): Schedule {
-  const RED_2026 = 1.2;
-  const GREEN_ILLUSTRATIVE = 0.9; // discount funded by red surcharge; recompute from published table when live
+/** Published RAM red multipliers by pEPR program year (PackUK modulation statement). */
+export const UK_RAM_RED_MULTIPLIER: Record<number, number> = {
+  2026: 1.2, // 2026-27
+  2027: 1.6, // 2027-28
+  2028: 2.0, // 2028-29
+};
+
+/** PackUK's own working estimate of the Y2 green discount. NOT a published rate — the
+ *  real figure is a market-mix-dependent redistribution of the red premium. Used only so
+ *  a green-rated component isn't priced identically to amber; always surfaced as an estimate. */
+export const UK_RAM_GREEN_ESTIMATE = 0.91;
+
+export function ukPeprSchedule(programYear = 2026): Schedule {
+  const red = UK_RAM_RED_MULTIPLIER[programYear] ?? UK_RAM_RED_MULTIPLIER[2026];
+  const greenEstimate = UK_RAM_GREEN_ESTIMATE;
   return {
-    id: 'uk-pepr-2026',
+    id: `uk-pepr-${programYear}`,
     jurisdiction: 'UK',
     materialScope: 'all',
     program: 'UK pEPR (PackUK)',
@@ -442,7 +496,7 @@ export function ukPeprSchedule(): Schedule {
     effectiveFrom: '2026-04-01',
     citation: 'DEFRA / PackUK — Year 2 (2026-27) illustrative waste-disposal fees + RAM modulation statement.',
     sourceUrl: 'https://www.gov.uk/government/publications/year-2-illustrative-waste-disposal-fees-extended-producer-responsibility-for-packaging/year-2-illustrative-waste-disposal-fees-extended-producer-responsibility-for-packaging',
-    provenance: 'UK pEPR 2026-27 illustrative (amber base) — RAM red ×1.2',
+    provenance: `UK pEPR ${programYear}-${String(programYear + 1).slice(2)} ILLUSTRATIVE (amber base) — RAM red ×${red}; green discount estimated, not published`,
     formats: [
       // Amber column, £/tonne (the unmodulated base). Green/red derived via the grade multiplier.
       { id: 'aluminium', label: 'Aluminium', category: 'aluminum_packaging', baseRateNative: 270, tier: 'single', recyclable: true },
@@ -458,16 +512,16 @@ export function ukPeprSchedule(): Schedule {
       rules: [
         {
           id: 'ram-red',
-          label: 'RAM red — not currently recyclable (2026-27 malus)',
+          label: `RAM red — not currently recyclable (×${red}, ${programYear}-${String(programYear + 1).slice(2)})`,
           role: 'selector',
-          op: { kind: 'multiplier', value: RED_2026 },
+          op: { kind: 'multiplier', value: red },
           applies: (a) => a.recyclabilityGrade === 'red',
         },
         {
           id: 'ram-green',
-          label: 'RAM green — widely recyclable (revenue-neutral discount)',
+          label: 'RAM green — ESTIMATED discount (~9%); the published figure depends on the whole market’s RAG mix',
           role: 'selector',
-          op: { kind: 'multiplier', value: GREEN_ILLUSTRATIVE },
+          op: { kind: 'multiplier', value: greenEstimate },
           applies: (a) => a.recyclabilityGrade === 'green',
         },
         // amber = no rule → base fee applies unmodulated.
@@ -479,11 +533,15 @@ export function ukPeprSchedule(): Schedule {
         attr: 'recyclabilityGrade',
         label: 'Recyclability (RAM)',
         kind: 'select',
-        help: 'PackUK Recyclability Assessment — amber is the base fee; red pays ×1.2, green earns a discount.',
+        help:
+          `PackUK Recyclability Assessment. Amber is the base fee; red pays ×${red} this program year ` +
+          `(rising to ×1.6 in 2027-28 and ×2.0 in 2028-29). The green discount is an estimate, not a ` +
+          `published rate — it is funded by the red premium and depends on the market’s RAG mix. ` +
+          `Assess per COMPONENT, not per pack: a cup, its lid and its sleeve can grade differently.`,
         options: [
           { value: 'amber', label: 'Amber — base fee' },
-          { value: 'green', label: 'Green — widely recyclable' },
-          { value: 'red', label: 'Red — not currently recyclable' },
+          { value: 'green', label: 'Green — widely recyclable (discount estimated)' },
+          { value: 'red', label: `Red — not currently recyclable (×${red})` },
         ],
       },
     ],
@@ -534,11 +592,224 @@ export function jpJcpraSchedule(): Schedule {
   };
 }
 
+/**
+ * Oregon PY2026 (CAA) — a CONFIRMED, binding, currently-invoiced US schedule.
+ *
+ * Transcribed from the source PDF (`OR-2026-Fee-Schedule-Public.pdf`, CAA,
+ * published 29 Oct 2025), parsed with pypdf — not derived from a summary. Rates
+ * are the FINAL FEE RATE column in ¢/lb. `Base + SIM = Final`; the SIM (Statewide
+ * Implementation Modulation) column is 0.0 ¢/lb on every row for PY2026, so Final
+ * equals Base this year. SIM is a live mechanism, so re-read it each program year
+ * rather than assuming zero.
+ *
+ * `Type` in the source records recycling-acceptance status — USCL (statewide
+ * collection list), PRO (PRO acceptance list) or N/A (on neither). N/A is what
+ * drives the punitive rates, and it is the reason the SAME poly-coated paper cup
+ * costs 48.0¢/lb here and 20.0¢/lb in Colorado: the driver is each state's
+ * collection list, not the packaging. Recorded in `tag` so the UI can say why.
+ *
+ * NOTE ON ATTRIBUTION: under ORS 459A.866(3) the producer of FOOD SERVICEWARE in
+ * Oregon is "the person that first sells the food serviceware in or into this
+ * state" — the supplier, not the brand owner. Pricing a restaurant chain's cups
+ * against this table does NOT mean the chain owes the fee. See
+ * docs/EXPOSURE_CALCULATOR_SPEC.md §3.
+ */
+export function orCaaSchedule(): Schedule {
+  return {
+    id: 'us-or-caa-2026',
+    jurisdiction: 'US-OR',
+    materialScope: 'all',
+    program: 'Oregon RMA (Circular Action Alliance)',
+    currency: 'USD',
+    rateUnit: 'cents_per_lb',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: '2026-12-31',
+    citation:
+      'Circular Action Alliance — 2026 Oregon Producer Fee Schedule, Program Year 2026 ' +
+      '(published 29 Oct 2025). Final Fee Rate column; SIM portion 0.0¢/lb throughout.',
+    sourceUrl: 'https://circularactionalliance.org/',
+    provenance: 'Oregon PY2026 CONFIRMED — binding, currently invoiced',
+    formats: [
+      // Printing and Writing Paper — five source rows share one rate (5.0¢/lb); collapsed.
+      { id: 'or_printed', label: 'Printing & writing paper (newspapers, magazines, general use)', category: 'printed_paper', baseRateNative: 5, tier: 'single', recyclable: true, tag: 'USCL' },
+      // Glass and Ceramics
+      { id: 'or_glass', label: 'Glass bottles, jars & other containers', category: 'glass_packaging', baseRateNative: 10, tier: 'best', recyclable: true, tag: 'PRO' },
+      { id: 'or_ceramic', label: 'Ceramic — all forms', category: 'glass_packaging', baseRateNative: 111, tier: 'worst', recyclable: false, tag: 'not accepted' },
+      // Metal
+      { id: 'or_alu_can', label: 'Aluminium containers', category: 'aluminum_packaging', baseRateNative: 6, tier: 'best', recyclable: true, tag: 'USCL' },
+      { id: 'or_steel_can', label: 'Steel containers', category: 'aluminum_packaging', baseRateNative: 10, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_alu_foil', label: 'Aluminium foil & molded containers', category: 'aluminum_packaging', baseRateNative: 24, tier: 'representative', recyclable: true, tag: 'PRO' },
+      { id: 'or_metal_small', label: 'Metal — small format', category: 'aluminum_packaging', baseRateNative: 26, tier: 'representative', recyclable: true, tag: 'PRO' },
+      { id: 'or_alu_aerosol', label: 'Aluminium aerosol containers', category: 'aluminum_packaging', baseRateNative: 64, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_steel_aerosol', label: 'Steel aerosol containers', category: 'aluminum_packaging', baseRateNative: 64, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_steel_other', label: 'Steel — other forms', category: 'aluminum_packaging', baseRateNative: 68, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_alu_other', label: 'Aluminium — other forms', category: 'aluminum_packaging', baseRateNative: 78, tier: 'worst', recyclable: false, tag: 'not accepted' },
+      // Paper / Fiber
+      { id: 'or_occ_transport', label: 'Corrugated cardboard — tertiary/transport, non-consumer', category: 'paper_packaging', baseRateNative: 0, tier: 'best', recyclable: true, tag: 'USCL · zero-rated' },
+      { id: 'or_occ', label: 'Corrugated cardboard', category: 'paper_packaging', baseRateNative: 8, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_paperboard', label: 'Paperboard', category: 'paper_packaging', baseRateNative: 8, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_kraft', label: 'Kraft paper (bags, wraps)', category: 'paper_packaging', baseRateNative: 8, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_paper_other', label: 'Other paper packaging', category: 'paper_packaging', baseRateNative: 8, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_carton', label: 'Aseptic & gable-top cartons', category: 'paper_packaging', baseRateNative: 17, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_paper_small', label: 'Paper — small format', category: 'paper_packaging', baseRateNative: 44, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_polycoat', label: 'Poly-coated paperboard — hot/cold paper cups', category: 'paper_packaging', baseRateNative: 48, tier: 'representative', recyclable: false, tag: 'not accepted — 2.4× Colorado' },
+      { id: 'or_paper_laminate', label: 'Other paper laminates', category: 'paper_packaging', baseRateNative: 51, tier: 'worst', recyclable: false, tag: 'not accepted' },
+      // Plastic — Rigid
+      { id: 'or_hdpe_nat', label: 'HDPE (#2) bottles, jugs & jars — clear/natural', category: 'plastic_packaging', baseRateNative: 9, tier: 'best', recyclable: true, tag: 'USCL' },
+      { id: 'or_hdpe_pails', label: 'HDPE (#2) pails & buckets', category: 'plastic_packaging', baseRateNative: 18, tier: 'representative', recyclable: true, tag: 'PRO' },
+      { id: 'or_pp_tubs', label: 'PP (#5) tubs, pails & buckets', category: 'plastic_packaging', baseRateNative: 19, tier: 'representative', recyclable: true, tag: 'PRO' },
+      { id: 'or_pet_nat', label: 'PET (#1) bottles, jugs & jars — clear/natural', category: 'plastic_packaging', baseRateNative: 25, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_lids_hdpe', label: 'HDPE (#2) package handles & lids', category: 'plastic_packaging', baseRateNative: 29, tier: 'representative', recyclable: true, tag: 'PRO' },
+      { id: 'or_lids_ldpe', label: 'LDPE (#4) lids', category: 'plastic_packaging', baseRateNative: 29, tier: 'representative', recyclable: true, tag: 'PRO' },
+      { id: 'or_lids_pp', label: 'PP (#5) lids', category: 'plastic_packaging', baseRateNative: 29, tier: 'representative', recyclable: true, tag: 'PRO · half the cup rate' },
+      { id: 'or_hdpe_pig', label: 'HDPE (#2) bottles, jugs & jars — pigmented', category: 'plastic_packaging', baseRateNative: 32, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_hdpe_tubs', label: 'HDPE (#2) tubs, nursery pots & trays', category: 'plastic_packaging', baseRateNative: 35, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_pp_bottles', label: 'PP (#5) bottles, jugs & jars', category: 'plastic_packaging', baseRateNative: 38, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_pet_tubs', label: 'PET (#1) tubs', category: 'plastic_packaging', baseRateNative: 50, tier: 'representative', recyclable: true, tag: 'USCL' },
+      { id: 'or_pet_thermo', label: 'PET (#1) thermoformed containers, cups, plates, trays', category: 'plastic_packaging', baseRateNative: 57, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_pet_lids', label: 'PET (#1) lids', category: 'plastic_packaging', baseRateNative: 60, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_pp_containers', label: 'PP (#5) other rigid containers, cups, plates, trays', category: 'plastic_packaging', baseRateNative: 62, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_ldpe_bottles', label: 'LDPE (#4) bottles, jugs & jars', category: 'plastic_packaging', baseRateNative: 66, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_hdpe_other', label: 'HDPE (#2) other rigid items', category: 'plastic_packaging', baseRateNative: 66, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_ldpe_other', label: 'LDPE (#4) other rigid items', category: 'plastic_packaging', baseRateNative: 66, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_pp_other', label: 'PP (#5) other rigid items', category: 'plastic_packaging', baseRateNative: 66, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_pet_pig', label: 'PET (#1) bottles, jugs & jars — pigmented', category: 'plastic_packaging', baseRateNative: 67, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_pet_other', label: 'PET (#1) other rigid items', category: 'plastic_packaging', baseRateNative: 70, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_pvc', label: 'PVC (#3) rigid items', category: 'plastic_packaging', baseRateNative: 97, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_ps_rigid', label: 'PS (#6) rigid non-expanded', category: 'plastic_packaging', baseRateNative: 97, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_pla_rigid', label: 'PLA / PHA / PHB rigid — compostable', category: 'plastic_packaging', baseRateNative: 97, tier: 'representative', recyclable: false, tag: 'not accepted — compostables are PENALISED here' },
+      { id: 'or_mixed_rigid', label: 'Other / mixed rigid plastic', category: 'plastic_packaging', baseRateNative: 97, tier: 'representative', recyclable: false, tag: 'not accepted' },
+      { id: 'or_ps_foam', label: 'PS (#6) expanded/foamed containers, plates, cups, trays', category: 'plastic_packaging', baseRateNative: 138, tier: 'worst', recyclable: false, tag: 'not accepted — worst in schedule' },
+      // Plastic — Flexible
+      { id: 'or_pallet_wrap', label: 'HDPE/LDPE pallet wrap — non-consumer', category: 'plastic_film', baseRateNative: 34, tier: 'best', recyclable: true, tag: 'PRO' },
+      { id: 'or_pe_film', label: 'HDPE (#2)/LDPE (#4) flexible & film items', category: 'plastic_film', baseRateNative: 43, tier: 'representative', recyclable: true, tag: 'PRO' },
+      { id: 'or_pp_film', label: 'PP (#5) flexible & film items', category: 'plastic_film', baseRateNative: 102, tier: 'worst', recyclable: false, tag: 'not accepted' },
+      { id: 'or_pla_film', label: 'PLA / PHA / PHB flexible & film — compostable', category: 'plastic_film', baseRateNative: 102, tier: 'worst', recyclable: false, tag: 'not accepted' },
+      { id: 'or_laminate_film', label: 'Plastic laminates & other flexible packaging', category: 'plastic_film', baseRateNative: 102, tier: 'worst', recyclable: false, tag: 'not accepted' },
+      // Plastic — Other
+      { id: 'or_plastic_small', label: 'Plastic — small format (straws, stirrers, sachets)', category: 'other_packaging', baseRateNative: 28, tier: 'best', recyclable: true, tag: 'PRO' },
+      { id: 'or_plastic_hazard', label: 'Plastic containers for automotive/hazardous products', category: 'other_packaging', baseRateNative: 63, tier: 'worst', recyclable: false, tag: 'not accepted' },
+      // Wood and Other Organic Materials
+      { id: 'or_wood', label: 'Wood & other organic materials', category: 'wood_packaging', baseRateNative: 105, tier: 'single', recyclable: false, tag: 'not accepted' },
+    ],
+    // SIM is 0.0¢/lb on every PY2026 row, so there is no modulation rule to apply.
+    // Oregon's eco-modulation lives in the acceptance-list assignment already baked
+    // into each rate, not in a separate multiplier.
+    modulation: { rules: [], policy: { compose: 'stack' } },
+  };
+}
+
+/**
+ * Colorado PY2026 (CAA) — the second CONFIRMED, binding, currently-invoiced US schedule.
+ *
+ * Transcribed from `CO-2026-Dues-Schedule-Public.pdf` (CAA, published 13 Oct 2025),
+ * parsed with pypdf. Rates are the FINAL DUES column in ¢/lb.
+ *
+ * ECO-MODULATION IS ALREADY BAKED IN — this is the important structural difference
+ * from every other schedule here. The source columns are
+ * `Base Dues + Detriments Malus + Not-on-MRL Malus + High-Recycling-Rate Bonus = Final Dues`,
+ * and state law requires those PASSIVE factors to be applied automatically to
+ * producer invoices. So Final Dues is the rate a producer actually pays and we
+ * encode it directly, with NO modulation rules — adding any would double-count.
+ * The published passive factors are: +5% for materials that disrupt recycling;
+ * an uplift ensuring AML materials sit ≥20% above comparable MRL materials and
+ * Not-Collected ≥10% above comparable AML; −5% for high recycling rates.
+ * Four ACTIVE incentives exist for PY2026 and are not encoded (guidance pending).
+ *
+ * `tag` carries the acceptance status — MRL (Minimum Recyclable List), AML
+ * (Additional Materials List) or N/C (not collected) — which is what drives the spread.
+ */
+export function coCaaSchedule(): Schedule {
+  return {
+    id: 'us-co-caa-2026',
+    jurisdiction: 'US-CO',
+    materialScope: 'all',
+    program: 'Colorado PRO (Circular Action Alliance)',
+    currency: 'USD',
+    rateUnit: 'cents_per_lb',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: '2026-12-31',
+    citation:
+      'Circular Action Alliance — 2026 Colorado Producer Dues Schedule, Program Year 2026 ' +
+      '(published 13 Oct 2025). Final Dues column; passive eco-modulation already applied.',
+    sourceUrl: 'https://circularactionalliance.org/',
+    provenance: 'Colorado PY2026 CONFIRMED — binding, passive eco-modulation included in the rate',
+    formats: [
+      { id: 'co_printed', label: 'Printing & writing paper (newspapers, magazines, general use)', category: 'printed_paper', baseRateNative: 6, tier: 'single', recyclable: true, tag: 'MRL' },
+      // Glass and Ceramics
+      { id: 'co_glass', label: 'Glass bottles, jars & other containers', category: 'glass_packaging', baseRateNative: 4, tier: 'best', recyclable: true, tag: 'MRL · high-recycling bonus applied' },
+      { id: 'co_ceramic', label: 'Ceramic — all forms', category: 'glass_packaging', baseRateNative: 47, tier: 'worst', recyclable: false, tag: 'N/C' },
+      // Metal
+      { id: 'co_alu_can', label: 'Aluminium containers', category: 'aluminum_packaging', baseRateNative: 2, tier: 'best', recyclable: true, tag: 'MRL · high-recycling bonus applied' },
+      { id: 'co_steel_can', label: 'Steel containers', category: 'aluminum_packaging', baseRateNative: 7, tier: 'representative', recyclable: true, tag: 'MRL · high-recycling bonus applied' },
+      { id: 'co_alu_aerosol', label: 'Aluminium aerosol containers', category: 'aluminum_packaging', baseRateNative: 14, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_steel_aerosol', label: 'Steel aerosol containers', category: 'aluminum_packaging', baseRateNative: 14, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_metal_small', label: 'Metal — small format', category: 'aluminum_packaging', baseRateNative: 32, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_alu_other', label: 'Aluminium — other forms', category: 'aluminum_packaging', baseRateNative: 33, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_alu_foil', label: 'Aluminium foil & molded containers', category: 'aluminum_packaging', baseRateNative: 34, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_steel_other', label: 'Steel — other forms', category: 'aluminum_packaging', baseRateNative: 34, tier: 'worst', recyclable: false, tag: 'AML' },
+      // Paper / Fiber
+      { id: 'co_occ', label: 'Corrugated cardboard', category: 'paper_packaging', baseRateNative: 8, tier: 'best', recyclable: true, tag: 'MRL · high-recycling bonus applied' },
+      { id: 'co_paperboard', label: 'Paperboard', category: 'paper_packaging', baseRateNative: 8, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_kraft', label: 'Kraft paper (bags, wraps)', category: 'paper_packaging', baseRateNative: 8, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_carton', label: 'Aseptic & gable-top cartons', category: 'paper_packaging', baseRateNative: 13, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_paper_other', label: 'Other paper packaging', category: 'paper_packaging', baseRateNative: 13, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_polycoat', label: 'Poly-coated paperboard — hot/cold paper cups', category: 'paper_packaging', baseRateNative: 20, tier: 'representative', recyclable: false, tag: 'AML · 0.4× Oregon' },
+      { id: 'co_paper_small', label: 'Paper — small format', category: 'paper_packaging', baseRateNative: 22, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_waxed_occ', label: 'Waxed corrugated cardboard', category: 'paper_packaging', baseRateNative: 25, tier: 'representative', recyclable: false, tag: 'N/C' },
+      { id: 'co_molded_pulp', label: 'Molded pulp food serviceware', category: 'paper_packaging', baseRateNative: 26, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_paper_laminate', label: 'Other paper laminates', category: 'paper_packaging', baseRateNative: 30, tier: 'worst', recyclable: false, tag: 'AML' },
+      // Plastic — Rigid
+      { id: 'co_hdpe_nat', label: 'HDPE (#2) bottles, jugs & jars — clear/natural', category: 'plastic_packaging', baseRateNative: 14, tier: 'best', recyclable: true, tag: 'MRL · high-recycling bonus applied' },
+      { id: 'co_pet_nat', label: 'PET (#1) bottles, jugs & jars — clear/natural', category: 'plastic_packaging', baseRateNative: 15, tier: 'representative', recyclable: true, tag: 'MRL · high-recycling bonus applied' },
+      { id: 'co_pet_rigid_nat', label: 'PET (#1) containers, cups, lids, plates, trays, tubs — clear/natural', category: 'plastic_packaging', baseRateNative: 17, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_pp_bottles', label: 'PP (#5) bottles, jugs & jars', category: 'plastic_packaging', baseRateNative: 20, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_pp_containers', label: 'PP (#5) containers, cups, lids, plates, trays, tubs', category: 'plastic_packaging', baseRateNative: 20, tier: 'representative', recyclable: true, tag: 'MRL · 0.3× Oregon' },
+      { id: 'co_hdpe_pig', label: 'HDPE (#2) bottles, jugs & jars — pigmented', category: 'plastic_packaging', baseRateNative: 23, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_hdpe_tubs', label: 'HDPE (#2) tubs', category: 'plastic_packaging', baseRateNative: 25, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_pp_other', label: 'PP (#5) other rigid items', category: 'plastic_packaging', baseRateNative: 25, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_hdpe_pails', label: 'HDPE (#2) pails & buckets', category: 'plastic_packaging', baseRateNative: 28, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_hdpe_other', label: 'HDPE (#2) other rigid items', category: 'plastic_packaging', baseRateNative: 31, tier: 'representative', recyclable: true, tag: 'MRL' },
+      { id: 'co_pet_pig', label: 'PET (#1) bottles, jugs & jars — pigmented', category: 'plastic_packaging', baseRateNative: 43, tier: 'representative', recyclable: false, tag: 'AML · detriments malus applied' },
+      { id: 'co_ldpe_bottles', label: 'LDPE (#4) bottles, jugs & jars', category: 'plastic_packaging', baseRateNative: 50, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_pet_rigid_pig', label: 'PET (#1) containers, cups, lids, plates, trays, tubs — pigmented', category: 'plastic_packaging', baseRateNative: 50, tier: 'representative', recyclable: false, tag: 'AML · 2.9× the clear equivalent' },
+      { id: 'co_pet_other', label: 'PET (#1) other rigid items', category: 'plastic_packaging', baseRateNative: 50, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_ldpe_other', label: 'LDPE (#4) other rigid items', category: 'plastic_packaging', baseRateNative: 55, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_hdpe_squeeze', label: 'HDPE (#2) squeeze tubes', category: 'plastic_packaging', baseRateNative: 71, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_pp_squeeze', label: 'PP (#5) squeeze tubes', category: 'plastic_packaging', baseRateNative: 73, tier: 'representative', recyclable: false, tag: 'AML' },
+      { id: 'co_ps_rigid', label: 'PS (#6) rigid non-expanded', category: 'plastic_packaging', baseRateNative: 78, tier: 'representative', recyclable: false, tag: 'N/C' },
+      { id: 'co_mixed_rigid', label: 'Other / mixed rigid plastic', category: 'plastic_packaging', baseRateNative: 78, tier: 'representative', recyclable: false, tag: 'N/C' },
+      { id: 'co_pvc', label: 'PVC (#3) rigid items', category: 'plastic_packaging', baseRateNative: 81, tier: 'representative', recyclable: false, tag: 'N/C · detriments malus applied' },
+      { id: 'co_ps_foam', label: 'PS (#6) expanded/foamed containers, plates, cups, trays', category: 'plastic_packaging', baseRateNative: 172, tier: 'worst', recyclable: false, tag: 'N/C · worst in schedule, 8.6× the clear-PET cup' },
+      // Plastic — Flexible
+      { id: 'co_pe_film', label: 'HDPE (#2)/LDPE (#4) flexible & film items', category: 'plastic_film', baseRateNative: 48, tier: 'best', recyclable: false, tag: 'AML' },
+      { id: 'co_pp_film', label: 'PP (#5) flexible & film items', category: 'plastic_film', baseRateNative: 64, tier: 'representative', recyclable: false, tag: 'N/C' },
+      { id: 'co_laminate_film', label: 'Plastic laminates & other flexible packaging', category: 'plastic_film', baseRateNative: 74, tier: 'worst', recyclable: false, tag: 'N/C · detriments malus applied' },
+      // Certified compostable — Colorado prices these as their own class, unlike Oregon.
+      { id: 'co_comp_plastic_coated', label: 'Compostable plastic / polymer-coated substrate (ASTM D6868-21)', category: 'compostable_packaging', baseRateNative: 26, tier: 'best', recyclable: false, tag: 'N/C · certified compostable' },
+      { id: 'co_comp_rigid', label: 'Compostable rigid plastic (ASTM D6400-23)', category: 'compostable_packaging', baseRateNative: 27, tier: 'representative', recyclable: false, tag: 'N/C · certified compostable' },
+      { id: 'co_comp_flex', label: 'Compostable flexible plastic (ASTM D6400-23)', category: 'compostable_packaging', baseRateNative: 31, tier: 'representative', recyclable: false, tag: 'N/C · certified compostable' },
+      { id: 'co_comp_paper', label: 'Compostable paper (ASTM D8410-22)', category: 'compostable_packaging', baseRateNative: 32, tier: 'worst', recyclable: false, tag: 'N/C · certified compostable' },
+      // Plastic — Other
+      { id: 'co_plastic_small', label: 'Plastic — small format (straws, stirrers, sachets, cutlery)', category: 'other_packaging', baseRateNative: 52, tier: 'best', recyclable: false, tag: 'N/C · detriments malus applied' },
+      { id: 'co_plastic_hazard', label: 'Plastic packaging — hazardous or special products', category: 'other_packaging', baseRateNative: 52, tier: 'worst', recyclable: false, tag: 'N/C · detriments malus applied' },
+      // Wood and Other Organics
+      { id: 'co_wood', label: 'Wood & other organic materials', category: 'wood_packaging', baseRateNative: 84, tier: 'single', recyclable: false, tag: 'N/C · detriments malus applied' },
+    ],
+    // Passive eco-modulation is ALREADY in the Final Dues figures above — adding rules
+    // here would double-count. The four active PY2026 incentives are not yet published
+    // in enough detail to encode.
+    modulation: { rules: [], policy: { compose: 'stack' } },
+  };
+}
+
 /** Register the schedules that have real, encodable tables today. Idempotent. */
 export function registerBuiltinSchedules(): void {
   registerSchedule(caSb54Schedule());
   registerSchedule(ukPeprSchedule());
   registerSchedule(jpJcpraSchedule());
+  registerSchedule(orCaaSchedule());
+  registerSchedule(coCaaSchedule());
   // Next: Canada (CA-BC / CA-AB / CA-QC — ¢/kg, QC has stacking bonus/malus),
   // France (FR — €/kg + phased %), Spain (ES all + ES glass/Ecovidrio — exclusive_malus),
   // Italy (IT — band tiers).
@@ -557,22 +828,45 @@ registerBuiltinSchedules();
 export const FLAGSHIP_SCHEDULE_JURISDICTION = 'US-CA';
 
 /**
- * Which jurisdiction's schedule prices a given studio market. US state codes have
- * no OWN published producer-fee table (CA SB 54 is the only detailed US schedule),
- * so they price on the flagship — the same approximation the studio already makes,
- * now explicit and per-market. Non-US markets (a country/province code) resolve to
- * their own schedule once registered; until then they, too, fall back.
+ * Which jurisdiction's schedule prices a given studio market.
  *
- *   scheduleForMarket('CA')  → US-CA flagship (California-the-state, priced on SB 54)
- *   scheduleForMarket('OR')  → US-CA flagship (Oregon has no published fee table)
- *   scheduleForMarket('UK')  → uk-pepr-2026 (once markets include the UK)
+ * CORRECTED 2026-08-11. This function used to route EVERY US state to the CA
+ * flagship on the stated grounds that "CA SB 54 is the only detailed US schedule".
+ * That is no longer true, and the direction of the error mattered: Oregon PY2026
+ * and Colorado PY2026 are published, binding and currently being invoiced, while
+ * California's 2027 rates remain explicitly non-binding until October 2026. We
+ * were proxying two CONFIRMED tables onto an ILLUSTRATIVE one.
+ *
+ * Resolution order: exact jurisdiction key → `US-` prefixed state key → flagship.
+ *
+ *   scheduleForMarket('CA')  → us-ca (California-the-state, SB 54 — still illustrative)
+ *   scheduleForMarket('OR')  → us-or-caa-2026 (CONFIRMED, binding)
+ *   scheduleForMarket('CO')  → us-co-caa-2026 (CONFIRMED, binding)
+ *   scheduleForMarket('WA')  → US-CA flagship (no published WA table; fees start 2030)
+ *   scheduleForMarket('UK')  → uk-pepr-2026
  *   scheduleForMarket('FR')  → FR schedule when registered, else flagship
+ *
+ * Callers must surface `schedule.provenance` — a proxied state and a confirmed one
+ * look identical in the returned shape, and only one of them is a real quote.
  */
 export function scheduleForMarket(market: string, scope = 'all'): Schedule | undefined {
   const direct = getSchedule(market, scope);
   if (direct) return direct;
-  // US two-letter state codes (and anything without its own table) → flagship.
+  // Bare US state codes ('OR') resolve against their registered 'US-OR' key.
+  const stateKeyed = /^[A-Z]{2}$/.test(market) ? getSchedule(`US-${market}`, scope) : undefined;
+  if (stateKeyed) return stateKeyed;
+  // Anything still without its own table → flagship, as an explicit approximation.
   return getSchedule(FLAGSHIP_SCHEDULE_JURISDICTION);
+}
+
+/** True when `market` is priced on another jurisdiction's table rather than its own —
+ *  the signal the UI needs to label a figure "priced on CA SB 54" instead of quoting it
+ *  as this market's rate. Mirrors the resolution order in `scheduleForMarket`. */
+export function isProxyPriced(market: string, scope = 'all'): boolean {
+  const resolved = scheduleForMarket(market, scope);
+  if (!resolved) return false;
+  const own = getSchedule(market, scope) ?? (/^[A-Z]{2}$/.test(market) ? getSchedule(`US-${market}`, scope) : undefined);
+  return own?.id !== resolved.id;
 }
 
 /**

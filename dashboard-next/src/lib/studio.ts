@@ -58,6 +58,13 @@ export const CATEGORY_LABEL: Record<string, string> = {
   pet_bottle_packaging: 'PET bottle',
   wood_packaging: 'Wood',
   other_packaging: 'Other',
+  // Categories the US CAA schedules (Oregon / Colorado) price as their own classes.
+  // 'compostable_packaging' is deliberately NOT folded into plastic/paper: Colorado
+  // prices certified compostables as a distinct class (26–32¢/lb), while Oregon has
+  // no such class and prices PLA at 97–102¢/lb inside the ordinary plastic bands. A
+  // shared category would hide that a national compostables switch RAISES Oregon fees.
+  printed_paper: 'Printed paper',
+  compostable_packaging: 'Certified compostable',
 };
 
 /** Label for any category — the curated map, else a humanized fallback. */
@@ -331,6 +338,8 @@ const CATEGORY_DEFAULT_G: Record<string, number> = {
   aluminum_packaging: 16,
   wood_packaging: 50,
   other_packaging: 10,
+  printed_paper: 20,
+  compostable_packaging: 12,
 };
 
 const TIER_TO_ROLE: Record<MaterialFormat['tier'], PaletteRole> = {

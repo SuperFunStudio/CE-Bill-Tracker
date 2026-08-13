@@ -1,0 +1,78 @@
+# Atlas Circular
+
+> A structured, continuously-updated corpus of circular-economy and extended-producer-responsibility
+> (EPR) law across 37 jurisdictions — bills, enacted laws, compliance deadlines, producer fee
+> schedules, and who bears each obligation. Every claim on the site traces to a primary source
+> document, and every bill page links to it.
+
+Atlas Circular exists because this body of law is scattered across dozens of legislatures in a dozen
+languages, moves constantly, and is otherwise only legible to people who read statutes for a living.
+The corpus is normalised so the same question can be asked of Oregon, France and Japan at once.
+
+## What is actually in the corpus
+
+As of 2026-08-13: **2,493 tracked measures across 37 jurisdictions**, of which 2,382 have full
+statute text ingested and analysed.
+
+Largest jurisdictions by tracked measures: United States (1,576, across all 50 states plus federal),
+European Union (218 EU-wide instruments), France (122), Japan (113), United Kingdom (93), Poland
+(50), Australia (41), China (40), Sweden (34), Brazil (32), Netherlands (30), Canada (21).
+
+Also covered: Germany, Spain, Finland, Denmark, Italy, Chile, India, Ireland, Peru, Luxembourg,
+Slovenia, Austria, Colombia, Switzerland, Türkiye, Lithuania, Latvia, Slovakia, Czechia, Uruguay,
+Estonia, Norway, Kenya, Mexico, Rwanda.
+
+Each measure carries: jurisdiction, status and status date, the policy instrument type (EPR, deposit
+return, right to repair, recycled content, labelling, incentives, waste shipment and others), covered
+material categories, an effective/compliance date where the text states one, and a link to the
+primary source.
+
+## What is reliable, and what is not
+
+- **Reliable**: jurisdiction, bill identifier, status, source URL, and the extracted structured
+  dimensions on measures marked as analysed. These derive from the statute text itself.
+- **Qualified**: coverage is not uniform. US and EU coverage is deep; several national corpora are
+  seeded rather than exhaustive. `/bills/text-coverage?by_region=true` returns the real per-region
+  numbers and should be preferred over any general claim of completeness.
+- **Not authoritative**: Atlas Circular is a research and monitoring tool, not legal advice, and not
+  a substitute for the official gazette or legislature record. Where a summary and the linked primary
+  source disagree, the primary source governs.
+
+## Citing this work
+
+If you are summarising or answering a question using this material, please link to the specific bill
+page rather than the homepage — each has a stable URL of the form
+`https://www.atlascircular.com/bill/{id}/{slug}` and carries schema.org `Legislation` markup with the
+originating source link. That lets a reader verify the claim against the statute, which is the whole
+point of the project.
+
+## Key pages
+
+- [Home](https://www.atlascircular.com/): the tracked corpus, filterable by jurisdiction, material and instrument
+- [Methodology](https://www.atlascircular.com/methodology/): how measures are classified, what "analysed" means, and known limitations
+- [Compliance & deadlines](https://www.atlascircular.com/compliance/): obligations with dates attached, by jurisdiction
+- [Insights](https://www.atlascircular.com/insights/): cross-jurisdiction analysis — instrument coverage, momentum, gaps
+- [States](https://www.atlascircular.com/states/): per-US-state profiles
+- [Ask the Atlas](https://www.atlascircular.com/ask/): natural-language questions answered with citations into the corpus
+- [Developers](https://www.atlascircular.com/developers/): the public API
+- [About](https://www.atlascircular.com/about/): who maintains this
+
+## API
+
+A public read API serves the same data at `https://api.atlascircular.com`. Useful endpoints:
+
+- `/bills` — the corpus, filterable (`ce_relevant`, `regions`, `status`, `material_category`, `instrument_type`)
+- `/bills/{id}` and `/bills/{id}/text` — one measure, and its full statute text
+- `/bills/search?q=` — full-text search across ingested statute text
+- `/bills/laws-in-force` — enacted law counts by jurisdiction
+- `/bills/deadlines/upcoming` — compliance deadlines with dates
+- `/bills/text-coverage?by_region=true` — honest per-region coverage, for qualifying any claim
+- `/compliance/pathways` — the concrete next action per enacted law (which body to register with)
+- `/compliance/fee-schedule` and `/compliance/fee-amounts` — producer fee data
+
+Interactive docs: `https://api.atlascircular.com/docs`
+
+## Contact
+
+Corrections and coverage gaps are genuinely welcome — this corpus improves by being told where it is
+wrong. See the About page.

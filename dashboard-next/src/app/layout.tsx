@@ -61,10 +61,53 @@ export const viewport: Viewport = {
   colorScheme: 'light dark',
 };
 
+// Sitewide structured data. Bill pages already emit schema.org `Legislation`; this is the publisher
+// and search-action layer that identifies WHO stands behind those records — the thing a search engine
+// or an assistant uses to decide whether a legislative claim is attributable. Rendered as a literal
+// script tag in the server layout so it's in the HTML for clients that never run JavaScript, which is
+// most crawlers and every AI crawler worth reaching.
+const ORG_JSONLD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${SITE_URL}/#organization`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      slogan: SITE_TAGLINE,
+      description: DESCRIPTION,
+      logo: `${SITE_URL}/og-image.png`,
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}/#website`,
+      url: SITE_URL,
+      name: SITE_NAME,
+      description: DESCRIPTION,
+      publisher: { '@id': `${SITE_URL}/#organization` },
+      inLanguage: 'en',
+      // Declares that the corpus is searchable, and how — so an assistant can construct a query URL
+      // instead of guessing or scraping the homepage.
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: {
+          '@type': 'EntryPoint',
+          urlTemplate: `${SITE_URL}/?q={search_term_string}`,
+        },
+        'query-input': 'required name=search_term_string',
+      },
+    },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={`${roboto.variable} ${playfair.variable} ${robotoMono.variable}`}>
       <body className="bg-bg-primary text-text-primary antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSONLD) }}
+        />
         {/* Anti-FOUC: apply the saved (or OS-preferred) theme synchronously, BEFORE first paint, so a
             dark-mode load never flashes the light surface. Runs during HTML parse, ahead of the app.
             Mirrors ThemeContext's resolution so there's no post-hydration correction. */}

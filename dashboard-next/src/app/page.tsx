@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useBills, useBillTextSearch, useLawsInForce } from '@/hooks/useBills';
-import { useFederalActions } from '@/hooks/useFederal';
+import { useFederalSummary } from '@/hooks/useFederal';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { FreshnessNote } from '@/components/ui/FreshnessNote';
@@ -24,15 +24,13 @@ import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
 import { STATE_NAMES, formatDate, downloadCsv } from '@/lib/utils';
 import { resolveFacetTerm, billMatchesFacets } from '@/lib/facetTerms';
-import { RESEARCH_EXAMPLES, useFreeAskUsed } from '@/components/research/ResearchThread';
-import { useTypedPlaceholder } from '@/components/research/useTypedPlaceholder';
-import { AiAnalysisToggle } from '@/components/search/AiAnalysisToggle';
+import { useFreeAskUsed } from '@/components/research/ResearchThread';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { track } from '@/lib/analytics';
 import { useHomeVariant } from '@/components/experiment/useHomeVariant';
-import { useAiSurfaceVariant } from '@/components/experiment/useAiSurfaceVariant';
 import { HomeVariantVote } from '@/components/experiment/HomeVariantVote';
 import { BillDotExplorer } from '@/components/explore/BillDotExplorer';
+import { CorpusJsonLd } from '@/components/seo/CorpusJsonLd';
 import { HeadlinesDeadlines } from '@/components/home/HeadlinesDeadlines';
 import Link from 'next/link';
 
@@ -52,19 +50,6 @@ const CoverageGlobe = dynamic(
   () => import('@/components/map/CoverageGlobe').then(m => ({ default: m.CoverageGlobe })),
   { ssr: false, loading: () => <div className="h-[320px] bg-bg-secondary rounded-lg animate-pulse" /> }
 );
-
-/**
- * Run a client navigation inside a view transition where the browser supports one, so the shared ask bar
- * (view-transition-name: ask-bar, set on both surfaces) flies from its place here to the top of /ask
- * instead of the page snapping. Falls back to a plain push in browsers without the API, and honors
- * prefers-reduced-motion — a cut is the correct transition for a reader who asked for less motion.
- */
-function navigateWithTransition(go: () => void) {
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
-  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  if (!doc.startViewTransition || reduced) { go(); return; }
-  doc.startViewTransition(go);
-}
 
 // Rows the results table shows per page. Five is the default — the table is a browse surface, not a
 // spreadsheet, and the page has content below it — but a reader scanning a filtered set shouldn't
@@ -90,7 +75,9 @@ export default function HomePage() {
   // payload), so it rides the fetch params rather than the client-side applyBillFilters below.
   const dimensionsCsv = billFilters.dimensions.length ? billFilters.dimensions.join(',') : undefined;
   const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, regions: regionsParam ?? 'all', dimensions: dimensionsCsv });
-  const { data: federal = [] } = useFederalActions({ limit: 50 });
+  // Counts, not rows: the banner below only ever needed the high-preemption tally, and the rows are
+  // CAP_FEDERAL now. /federal-actions/summary stays public precisely so this surface keeps working.
+  const { data: federalStats } = useFederalSummary();
   // Enacted laws in force by region — the SAME source the globe shades from, so the "Top Regions"
   // ticker ranks identically to the map (combined national + sub-national enacted).
   const { data: lawsInForce = [] } = useLawsInForce();
@@ -109,58 +96,22 @@ export default function HomePage() {
   // compliance buyer). Opens the shared request-access form, tagged source="home_walkthrough".
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
 
-  // One adaptive bar with two jobs. Typing filters the table live (Explorer); submitting a question
-  // ROUTES to /ask, which owns the conversation. The homepage deliberately doesn't host the answer any
-  // more: state that lives only here dies on a nav, a reload, or a discarded tab, which is exactly how
-  // long asks were being lost. See docs/ASK_SURFACE_SPEC.md.
+  // The Explore bar does ONE thing: typing filters the table live. It used to carry an "AI Analysis"
+  // toggle that flipped the same box into a question box, plus an Ask button — removed 2026-08-13,
+  // which is the A/B concluding in favour of its "hidden" arm (see git history for
+  // useAiSurfaceVariant). The hypothesis held: a mode toggle at the top of the page is a fork in the
+  // road, and a reader who has to choose a mode before typing hasn't started yet. Questions were
+  // never answered here anyway — /ask owns the conversation, because state that lives only on this
+  // page dies on a nav, a reload, or a discarded tab. The line under the bar is now the single route
+  // there. See docs/ASK_SURFACE_SPEC.md.
   const [query, setQuery] = useState('');
   const freeAskUsed = useFreeAskUsed();
-  // A/B: half of devices get the search bar WITHOUT the AI Analysis toggle + Ask button, to see
-  // whether that fork in the road is costing us engagement at the top of the page. Nothing is
-  // removed for them — the line under the bar links to /ask, which owns questions either way.
-  const { variant: aiSurface } = useAiSurfaceVariant();
-  const showAiSurface = aiSurface === 'shown';
-  // "AI Analysis" mode — OFF (default) = classic keyword filtering of the table; ON unlocks asking
-  // grounded, cited questions (and reveals the Ask button). Persisted in localStorage: server render
-  // OFF, read the stored value on mount to avoid a hydration mismatch (mirrors BetaContext).
-  const [aiModeStored, setAiModeState] = useState(false);
-  useEffect(() => {
-    try { setAiModeState(localStorage.getItem('ai_analysis_mode') === '1'); } catch { /* ignore */ }
-  }, []);
-  // In the "hidden" arm there's no control to turn AI mode on, so the bar is keyword-only regardless
-  // of what a previous visit stored (the stored preference is preserved, just not honored here).
-  const aiMode = aiModeStored && showAiSurface;
-  const setAiMode = (v: boolean) => {
-    setAiModeState(v);
-    try { localStorage.setItem('ai_analysis_mode', v ? '1' : '0'); } catch { /* ignore */ }
-    // Entering AI mode: the typed text becomes a question, so stop live-filtering the table by it.
-    // Leaving AI mode: resume keyword filtering by whatever is in the box.
-    setBillFilters(prev => ({ ...prev, search: v ? '' : query.trim() }));
-    track('search_mode_toggled', { mode: v ? 'ai_analysis' : 'keyword' });
-  };
-  // In keyword mode typing filters the table live; in AI mode it only composes the question.
   const onSearchChange = (v: string) => {
     setQuery(v);
-    if (!aiMode) setBillFilters(prev => ({ ...prev, search: v }));
-  };
-  // Ask hands off to /ask with the question in the URL; that page owns the request and the thread. The
-  // view transition carries the bar across so it reads as "let me take you over here" rather than as a
-  // page load — see navigateWithTransition.
-  const submitQuery = () => {
-    if (!aiMode) return;             // asking is only possible in AI Analysis mode
-    const q = query.trim();
-    if (q.length < 3) return;
-    setQuery('');
-    setBillFilters(prev => ({ ...prev, search: '' }));
-    navigateWithTransition(() => router.push(`/ask/?q=${encodeURIComponent(q)}`));
+    setBillFilters(prev => ({ ...prev, search: v }));
   };
 
-  // Cycle the example questions through the search-box placeholder, typewriter-style — only in AI mode
-  // (in keyword mode the placeholder is the static "Search bills…" line, so the timers would run for a
-  // string nobody sees) and only before the reader types, so the animation never fights a real query.
-  const typedPlaceholder = useTypedPlaceholder(RESEARCH_EXAMPLES, aiMode && query === '');
-
-  const highPreemption = useMemo(() => federal.filter(f => f.preemption_risk === 'High').length, [federal]);
+  const highPreemption = federalStats?.high_preemption ?? 0;
 
   // Resin filter options come from the full bill set, so the choices are stable regardless of the
   // active scope/filters. Empty (and the filter stays hidden) until the polymer scan tags bills.
@@ -174,7 +125,7 @@ export default function HomePage() {
     [bills, scopeActive, scope],
   );
   const mapSource = useMemo(
-    () => (scopeActive ? bills.filter(b => inScope(b, { states: [], materials: scope.materials })) : bills),
+    () => (scopeActive ? bills.filter(b => inScope(b, { regions: [], states: [], materials: scope.materials })) : bills),
     [bills, scopeActive, scope],
   );
 
@@ -315,6 +266,11 @@ export default function HomePage() {
 
   return (
     <div className="p-6 space-y-8 max-w-6xl mx-auto">
+      {/* schema.org Dataset for the corpus. The bills on this page are fetched client-side, so a
+          crawler that doesn't run JS sees an empty frame — this is the machine-readable description
+          it gets instead. Pre-rendered into the static HTML at build despite living in a client
+          component. See components/seo/CorpusJsonLd. */}
+      <CorpusJsonLd />
       {/* Value prop + primary CTA — held back until a signed-out visitor has spent their one free
           question and is reaching for a second (useFreeAskUsed reads the marker /ask writes). A fresh
           visitor gets the clean Explore surface first; the "start free" pitch only lands once they've
@@ -443,34 +399,29 @@ export default function HomePage() {
       {/* Explore: one adaptive search/ask bar + facets. The "Explore · N bills" title + Export live at
           the top of the page now; this section is just the bar and its controls. */}
       <section className="lg:col-start-1 lg:row-start-1">
-        {/* The search box leads — it sits directly under the globe as the page's primary action, with the
-            one-line explainer beneath it. Enter submits a question only when AI Analysis is on
-            (submitQuery guards it). */}
-        <form onSubmit={e => { e.preventDefault(); submitQuery(); }} style={{ viewTransitionName: 'ask-bar' }}>
+        {/* The search box leads — it sits directly under the globe as the page's primary action, with
+            the one-line explainer beneath it. Still a <form> so Enter is a no-op submit rather than a
+            page navigation; filtering is already live on every keystroke. */}
+        <form onSubmit={e => e.preventDefault()} style={{ viewTransitionName: 'ask-bar' }}>
           <div className="flex items-center gap-2 rounded-xl border-2 border-green-accent/60 bg-bg-secondary px-3 py-2 focus-within:border-green-accent transition-colors">
             <span aria-hidden className="text-text-muted text-lg leading-none">⌕</span>
             <input
               value={query}
               onChange={e => onSearchChange(e.target.value)}
-              placeholder={
-                aiMode
-                  ? (typedPlaceholder || 'Ask a question about the corpus…')
-                  : 'Search bills by keyword…'
-              }
-              aria-label={aiMode ? 'Ask a question' : 'Search bills by keyword'}
+              placeholder="Search bills by keyword…"
+              aria-label="Search bills by keyword"
               className="flex-1 min-w-0 bg-transparent text-body text-text-primary placeholder-text-muted focus:outline-none"
             />
           </div>
         </form>
 
-        {/* One line, under the bar: what the box does, and where the questions go. "Ask the Atlas" is
-            the link, not a mode name, so it reads the same in both arms of the A/B — in the "hidden"
-            arm it's the ONLY route to the AI surface, which is the point of the test. */}
+        {/* One line, under the bar: what the box does, and where questions go. With the toggle gone
+            this link is the ONLY route to the AI surface from Explore, so it stays. */}
         <p className="mt-2 text-xs text-text-muted truncate">
           <b className="text-text-secondary font-medium">Keywords</b> filter instantly ·{' '}
           <Link
             href="/ask"
-            onClick={() => track('cta_click', { entry_source: 'explore_search_hint', variant: aiSurface })}
+            onClick={() => track('cta_click', { entry_source: 'explore_search_hint' })}
             className="text-green-accent hover:underline"
           >
             Ask the Atlas
@@ -478,41 +429,18 @@ export default function HomePage() {
           for AI analysis
         </p>
 
-        {/* Control row UNDER the bar: AI Analysis toggle + Ask lead (when this device is in the
-            "shown" arm); the facets share the same row on desktop and wrap below on mobile. Kept OUT
-            of the <form> so a facet dropdown can never accidentally submit a question. */}
+        {/* Control row UNDER the bar — now just the facets. Kept OUT of the <form> so a facet dropdown
+            can never accidentally submit. They open by default: they're the only controls on this row,
+            so hiding them behind a second click buys nothing. */}
         <div className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-text-primary/15 pb-4">
-          {showAiSurface && (
-            <div className="flex items-center gap-3 shrink-0">
-              <AiAnalysisToggle on={aiMode} onChange={setAiMode} />
-              {/* Ask is ALWAYS visible so the capability is discoverable; it's just disabled until AI
-                  Analysis is on (and there's a long-enough question). submitQuery no-ops when off. */}
-              <button
-                type="button"
-                onClick={submitQuery}
-                disabled={!aiMode || query.trim().length < 3}
-                title={!aiMode ? 'Turn on AI Analysis to ask a question' : undefined}
-                className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-medium text-sm px-5 py-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Ask →
-              </button>
-            </div>
-          )}
-          {/* On lg the facets sit in the narrow left column beside the globe, so they take their own
-              full-width line under the toggle+Ask row rather than sharing it. With that row absent,
-              the facets are the only thing under the bar — so open them rather than hide them behind
-              a second click. */}
-          <div className="w-full min-w-0 sm:w-auto sm:flex-1 lg:w-full lg:flex-none">
+          <div className="w-full min-w-0">
             <BillFilters
-              // The A/B bucket resolves after mount, so remount the facets when it lands — their
-              // "start expanded" default is initial state, and a prop flip alone wouldn't take.
-              key={aiSurface}
               filters={billFilters}
               onChange={setBillFilters}
               hideSearch
               showRegion
               resinOptions={resinOptions}
-              expandFiltersByDefault={!showAiSurface}
+              expandFiltersByDefault
             />
           </div>
         </div>

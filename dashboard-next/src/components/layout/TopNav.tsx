@@ -6,6 +6,7 @@ import { useTheme } from './ThemeContext';
 import { useRegion } from './RegionContext';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { useAuth } from '@/components/auth/AuthContext';
+import { SITE_NAME, SITE_TAGLINE } from '@/lib/brand';
 import {
   HomeIcon, CalendarIcon, FactoryIcon, InfoIcon, TagIcon, CompassIcon, UserIcon, SunIcon, MoonIcon,
   LabelIcon, ScaleIcon, ChartIcon, CapitolIcon, AskIcon,
@@ -36,9 +37,9 @@ const NAV_ITEMS: NavItem[] = [
   // (?session=). Nav entry so the primary AI surface is somewhere you can go, not only somewhere you
   // land after typing. See docs/ASK_SURFACE_SPEC.md.
   { href: '/ask', label: 'Ask the Atlas', Icon: AskIcon },
-  // Rankings is the global two-column activity tracker (national law by country + sub-national) —
+  // Leaderboard is the global two-column activity tracker (national law by country + sub-national) —
   // global, so no usOnly gate. /states adapts to the region selection (US momentum / EU / two-column).
-  { href: '/states', label: 'Rankings', Icon: CapitolIcon },
+  { href: '/states', label: 'Leaderboard', Icon: CapitolIcon },
   // Upcoming Deadlines is a tabbed surface — Federal Actions is folded in as a subpage tab (see
   // DeadlinesTabs), so /federal lights this item up too. Federal has no top-level nav entry anymore.
   { href: '/compliance', label: 'Upcoming Deadlines', short: 'Deadlines', Icon: CalendarIcon, altPaths: ['/federal'] },
@@ -70,8 +71,8 @@ const ACCOUNT_ITEM: NavItem = { href: '/account', label: 'Account', Icon: UserIc
  * collapse behind the hamburger into a dropdown (the full set only fits one row at lg+).
  *
  * The bar carries only the primary destinations; everything flagged `secondary` sits under a
- * "More" dropdown. The tagline is stacked under the wordmark as a lockup rather than set
- * alongside it, which is what bought the horizontal room.
+ * "More" dropdown. The brand is the wordmark alone — the tagline moved to the footer and the
+ * page metadata, which also returns its width to the nav.
  *
  * Non-animated by design: the bar has a fixed height and nothing resizes on scroll, so
  * pinning it never reflows the page. (An earlier version shrank a taller pinned header,
@@ -156,15 +157,12 @@ export function TopNav() {
     // height, nothing resizes on scroll, so no reflow/"zoom" jump and the brand shows once.
     <header className="sticky top-0 z-40 bg-bg-secondary/95 backdrop-blur border-b border-border-default">
       <div className="flex items-center gap-3 px-4 sm:px-6 min-h-[3.25rem] py-2">
-        {/* Brand — left, as a stacked lockup: wordmark with the slogan set beneath it. Stacking
-            costs no extra bar height (the two lines fit the existing min-height) and returns the
-            whole slogan's width to the nav. */}
-        <Link href="/" onClick={() => setMenuOpen(false)} className="flex flex-col justify-center shrink-0 leading-none">
+        {/* Brand — left, wordmark only. The slogan used to be stacked beneath it, but at the size the
+            bar's fixed height allowed it set thin and grey enough to be hard to read; it lives in the
+            page metadata and on the footer brand rail now (see lib/brand.ts). */}
+        <Link href="/" onClick={() => setMenuOpen(false)} className="flex items-center shrink-0 leading-none">
           <span className="font-serif uppercase text-text-primary tracking-[0.06em] text-lg sm:text-xl leading-none">
-            Atlas Circular
-          </span>
-          <span className="hidden sm:block font-serif text-text-muted text-[0.65rem] tracking-[0.14em] uppercase mt-0.5 leading-none">
-            Tracking circularity globally
+            {SITE_NAME}
           </span>
         </Link>
 
@@ -250,7 +248,7 @@ export function TopNav() {
               <AuthButton variant="menu" onNavigate={() => setMenuOpen(false)} />
             </div>
             <div className="text-text-muted text-xs text-center pt-2">
-              Circular-economy law atlas · Beta
+              {SITE_TAGLINE} · Beta
             </div>
           </div>
         </nav>

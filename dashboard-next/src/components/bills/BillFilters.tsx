@@ -159,6 +159,11 @@ interface BillFiltersProps {
       derive with `resinOptionsFromBills(bills)`. Omitted/empty → the filter is hidden (e.g. before the
       polymer scan has populated any data), so no surface shows a dead control. */
   resinOptions?: string[];
+  /** Start the home-explorer's "More filters" panel expanded (`showRegion` layouts only). Set on
+   *  surfaces where nothing else occupies the row under the search bar — with the AI Analysis
+   *  toggle + Ask hidden, the facets are the only thing left to do there, so collapsing them just
+   *  buries the controls. */
+  expandFiltersByDefault?: boolean;
 }
 
 function Select({
@@ -353,7 +358,7 @@ function DateFilter({
   );
 }
 
-export function BillFilters({ filters, onChange, hideState, hideSearch, showRegion, resinOptions }: BillFiltersProps) {
+export function BillFilters({ filters, onChange, hideState, hideSearch, showRegion, resinOptions, expandFiltersByDefault }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
 
   // EU-central law is EU-wide (no sub-jurisdiction yet), so the State select is hidden in EU mode —
@@ -371,8 +376,8 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
   }, []);
 
   // Home-explorer (showRegion) layout keeps Region + State up front and folds the rest behind a
-  // "More filters" toggle. Start expanded only if one of those secondary filters is already active,
-  // so a filtered arrival isn't hidden.
+  // "More filters" toggle. Start expanded if one of those secondary filters is already active (so a
+  // filtered arrival isn't hidden) or if the host surface asked for it (expandFiltersByDefault).
   const secondaryActiveCount = [
     filters.status,
     filters.instrumentType,
@@ -381,7 +386,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     filters.polymers.length > 0,
     filters.dateType,
   ].filter(Boolean).length;
-  const [showMore, setShowMore] = useState(secondaryActiveCount > 0);
+  const [showMore, setShowMore] = useState(secondaryActiveCount > 0 || !!expandFiltersByDefault);
   // On a fixed-state context, reset preserves the locked state instead of clearing it.
   const reset = () => onChange(hideState ? { ...DEFAULT_FILTERS, state: filters.state } : DEFAULT_FILTERS);
 

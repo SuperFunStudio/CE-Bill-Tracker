@@ -339,6 +339,9 @@ export async function fetchChampionBills(personId: string): Promise<ChampionBill
 export async function fetchBillOutcomes(params?: {
   direction?: string;
   state?: string;
+  /** US when omitted (the server's default), a region code, or "all" — 11 regions carry outcomes,
+   *  so the global surfaces must pass "all" or they silently show only the US ones. */
+  region?: string;
   reviewed_only?: boolean;
 }): Promise<BillOutcome[]> {
   return apiFetch<BillOutcome[]>(

@@ -30,8 +30,10 @@ import { AiAnalysisToggle } from '@/components/search/AiAnalysisToggle';
 import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { track } from '@/lib/analytics';
 import { useHomeVariant } from '@/components/experiment/useHomeVariant';
+import { useAiSurfaceVariant } from '@/components/experiment/useAiSurfaceVariant';
 import { HomeVariantVote } from '@/components/experiment/HomeVariantVote';
 import { BillDotExplorer } from '@/components/explore/BillDotExplorer';
+import { HeadlinesDeadlines } from '@/components/home/HeadlinesDeadlines';
 import Link from 'next/link';
 
 const StateMap = dynamic(
@@ -64,8 +66,14 @@ function navigateWithTransition(go: () => void) {
   doc.startViewTransition(go);
 }
 
+// Rows the results table shows per page. Five is the default — the table is a browse surface, not a
+// spreadsheet, and the page has content below it — but a reader scanning a filtered set shouldn't
+// have to page through it five at a time.
+const ROWS_PER_PAGE_OPTIONS = [5, 10, 20, 50, 100];
+
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
+  const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE_OPTIONS[0]);
   const { region, regionsParam, regions: selectedRegions, setRegions, isUsView } = useRegion();
   const router = useRouter();
 
@@ -87,7 +95,7 @@ export default function HomePage() {
   // ticker ranks identically to the map (combined national + sub-national enacted).
   const { data: lawsInForce = [] } = useLawsInForce();
 
-  const { scope } = useScope();
+  const { scope, openEditor: openScopeEditor } = useScope();
   const scopeActive = useScopeActive();
 
   const { isPro, user, openAuth } = useAuth();
@@ -107,13 +115,21 @@ export default function HomePage() {
   // long asks were being lost. See docs/ASK_SURFACE_SPEC.md.
   const [query, setQuery] = useState('');
   const freeAskUsed = useFreeAskUsed();
+  // A/B: half of devices get the search bar WITHOUT the AI Analysis toggle + Ask button, to see
+  // whether that fork in the road is costing us engagement at the top of the page. Nothing is
+  // removed for them — the line under the bar links to /ask, which owns questions either way.
+  const { variant: aiSurface } = useAiSurfaceVariant();
+  const showAiSurface = aiSurface === 'shown';
   // "AI Analysis" mode — OFF (default) = classic keyword filtering of the table; ON unlocks asking
   // grounded, cited questions (and reveals the Ask button). Persisted in localStorage: server render
   // OFF, read the stored value on mount to avoid a hydration mismatch (mirrors BetaContext).
-  const [aiMode, setAiModeState] = useState(false);
+  const [aiModeStored, setAiModeState] = useState(false);
   useEffect(() => {
     try { setAiModeState(localStorage.getItem('ai_analysis_mode') === '1'); } catch { /* ignore */ }
   }, []);
+  // In the "hidden" arm there's no control to turn AI mode on, so the bar is keyword-only regardless
+  // of what a previous visit stored (the stored preference is preserved, just not honored here).
+  const aiMode = aiModeStored && showAiSurface;
   const setAiMode = (v: boolean) => {
     setAiModeState(v);
     try { localStorage.setItem('ai_analysis_mode', v ? '1' : '0'); } catch { /* ignore */ }
@@ -331,29 +347,23 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Page masthead: "Explore · N bills" + the CSV export, at the very top of the page. The search
-          bar it used to sit on stays below the globe — this line is the page title, not a section
-          header for the input. */}
+      {/* Page masthead: "Explore · N circular economy bills". The count says what the corpus IS —
+          that phrase is the tagline this line used to carry — and "See what we track" answers the
+          question it provokes by sending readers to the methodology. CSV export moved down to the
+          table it exports (see the action row above the results). */}
       <div className="flex items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-3 flex-wrap">
           <h1 className="font-serif text-2xl sm:text-3xl text-text-primary">Explore</h1>
-          <span className="text-text-muted text-sm">{tableBills.length} bills</span>
+          <span className="text-text-muted text-sm">{tableBills.length} circular economy bills</span>
           <FreshnessNote />
         </div>
-        <button
-            onClick={handleExport}
-            disabled={tableBills.length === 0}
-            title={isPro ? undefined : 'CSV export is a Pro feature'}
-            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0 inline-flex items-center gap-1.5"
-          >
-            {!isPro && <LockIcon className="text-xs" />}
-            ↓ Export CSV
-            {!isPro && (
-              <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
-                Pro
-              </span>
-            )}
-        </button>
+        <Link
+          href="/methodology"
+          onClick={() => track('cta_click', { entry_source: 'explore_methodology' })}
+          className="shrink-0 text-sm text-text-secondary hover:text-green-accent transition-colors"
+        >
+          See what we track <span aria-hidden>→</span>
+        </Link>
       </div>
 
       {/* Ranked leaderboard line, right under the nav. Region-aware + enacted-only: umbrella regions
@@ -453,35 +463,57 @@ export default function HomePage() {
           </div>
         </form>
 
-        {/* One line, under the bar: what each mode does, and nothing more — the rotating example
-            questions in the placeholder carry the rest of the context. */}
+        {/* One line, under the bar: what the box does, and where the questions go. "Ask the Atlas" is
+            the link, not a mode name, so it reads the same in both arms of the A/B — in the "hidden"
+            arm it's the ONLY route to the AI surface, which is the point of the test. */}
         <p className="mt-2 text-xs text-text-muted truncate">
           <b className="text-text-secondary font-medium">Keywords</b> filter instantly ·{' '}
-          <b className="text-text-secondary font-medium">AI Analysis</b> answers full questions, with citations
+          <Link
+            href="/ask"
+            onClick={() => track('cta_click', { entry_source: 'explore_search_hint', variant: aiSurface })}
+            className="text-green-accent hover:underline"
+          >
+            Ask the Atlas
+          </Link>{' '}
+          for AI analysis
         </p>
 
-        {/* Control row UNDER the bar: AI Analysis toggle + Ask (AI mode only) lead; the facets share the
-            same row on desktop and wrap below on mobile (toggle+Ask first, then filters). Kept OUT of the
-            <form> so a facet dropdown can never accidentally submit a question. */}
+        {/* Control row UNDER the bar: AI Analysis toggle + Ask lead (when this device is in the
+            "shown" arm); the facets share the same row on desktop and wrap below on mobile. Kept OUT
+            of the <form> so a facet dropdown can never accidentally submit a question. */}
         <div className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-text-primary/15 pb-4">
-          <div className="flex items-center gap-3 shrink-0">
-            <AiAnalysisToggle on={aiMode} onChange={setAiMode} />
-            {/* Ask is ALWAYS visible so the capability is discoverable; it's just disabled until AI
-                Analysis is on (and there's a long-enough question). submitQuery no-ops when off. */}
-            <button
-              type="button"
-              onClick={submitQuery}
-              disabled={!aiMode || query.trim().length < 3}
-              title={!aiMode ? 'Turn on AI Analysis to ask a question' : undefined}
-              className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-medium text-sm px-5 py-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Ask →
-            </button>
-          </div>
+          {showAiSurface && (
+            <div className="flex items-center gap-3 shrink-0">
+              <AiAnalysisToggle on={aiMode} onChange={setAiMode} />
+              {/* Ask is ALWAYS visible so the capability is discoverable; it's just disabled until AI
+                  Analysis is on (and there's a long-enough question). submitQuery no-ops when off. */}
+              <button
+                type="button"
+                onClick={submitQuery}
+                disabled={!aiMode || query.trim().length < 3}
+                title={!aiMode ? 'Turn on AI Analysis to ask a question' : undefined}
+                className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-medium text-sm px-5 py-2 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Ask →
+              </button>
+            </div>
+          )}
           {/* On lg the facets sit in the narrow left column beside the globe, so they take their own
-              full-width line under the toggle+Ask row rather than sharing it. */}
+              full-width line under the toggle+Ask row rather than sharing it. With that row absent,
+              the facets are the only thing under the bar — so open them rather than hide them behind
+              a second click. */}
           <div className="w-full min-w-0 sm:w-auto sm:flex-1 lg:w-full lg:flex-none">
-            <BillFilters filters={billFilters} onChange={setBillFilters} hideSearch showRegion resinOptions={resinOptions} />
+            <BillFilters
+              // The A/B bucket resolves after mount, so remount the facets when it lands — their
+              // "start expanded" default is initial state, and a prop flip alone wouldn't take.
+              key={aiSurface}
+              filters={billFilters}
+              onChange={setBillFilters}
+              hideSearch
+              showRegion
+              resinOptions={resinOptions}
+              expandFiltersByDefault={!showAiSurface}
+            />
           </div>
         </div>
 
@@ -521,6 +553,50 @@ export default function HomePage() {
           the table, instead of globally under the nav. */}
       <section>
         <div className="mb-3"><ScopeBar /></div>
+
+        {/* Action row — between the filters and the results it acts on. Left: set a scope (the
+            invitation that used to be buried in the deadline banner's tail, now a real button on the
+            filter/results seam) + how many rows to show. Right: CSV export, which used to float up in
+            the masthead where it read as page furniture rather than "download this table". */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border-default pb-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <button
+              onClick={() => { track('cta_click', { entry_source: 'explore_scope' }); openScopeEditor(); }}
+              className="text-sm text-green-accent hover:underline"
+            >
+              Set your regional &amp; material scope →
+            </button>
+            <label className="flex items-center gap-1.5 text-xs text-text-muted">
+              Show
+              <select
+                value={rowsPerPage}
+                onChange={e => setRowsPerPage(Number(e.target.value))}
+                aria-label="Rows per page"
+                className="rounded border border-border-default bg-bg-secondary px-1.5 py-0.5 text-xs text-text-primary focus:border-green-accent focus:outline-none"
+              >
+                {ROWS_PER_PAGE_OPTIONS.map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              per page
+            </label>
+          </div>
+          <button
+            onClick={handleExport}
+            disabled={tableBills.length === 0}
+            title={isPro ? undefined : 'CSV export is a Pro feature'}
+            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0 inline-flex items-center gap-1.5"
+          >
+            {!isPro && <LockIcon className="text-xs" />}
+            ↓ Export CSV
+            {!isPro && (
+              <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
+                Pro
+              </span>
+            )}
+          </button>
+        </div>
+
         {/* Only fires when live AND snapshot/localStorage all came up empty — otherwise
             last-known data shows with a quiet FreshnessNote instead of a scary banner. */}
         {billsError && <AlertBanner variant="red" message="We're having trouble loading bill data right now — please refresh in a moment." className="mb-3" />}
@@ -529,17 +605,22 @@ export default function HomePage() {
         ) : variant === 'b' ? (
           <BillDotExplorer bills={tableBills} />
         ) : (
-          <BillTable bills={tableBills} autoPageSize={5} urlSync />
+          <BillTable bills={tableBills} autoPageSize={rowsPerPage} urlSync />
         )}
       </section>
 
-      {/* Alerts, bundled below the table (out of the way of the bills, which are what visitors came
-          for). The scoped deadline count is here rather than at the top so it informs without leading
-          with stress; the Oregon court-case wildcard is US-only — irrelevant to a non-US filter. */}
-      <div className="space-y-3">
+      {/* Headlines & Deadlines — the signals that aren't bills, bundled below the table (out of the
+          way of the bills, which are what visitors came for) and now under a heading that says what
+          they are. Two loose notices reading as stray banners is what the section header fixes. The
+          deadline count is here rather than at the top so it informs without leading with stress; the
+          Oregon court-case wildcard is US-only — irrelevant to a non-US filter.
+          The section leads with two date-relevant blocks (documented outcomes / next deadlines) and
+          keeps the banners beneath them. Still to come: consortium formations and notes from the
+          pulse script, which have no feed to read from yet. */}
+      <HeadlinesDeadlines>
         <ScopedDeadlineBanner />
         {isUsView && <FederalWatchBanner highRiskCount={highPreemption} />}
-      </div>
+      </HeadlinesDeadlines>
 
       {/* Guided-tour CTA — a standing home for the demo-led motion, distinct from the free-signup and
           referral CTAs. A 15-min walkthrough is the highest-converting path for the considered
@@ -547,7 +628,7 @@ export default function HomePage() {
       <section className="border-t border-border-default pt-8">
         <div className="rounded-xl border border-green-accent/30 bg-green-hero px-5 py-4 sm:px-6 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="max-w-2xl">
-            <h3 className="font-serif text-lg text-text-primary">See Atlas on your own obligations.</h3>
+            <h3 className="font-serif text-lg text-text-primary">Unlock the full power of the Atlas.</h3>
             <p className="text-text-secondary text-sm mt-0.5 leading-relaxed">
               Book a 15-minute walkthrough — we&apos;ll map the tracker to the materials and
               jurisdictions your team actually reports on.

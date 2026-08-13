@@ -5,8 +5,10 @@ import Link from 'next/link';
 const STORAGE_KEY = 'botb_federal_watch_dismissed';
 
 /**
- * Pithy, dismissible federal-preemption notice. "Learn more" links to Upcoming Deadlines
- * (where the Oregon case is tracked); the ✕ hides it (remembered).
+ * Pithy, dismissible federal-preemption notice. "Learn more" links to Federal Actions — the page that
+ * actually tracks the Oregon preemption case, its trial date, and the federal register actions on
+ * watch (it used to land on the Upcoming Deadlines calendar, which says nothing about the case). The
+ * ✕ hides it (remembered).
  */
 export function FederalWatchBanner({ highRiskCount = 0 }: { highRiskCount?: number }) {
   const [hidden, setHidden] = useState(true);
@@ -31,7 +33,7 @@ export function FederalWatchBanner({ highRiskCount = 0 }: { highRiskCount?: numb
           nationwide — a ruling is expected this August{highRiskCount > 0 ? ` (${highRiskCount} federal actions on watch)` : ''}.
         </span>
         <Link
-          href="/compliance"
+          href="/federal"
           className="shrink-0 font-medium underline underline-offset-2 hover:no-underline whitespace-nowrap"
         >
           Learn more →

@@ -4,6 +4,7 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { useReferralShare } from '@/hooks/useReferralShare';
 import { track } from '@/lib/analytics';
 import { GiftIcon, CheckIcon } from '@/components/ui/icons';
+import { SITE_NAME, SITE_TAGLINE } from '@/lib/brand';
 
 /**
  * Global site footer — rendered at the bottom of every (non-embed) page by AppShell. Its centrepiece is
@@ -98,8 +99,10 @@ export function SiteFooter() {
       {/* Link + brand rail. */}
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 px-4 py-8 text-center sm:flex-row sm:justify-between sm:text-left">
         <div className="text-text-muted">
-          <p className="font-serif text-base text-text-primary">Atlas Circular</p>
-          <p className="text-meta">Circular-economy law, by jurisdiction · Beta</p>
+          <p className="font-serif text-base text-text-primary">{SITE_NAME}</p>
+          {/* The brand tagline lives here (and in the page metadata) rather than under the nav
+              wordmark, where the bar's fixed height forced it too small to read. */}
+          <p className="text-meta">{SITE_TAGLINE} · Beta</p>
         </div>
         <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-text-secondary">
           <Link href="/about" className="transition-colors hover:text-text-primary">About</Link>

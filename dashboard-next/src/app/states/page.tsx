@@ -89,7 +89,7 @@ function UsStandings() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <GazetteHeader title="State Rankings" subtitle="US circular-economy law momentum" />
+      <GazetteHeader title="State Leaderboard" subtitle="US circular-economy law momentum" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
@@ -230,7 +230,7 @@ function RegionStandings() {
       .sort((a, b) => b.count - a.count || b.enacted - a.enacted || a.name.localeCompare(b.name));
   }, [bills]);
 
-  const title = 'Member State Rankings';
+  const title = 'Member State Leaderboard';
   const subtitle = 'Circular-economy law across the European Union';
 
   return (
@@ -470,14 +470,14 @@ function WorldStandings() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
-      <GazetteHeader title="Rankings" subtitle="Circular-economy law by jurisdiction" />
+      <GazetteHeader title="Leaderboard" subtitle="A global index of the regions advancing the circular economy" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
       </div>
 
       <p className="text-text-secondary text-body -mt-2">
-        Two rankings side by side. <strong>National</strong> ranks countries by circular-economy law in
+        Two leaderboards side by side. <strong>National</strong> ranks countries by circular-economy law in
         force — the fair comparison across borders; switch it to <strong>Combined</strong> to fold in each
         country&rsquo;s sub-national laws (today that means the US and its 50 states). <strong>Sub-national</strong>
         ranks US states, where you can toggle between law <strong>enacted</strong> and total <strong>activity</strong>.

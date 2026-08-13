@@ -19,8 +19,9 @@ import { ScopeOnboarding } from '@/components/scope/ScopeOnboarding';
 // geography from the QUESTION TEXT (resolve_facets), so the bar never reached the request. The home
 // page ('/') hosts the Regions selector inside its own explorer filter box (BillFilters showRegion).
 // '/pricing' has nothing a jurisdiction filter could scope — the coverage figures there are deliberately
-// whole-corpus, and a filter above them invites the reader to shrink the thing being priced.
-const REGION_BAR_HIDDEN = ['/', '/compliance', '/federal', '/studio', '/ask', '/pricing'];
+// whole-corpus, and a filter above them invites the reader to shrink the thing being priced. '/methodology'
+// is the same case: it describes how the whole engine works, and its counts are the whole-corpus totals.
+const REGION_BAR_HIDDEN = ['/', '/compliance', '/federal', '/studio', '/ask', '/pricing', '/methodology'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

@@ -223,7 +223,7 @@ export default function CompliancePage() {
         <p className="text-sm text-text-muted -mt-3">
           Showing every jurisdiction we track.{' '}
           <button onClick={openEditor} className="text-green-accent hover:underline">
-            Tell us your states, products &amp; materials to see which ones are yours →
+            Set your regional &amp; material scope to see which ones are yours →
           </button>
         </p>
       )}

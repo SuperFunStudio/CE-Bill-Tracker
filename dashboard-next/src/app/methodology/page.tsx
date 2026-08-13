@@ -1,7 +1,9 @@
 'use client';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { useBills, useLawsInForce } from '@/hooks/useBills';
+import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
 import { FAIR_QUESTIONS } from '@/lib/tiers';
 
 // Public engine snapshot. Only observable facts live here — the numbers a reader could verify
@@ -35,12 +37,25 @@ const INSTRUMENTS = [
   'Preemption (tracked as a countervailing signal)',
 ];
 
-const MATERIALS = [
-  'plastic packaging', 'paper packaging', 'glass', 'metals', 'electronics', 'batteries',
-  'paint', 'carpet', 'mattresses', 'tires', 'vehicles', 'construction', 'furniture',
-  'used oil', 'pharmaceuticals', 'solar panels', 'textiles', 'organics', 'bio-based materials',
-  'agriculture', 'hazardous materials', 'water', 'biodiversity',
-];
+// The tracked material & product streams, derived from the SAME canonical list the Materials filter
+// and the scope onboarding offer (MATERIAL_CATEGORIES) rather than hand-maintained here. This page
+// used to carry a curated subset of 23, which understated the engine and left ten streams a reader
+// could filter by but never see claimed — lighting, thermostats, mercury, pesticides, microplastics,
+// marine debris, critical minerals among them. Deriving it means the count in the lede, the count in
+// the section heading, and the dropdown can't drift apart. "other" is the classifier's catch-all, not
+// a stream, so it's excluded — hence 33.
+const STREAM_LABELS: Record<string, string> = {
+  biobased: 'bio-based materials',
+  nickel_cadmium: 'nickel-cadmium batteries',
+};
+const MATERIALS = MATERIAL_CATEGORIES
+  .filter(c => c !== 'other')
+  .map(c => STREAM_LABELS[c] ?? c.replace(/_/g, ' '));
+
+/** A jurisdiction named in the lede, linked to its profile page (/jurisdictions/[region]/[code]). */
+function J({ href, children }: { href: string; children: ReactNode }) {
+  return <Link href={href} className="text-green-accent hover:underline">{children}</Link>;
+}
 
 export default function MethodologyPage() {
   // regions:'all' — the SAME query the homepage explorer headlines with ("Explore · N bills"), so the
@@ -62,24 +77,25 @@ export default function MethodologyPage() {
 
   return (
     <div className="p-6 space-y-8 max-w-3xl mx-auto">
-      <GazetteHeader title="How we decide what counts" subtitle="The classification behind every relevance call" />
+      <GazetteHeader title="Methodology" subtitle="Our approach to classifying circular economy laws" />
 
+      {/* The lede is the whole page in four sentences: what this is, how much of the world it covers,
+          and what every measure is tested against. The A-to-Z jurisdiction pairs are the coverage
+          claim, so each one links to its profile — a reader can check the claim instead of taking it.
+          Counts are live (or snapshot-backed) and the instrument/stream figures are derived from the
+          lists below, so the sentence can never drift from the section it summarizes. */}
       <p className="text-text-secondary leading-relaxed">
-        This page is powered by the <strong className="text-text-primary">Atlas Circular</strong> bill-tracker
-        and analysis engine — the same pipeline behind the API. It screens the full U.S. legislative
-        universe and ingests circular-economy law from the EU and national governments worldwide, testing
-        every measure against a consistent set of circularity criteria — EPR, deposit-return,
-        right-to-repair, recycled-content, financial-incentive, and labeling instruments across two dozen
-        material &amp; product streams — and auto-classifies the matches before a human spot-review. The goal
-        is a judgment you can audit, not a black box.
-      </p>
-
-      <p className="text-text-secondary leading-relaxed">
-        We&apos;re transparent about <em className="text-text-primary">how</em> a call is made — the scope
-        below, the pipeline, and the auto-classified-vs-reviewed marker on every bill. The engine itself —
-        the exact screening lexicon, the model and prompts, and the confidence logic that ranks a match — is
-        proprietary. That&apos;s the line: enough to trust and check a result, not enough to clone the system
-        behind it.
+        <strong className="text-text-primary">Atlas Circular</strong> is a circular economy legislation
+        tracker and analysis engine. The Atlas holds {relevant} measures across {regionCount} regions
+        worldwide — from <J href="/jurisdictions/au/au/">Australia</J> to <J href="/jurisdictions/at/at/">Austria</J>,{' '}
+        <J href="/jurisdictions/cn/cn/">China</J> to <J href="/jurisdictions/cl/cl/">Chile</J>, and{' '}
+        <J href="/jurisdictions/us/ky/">Kentucky</J> to <J href="/jurisdictions/ke/ke/">Kenya</J>. Each one is
+        screened against{' '}
+        <a href="#what-we-screen-for" className="text-green-accent hover:underline">
+          a consistent set of circular economy criteria
+        </a>{' '}
+        mapped to the technical and biological cascades — {INSTRUMENTS.length} legal instruments and{' '}
+        {MATERIALS.length} material and product streams.
       </p>
 
       <section className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border-default bg-border-default">
@@ -103,7 +119,9 @@ export default function MethodologyPage() {
         jurisdictions by. The rest are pending, failed, or superseded bills we keep on the record.
       </p>
 
-      <section className="space-y-3">
+      {/* Anchor target for the lede's "a consistent set of circular economy criteria" link. scroll-mt
+          clears the sticky nav so the heading isn't parked under it on arrival. */}
+      <section id="what-we-screen-for" className="scroll-mt-20 space-y-3">
         <h2 className="font-serif text-xl text-text-primary">What we screen for</h2>
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
@@ -180,9 +198,8 @@ export default function MethodologyPage() {
           </li>
           <li>
             <span className="text-text-primary font-medium">Jurisdiction profiles</span> — bill activity
-            rolled up per{' '}
-            <Link href="/states" className="text-green-accent hover:underline">state</Link> and{' '}
-            <Link href="/jurisdictions" className="text-green-accent hover:underline">country</Link>,
+            rolled up per state and country on the{' '}
+            <Link href="/states" className="text-green-accent hover:underline">Leaderboard</Link>,
             with cross-border comparison in{' '}
             <Link href="/insights" className="text-green-accent hover:underline">Insights</Link>.
           </li>

@@ -5,6 +5,7 @@ import './globals.css';
 import { Providers } from '@/components/layout/Providers';
 import { AppShell } from '@/components/layout/AppShell';
 import { RouteAnalytics } from '@/components/layout/RouteAnalytics';
+import { SITE_NAME, SITE_TAGLINE } from '@/lib/brand';
 
 // Atlas Circular brand type: Playfair Display is the display/masthead face (`--font-serif` — the token
 // name is kept so the many existing masthead call sites don't have to change), Roboto is the body/UI
@@ -16,11 +17,14 @@ const robotoMono = Roboto_Mono({ subsets: ['latin'], weight: ['400', '500', '700
 
 const SITE_URL = 'https://www.atlascircular.com';
 const TITLE = 'Atlas Circular — Circular Economy Legislation Tracker';
+// The brand tagline is metadata + footer copy now (it was set too small to read under the nav
+// wordmark), so it leads the description that search and share cards show.
 const DESCRIPTION =
-  'Track sustainability and circular-economy law across the globe — bills, deadlines, and analysis, by jurisdiction.';
+  `${SITE_TAGLINE} — track sustainability and circular-economy law across the globe: bills, deadlines, and analysis, by jurisdiction.`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
+  applicationName: SITE_NAME,
   title: TITLE,
   description: DESCRIPTION,
   openGraph: {

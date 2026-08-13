@@ -22,9 +22,9 @@ export function ScopeBar() {
   if (!ready) return null;
 
   // No active scope (never personalized, or skipped): a quiet, persistent invitation, and the entry
-  // point on every page where the modal no longer auto-opens. The home page is the exception — its
-  // ScopedDeadlineBanner carries the single "personalize" CTA (with deadline urgency baked in), so we
-  // suppress this redundant strip there rather than show two buttons opening the same modal.
+  // point on every page where the modal no longer auto-opens. The home page is the exception — it
+  // carries its own "Set your regional & material scope" button on the filter row, so we suppress
+  // this redundant strip there rather than show two controls opening the same modal.
   if (isEmptyScope(scope)) {
     if (pathname === '/') return null;
     return (

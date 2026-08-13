@@ -22,6 +22,9 @@ const NON_EU_LABELS: Record<string, string> = {
   BR: 'Brazil',
   CH: 'Switzerland',
   NO: 'Norway',
+  // Kept though neither is in REGION_CODES yet (no adapter ingests them). This map is a lookup for
+  // whatever code turns up in data, not a claim about coverage — so if a KR/ZA row ever lands it
+  // renders as "South Korea" rather than a bare code, before anyone updates the filter list.
   KR: 'South Korea',
   ZA: 'South Africa',
   KE: 'Kenya',
@@ -52,8 +55,12 @@ const ANCHORS = ['US', 'EU'];
 const REST = [
   'UK', 'FR', 'DE', 'IT', 'JP', 'PL', 'SE', 'NL', 'ES', 'FI', 'IE', 'DK',
   'CL', 'CH', 'SI', 'BR', 'AT', 'LU', 'LV', 'SK', 'LT', 'CZ', 'EE',
-  'CN', 'CA', 'AU', 'IN', 'KR', 'ZA', 'KE', 'NO', 'MX',
+  'CN', 'CA', 'AU', 'IN', 'KE', 'NO', 'MX',
   'TR', 'CO', 'PE', 'UY', 'RW',
+  // KR and ZA are deliberately absent: no adapter ingests them yet, so they returned an empty
+  // result — which reads as a broken filter rather than as "not covered". They also leaked into the
+  // homepage Dataset markup's spatialCoverage, asserting coverage of two countries we track nothing
+  // in. Their labels stay in NON_EU_LABELS below; add the code back here the day data lands.
 ].sort((a, b) => regionLabel(a).localeCompare(regionLabel(b)));
 export const REGION_CODES = [...ANCHORS, ...REST];
 

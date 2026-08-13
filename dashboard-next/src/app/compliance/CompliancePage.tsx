@@ -10,9 +10,9 @@ import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { UpcomingDeadlinesLock } from '@/components/compliance/UpcomingDeadlinesLock';
 import { DeadlinesTabs } from '@/components/compliance/DeadlinesTabs';
 import { ComplianceChecker } from '@/components/compliance/ComplianceChecker';
-import { RegionFilter } from '@/components/insights/RegionFilter';
+import { RegionFilter, regionLabel } from '@/components/insights/RegionFilter';
 import { LockIcon } from '@/components/ui/icons';
-import { deadlineInScope } from '@/lib/scope';
+import { deadlineInScope, scopeJurisdictionCodes } from '@/lib/scope';
 import { formatMaterial } from '@/components/scope/ScopeOnboarding';
 import { formatDate, daysUntil, downloadCsv, STATE_NAMES } from '@/lib/utils';
 import type { DeadlineSummary } from '@/lib/types';
@@ -74,7 +74,11 @@ export default function CompliancePage() {
   // The list is gated server-side: Pro → full merged calendar (spans up to 5y of past dates too),
   // free → the soonest few rows. Pass scope only on the free path so the teaser stays relevant.
   const scopeMaterials = scopeActive && scope.materials.length ? scope.materials.join(',') : undefined;
-  const scopeStates = scopeActive && scope.states.length ? scope.states.join(',') : undefined;
+  // Regions AND states, unioned: a deadline row carries one jurisdiction column holding a US state
+  // code or a region/country code depending on the row, so the server-side `states` filter is the
+  // only place either can be applied. See scopeJurisdictionCodes.
+  const scopeCodes = scopeActive ? scopeJurisdictionCodes(scope) : [];
+  const scopeStates = scopeCodes.length ? scopeCodes.join(',') : undefined;
   // 0 regions selected → span everything ("all"); 1 → that single region; 2+ → the CSV `regions` param.
   const regionParams: { region?: string; regions?: string } =
     selectedRegions.length === 0
@@ -270,6 +274,7 @@ export default function CompliancePage() {
         <p className="text-xs text-text-muted -mt-2">
           Filtered to your scope
           {scope.materials.length > 0 && <> · <span className="text-text-secondary">{scope.materials.map(formatMaterial).join(', ')}</span></>}
+          {scope.regions.length > 0 && <> · <span className="text-text-secondary">{scope.regions.map(regionLabel).join(', ')}</span></>}
           {scope.states.length > 0 && <> · <span className="text-text-secondary">{scope.states.join(', ')}</span></>}
           . Use “Show everything” in the scope bar to see all deadlines.
         </p>

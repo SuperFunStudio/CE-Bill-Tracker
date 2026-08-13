@@ -497,8 +497,23 @@ class AlertSubscription(Base):
     )
     # 'admin_mute' | 'self_unsubscribe' | 'self_prefs' | None
     deactivation_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # When the recipient CONFIRMED the opt-in by clicking the link we emailed them (migration 049).
+    # NULL means nobody at that address has ever agreed to receive mail, so the row is created
+    # inactive and every send path skips it — see confirm_subscription in app/api/alerts.py. Public
+    # filter-scope sign-ups with an email are the only rows that need this; a watchlist row belongs
+    # to an authenticated account and a Slack-webhook row has no address, so both are stamped at
+    # creation. Combined with the two columns above it also says WHICH inactive state a row is in:
+    # NULL here = never confirmed, set here = confirmed once and later unsubscribed/muted.
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (Index("idx_alert_sub_uid_scope", "firebase_uid", "scope"),)
+
+    @property
+    def pending_confirmation(self) -> bool:
+        """True while an emailed sign-up is waiting on its confirmation click."""
+        return bool(self.email) and self.confirmed_at is None
 
     def set_active(self, active: bool, source: str | None = None) -> None:
         """Flip `active` and keep the provenance columns honest in one place.

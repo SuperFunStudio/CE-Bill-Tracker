@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useBills } from '@/hooks/useBills';
-import { useFederalActions } from '@/hooks/useFederal';
+import { useFederalSummary } from '@/hooks/useFederal';
 import { useRegion } from '@/components/layout/RegionContext';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { STATE_NAMES } from '@/lib/utils';
@@ -362,7 +362,11 @@ function WorldStandings() {
   // US FEDERAL regulatory activity — agency rulemakings (EPA/GSA/FTC) live in a separate table from
   // bills. They feed the sub-national ACTIVITY score only (movement, not enacted law); the national
   // column ranks purely by enacted law and never counts them.
-  const { data: federal = [] } = useFederalActions({ ce_relevant: true, limit: 500, days_back: 3650 });
+  // The rollup line needs ONE number (how many federal actions there are). The rows behind it are
+  // CAP_FEDERAL now, so read the ungated count rather than pulling 500 gated records to call .length
+  // on them.
+  const { data: federalStats } = useFederalSummary();
+  const federalCount = federalStats?.total ?? 0;
   const [natView, setNatView] = useState<'national' | 'combined'>('national'); // left column: enacted scope
   const [subView, setSubView] = useState<'enacted' | 'activity'>('enacted');   // right column: enacted vs activity
 
@@ -417,11 +421,11 @@ function WorldStandings() {
       enacted: usNat.combinedEnacted,
       motion: usNat.combinedMotion,
       states: states.length,
-      federalActions: federal.length,
+      federalActions: federalCount,
     };
 
     return { states, nations, maxStateRaw, usRollup };
-  }, [bills, federal]);
+  }, [bills, federalCount]);
 
   // National column ranks by enacted law only; "Combined" swaps in the tier-combined figures.
   const isCombined = natView === 'combined';

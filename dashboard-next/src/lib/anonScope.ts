@@ -46,6 +46,10 @@ export function clearAnonId(): void {
 }
 
 export interface AnonScopePayload {
+  /** Region codes ('US', 'EU', 'JP'…). The backend column for these is not built yet, so the field is
+   *  ignored on arrival rather than stored — sending it now means the signal starts landing the moment
+   *  that column exists, instead of needing a coordinated client release. */
+  regions: string[];
   states: string[];
   material_categories: string[];
   configured: boolean;

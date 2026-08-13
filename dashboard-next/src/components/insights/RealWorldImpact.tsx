@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchBillOutcomes } from '@/lib/api';
 import { track } from '@/lib/analytics';
+import { useAuth } from '@/components/auth/AuthContext';
 import type { BillOutcome } from '@/lib/types';
 
 /**
@@ -118,22 +119,26 @@ function OutcomeCard({ outcome }: { outcome: BillOutcome }) {
 export function RealWorldImpact() {
   const [outcomes, setOutcomes] = useState<BillOutcome[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { getToken } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
     // reviewed_only: only human-vetted figures on the public page. Unvetted candidates
     // (reviewed=false, from scripts/propose_bill_outcomes.py) live only in the /admin console.
-    fetchBillOutcomes({ reviewed_only: true })
-      .then((d) => {
-        if (!cancelled) setOutcomes(d);
-      })
-      .catch((e) => {
+    // Token attached: the full documented set is CAP_INSIGHTS_IMPACT. Without it the API returns
+    // only the teaser the free homepage ticker uses, so this table would silently show six rows.
+    (async () => {
+      try {
+        const data = await fetchBillOutcomes({ reviewed_only: true }, await getToken());
+        if (!cancelled) setOutcomes(data);
+      } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load outcomes.');
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [getToken]);
 
   if (error) return <p className="text-sm text-error">{error}</p>;
   if (!outcomes) {

@@ -23,6 +23,7 @@ import type {
   DeadlineSummary,
   DeadlineParams,
   FederalActionSummary,
+  FederalActionStats,
   FederalActionParams,
   LitigationCaseSummary,
   LitigationCaseDetail,
@@ -70,8 +71,19 @@ export interface SubscribePayload {
   material_categories?: string[];
 }
 
-/** Public "get free updates" sign-up — creates an alert subscription. */
-export async function subscribe(payload: SubscribePayload): Promise<void> {
+export interface SubscribeResult {
+  /** True when a confirmation email was sent and the subscription is NOT yet live. */
+  pending_confirmation: boolean;
+}
+
+/** Public "get free updates" sign-up — creates an alert subscription.
+ *
+ * Double opt-in: an emailed sign-up comes back inactive with pending_confirmation=true, and nothing
+ * is sent to the address until the emailed link is clicked. Callers must reflect that — telling
+ * someone they're subscribed when they aren't is how a confirmation email gets ignored. Older API
+ * builds don't return the field; treat its absence as "pending" rather than assuming the optimistic
+ * case, so the copy can never overstate what happened. */
+export async function subscribe(payload: SubscribePayload): Promise<SubscribeResult> {
   const res = await fetch(buildUrl('/subscriptions'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -81,6 +93,8 @@ export async function subscribe(payload: SubscribePayload): Promise<void> {
     const detail = await res.text().catch(() => '');
     throw new Error(`Subscribe failed (${res.status})${detail ? `: ${detail}` : ''}`);
   }
+  const body = await res.json().catch(() => null);
+  return { pending_confirmation: body?.pending_confirmation !== false };
 }
 
 /** Which paid tier a visitor expressed interest in — the willingness-to-pay experiment. */
@@ -343,9 +357,14 @@ export async function fetchBillOutcomes(params?: {
    *  so the global surfaces must pass "all" or they silently show only the US ones. */
   region?: string;
   reviewed_only?: boolean;
-}): Promise<BillOutcome[]> {
+},
+  /** CAP_INSIGHTS_IMPACT token for the FULL documented set. Without one the API returns the newest
+   *  few — which is all the free homepage ticker rotates through anyway. */
+  token?: string | null,
+): Promise<BillOutcome[]> {
   return apiFetch<BillOutcome[]>(
     buildUrl('/bills/outcomes', params as Record<string, string | number | boolean | undefined>),
+    token,
   );
 }
 
@@ -365,16 +384,30 @@ export async function fetchDeadlineStats(params?: DeadlineParams): Promise<Deadl
   );
 }
 
-export async function fetchFederalActions(params?: FederalActionParams): Promise<FederalActionSummary[]> {
-  return apiFetch<FederalActionSummary[]>(buildUrl('/federal-actions', params as Record<string, string | number | boolean | undefined>));
+/** Federal action rows. CAP_FEDERAL server-side: pass a token for the full list, otherwise the API
+ *  returns a short teaser. Counts for free surfaces come from fetchFederalSummary instead. */
+export async function fetchFederalActions(
+  params?: FederalActionParams,
+  token?: string | null,
+): Promise<FederalActionSummary[]> {
+  return apiFetch<FederalActionSummary[]>(
+    buildUrl('/federal-actions', params as Record<string, string | number | boolean | undefined>),
+    token,
+  );
+}
+
+/** Ungated federal counts — total and how many carry High preemption risk. */
+export async function fetchFederalSummary(): Promise<FederalActionStats> {
+  return apiFetch<FederalActionStats>(buildUrl('/federal-actions/summary'));
 }
 
 export async function fetchPreemptionRisk(): Promise<Record<string, unknown>> {
   return apiFetch<Record<string, unknown>>(buildUrl('/federal-actions/preemption-risk'));
 }
 
-export async function fetchLitigationCases(): Promise<LitigationCaseSummary[]> {
-  return apiFetch<LitigationCaseSummary[]>(buildUrl('/litigation-cases'));
+/** The bulk litigation feed — CAP_FEDERAL, 403 without a qualifying token. */
+export async function fetchLitigationCases(token?: string | null): Promise<LitigationCaseSummary[]> {
+  return apiFetch<LitigationCaseSummary[]>(buildUrl('/litigation-cases'), token);
 }
 
 export async function fetchLitigationCase(id: number): Promise<LitigationCaseDetail> {

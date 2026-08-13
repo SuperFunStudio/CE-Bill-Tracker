@@ -490,6 +490,12 @@ export interface BillOutcome {
   remediated_by_bill_id: number | null;
 }
 
+/** Ungated counts from /federal-actions/summary — the free surfaces' replacement for pulling rows. */
+export interface FederalActionStats {
+  total: number;
+  high_preemption: number;
+}
+
 export interface FederalActionSummary {
   id: number;
   agency: string | null;

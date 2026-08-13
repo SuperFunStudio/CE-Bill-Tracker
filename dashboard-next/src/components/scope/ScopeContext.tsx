@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { Scope, EMPTY_SCOPE, isEmptyScope, loadScope, saveScope, clearScope } from '@/lib/scope';
+import { Scope, EMPTY_SCOPE, isEmptyScope, loadScope, saveScope, clearScope, normalizeScope } from '@/lib/scope';
 import { useAuth } from '@/components/auth/AuthContext';
 import { fetchSettings, patchSettings } from '@/lib/userSettings';
 import { clearAnonId, postAnonScope } from '@/lib/anonScope';
@@ -69,6 +69,7 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     async (next: { scope: Scope; isConfigured: boolean; scoped: boolean }) => {
       if (!user) {
         await postAnonScope({
+          regions: next.scope.regions,
           states: next.scope.states,
           material_categories: next.scope.materials,
           configured: next.isConfigured,
@@ -98,18 +99,24 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const prefs = await fetchSettings(await getToken());
       if (cancelled) return;
-      const backendScope = prefs.scope as Scope | undefined;
+      const backendScope = prefs.scope as Partial<Scope> | undefined;
       if (
         backendScope &&
         Array.isArray(backendScope.states) &&
         Array.isArray(backendScope.materials)
       ) {
-        setScope(backendScope);
+        // `regions` post-dates the stored blob, so an account saved before it is adopted as
+        // region-less rather than rejected — normalizeScope then reads a states-only scope as US-only,
+        // exactly as the localStorage path does. Signing in must not silently widen someone's scope.
+        const adopted = normalizeScope({
+          regions: Array.isArray(backendScope.regions) ? backendScope.regions : [],
+          states: backendScope.states,
+          materials: backendScope.materials,
+        });
+        setScope(adopted);
         setIsConfigured(Boolean(prefs.scopeConfigured));
-        setScoped(
-          prefs.scoped === undefined ? !isEmptyScope(backendScope) : Boolean(prefs.scoped),
-        );
-        saveScope(backendScope);
+        setScoped(prefs.scoped === undefined ? !isEmptyScope(adopted) : Boolean(prefs.scoped));
+        saveScope(adopted);
       } else if (isConfigured) {
         persist({ scope, isConfigured, scoped });
       }
@@ -122,7 +129,10 @@ export function ScopeProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const saveAndClose = useCallback(
-    (s: Scope) => {
+    (raw: Scope) => {
+      // Normalize on the way in, so the stored scope and the live one can never disagree about
+      // whether a states-only selection implies the US.
+      const s = normalizeScope(raw);
       saveScope(s);
       setScope(s);
       setIsConfigured(true);

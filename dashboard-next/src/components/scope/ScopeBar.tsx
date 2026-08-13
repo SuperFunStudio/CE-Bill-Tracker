@@ -2,6 +2,7 @@
 import { usePathname } from 'next/navigation';
 import { STATE_NAMES } from '@/lib/utils';
 import { isEmptyScope } from '@/lib/scope';
+import { regionLabel } from '@/components/insights/RegionFilter';
 import { useScope } from './ScopeContext';
 import { formatMaterial } from './ScopeOnboarding';
 
@@ -30,7 +31,7 @@ export function ScopeBar() {
     return (
       <div className="border-b border-border-default bg-bg-secondary/60">
         <div className="max-w-6xl mx-auto px-4 py-1.5 text-center text-xs text-text-muted">
-          Showing every state, material &amp; product.{' '}
+          Showing every region, material &amp; product.{' '}
           <button onClick={openEditor} className="text-green-accent hover:underline">
             Personalize your feed →
           </button>
@@ -39,8 +40,13 @@ export function ScopeBar() {
     );
   }
 
-  const states = summarize(scope.states, a => STATE_NAMES[a] ?? a, 'all states');
+  const regions = summarize(scope.regions, regionLabel, 'every region');
   const materials = summarize(scope.materials, formatMaterial, 'all materials & products');
+  // The state line only earns its place when states are actually selected: with regions in the strip,
+  // "United States · all states" is the same fact twice.
+  const states = scope.states.length
+    ? summarize(scope.states, a => STATE_NAMES[a] ?? a, '')
+    : '';
 
   return (
     <div className="border-b border-border-default bg-bg-secondary/60">
@@ -49,7 +55,13 @@ export function ScopeBar() {
           {scoped ? 'Showing your scope:' : 'Your scope:'}{' '}
           <span className="text-text-primary font-medium">{materials}</span>
           <span className="text-text-muted"> · </span>
-          <span className="text-text-primary font-medium">{states}</span>
+          <span className="text-text-primary font-medium">{regions}</span>
+          {states && (
+            <>
+              <span className="text-text-muted"> · </span>
+              <span className="text-text-primary font-medium">{states}</span>
+            </>
+          )}
         </span>
         <span className="flex items-center gap-2">
           <button onClick={openEditor} className="text-green-accent hover:underline">

@@ -472,7 +472,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
         <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
           <RegionFilter selected={regions} onChange={setRegions} />
           {showState && (
-            <div className="min-w-[9rem]">
+            <div className="min-w-[9rem] max-w-[11rem]">
               <Select
                 label="State"
                 value={filters.state}
@@ -506,11 +506,14 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
           )}
         </div>
 
-        {/* Secondary controls — revealed on demand. Three columns max: on desktop this panel lives in
-            the compact left rail beside the globe, where 4-5 columns squeeze the longer labels
-            ("Materials & Products") to nothing. */}
+        {/* Secondary controls. Tracks are CAPPED at 11rem rather than sharing the row equally: these
+            are short underline selects ("All Statuses", "Any"), and a control stretched to half a
+            phone screen reads as a text field waiting for input rather than a dropdown. auto-fill
+            packs as many capped tracks as fit — two on a phone, three in the desktop left rail beside
+            the globe — so the same rule handles both without a breakpoint. The 9rem floor keeps
+            "Materials & Products" from wrapping to three lines on the narrowest phones. */}
         {showMore && (
-          <div className="grid grid-cols-2 gap-3 pt-1 md:grid-cols-3">
+          <div className="grid gap-x-4 gap-y-3 pt-1 [grid-template-columns:repeat(auto-fill,minmax(9rem,11rem))]">
             {secondaryFields}
           </div>
         )}

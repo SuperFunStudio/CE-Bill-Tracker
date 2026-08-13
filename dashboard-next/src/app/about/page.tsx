@@ -2,13 +2,20 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
+// The same jurisdiction count /pricing shows. This page is static prose and can't read the live
+// corpus the way the pricing ledger does, so it shares pricing's fallback constant instead of
+// carrying its own number — the last thing this page needs is a third figure to keep in sync.
+import { REGION_COUNT_FALLBACK } from '@/lib/tiers';
 
 export const metadata: Metadata = {
   title: 'About — Atlas Circular',
   description:
-    'Atlas Circular tracks circularity-aligned legislation across all 50 states — Extended ' +
-    'Producer Responsibility, right-to-repair, deposit-return, recycled-content, and labeling — so ' +
-    'producers and advocates can see where policy and market opportunity are building.',
+    `Atlas Circular tracks circularity-aligned legislation across ${REGION_COUNT_FALLBACK} ` +
+    'jurisdictions — all 50 US ' +
+    'states, the EU, and national law worldwide. Extended Producer Responsibility, right-to-repair, ' +
+    'deposit-return, recycled-content, and labeling, so producers and advocates can see where ' +
+    'policy and market opportunity are building.',
+  alternates: { canonical: '/about/' },
 };
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -29,10 +36,12 @@ export default function AboutPage() {
       <section>
         <SectionTitle>Why this exists</SectionTitle>
         <p className="text-text-secondary leading-relaxed">
-          Atlas Circular tracks circularity-aligned legislation across all 50 states. By
-          following Extended Producer Responsibility, right-to-repair, deposit-return,
-          recycled-content, labeling, and related laws in one place, it makes visible where the
-          policy momentum — and the market opportunity for a{' '}
+          Atlas Circular tracks circularity-aligned legislation across {REGION_COUNT_FALLBACK}{' '}
+          jurisdictions — all 50 US
+          states and US federal action, the EU and its member states, and national law from Japan and
+          India to Kenya, Chile and Australia. By following Extended Producer Responsibility,
+          right-to-repair, deposit-return, recycled-content, labeling, and related laws in one place,
+          it makes visible where the policy momentum — and the market opportunity for a{' '}
           <span className="text-text-primary font-medium">circular economy</span> — is building, and
           turns a firehose of legislative activity into the handful of bills and deadlines that
           actually affect you.
@@ -75,8 +84,10 @@ export default function AboutPage() {
       <section className="border-t border-border-default pt-8">
         <SectionTitle>Plans</SectionTitle>
         <p className="text-text-secondary leading-relaxed mb-4">
-          The bill explorer, map, deadline dashboard, and email alerts are free, and they stay free.
-          Paid plans — personal watch lists, portfolio-scoped exposure, team features, and API
+          The bill explorer and the jurisdiction data behind it are free, and they stay free — every
+          measure, its status, and a link to its source document, without an account. Students
+          researching on a verified .edu address get the research surface free too. Paid plans — the
+          deadline calendar, watch lists and alerts, the full Design Guide, exposure work and API
           access — are how the project stays independent and keeps improving.
         </p>
         <Link

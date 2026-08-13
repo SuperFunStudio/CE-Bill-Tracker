@@ -71,6 +71,13 @@ async def admin_stats(
     )
     active_subs = (await db.execute(sub_q.where(AlertSubscription.active.is_(True)))).scalar() or 0
     total_subs = (await db.execute(sub_q)).scalar() or 0
+    # Sign-ups that asked but never clicked the confirmation link (migration 049). Counted separately
+    # because they are neither subscribers nor churn: lumping them into `total` would inflate the list
+    # with addresses we are not allowed to mail, and a sudden burst of them is the signal that someone
+    # is pointing the sign-up form at an inbox that isn't theirs.
+    pending_subs = (
+        await db.execute(sub_q.where(AlertSubscription.confirmed_at.is_(None)))
+    ).scalar() or 0
 
     # Live Pro seats, split into paid vs complimentary. A comp seat past its expiry no longer counts.
     live = (Entitlement.plan == "pro", Entitlement.status.in_(("active", "trialing")))
@@ -121,6 +128,7 @@ async def admin_stats(
     return {
         "subscribers_active": active_subs,
         "subscribers_total": total_subs,
+        "subscribers_pending_confirmation": pending_subs,
         "pro_total": pro_total,
         "pro_paid": pro_total - comp_total,
         "pro_comp": comp_total,
@@ -180,6 +188,11 @@ async def list_subscribers(
                 # it predates the migration — the UI must show that as "unknown", never guess.
                 "deactivated_at": s.deactivated_at.isoformat() if s.deactivated_at else None,
                 "deactivation_source": s.deactivation_source,
+                # ...unless it's inactive because it was never confirmed (migration 049), which is a
+                # third state entirely. Without this the console would read every waiting sign-up as
+                # an inactive row of unknown provenance — i.e. as churn.
+                "confirmed_at": s.confirmed_at.isoformat() if s.confirmed_at else None,
+                "pending_confirmation": s.pending_confirmation,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
             }
             for s in rows

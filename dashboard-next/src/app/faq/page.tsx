@@ -1,12 +1,23 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
+import { PRO, RESEARCH, REGION_COUNT_FALLBACK, STUDENT } from '@/lib/tiers';
 
+/**
+ * Prices and tier names below are READ FROM lib/tiers.ts, never typed in. They were typed in once,
+ * and the page drifted into describing a product that no longer existed: a free/Pro binary at
+ * $400/month with no Student or Researcher tier, Federal Actions listed as free while the pricing
+ * page sold it under Professional. The buyer this product courts — the one the methodology page is
+ * written for — reads both pages and prices the contradiction into their trust. One source of truth
+ * is the only fix that stays fixed. The capability claims mirror PLAN_CAPS in app/api/auth.py.
+ */
 export const metadata: Metadata = {
   title: 'FAQ — Atlas Circular',
   description:
-    'Frequently asked questions about Atlas Circular: what it tracks, where the data comes ' +
-    'from, how the AI classification works, what is free vs. Pro, pricing, alerts, and the API.',
+    `Frequently asked questions about Atlas Circular: what it tracks across ${REGION_COUNT_FALLBACK} ` +
+    'jurisdictions, where the data comes from, how the AI classification works, the Student, ' +
+    'Researcher and Professional plans, alerts, and the API.',
+  alternates: { canonical: '/faq/' },
 };
 
 interface QA {
@@ -27,8 +38,10 @@ const GROUPS: Group[] = [
         q: 'What is Atlas Circular?',
         a: (
           <>
-            Atlas Circular tracks circularity-aligned legislation across all 50 states and at
-            the federal level — Extended Producer Responsibility (EPR), right-to-repair,
+            Atlas Circular tracks circularity-aligned legislation across {REGION_COUNT_FALLBACK}{' '}
+            jurisdictions — all 50 US states, the EU and its member states, and national law from
+            Japan to Kenya to Chile,
+            plus US federal action — Extended Producer Responsibility (EPR), right-to-repair,
             deposit-return, recycled-content, labeling, disposal bans, and related laws — in one
             place. It turns a firehose of legislative activity into the handful of bills, deadlines,
             and obligations that actually affect you.
@@ -41,8 +54,9 @@ const GROUPS: Group[] = [
           <>
             Producers and the teams responsible for staying compliant as EPR spreads — plus
             advocates, nonprofits, researchers, journalists, and students who need to see the
-            landscape. The free tier is built for the latter; the Pro tier is built for regulatory,
-            sustainability, and product teams who need every deadline and obligation.
+            landscape. The {STUDENT.label} and {RESEARCH.label} tiers are built for the latter;{' '}
+            {PRO.label} is built for regulatory, sustainability, and product teams who need every
+            deadline and obligation.
           </>
         ),
       },
@@ -139,14 +153,18 @@ const GROUPS: Group[] = [
     title: 'Plans & billing',
     items: [
       {
-        q: 'What is free, and what needs Pro?',
+        q: 'What are the plans?',
         a: (
           <>
-            Free includes the full Bill Explorer and map across all 50 states, state snapshots, the
-            Federal Actions tracker, the headline Design Guide imperatives, a personalized feed, and
-            a limited alerts filter. Pro adds every extracted obligation date, the full timeline and
-            deadline dashboard, personal and shared watch lists, alerts across every instrument with
-            custom filters, the complete Design Guide, and CSV export.{' '}
+            Four. <strong>Free</strong> is the Bill Explorer and jurisdiction data — browse the whole
+            corpus, no account needed. <strong>{STUDENT.label}</strong> is free on a verified .edu or
+            .ac.uk address and adds Ask the Atlas and the Design Guide.{' '}
+            <strong>{RESEARCH.label}</strong> ({RESEARCH.monthly.price}
+            {RESEARCH.monthly.cadence}, or {RESEARCH.annual.price}
+            {RESEARCH.annual.cadence}) adds the impact and bills-over-time analysis for published
+            work. <strong>{PRO.label}</strong> adds the deadline calendar, watch lists and alerts,
+            the Packaging Studio, and Federal Actions. Enterprise is scoped and invoiced per
+            engagement.{' '}
             <Link href="/pricing" className="text-green-accent hover:underline">
               Compare plans →
             </Link>
@@ -154,12 +172,29 @@ const GROUPS: Group[] = [
         ),
       },
       {
-        q: 'How much does Pro cost?',
+        q: 'What do I get without paying?',
         a: (
           <>
-            Pro is $400/month, or $3,600/year (billed annually — $300/mo, three months free).
-            Founding members who join during early access lock in 50% off for life and get a 90-day
-            free trial. Cancel anytime.
+            The Bill Explorer and the jurisdiction data behind it — every measure we track, its
+            status, and a link to the source document, across every jurisdiction. Deadlines, alerts,
+            watch lists, the full Design Guide, the Packaging Studio and Federal Actions sit on the
+            paid tiers; students get most of the research surface free. We&apos;d rather say that
+            plainly than describe a free tier that quietly shrinks.
+          </>
+        ),
+      },
+      {
+        q: `How much does ${PRO.label} cost?`,
+        a: (
+          <>
+            {PRO.monthly.price}
+            {PRO.monthly.cadence} or {PRO.annual.price}
+            {PRO.annual.cadence} for the first seat, at the founding rate — half the list price of{' '}
+            {PRO.monthly.was}
+            {PRO.monthly.cadence} / {PRO.annual.was}
+            {PRO.annual.cadence}. Additional seats are {PRO.extraSeat.monthly} (
+            {PRO.extraSeat.annual} billed annually). The founding rate is capped at 50 seats and
+            stays with your seat for as long as you keep it. Cancel anytime.
           </>
         ),
       },
@@ -167,9 +202,9 @@ const GROUPS: Group[] = [
         q: 'Is there a free trial?',
         a: (
           <>
-            Yes — Pro starts with a 90-day free trial, no charge until it ends, cancel anytime. New
-            accounts also get a short self-serve trial on signup, and you can extend access by
-            referring others.
+            Yes, and no card is needed to start: a new account gets a 7-day {PRO.label} trial
+            immediately. Taking a founding seat at checkout adds a 90-day trial on top, billed only
+            when it ends. You can extend access further by referring others.
           </>
         ),
       },
@@ -179,7 +214,7 @@ const GROUPS: Group[] = [
           <>
             From <Link href="/account" className="text-green-accent hover:underline">your account</Link>,
             open <em>Manage plan</em> to reach the billing portal, where you can update payment
-            details or cancel. Cancellation stops future renewals; you keep Pro access through the end
+            details or cancel. Cancellation stops future renewals; you keep your plan through the end
             of the period you have paid for.
           </>
         ),
@@ -193,10 +228,12 @@ const GROUPS: Group[] = [
         q: 'What are watch lists and alerts?',
         a: (
           <>
-            Watch lists (Pro) let you and your team follow specific bills and get notified when their
-            status or deadlines change. Alerts email you about new and changing legislation; free
-            accounts get a limited filter, Pro gets alerts across every instrument with custom
-            filters. You can unsubscribe from any email at any time.
+            Watch lists ({PRO.label}) let you and your team follow specific bills and get notified
+            when their status or deadlines change. Alerts email you about new and changing
+            legislation across every instrument, with custom filters — also {PRO.label}. Separately,
+            anyone can subscribe to the free email updates from the sign-up form on any page: pick
+            your jurisdictions, materials and topics, confirm the address, and we&apos;ll email you
+            when matching legislation moves. You can unsubscribe from any email at any time.
           </>
         ),
       },
@@ -206,7 +243,8 @@ const GROUPS: Group[] = [
           <>
             The Design Guide synthesizes what enacted EPR and circularity law actually requires into
             design-for-compliance principles — so product and packaging teams can act on policy, not
-            just read it. Free shows the headline imperatives; Pro unlocks the complete guide.
+            just read it. Signed-out visitors see the headline imperatives; the complete guide opens
+            at {STUDENT.label} and above.
           </>
         ),
       },
@@ -229,8 +267,12 @@ const GROUPS: Group[] = [
         a: (
           <>
             Yes — the circularity-legislation dataset (bills, statuses, deadlines, and
-            classifications across all 50 states) is available via API, with a rate-limited free
-            developer tier and usage-based paid plans. Request access from the{' '}
+            classifications across every jurisdiction we track) is available via API, with a
+            rate-limited free developer tier and usage-based paid plans. See the{' '}
+            <Link href="/developers" className="text-green-accent hover:underline">
+              developer docs
+            </Link>
+            , or request access from the{' '}
             <Link href="/pricing" className="text-green-accent hover:underline">
               pricing page
             </Link>
@@ -247,9 +289,10 @@ const GROUPS: Group[] = [
         q: 'Do I need an account?',
         a: (
           <>
-            You can browse the free Bill Explorer and map without one. A free account unlocks a
-            personalized feed and alerts; a Pro subscription unlocks the full deadline dashboard,
-            watch lists, and export. Sign-in is by email or Google.
+            You can browse the Bill Explorer and map without one, and subscribe to the free email
+            updates without one. An account is what carries a plan: {STUDENT.label} for the research
+            surface, {PRO.label} for the deadline calendar, watch lists, alerts and export. Sign-in
+            is by email or Google.
           </>
         ),
       },

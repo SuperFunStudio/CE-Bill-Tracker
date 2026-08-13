@@ -19,6 +19,7 @@ import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
 import { BillFlowSankey } from '@/components/insights/BillFlowSankey';
 import { useRegion } from '@/components/layout/RegionContext';
 import { useAuth } from '@/components/auth/AuthContext';
+import { LockIcon } from '@/components/ui/icons';
 import Link from 'next/link';
 import { fetchBillTimeline } from '@/lib/api';
 import { formatInstrumentType } from '@/lib/utils';
@@ -128,37 +129,105 @@ export default function InsightsPage() {
     return { enacted, peak, firstYear: Number.isFinite(firstYear) ? firstYear : null };
   }, [points]);
 
-  // Insights is a Pro membership feature — non-members get the same sign-up-or-purchase gate as
-  // Federal Actions / Packaging Studio (see federal/page.tsx). Kept after the hooks above so the
-  // rules-of-hooks order is stable; the timeline fetch is a public snapshot, so it's harmless.
+  // Insights is a Pro membership feature, but a locked door sells nothing — a visitor who can't see
+  // any of it has no way to judge whether it's worth paying for. So non-members get one real chart
+  // rather than a wall: the enacted-laws-over-time view, with the headline figures above it.
+  //
+  // The teaser is built from data that is ALREADY PUBLIC (/bills/timeline — the same aggregate the
+  // pricing ledger sums), not from a softened version of the gated routes. That distinction is what
+  // lets the server gate stay absolute: /insights/* still 403s, and nothing here asks it to bend.
+  // Kept after the hooks above so the rules-of-hooks order is stable.
   if (!isPro && !isAdmin) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-10">
+      <div className="mx-auto max-w-4xl px-6 py-10 space-y-6">
         <GazetteHeader
           title="Insights"
           subtitle="Field notes on the circular-economy policy landscape — for the people writing it."
         />
-        <div className="surface-card p-6 mt-6 space-y-3 text-center">
-          <h2 className="font-serif text-xl text-text-primary">A Pro membership feature</h2>
-          <p className="text-text-secondary max-w-xl mx-auto">
-            The Insights briefing room — global coverage maps, policy momentum and stance charts,
-            state scorecards, and documented real-world outcomes — is included with a Pro membership.
-          </p>
-          <div className="flex justify-center gap-2 pt-1">
+
+        <section className="space-y-4">
+          <div>
+            <p className="text-[rgb(var(--green-accent))] text-xs font-semibold uppercase tracking-wider">
+              Free preview
+            </p>
+            <h2 className="font-serif text-xl text-text-primary">
+              Twenty years of circular-economy law, in one line
+            </h2>
+            <p className="text-text-secondary text-body leading-relaxed mt-1">
+              Every measure the Atlas tracks, by the year it moved. This is one chart of the briefing
+              room — the rest is below.
+            </p>
+          </div>
+
+          {stats && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <Stat
+                value={stats.enacted.toLocaleString()}
+                label="Circular-economy laws enacted to date"
+              />
+              {stats.peak.year > 0 && (
+                <Stat
+                  value={stats.peak.count.toLocaleString()}
+                  label={`Bills introduced in ${stats.peak.year} (peak year)`}
+                />
+              )}
+              {stats.firstYear && <Stat value={`${stats.firstYear}`} label="Earliest law tracked" />}
+            </div>
+          )}
+
+          {error ? (
+            <p className="text-sm text-error">{error}</p>
+          ) : !points ? (
+            <div className="h-[360px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
+          ) : (
+            <BillTimelineChart points={points} />
+          )}
+        </section>
+
+        {/* What's behind the gate, named specifically. "Global coverage maps, momentum charts,
+            scorecards" is a list of nouns; saying what each one answers is what makes the price
+            legible to someone deciding. */}
+        <section className="surface-card p-6 space-y-4">
+          <div>
+            <h2 className="font-serif text-xl text-text-primary">The rest of the briefing room</h2>
+            <p className="text-text-secondary text-body mt-1">Included with a Pro membership.</p>
+          </div>
+          <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2 text-body text-text-secondary">
+            {[
+              ['World coverage', 'which jurisdictions have laws in force, and on what'],
+              ['Momentum', 'whether bills are strengthening obligations or rolling them back'],
+              ['Instrument × material', 'which policy tools are aimed at which materials'],
+              ['State gaps & cycles', 'who is behind their peers, and when their session opens'],
+              ['Champions', 'the legislators who keep carrying these bills'],
+              ['Real-world impact', 'documented outcomes of enacted laws, with citations'],
+            ].map(([title, desc]) => (
+              <li key={title} className="flex gap-2">
+                <LockIcon className="text-xs mt-1 shrink-0 text-text-muted" />
+                <span>
+                  <span className="text-text-primary font-medium">{title}</span> — {desc}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2 pt-1">
             {!user && (
               <button
                 type="button"
-                onClick={openAuth}
+                onClick={() => { track('cta_click', { entry_source: 'insights_teaser_signin' }); openAuth(); }}
                 className="rounded-full border border-border-default px-5 py-2 text-sm text-text-secondary hover:text-text-primary"
               >
                 Sign in
               </button>
             )}
-            <Link href="/pricing" className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary hover:opacity-90">
+            <Link
+              href="/pricing"
+              onClick={() => track('cta_click', { entry_source: 'insights_teaser_pricing' })}
+              className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary hover:opacity-90"
+            >
               See memberships
             </Link>
           </div>
-        </div>
+        </section>
       </div>
     );
   }

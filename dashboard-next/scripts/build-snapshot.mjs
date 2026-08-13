@@ -28,8 +28,11 @@ const ENDPOINTS = [
   // deliberately do NOT snapshot /bills/deadlines/upcoming (an unauthenticated build would only get
   // the public 5-row teaser anyway, and the CDN must not serve the paid calendar). See C-1.
   { name: 'deadlines-summary', path: '/bills/deadlines/summary?days_ahead=1095' },
-  { name: 'federal-actions', path: '/federal-actions?limit=100' },
-  { name: 'litigation-cases', path: '/litigation-cases' },
+  // Federal actions and litigation are CAP_FEDERAL. They used to be baked here in full, which quietly
+  // made /data/federal-actions.json a public copy of the paid dataset — the frontend lock on /federal
+  // was guarding a door next to an open window. Only the ungated counts are snapshotted now, exactly
+  // as with deadlines above. The litigation feed has no free surface, so it isn't snapshotted at all.
+  { name: 'federal-summary', path: '/federal-actions/summary' },
   { name: 'companies', path: '/companies?limit=200' },
 ];
 

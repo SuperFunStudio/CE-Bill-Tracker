@@ -30,6 +30,8 @@ async function authedFetch<T>(
 export interface AdminStats {
   subscribers_active: number;
   subscribers_total: number;
+  /** Signed up but never clicked the confirmation link — not subscribers, and not churn either. */
+  subscribers_pending_confirmation: number;
   pro_total: number;
   pro_paid: number;
   pro_comp: number;
@@ -61,6 +63,14 @@ export interface Subscriber {
    * "unknown", never fold it into either bucket.
    */
   deactivation_source: 'admin_mute' | 'self_unsubscribe' | 'self_prefs' | null;
+  /** When they clicked the double opt-in link (migration 049). Null = never confirmed. */
+  confirmed_at: string | null;
+  /**
+   * Inactive because nobody has yet proven they own this address — a THIRD state, distinct from both
+   * "unsubscribed" and the pre-048 unknown. Check it before deactivation_source when labelling a row,
+   * or every waiting sign-up reads as churn.
+   */
+  pending_confirmation: boolean;
   created_at: string | null;
 }
 

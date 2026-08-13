@@ -53,7 +53,10 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
       ALL_REGION_CODES.map(code => [code, { included: code === 'US', all: true, codes: [] }]),
     ),
   );
-  const [status, setStatus] = useState<'idle' | 'submitting' | 'done' | 'error'>('idle');
+  // 'pending' is the normal end state for an emailed sign-up: the row exists but is inactive until
+  // the confirmation link is clicked. 'done' is reserved for the (currently Slack-only) case where
+  // there's no address to confirm.
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'pending' | 'done' | 'error'>('idle');
   const [error, setError] = useState('');
 
   // Prefill jurisdictions + materials from the reader's saved personalization scope (US states), so
@@ -71,9 +74,27 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
       setPrefilled(true);
       return;
     }
-    if (ready && (scope.states.length > 0 || scope.materials.length > 0)) {
-      if (scope.states.length > 0) {
-        setRegionSel(prev => ({ ...prev, US: { included: true, all: false, codes: scope.states } }));
+    if (ready && (scope.regions.length > 0 || scope.states.length > 0 || scope.materials.length > 0)) {
+      // Every region the reader follows, not just the US. A scope of "Japan" used to prefill nothing
+      // here, so the one reader who had already told us exactly what they cared about got the blank
+      // form. US is special only in carrying sub-codes: its states narrow it, every other region is
+      // followed whole.
+      if (scope.regions.length > 0 || scope.states.length > 0) {
+        setRegionSel(prev => {
+          // Rebuild rather than patch: the default has US included, so patching in a scope of "Japan"
+          // would silently subscribe them to the US as well. A stated scope replaces the default.
+          const next: Record<string, RegionSel> = Object.fromEntries(
+            Object.keys(prev).map(code => [code, { included: false, all: true, codes: [] }]),
+          );
+          for (const r of scope.regions) {
+            if (!next[r]) continue;   // a region the subscribe form doesn't offer — skip, don't crash
+            next[r] = { included: true, all: true, codes: [] };
+          }
+          if (scope.states.length > 0) {
+            next.US = { included: true, all: false, codes: scope.states };
+          }
+          return next;
+        });
       }
       if (scope.materials.length > 0) setMaterials(scope.materials);
       setPrefilled(true);
@@ -124,7 +145,7 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
     setError('');
     try {
       const region_scope = buildRegionScope();
-      await subscribe({
+      const result = await subscribe({
         email: email.trim(),
         organization: organization.trim() || undefined,
         // Empty region_scope means "every region" — friendliest default for a free digest.
@@ -137,12 +158,41 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
         materials_count: materials.length,
         regions_count: Object.keys(region_scope).length,
         has_organization: organization.trim().length > 0,
+        // The funnel now has two steps, and only the second one produces a subscriber. Reporting
+        // both under one event would make the confirmation drop-off invisible.
+        pending_confirmation: result.pending_confirmation,
       });
-      setStatus('done');
+      setStatus(result.pending_confirmation ? 'pending' : 'done');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
       setStatus('error');
     }
+  }
+
+  // Double opt-in: the sign-up is NOT live yet, so the copy asks for the second step rather than
+  // congratulating them on a subscription they don't have. Naming the address is load-bearing here —
+  // a typo is the most common reason the confirmation never arrives.
+  if (status === 'pending') {
+    return (
+      <div className="border border-green-accent/40 bg-green-dark/30 rounded-lg p-6 text-center space-y-2">
+        <p className="font-serif text-text-primary text-lg">Check your inbox to confirm.</p>
+        <p className="text-text-secondary text-body">
+          We just emailed <span className="text-text-primary">{email}</span> a confirmation link.
+          Click it and your updates start — until then nothing else is sent.
+        </p>
+        <p className="text-text-muted text-xs">
+          Wrong address, or nothing after a few minutes? Check spam, then{' '}
+          <button
+            type="button"
+            onClick={() => setStatus('idle')}
+            className="underline hover:text-text-secondary"
+          >
+            try again
+          </button>
+          .
+        </p>
+      </div>
+    );
   }
 
   if (status === 'done') {
@@ -280,7 +330,8 @@ export function SubscribeForm({ prefill }: { prefill?: SubscribeFormPrefill } = 
           the privacy policy is. Keeping it at the point of submission — rather than only in the
           emails — is what makes this a documented opt-in rather than an address capture. */}
       <p className="text-text-muted text-xs leading-relaxed">
-        By subscribing you agree to receive email updates about legislation matching your selections.
+        We&apos;ll email you a link to confirm the address — updates only start once you click it.
+        By confirming you agree to receive email updates about legislation matching your selections.
         Every email includes an unsubscribe link and you can leave at any time. See our{' '}
         <a href="/privacy" className="underline hover:text-text-secondary">
           Privacy Policy

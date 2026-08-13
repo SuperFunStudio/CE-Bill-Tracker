@@ -196,7 +196,15 @@ function StatsPanel({ stats, error }: { stats: AdminStats | null; error: string 
   return (
     <Section title="Overview">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <Stat label="Subscribers" value={stats.subscribers_active} sub={`${stats.subscribers_total} all-time`} />
+        <Stat
+          label="Subscribers"
+          value={stats.subscribers_active}
+          sub={
+            stats.subscribers_pending_confirmation
+              ? `${stats.subscribers_total} all-time · ${stats.subscribers_pending_confirmation} unconfirmed`
+              : `${stats.subscribers_total} all-time`
+          }
+        />
         <Stat label="Pro (total)" value={stats.pro_total} sub={`${stats.pro_paid} paid`} />
         <Stat label="Comp Pro" value={stats.pro_comp} sub="complimentary" />
         <Stat label="Leads" value={stats.access_requests} sub="access requests" />
@@ -608,6 +616,12 @@ function SubscribersPanel({ getToken, reloadKey }: { getToken: GetToken; reloadK
                 <Td>
                   {s.active ? (
                     <Pill tone="green">Active</Pill>
+                  ) : s.pending_confirmation ? (
+                    // Checked FIRST: an unconfirmed row is inactive with no deactivation source, so
+                    // it would otherwise fall through to "Inactive (unknown)" and read as churn.
+                    <Pill tone="amber" title={`Signed up ${fmtDate(s.created_at)}, never confirmed`}>
+                      Awaiting confirmation
+                    </Pill>
                   ) : s.deactivation_source === 'self_unsubscribe' ? (
                     <Pill tone="red" title={`Unsubscribed ${fmtDate(s.deactivated_at)}`}>Unsubscribed</Pill>
                   ) : s.deactivation_source === 'admin_mute' ? (

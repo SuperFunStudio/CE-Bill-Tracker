@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useDeadlineStats } from '@/hooks/useDeadlines';
-import { isEmptyScope } from '@/lib/scope';
+import { isEmptyScope, scopeJurisdictionCodes } from '@/lib/scope';
 import { formatDate } from '@/lib/utils';
 import { CalendarIcon, AlertIcon } from '@/components/ui/icons';
 import { useScope, useScopeActive } from './ScopeContext';
@@ -26,7 +26,8 @@ export function ScopedDeadlineBanner() {
   const { data: stats } = useDeadlineStats({
     days_ahead: THREE_YEARS,
     materials: active && scope.materials.length ? scope.materials.join(',') : undefined,
-    states: active && scope.states.length ? scope.states.join(',') : undefined,
+    // Regions + US states in one list — the deadline row has a single jurisdiction column.
+    states: active && scopeJurisdictionCodes(scope).length ? scopeJurisdictionCodes(scope).join(',') : undefined,
   });
 
   if (!stats) return null;

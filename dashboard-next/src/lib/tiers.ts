@@ -129,6 +129,10 @@ export const PRO = {
     sub: 'First seat · $600 per additional seat',
     save: 'Save $600/yr vs monthly',
   },
+  // The per-seat add-on, stated as its own field rather than left only inside the `sub` strings above.
+  // The FAQ quotes it too, and a page that has to parse a display string to find a price is one
+  // rewording away from quoting the wrong number — which is exactly how that page drifted before.
+  extraSeat: { monthly: '$50/mo', annual: '$600/yr' },
   who: 'Consultancies, ESG and legal services, and in-house sustainability teams answering to clients.',
   // Used on in-app upgrade gates too (UpcomingDeadlinesLock, WatchListSection), so it has to read as a
   // whole sentence on its own — the pricing card pairs it with the seat counter (see FOUNDING).

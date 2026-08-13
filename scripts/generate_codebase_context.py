@@ -9,6 +9,15 @@ can't quietly drift from the code the way a hand-maintained doc does.
     python scripts/generate_codebase_context.py --level brief    # smaller, for tight context
     python scripts/generate_codebase_context.py --level full     # everything
     python scripts/generate_codebase_context.py -o -             # stdout
+    python scripts/generate_codebase_context.py --diff           # just what changed
+
+Two things aren't derivable and live outside this file: `docs/FOCUS.md` (what's actively
+being worked — the generator only stamps its age and flags it stale) and `CLUSTERS` below
+(which pages and routers serve the same user-facing job).
+
+A normal run rewrites `docs/codebase_context.snapshot.json`, the baseline the diff compares
+against — so commit it, and use `--diff`/`--no-snapshot` when you want to look without
+consuming the baseline.
 
 Secrets: only *names* of settings are emitted. Values that look like credentials are
 redacted (see _safe_default) and .env is never read.
@@ -18,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import os
 import re
 import subprocess
@@ -43,8 +53,9 @@ surface ("Ask the Atlas") that answers questions with citations back to specific
 
 Stack: **FastAPI + SQLAlchemy 2.0 (typed `Mapped`) + Postgres + Alembic** on the backend,
 **Next.js (App Router, static export) + Tailwind** in `dashboard-next/`, Anthropic API for
-classification/extraction/synthesis, APScheduler for recurring ingest, SendGrid for email,
-Stripe for billing, Firebase Auth for identity.
+classification/extraction/synthesis, APScheduler for recurring ingest, SendGrid for email
+(with a Postmark transport wired behind `EMAIL_PROVIDER` — both are implemented, callers gate on
+`settings.email_configured` and never name one), Stripe for billing, Firebase Auth for identity.
 
 Hosting is **Google Cloud**, project `ce-bill-tracker`: Cloud Run for the API, Cloud Run Jobs
 for the pipeline, Cloud SQL Postgres, Firebase Hosting for the dashboard.
@@ -88,6 +99,101 @@ DIR_NOTES = {
     "docs": "Design specs, roadmaps, plans, assessments",
     "data": "Seed data and exports (data/seed IS shipped into the image)",
     "hackathon": "Hackathon prototypes",
+}
+
+# ---------------------------------------------------------------------------
+# Capability clusters. The *grouping* is hand-declared (nothing in the tree says which
+# page and which router serve the same user-facing job); the *contents* are derived, so a
+# new page or router shows up on its own — under a cluster if it matches, otherwise in the
+# "Unclustered" bucket at the end, which is the signal to edit this table.
+#
+#   routes: frontend paths — exact match, or a `/x/*` prefix
+#   tags:   APIRouter tags, i.e. which backend routers serve this capability
+# ---------------------------------------------------------------------------
+CLUSTERS: list[dict] = [
+    {
+        "name": "Corpus browse & filter",
+        "blurb": "The atlas itself: the bill corpus, per-bill pages, jurisdiction and "
+                 "state profiles, and the embeddable/anonymous slices.",
+        "routes": ["/", "/bill/*", "/jurisdictions/*", "/states", "/states/*", "/library",
+                   "/embed"],
+        "tags": ["bills", "scope"],
+    },
+    {
+        "name": "Ask the Atlas (research)",
+        "blurb": "LLM research surface — cited answers over the corpus, persisted research "
+                 "sessions, shared `/r/` links and published `/p/` pages.",
+        "routes": ["/ask", "/r", "/p"],
+        "tags": ["research"],
+    },
+    {
+        "name": "Compliance pathways",
+        "blurb": "What a given obligation actually requires: deadlines, structured "
+                 "compliance dimensions, and how-to-comply links.",
+        "routes": ["/compliance"],
+        "tags": ["compliance"],
+    },
+    {
+        "name": "Company exposure & bill evaluation",
+        "blurb": "Producer attribution — which companies a measure reaches — plus the "
+                 "fit-score evaluator for a single bill.",
+        "routes": ["/company", "/evaluate"],
+        "tags": ["companies", "evaluate"],
+    },
+    {
+        "name": "Federal actions & litigation",
+        "blurb": "US federal regulatory actions and tracked litigation, alongside the "
+                 "legislative corpus.",
+        "routes": ["/federal"],
+        "tags": ["federal", "litigation"],
+    },
+    {
+        "name": "Insights & analytics",
+        "blurb": "Momentum, heatmaps, passage-rate baselines and real-world outcomes.",
+        "routes": ["/insights"],
+        "tags": ["insights"],
+    },
+    {
+        "name": "Design guide & packaging studio",
+        "blurb": "Design-for-EPR principles, the packaging reference catalog, material "
+                 "swatches and labeling.",
+        "routes": ["/design-guide", "/studio", "/label"],
+        "tags": ["design-guide"],
+    },
+    {
+        "name": "Watchlist & alerts",
+        "blurb": "Per-user tracking with new-bill, deadline and digest email triggers.",
+        "routes": ["/watchlist"],
+        "tags": ["alerts"],
+    },
+    {
+        "name": "Accounts, billing & access",
+        "blurb": "Identity, entitlements and plan resolution, Stripe checkout and "
+                 "webhooks, referrals, beta access requests.",
+        "routes": ["/account", "/pricing", "/beta"],
+        "tags": ["auth", "me", "billing", "webhooks", "referrals", "access"],
+    },
+    {
+        "name": "Admin & pipeline ops",
+        "blurb": "Internal only: corpus review queues, the research log, and manual "
+                 "triggers for the ingest/classify pipeline.",
+        "routes": ["/admin", "/admin/*"],
+        "tags": ["admin", "pipeline"],
+    },
+    {
+        "name": "Static & marketing",
+        "blurb": "Content pages with no backing API surface of their own.",
+        "routes": ["/about", "/faq", "/methodology", "/privacy", "/terms", "/developers"],
+        "tags": [],
+    },
+]
+
+# Gate spelling -> how to describe it in the capability table.
+GATE_LABELS = {
+    "require_admin": "admin",
+    "require_pro": "Pro",
+    "require_user": "signed in",
+    "require_verified": "verified email",
 }
 
 SECRETY = re.compile(r"(key|secret|token|password|passwd|credential|dsn|_oc$|webhook)", re.I)
@@ -173,6 +279,26 @@ def rel(path: Path) -> str:
 # extractors
 # ---------------------------------------------------------------------------
 
+def _gates(node) -> list[str]:
+    """Auth gates named inside `Depends(...)` anywhere under `node`.
+
+    Covers both spellings the codebase uses: a router-level
+    `dependencies=[Depends(require_admin)]` and a per-handler
+    `_user: AuthedUser = Depends(require_capability(CAP_ASK))`. Returns the gate as written
+    (`require_admin`, `require_capability(CAP_ASK)`) so the caller can map it to a plan.
+    """
+    found: list[str] = []
+    for sub in ast.walk(node):
+        if not (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name)):
+            continue
+        if sub.func.id != "Depends" or not sub.args:
+            continue
+        text = literal(sub.args[0]) or ""
+        if text.startswith("require_") and text not in found:
+            found.append(text)
+    return found
+
+
 def extract_routes() -> list[dict]:
     """Router modules -> prefix, tags, and every decorated endpoint."""
     modules = []
@@ -185,6 +311,7 @@ def extract_routes() -> list[dict]:
 
         # var name -> (prefix, tags); a module may declare several routers.
         routers: dict[str, tuple[str, str]] = {}
+        router_gates: dict[str, list[str]] = {}
         for node in ast.walk(tree):
             if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
                 continue
@@ -197,9 +324,11 @@ def extract_routes() -> list[dict]:
                     prefix = (literal(kw.value) or "").strip("'\"")
                 elif kw.arg == "tags":
                     tags = (literal(kw.value) or "").strip("[]")
+            gates = _gates(node.value)
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     routers[target.id] = (prefix, tags)
+                    router_gates[target.id] = gates
 
         if not routers:
             continue
@@ -219,13 +348,20 @@ def extract_routes() -> list[dict]:
                     continue
                 sub = (literal(dec.args[0]) if dec.args else "") or ""
                 sub = sub.strip("'\"")
-                prefix, _ = routers[owner.id]
+                prefix, tags = routers[owner.id]
+                # Signature-level gates only — walking the body would pick up unrelated
+                # Depends() calls made inside the handler.
+                gates = _gates(node.args) + [
+                    g for g in router_gates.get(owner.id, []) if g not in _gates(node.args)
+                ]
                 endpoints.append({
                     "method": method,
                     "path": (prefix + sub) or "/",
                     "func": node.name,
                     "doc": first_doc_line(node),
                     "line": node.lineno,
+                    "tags": tags.strip("'\""),
+                    "gates": gates,
                 })
 
         endpoints.sort(key=lambda e: (e["path"], e["method"]))
@@ -366,6 +502,98 @@ def extract_settings() -> list[dict]:
     return fields
 
 
+def extract_capability_model() -> dict:
+    """The membership capability model in `app/api/auth.py`: CAP_* consts and PLAN_CAPS.
+
+    Resolves the set algebra (`_CAPS_RESEARCH = _CAPS_STUDENT | {...}`) so each capability
+    can report the cheapest plan that carries it. Returns {} if auth.py stops looking like
+    this, rather than guessing.
+    """
+    path = REPO / "app" / "api" / "auth.py"
+    tree = parse(path)
+    if tree is None:
+        return {}
+
+    # CAP_ASK = "ask"  # Ask the Atlas (research Q&A)  <- the comment is the human label,
+    # and comments aren't in the AST, so read those off the source text.
+    labels: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        m = re.match(r"^CAP_\w+\s*=\s*['\"]([^'\"]+)['\"]\s*(?:#\s*(.*))?$", line)
+        if m:
+            labels[m.group(1)] = (m.group(2) or "").strip()
+
+    consts: dict[str, str] = {}          # CAP_ASK -> "ask"
+    sets: dict[str, set[str]] = {}       # _CAPS_PRO -> {"ask", ...}
+    plans: dict[str, set[str]] = {}
+
+    def resolve(node) -> set[str] | None:
+        """Evaluate a capability-set expression: names, {…}, a | b, frozenset(x)."""
+        if isinstance(node, ast.Name):
+            if node.id in sets:
+                return set(sets[node.id])
+            if node.id in consts:
+                return {consts[node.id]}
+            return None
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return {node.value}
+        if isinstance(node, ast.Set):
+            out: set[str] = set()
+            for elt in node.elts:
+                part = resolve(elt)
+                if part is None:
+                    return None
+                out |= part
+            return out
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            left, right = resolve(node.left), resolve(node.right)
+            return None if left is None or right is None else left | right
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+                and node.func.id in {"frozenset", "set"}:
+            return resolve(node.args[0]) if node.args else set()
+        return None
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            target = node.targets[0] if len(node.targets) == 1 else None
+            name = target.id if isinstance(target, ast.Name) else None
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            name = node.target.id
+        else:
+            continue
+        if not name or node.value is None:
+            continue
+
+        if name.startswith("CAP_") and isinstance(node.value, ast.Constant):
+            consts[name] = str(node.value.value)
+        elif name.startswith("_CAPS_"):
+            got = resolve(node.value)
+            if got is not None:
+                sets[name] = got
+        elif name == "PLAN_CAPS" and isinstance(node.value, ast.Dict):
+            for k, v in zip(node.value.keys, node.value.values):
+                if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                    got = resolve(v)
+                    if got is not None:
+                        plans[k.value] = got
+
+    if not consts or not plans:
+        return {}
+
+    # Plans in the order they're declared = cheapest first, so "first plan carrying X" is
+    # the entry price for X.
+    order = list(plans)
+    caps = []
+    for cap in consts.values():
+        carriers = [p for p in order if cap in plans[p]]
+        caps.append({
+            "cap": cap,
+            "label": labels.get(cap, ""),
+            "plans": carriers,
+            "entry": carriers[0] if carriers else "—",
+        })
+    return {"caps": caps, "plans": plans, "order": order}
+
+
 def extract_frontend_routes() -> list[dict]:
     root = REPO / "dashboard-next" / "src" / "app"
     if not root.exists():
@@ -439,11 +667,293 @@ def extract_tree(max_depth: int = 2) -> list[str]:
     return lines
 
 
+def _route_matches(route: str, patterns: list[str]) -> bool:
+    for pat in patterns:
+        if pat.endswith("/*"):
+            if route.startswith(pat[:-1]):
+                return True
+        elif route == pat:
+            return True
+    return False
+
+
+def _gate_label(gate: str, caps_by_name: dict[str, dict]) -> str:
+    """Render one gate as a plan requirement: require_capability(CAP_ASK) -> "ask (student+)"."""
+    m = re.match(r"require_capability\(\s*CAP_(\w+)\s*\)", gate)
+    if m:
+        cap = m.group(1).lower()
+        info = caps_by_name.get(cap)
+        return f"{cap} ({info['entry']}+)" if info else cap
+    return GATE_LABELS.get(gate, gate)
+
+
+def build_capabilities(routes: list[dict], fe: list[dict], capmodel: dict) -> list[dict]:
+    """Join frontend routes + backend endpoints into user-facing capability clusters.
+
+    Everything that matches no cluster lands in a trailing "Unclustered" entry — a missing
+    capability should be visible as a gap, not vanish.
+    """
+    caps_by_name = {c["cap"]: c for c in capmodel.get("caps", [])}
+    endpoints = [
+        {**e, "file": mod["file"]}
+        for mod in routes for e in mod["endpoints"]
+    ]
+
+    claimed_routes: set[str] = set()
+    claimed_tags: set[str] = set()
+    out = []
+    for cluster in CLUSTERS:
+        pages = [f["route"] for f in fe if _route_matches(f["route"], cluster["routes"])]
+        claimed_routes.update(pages)
+        claimed_tags.update(cluster["tags"])
+        eps = [e for e in endpoints if e["tags"] in cluster["tags"]]
+
+        gates: list[str] = []
+        for e in eps:
+            for g in e["gates"]:
+                label = _gate_label(g, caps_by_name)
+                if label not in gates:
+                    gates.append(label)
+        open_eps = sum(1 for e in eps if not e["gates"])
+        out.append({
+            "name": cluster["name"],
+            "blurb": cluster["blurb"],
+            "pages": sorted(pages),
+            "endpoints": eps,
+            "gates": gates,
+            "open": open_eps,
+        })
+
+    stray_pages = sorted(f["route"] for f in fe if f["route"] not in claimed_routes)
+    stray_eps = [e for e in endpoints if e["tags"] not in claimed_tags]
+    if stray_pages or stray_eps:
+        out.append({
+            "name": "Unclustered",
+            "blurb": "Not claimed by any cluster above — add them to `CLUSTERS` in "
+                     "`scripts/generate_codebase_context.py`.",
+            "pages": stray_pages,
+            "endpoints": stray_eps,
+            "gates": [],
+            "open": sum(1 for e in stray_eps if not e["gates"]),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# focus
+# ---------------------------------------------------------------------------
+
+FOCUS_FILE = "docs/FOCUS.md"
+FOCUS_STALE_DAYS = 21
+
+
+def extract_focus() -> dict:
+    """The hand-written `docs/FOCUS.md`, plus derived evidence of what's actually moving.
+
+    The prose can't be derived — nothing in the tree says which of 107 endpoints matters
+    this week. So it's hand-written, and the generator's job is to keep it *honest*: it
+    stamps the file's git age and flags it as stale, and prints the directories git says
+    have actually changed lately, so a reader can see prose and reality side by side.
+    """
+    path = REPO / FOCUS_FILE
+    text = ""
+    if path.exists():
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        # HTML comments hold the how-to-edit note for whoever opens FOCUS.md; they're not
+        # for the reader of the generated doc.
+        raw = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
+        # Drop a leading H1 so the block nests under our own heading.
+        lines = [ln for ln in raw.splitlines() if not ln.startswith("# ")]
+        text = "\n".join(lines).strip()
+
+    age_days, edited = None, ""
+    stamp = git("log", "-1", "--format=%ad|%ar", "--date=short", "--", FOCUS_FILE).strip()
+    if "|" in stamp:
+        edited, rel_age = stamp.split("|", 1)
+        edited = f"{edited} ({rel_age})"
+        m = re.match(r"(\d+)\s+(day|week|month|year)", rel_age)
+        if m:
+            n, unit = int(m.group(1)), m.group(2)
+            age_days = n * {"day": 1, "week": 7, "month": 30, "year": 365}[unit]
+
+    # Which directories git says are actually moving, independent of what the prose claims.
+    hot: dict[str, int] = {}
+    for line in git("log", "--since=21.days", "--name-only", "--format=").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split("/")
+        key = "/".join(parts[:3]) if line.startswith("dashboard-next/") else "/".join(parts[:2])
+        key = key if "/" in key else parts[0]
+        hot[key] = hot.get(key, 0) + 1
+    top = sorted(hot.items(), key=lambda kv: (-kv[1], kv[0]))[:8]
+
+    return {
+        "text": text,
+        "edited": edited,
+        "age_days": age_days,
+        "stale": age_days is not None and age_days > FOCUS_STALE_DAYS,
+        "missing": not text,
+        "hot": top,
+        "recent_subjects": [
+            ln for ln in git("log", "-8", "--since=21.days", "--format=%s").splitlines() if ln
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# snapshot + diff
+# ---------------------------------------------------------------------------
+
+SNAPSHOT_FILE = "docs/codebase_context.snapshot.json"
+
+
+def build_snapshot(routes, models, fe, jobs, settings, migrations) -> dict:
+    """The structural facts, flattened to comparable keys.
+
+    Level-independent on purpose: `--level brief` must not look like half the API was
+    deleted. Only things whose *change* is worth a line in the diff go in here.
+    """
+    endpoints = {}
+    for mod in routes:
+        for e in mod["endpoints"]:
+            endpoints[f"{e['method']} {e['path']}"] = {
+                "func": e["func"],
+                "file": mod["file"],
+                "gates": sorted(e["gates"]),
+            }
+    return {
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "head": git("rev-parse", "--short", "HEAD").strip(),
+        "endpoints": endpoints,
+        "tables": {
+            m["table"]: sorted(c["name"] for c in m["columns"] if c["kind"] == "column")
+            for m in models
+        },
+        "frontend": sorted(r["route"] for r in fe),
+        "jobs": {j["id"]: f"{j['trigger']} {j['schedule']}" for j in jobs},
+        "settings": {s["name"]: s["default"] for s in settings},
+        "migration_head": ", ".join(migrations["heads"]),
+        "migrations": migrations["count"],
+    }
+
+
+def load_snapshot() -> dict | None:
+    path = REPO / SNAPSHOT_FILE
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def diff_snapshots(old: dict | None, new: dict) -> dict:
+    """What changed between two snapshots, as lists of human-readable lines."""
+    if not old:
+        return {}
+    out: dict[str, list[str]] = {}
+
+    def add(section: str, lines: list[str]) -> None:
+        if lines:
+            out[section] = lines
+
+    o_eps, n_eps = old.get("endpoints", {}), new["endpoints"]
+    add("New endpoints", [
+        f"`{k}` — `{n_eps[k]['func']}` in {n_eps[k]['file']}"
+        + (f" (gated: {', '.join(n_eps[k]['gates'])})" if n_eps[k]["gates"] else "")
+        for k in sorted(set(n_eps) - set(o_eps))
+    ])
+    add("Removed endpoints", [f"`{k}`" for k in sorted(set(o_eps) - set(n_eps))])
+    add("Moved gates", [
+        f"`{k}` — was {', '.join(o_eps[k]['gates']) or 'ungated'}"
+        f" → now {', '.join(n_eps[k]['gates']) or 'ungated'}"
+        for k in sorted(set(o_eps) & set(n_eps))
+        if o_eps[k].get("gates", []) != n_eps[k]["gates"]
+    ])
+
+    o_tb, n_tb = old.get("tables", {}), new["tables"]
+    add("New tables", [
+        f"`{t}` ({len(n_tb[t])} columns)" for t in sorted(set(n_tb) - set(o_tb))
+    ])
+    add("Removed tables", [f"`{t}`" for t in sorted(set(o_tb) - set(n_tb))])
+    col_changes = []
+    for t in sorted(set(o_tb) & set(n_tb)):
+        added = sorted(set(n_tb[t]) - set(o_tb[t]))
+        dropped = sorted(set(o_tb[t]) - set(n_tb[t]))
+        if added or dropped:
+            bits = []
+            if added:
+                bits.append("+" + ", ".join(f"`{c}`" for c in added))
+            if dropped:
+                bits.append("-" + ", ".join(f"`{c}`" for c in dropped))
+            col_changes.append(f"`{t}`: " + "; ".join(bits))
+    add("Changed columns", col_changes)
+
+    o_fe, n_fe = set(old.get("frontend", [])), set(new["frontend"])
+    add("New pages", [f"`{r}`" for r in sorted(n_fe - o_fe)])
+    add("Removed pages", [f"`{r}`" for r in sorted(o_fe - n_fe)])
+
+    o_jb, n_jb = old.get("jobs", {}), new["jobs"]
+    add("New jobs", [f"`{j}` ({n_jb[j]})" for j in sorted(set(n_jb) - set(o_jb))])
+    add("Removed jobs", [f"`{j}`" for j in sorted(set(o_jb) - set(n_jb))])
+    add("Rescheduled jobs", [
+        f"`{j}` — was `{o_jb[j]}` → now `{n_jb[j]}`"
+        for j in sorted(set(o_jb) & set(n_jb)) if o_jb[j] != n_jb[j]
+    ])
+
+    o_st, n_st = old.get("settings", {}), new["settings"]
+    add("New settings", [f"`{s.upper()}` (default `{n_st[s]}`)" for s in sorted(set(n_st) - set(o_st))])
+    add("Removed settings", [f"`{s.upper()}`" for s in sorted(set(o_st) - set(n_st))])
+    add("Changed defaults", [
+        f"`{s.upper()}` — was `{o_st[s]}` → now `{n_st[s]}`"
+        for s in sorted(set(o_st) & set(n_st)) if o_st[s] != n_st[s]
+    ])
+
+    if old.get("migration_head") != new["migration_head"]:
+        delta = new["migrations"] - old.get("migrations", 0)
+        add("Migrations", [
+            f"head `{old.get('migration_head') or '?'}` → `{new['migration_head']}` "
+            f"({delta:+d} revision{'' if abs(delta) == 1 else 's'})"
+        ])
+    return out
+
+
+def render_diff(old: dict | None, changes: dict, cap: int = 25) -> list[str]:
+    L: list[str] = []
+    w = L.append
+    w("## Changed since last generation")
+    w("")
+    if not old:
+        w(f"_No previous snapshot at `{SNAPSHOT_FILE}` — this run creates the baseline, so "
+          "the next run can diff against it._")
+        w("")
+        return L
+    w(f"_Baseline: snapshot taken {old.get('generated', '?')} at "
+      f"`{old.get('head', '?')}`. Structural only — a rewritten function body with the "
+      "same signature doesn't appear here._")
+    w("")
+    if not changes:
+        w("Nothing structural changed.")
+        w("")
+        return L
+    for section, lines in changes.items():
+        w(f"**{section}**")
+        w("")
+        for line in lines[:cap]:
+            w(f"- {line}")
+        if len(lines) > cap:
+            w(f"- _…and {len(lines) - cap} more_")
+        w("")
+    return L
+
+
 # ---------------------------------------------------------------------------
 # rendering
 # ---------------------------------------------------------------------------
 
-def build(level: str) -> str:
+def build(level: str) -> tuple[str, dict]:
+    """Render the document; also return the snapshot so the caller can persist it."""
     brief = level == "brief"
     full = level == "full"
 
@@ -462,6 +972,12 @@ def build(level: str) -> str:
     fe = extract_frontend_routes()
     scripts = extract_scripts()
     docs = extract_docs()
+    capmodel = extract_capability_model()
+    capabilities = build_capabilities(routes, fe, capmodel)
+    focus = extract_focus()
+    snapshot = build_snapshot(routes, models, fe, jobs, settings, migrations)
+    previous = load_snapshot()
+    changes = diff_snapshots(previous, snapshot)
 
     L: list[str] = []
     w = L.append
@@ -472,10 +988,103 @@ def build(level: str) -> str:
       "Regenerate rather than hand-editing — every section below the preamble is derived "
       "from the source tree._")
     w("")
+    # ---- current focus ----
+    # Deliberately first: the derived sections say what exists, not what matters, and a
+    # pasted-in agent reads top-down.
+    w("## Current focus")
+    w("")
+    if focus["missing"]:
+        w(f"_No `{FOCUS_FILE}` in the repo — create it with three or four lines on what's "
+          "actively being worked, and it will appear here._")
+    else:
+        w(focus["text"])
+        w("")
+        if focus["stale"]:
+            w(f"> ⚠️ **Possibly stale** — `{FOCUS_FILE}` was last edited {focus['edited']}, "
+              f"more than {FOCUS_STALE_DAYS} days ago. Treat the block above as history "
+              "and trust the activity below.")
+        else:
+            w(f"_Source: [{FOCUS_FILE}]({FOCUS_FILE}), last edited {focus['edited'] or '(uncommitted)'}._")
+    w("")
+    if focus["hot"]:
+        w("Where the commits have actually landed in the last 21 days — derived, so it "
+          "corroborates or contradicts the block above:")
+        w("")
+        w(" · ".join(f"`{d}` ({n})" for d, n in focus["hot"]))
+        w("")
+
     w("## What this is")
     w("")
     w(PREAMBLE)
     w("")
+
+    # ---- capabilities ----
+    w("## Capabilities")
+    w("")
+    w("What the product can do, grouped by user-facing job. Each cluster's pages and "
+      "endpoints are derived from the tree; only the grouping is hand-declared "
+      "(`CLUSTERS` in the generator), so anything new shows up either in a cluster or in "
+      "**Unclustered** at the end.")
+    w("")
+    w("\"Gated by\" lists the auth dependencies the backend actually enforces — a "
+      "capability name maps to the cheapest plan carrying it, per `PLAN_CAPS`. Endpoints "
+      "with no gate are public.")
+    w("")
+    for cap in capabilities:
+        w(f"### {cap['name']}")
+        w("")
+        w(cap["blurb"])
+        w("")
+        if cap["pages"]:
+            w("- Pages: " + ", ".join(f"`{p}`" for p in cap["pages"]))
+        if cap["endpoints"]:
+            files = sorted({e["file"] for e in cap["endpoints"]})
+            n = len(cap["endpoints"])
+            w(f"- API: {n} endpoint{'' if n == 1 else 's'} "
+              f"({cap['open']} public) in " + ", ".join(f"`{f}`" for f in files))
+        w("- Gated by: " + (", ".join(cap["gates"]) if cap["gates"] else "nothing — fully public"))
+        w("")
+
+    if capmodel.get("caps"):
+        w("### Plan matrix")
+        w("")
+        w("From `PLAN_CAPS` in `app/api/auth.py` — plans in declaration order, "
+          "cheapest first.")
+        w("")
+        order = capmodel["order"]
+        w("| Capability | " + " | ".join(p.title() for p in order) + " | What it unlocks |")
+        w("| --- | " + " | ".join("---" for _ in order) + " | --- |")
+        for c in capmodel["caps"]:
+            marks = " | ".join("●" if p in c["plans"] else "·" for p in order)
+            w(f"| `{c['cap']}` | {marks} | {c['label']} |")
+        w("")
+
+        # Which of those capabilities any route actually checks. A capability nobody
+        # depends on is enforced in the UI only, so the API behind it is open.
+        enforced = {
+            m.group(1).lower()
+            for mod in routes for e in mod["endpoints"] for g in e["gates"]
+            if (m := re.match(r"require_capability\(\s*CAP_(\w+)\s*\)", g))
+        }
+        unenforced = [c["cap"] for c in capmodel["caps"] if c["cap"] not in enforced]
+        if unenforced:
+            w(f"> **Enforced server-side: {', '.join(f'`{c}`' for c in sorted(enforced)) or 'none'}.** "
+              "The rest — " + ", ".join(f"`{c}`" for c in unenforced) + " — appear in "
+              "`PLAN_CAPS` but are not required by any route, so the paywall for them is "
+              "client-side and the API is reachable without the plan.")
+            w("")
+
+    off = [s for s in settings
+           if s["name"].startswith("enable_") and s["default"] == "False"]
+    if off:
+        w("### Behavior behind default-off flags")
+        w("")
+        w("These `app/config.py` settings default to **False**, so the code exists but is "
+          "inert unless the environment turns it on. Reading the code alone will "
+          "overstate what's running.")
+        w("")
+        w(", ".join(f"`{s['name'].upper()}`" for s in off))
+        w("")
 
     w("## Repo state at generation time")
     w("")
@@ -501,6 +1110,8 @@ def build(level: str) -> str:
     w(git("log", "-15", "--format=%h %ad  %s", "--date=short"))
     w("```")
     w("")
+
+    L.extend(render_diff(previous, changes))
 
     w("## Directory map")
     w("")
@@ -646,7 +1257,16 @@ def build(level: str) -> str:
       "(fees, eco-modulation, targets, penalties, lifecycle) with `source_excerpt` provenance.")
     w("")
 
-    return "\n".join(L) + "\n"
+    return "\n".join(L) + "\n", snapshot
+
+
+def _stdout_utf8() -> None:
+    """The Windows console defaults to cp1252, which can't encode the arrows/em-dashes
+    that appear in commit subjects and docstrings."""
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 
 def main() -> int:
@@ -655,17 +1275,28 @@ def main() -> int:
                     help="how much detail to emit (default: standard)")
     ap.add_argument("-o", "--out", default="docs/CODEBASE_CONTEXT.md",
                     help="output path, or '-' for stdout")
+    ap.add_argument("--diff", action="store_true",
+                    help="print only what changed since the last snapshot, and leave the "
+                         "snapshot alone")
+    ap.add_argument("--no-snapshot", action="store_true",
+                    help="don't update the baseline snapshot (the next run then diffs "
+                         "against the same older baseline)")
     args = ap.parse_args()
 
-    text = build(args.level)
+    text, snapshot = build(args.level)
+
+    # The baseline is only consumed when we actually write the doc: a preview to stdout or
+    # a --diff must not silently reset it and make the next real run look empty.
+    writing = args.out != "-" and not args.diff and not args.no_snapshot
+
+    if args.diff:
+        _stdout_utf8()
+        changes = diff_snapshots(load_snapshot(), snapshot)
+        sys.stdout.write("\n".join(render_diff(load_snapshot(), changes)) + "\n")
+        return 0
 
     if args.out == "-":
-        # The Windows console defaults to cp1252, which can't encode the arrows/em-dashes
-        # that appear in commit subjects and docstrings.
-        try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
+        _stdout_utf8()
         sys.stdout.write(text)
         return 0
 
@@ -673,8 +1304,14 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
 
+    if writing:
+        snap = REPO / SNAPSHOT_FILE
+        snap.write_text(json.dumps(snapshot, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
     chars = len(text)
     print(f"Wrote {rel(out)}")
+    if writing:
+        print(f"  baseline updated: {SNAPSHOT_FILE} (commit it so diffs work across machines)")
     # ASCII separators: the Windows console codepage mangles non-ASCII on print.
     print(f"  {chars:,} chars | ~{chars // 4:,} tokens | {text.count(chr(10)):,} lines")
     if chars // 4 > 100_000:

@@ -12,8 +12,11 @@ const SNAPSHOTS = [
   // Only the ungated deadline COUNTS are snapshotted; the deadline rows are Pro-gated and must not be
   // baked into the public CDN (that was the C-1 leak).
   'deadlines-summary',
-  'federal-actions',
-  'litigation-cases',
+  // Same rule, applied to CAP_FEDERAL: only the ungated federal COUNTS are snapshotted. The full
+  // action list and the litigation feed used to be baked here, which made /data/federal-actions.json
+  // a public copy of the paid dataset — a gated feed can't have a static fallback, because the
+  // fallback is unauthenticated by construction.
+  'federal-summary',
   'companies',
   'meta',
 ] as const;

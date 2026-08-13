@@ -15,7 +15,13 @@
       "WebFetch(domain:www.verpackungsgesetz.com)",
       "WebFetch(domain:circularcitiesdeclaration.eu)",
       "WebFetch(domain:ec.europa.eu)",
-      "Bash(curl -s -o /dev/null -w \"pricing \\(followed\\): %{http_code} -> %{url_effective}\\\\n\" -L https://www.atlascircular.com/pricing)"
+      "Bash(curl -s -o /dev/null -w \"pricing \\(followed\\): %{http_code} -> %{url_effective}\\\\n\" -L https://www.atlascircular.com/pricing)",
+      "WebFetch(domain:leginfo.legislature.ca.gov)",
+      "WebFetch(domain:duckduckgo.com)",
+      "WebFetch(domain:www.cga.ct.gov)",
+      "Bash(xxd)",
+      "Bash(python -c \"import py7zr; print\\('py7zr ok'\\)\")",
+      "Read(//c/Program Files/**)"
     ],
     "additionalDirectories": [
       "c:\\Users\\kenny\\.claude\\projects\\c--Users-kenny-SignalScout\\memory"

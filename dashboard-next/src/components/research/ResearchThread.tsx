@@ -25,6 +25,61 @@ import { useChartTheme } from '@/lib/charts/theme';
 // per-IP/day limit; this just avoids a wasted round-trip and shows the wall immediately).
 const FREE_ASK_KEY = 'atlas_free_ask_used';
 
+// An ask that was in flight when this page stopped watching — the durable half of drop recovery.
+//
+// A deep read can outlive the request that started it: browsers and corporate proxies cut a pending
+// fetch at around 60s, while the server runs to Cloud Run's 300s ceiling and PERSISTS the finished
+// turn either way. Recovery for that already existed, but it lived entirely in React state, so it
+// died on the reload, navigation or tab-close that a two-minute wait invites — and the reader was
+// left to discover their answer in My Library later, if they thought to look. Writing the attempt
+// down is what lets the next mount pick it back up.
+const PENDING_ASK_KEY = 'atlas_pending_ask';
+
+interface PendingAsk {
+  q: string;
+  /** Thread being appended to, when the drop happened on a follow-up. */
+  sessionId: string | null;
+  /** Turn count before this ask, so the poll can tell "written" from "not yet". */
+  priorTurns: number;
+  startedAt: number;
+}
+
+// The server can't still be working after Cloud Run's 300s request ceiling, so a pending ask older
+// than that has either landed or died — either way there is nothing left to wait for, and the saved
+// copy (if any) is reachable from My Library. The margin covers clock skew and the persist write.
+const PENDING_TTL_MS = 360_000;
+
+// How long to keep polling for the saved copy after a LIVE drop. The cut typically lands ~60s in and
+// the server can run to the 300s ceiling, so the answer may not exist for another ~240s. The old
+// 150s budget gave up while the server was still writing — which is precisely the case that sent
+// readers to My Library to find an answer that arrived thirty seconds later.
+const LIVE_RECOVERY_MS = 250_000;
+
+// Resuming a pending ask on a fresh mount: poll for whatever is left of the server's 300s ceiling,
+// with a floor so a resume that lands near the end still gets a look rather than timing out instantly.
+function resumeWindowMs(startedAt: number): number {
+  return Math.max(20_000, 300_000 - (Date.now() - startedAt));
+}
+
+function readPendingAsk(): PendingAsk | null {
+  try {
+    const raw = localStorage.getItem(PENDING_ASK_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as PendingAsk;
+    if (!p?.q || typeof p.startedAt !== 'number') return null;
+    if (Date.now() - p.startedAt > PENDING_TTL_MS) { clearPendingAsk(); return null; }
+    return p;
+  } catch { return null; }
+}
+
+function writePendingAsk(p: PendingAsk) {
+  try { localStorage.setItem(PENDING_ASK_KEY, JSON.stringify(p)); } catch { /* ignore */ }
+}
+
+function clearPendingAsk() {
+  try { localStorage.removeItem(PENDING_ASK_KEY); } catch { /* ignore */ }
+}
+
 /**
  * Whether an anonymous visitor has already spent their one free question — readable WITHOUT hosting the
  * ask state machine, so the homepage can show its "start free" pitch to someone who hit the limit over
@@ -70,6 +125,8 @@ export function useResearch() {
   const [recovering, setRecovering] = useState(false);
   // Generation token: a newer ask / new thread invalidates an in-flight recovery poll.
   const recoverGen = useRef(0);
+  // Whether the mount-time pending-ask resume has already run (once per mount, see the effect below).
+  const resumedRef = useRef(false);
   const [restoring, setRestoring] = useState(false);
   const [restored, setRestored] = useState(false);
 
@@ -104,12 +161,62 @@ export function useResearch() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
 
+  // Pick up an ask that was in flight when this page last stopped watching.
+  //
+  // This is the half that was missing. Drop recovery existed, but it only ran inside the tab that
+  // made the request — so a reader who reloaded, hit Back, or closed the tab during a two-minute deep
+  // read lost the poll along with the page, and the finished answer sat unseen in My Library. The
+  // pending record survives all three, so the answer finds them instead of the other way round.
+  //
+  // Yields to the two URL-driven paths: `?session=` restores a whole thread (a superset of this), and
+  // `?q=` is the homepage handoff, which AskPage drives through resume() — and resume() consults the
+  // same record, so a pending ask is honoured there too rather than being re-asked.
+  useEffect(() => {
+    if (authLoading || !user || typeof window === 'undefined') return;
+    // A ref, not the generation token: `user` is a Firebase object that can be replaced on a silent
+    // token refresh, which would re-run this effect and restart the poll from zero — resetting the
+    // deadline each time and, worse, re-showing the dropped banner over an answer already on screen.
+    if (resumedRef.current) return;
+    resumedRef.current = true;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('session') || params.get('q')) return;
+    const pending = readPendingAsk();
+    if (!pending) return;
+    setLastAsked(pending.q);
+    setDropped(true);          // say what happened up front rather than showing a bare spinner
+    void recoverAnswer(pending.q, pending.sessionId, pending.priorTurns, resumeWindowMs(pending.startedAt));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user]);
+
   // Anonymous visitors: remember once they've spent their free question so the wall shows immediately.
   useEffect(() => {
     if (!user && typeof window !== 'undefined') {
       try { setFreeAskUsed(localStorage.getItem(FREE_ASK_KEY) === '1'); } catch { /* ignore */ }
     }
   }, [user]);
+
+  /**
+   * Put the thread's id in the address bar as soon as there is one.
+   *
+   * /ask has always documented `?session=` as the thing that makes a conversation survive refresh and
+   * Back — but nothing ever WROTE it. The parameter was only read (My Library deep links) and deleted
+   * (New question), so in practice a thread was recoverable only if the reader had arrived from the
+   * Library. Publishing it here is what makes the documented behaviour true, and it gives the reader a
+   * URL worth bookmarking or sending to a colleague.
+   *
+   * replaceState, not push: an answer arriving is not a navigation, and it must not put a Back step
+   * between the reader and the page they came from. Guarded to /ask so a host page that embeds the
+   * thread elsewhere never has its own URL rewritten.
+   */
+  function publishSession(id: string | null | undefined) {
+    if (!id || typeof window === 'undefined') return;
+    if (!window.location.pathname.startsWith('/ask')) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('session') === id) return;
+    params.set('session', id);
+    params.delete('q');   // the question is in the thread now; it no longer needs to ride the URL
+    window.history.replaceState(null, '', `/ask/?${params.toString()}`);
+  }
 
   /**
    * The connection dropped, but the server keeps going and PERSISTS the finished turn — so the answer
@@ -123,40 +230,54 @@ export function useResearch() {
    * citations (they aren't persisted per turn), so its [STATE BILL_NUMBER] markers read as plain text —
    * the same limitation as reopening a thread from My Library.
    */
-  async function recoverAnswer(q: string, sid: string | null, priorTurns: number, windowMs = 150_000) {
-    if (!user) return false;
+  async function recoverAnswer(q: string, sid: string | null, priorTurns: number, windowMs = LIVE_RECOVERY_MS) {
+    if (!user) { clearPendingAsk(); return false; }   // an anonymous ask is stateless — nothing saved
     const gen = ++recoverGen.current;
     const title = q.slice(0, 200).trim();
     setRecovering(true);
     const deadline = performance.now() + windowMs;
     try {
-      while (performance.now() < deadline) {
-        await new Promise(r => setTimeout(r, 3000));
+      // CHECK FIRST, then sleep. On a resumed mount the answer is usually already written, and
+      // sleeping up front made the reader stare at a spinner for three seconds to be told something
+      // that was true before the page loaded.
+      for (let attempt = 0; ; attempt++) {
         if (recoverGen.current !== gen) return false;   // superseded by a retry or a new thread
         try {
           const token = await getToken();
           let targetId = sid;
           if (!targetId) {
             const list = await fetchMyResearchSessions(token);
+            // The server stores the title as question[:200] (_persist_turn), newest first — so
+            // re-asking something you asked before still finds THIS one.
             targetId = list.find(s => (s.title ?? '').trim() === title)?.session_id ?? null;
           }
-          if (!targetId) continue;
-          const s = await fetchResearchSession(targetId, token);
-          if (s.turns.length <= priorTurns) continue;   // the turn hasn't been written yet
-          if (recoverGen.current !== gen) return false;
-          setTurns(s.turns.map(t => ({
-            q: t.question,
-            answer: { answer: t.answer ?? '', citations: [] } as ResearchAnswer,
-          })));
-          setSessionId(s.session_id);
-          setDropped(false);
-          track('atlas_query_recovered', { query_length: q.length });
-          return true;
+          if (targetId) {
+            const s = await fetchResearchSession(targetId, token);
+            if (s.turns.length > priorTurns) {          // the turn has been written
+              if (recoverGen.current !== gen) return false;
+              setTurns(s.turns.map(t => ({
+                q: t.question,
+                answer: { answer: t.answer ?? '', citations: [] } as ResearchAnswer,
+              })));
+              setSessionId(s.session_id);
+              publishSession(s.session_id);
+              setDropped(false);
+              clearPendingAsk();
+              track('atlas_query_recovered', { query_length: q.length, attempt });
+              return true;
+            }
+          }
         } catch { /* transient — keep polling until the deadline, then leave the Library link */ }
+        if (performance.now() >= deadline) break;
+        await new Promise(r => setTimeout(r, 3000));
       }
     } finally {
       if (recoverGen.current === gen) setRecovering(false);
     }
+    // Out of budget. The pending record deliberately SURVIVES: the server may still be finishing, and
+    // the next time this page opens it will look again rather than the answer being lost to Library
+    // archaeology. PENDING_TTL_MS is what eventually retires it.
+    track('atlas_query_recovery_timeout', { query_length: q.length });
     return false;
   }
 
@@ -167,8 +288,20 @@ export function useResearch() {
    * request probably never reached synthesis), and only ask fresh when there's nothing to pick up.
    */
   async function resume(q: string) {
-    const found = await recoverAnswer(q, null, turns.length, 20_000);
-    if (!found) await ask(q);
+    // If this exact question is on record as in-flight, it has a real chance of landing — poll for
+    // what's left of the server's budget using the ORIGINAL attempt's session and turn count. Without
+    // the record we can only guess, so the old blind 20s applies: long enough to catch an answer
+    // already written, short enough not to strand a reader behind a request that never happened.
+    const pending = readPendingAsk();
+    const matches = pending?.q === q.trim();
+    const found = matches && pending
+      ? await recoverAnswer(q, pending.sessionId, pending.priorTurns, resumeWindowMs(pending.startedAt))
+      : await recoverAnswer(q, null, turns.length, 20_000);
+    if (!found && !matches) await ask(q);
+    // A matching pending record that didn't land is NOT re-asked: the server is probably still
+    // working on it, and a second deep read is real money spent to duplicate an answer we're already
+    // waiting for. The pending record survives, so the next mount tries again.
+    else if (!found) setDropped(true);
   }
 
   async function ask(q: string) {
@@ -180,6 +313,10 @@ export function useResearch() {
     recoverGen.current++;                       // a fresh ask supersedes any in-flight recovery poll
     setRecovering(false);
     setBusy(true); setError(null); setDropped(false); setWall(null); setLastAsked(trimmed);
+    // Write the attempt down BEFORE it goes out. Everything that makes an answer un-missable depends
+    // on this record outliving the request — and the request is exactly what may not survive.
+    // Members only: an anonymous ask persists nothing server-side, so there'd be nothing to recover.
+    if (user) writePendingAsk({ q: trimmed, sessionId, priorTurns: turns.length, startedAt: Date.now() });
     const t0 = performance.now();
     try {
       const token = await getToken();
@@ -193,8 +330,10 @@ export function useResearch() {
       if (resultCount === 0) {
         track('atlas_query_zero_results', { query_length: trimmed.length, latency_ms: latencyMs });
       }
+      clearPendingAsk();                        // it arrived — nothing left to recover
       setTurns(prev => [...prev, { q: trimmed, answer: a }]);
       setSessionId(a.session_id ?? sessionId);
+      publishSession(a.session_id ?? sessionId);
       setBillPage(a.bills ?? null);
       setLastQuery(a.retrieval_query ?? trimmed);
       if (!user && typeof window !== 'undefined') {
@@ -203,9 +342,13 @@ export function useResearch() {
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) {
+        clearPendingAsk();                      // the server answered (with a refusal) — nothing pending
         setWall(e.detail === 'ask_upgrade_required' ? 'upgrade' : 'signin');
         if (!user) { try { localStorage.setItem(FREE_ASK_KEY, '1'); } catch { /* ignore */ } setFreeAskUsed(true); }
       } else if (e instanceof ApiError) {
+        // A real response, just not a good one. The request completed, so no turn is being written
+        // behind our back and there is nothing to poll for.
+        clearPendingAsk();
         setError(e.message);
       } else {
         // fetch() rejects with a TypeError only when the request never completed — no status, no body.
@@ -223,6 +366,7 @@ export function useResearch() {
 
   function newThread() {
     recoverGen.current++; setRecovering(false);
+    clearPendingAsk();   // deliberately abandoning the old ask — don't resurrect it on the next mount
     setTurns([]); setSessionId(null); setBillPage(null); setLastQuery('');
     setError(null); setDropped(false); setLastAsked(''); setRestored(false); setWall(null);
     // Drop ?session= so a fresh thread isn't tied to the reopened one (and a reload starts clean).
@@ -705,9 +849,12 @@ export function ResearchThread({ research }: { research: ResearchState }) {
           <p className="text-sm text-text-primary">
             The connection dropped before the answer came back.
             {!user && ' A long question can take a minute; a steady connection sees it through.'}
+            {/* Careful with the tense: while we're still polling the answer may not exist YET — the
+                server could still be writing it. Claiming "it was saved" before that is true is the
+                kind of small wrongness this audience notices. Only the give-up branch can say it. */}
             {user && (recovering
-              ? ' It was still saved — fetching your copy now…'
-              : ' It was still saved — visit your Library for asked questions and answers.')}
+              ? " The answer is still being written and saved — we'll show it here the moment it lands. You can leave this page; it'll be waiting in your Library too."
+              : ' If it finished, it was saved — check your Library.')}
           </p>
           {recovering && <div className="h-16 w-full animate-pulse rounded-lg bg-bg-tertiary" />}
           <div className="flex flex-wrap items-center gap-4">

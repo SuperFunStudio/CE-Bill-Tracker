@@ -49,7 +49,7 @@ from app.alerts.digest import (
 )
 from app.alerts.applinks import bill_url, substack_url
 from app.alerts.email_shell import cta_button, render_shell
-from app.alerts.unsubscribe import unsubscribe_url
+from app.alerts.unsubscribe import confirm_url, unsubscribe_url
 from app.config import settings
 from app.models import AlertSubscription, Bill
 
@@ -743,7 +743,7 @@ def _as_of_label(now) -> str:
 async def send_welcome_email(db: AsyncSession, sub: AlertSubscription) -> bool:
     """Best-effort welcome send for one subscriber. Returns True only if an email actually went out.
 
-    Gated on enable_welcome_email + a SendGrid key + the subscriber having an email. Never raises —
+    Gated on enable_welcome_email + a configured email provider + the subscriber having an email. Never raises —
     a welcome-email failure must never surface to the signup API caller.
     """
     if not settings.enable_welcome_email:
@@ -796,6 +796,102 @@ async def send_welcome_email(db: AsyncSession, sub: AlertSubscription) -> bool:
     except Exception as e:
         log.warning("welcome_email_failed", email=sub.email, error=str(e))
         return False
+
+
+# --- Double opt-in confirmation ------------------------------------------------------------------
+# The FIRST email a public sign-up receives, ahead of the welcome roundup above. Its only job is to
+# establish that the person who typed the address is the person who owns it — POST /subscriptions is
+# anonymous and unauthenticated, so without this step anyone could sign up anyone. Nothing else is
+# sent to the address until the link in here is clicked (the row is created inactive; every send path
+# filters on active). See migration 049.
+
+
+def render_confirm_subject() -> str:
+    # An imperative, not a greeting: this email is worthless unless it's acted on, and it lands in an
+    # inbox that has no relationship with us yet.
+    return "Confirm your Atlas Circular updates"
+
+
+def render_confirm_html(sub: AlertSubscription) -> str:
+    """The confirmation ask. Restates the scope they picked (so the click is informed rather than
+    reflexive) and — the part that matters if this lands with someone who didn't sign up — says
+    plainly that ignoring it means nothing further arrives."""
+    scope_bits = [_topics_summary(sub)]
+    materials = _materials_summary(sub)
+    if materials:
+        scope_bits.append(materials)
+    scope_bits.append(_jurisdictions_summary(sub))
+    scope_line = " · ".join(scope_bits)
+
+    inner = f"""
+    <p style="font:18px {_SERIF};color:{_INK};margin:6px 0 10px;font-weight:bold;">
+      One click and you're on the list.</p>
+    <p style="font:15px {_SERIF};color:{_INK_SOFT};line-height:1.65;margin:0 0 14px;">
+      Someone — we hope you — asked for <strong>Atlas Circular</strong> updates at this address.
+      Confirm it and we'll start sending you movement on the laws you picked:</p>
+    <p style="font:14px {_SERIF};color:{_INK_SOFT};line-height:1.6;margin:0 0 18px;
+        padding:10px 14px;background:{_PAPER};border-left:3px solid {_ACCENT};">
+      <strong>Your watch list</strong> · {scope_line}</p>
+    {cta_button(confirm_url(sub.id), "Confirm my subscription →")}
+    <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:20px 0 0;">
+      <strong>Didn't sign up?</strong> Then don't click anything — just delete this. We won't send
+      you anything else, and the request expires on its own. Your address was never added to a
+      mailing list, and we won't pass it on.</p>
+    <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:14px 0 0;">
+      Once you're in, every email carries a one-click unsubscribe. See our
+      <a href="{_DASHBOARD_URL}/privacy" style="color:{_ACCENT};">privacy policy</a>.</p>"""
+    return render_shell(
+        inner,
+        preheader="Confirm this address and your Atlas Circular updates start.",
+        colophon=(
+            "You're receiving this one email because this address was entered into the sign-up form "
+            f"at {_DASHBOARD_URL}. No further email is sent unless you confirm."
+        ),
+        # No referral note and no unsubscribe action: there is nothing to unsubscribe from yet, and
+        # asking a stranger to recruit a colleague before they've agreed to hear from us at all is
+        # exactly the reflex this whole change exists to remove.
+        referral=False,
+    )
+
+
+async def send_confirmation_email(sub: AlertSubscription) -> bool:
+    """Send the double opt-in ask. Best-effort in the sense of never raising into the signup request,
+    but deliberately NOT gated on enable_welcome_email: that flag governs the marketing roundup, and a
+    subscription whose confirmation never went out is a dead row the subscriber cannot rescue. The
+    only real precondition is a configured provider.
+    """
+    if not sub.email:
+        return False
+    if not settings.email_configured:
+        log.warning("confirmation_email_skipped_no_email_key", email=sub.email)
+        return False
+    try:
+        from app.alerts.email_sender import EmailSender
+
+        ok = await EmailSender().send_html(
+            sub.email, render_confirm_subject(), render_confirm_html(sub)
+        )
+        log.info("confirmation_email_sent", email=sub.email, ok=ok, subscription_id=sub.id)
+        return ok
+    except Exception as e:
+        log.warning("confirmation_email_failed", email=sub.email, error=str(e))
+        return False
+
+
+async def send_confirmation_for_subscription(subscription_id: int) -> None:
+    """Background-task entrypoint — owns its session, same shape as the welcome one below."""
+    from app.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        sub = (
+            await db.execute(
+                select(AlertSubscription).where(AlertSubscription.id == subscription_id)
+            )
+        ).scalar_one_or_none()
+        if sub is None:
+            log.warning("confirmation_email_subscription_missing", subscription_id=subscription_id)
+            return
+        await send_confirmation_email(sub)
 
 
 async def send_welcome_for_subscription(subscription_id: int) -> None:
@@ -856,7 +952,7 @@ def render_account_welcome_html() -> str:
 
 async def send_account_welcome(email: str) -> bool:
     """Best-effort welcome for a brand-new free account (background-task entrypoint). Self-contained —
-    no DB needed (no scope to summarise). Gated on enable_welcome_email + a SendGrid key + an email.
+    no DB needed (no scope to summarise). Gated on enable_welcome_email + a configured email provider + an email.
     Never raises — a welcome failure must never surface to the signup caller."""
     if not settings.enable_welcome_email:
         log.info("account_welcome_skipped_flag_off", email=email)
@@ -918,7 +1014,7 @@ def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
 
 async def send_comp_grant_welcome(email: str, days: int | None = None, name: str | None = None) -> bool:
     """Best-effort notice that an admin granted this email complimentary Pro (background-task
-    entrypoint). Self-contained — no DB needed. Gated on enable_welcome_email + a SendGrid key + an
+    entrypoint). Self-contained — no DB needed. Gated on enable_welcome_email + a configured email provider + an
     email. Never raises — a send failure must never surface to the admin grant caller."""
     if not settings.enable_welcome_email:
         log.info("comp_grant_welcome_skipped_flag_off", email=email)
@@ -1000,7 +1096,7 @@ def render_pro_welcome_html(is_trial: bool = False, founding: bool = False) -> s
 
 async def send_pro_welcome(email: str, is_trial: bool = False, founding: bool = False) -> bool:
     """Best-effort purchase confirmation / welcome for a paid Pro conversion (background-task
-    entrypoint). Self-contained — no DB needed. Gated on enable_welcome_email + a SendGrid key + an
+    entrypoint). Self-contained — no DB needed. Gated on enable_welcome_email + a configured email provider + an
     email. Never raises — a send failure must never surface to the Stripe webhook caller."""
     if not settings.enable_welcome_email:
         log.info("pro_welcome_skipped_flag_off", email=email)
@@ -1024,7 +1120,7 @@ async def send_pro_welcome(email: str, is_trial: bool = False, founding: bool = 
 # --- Billing lifecycle + referral notices --------------------------------------------------------
 # Three transactional notices that close gaps in the alert map: a dunning email when a Pro renewal
 # payment fails, a confirmation when a subscription is canceled, and a reward notice when a referral
-# pays off. All self-contained (no DB), gated on enable_welcome_email + a SendGrid key like the rest,
+# pays off. All self-contained (no DB), gated on enable_welcome_email + a configured email provider like the rest,
 # and best-effort so a send failure can never surface into the Stripe webhook / referral caller.
 
 
@@ -1089,7 +1185,7 @@ def render_payment_failed_html() -> str:
 
 async def send_payment_failed(email: str) -> bool:
     """Best-effort dunning notice for a failed Pro renewal (background-task entrypoint). Gated on
-    enable_welcome_email + a SendGrid key + an email. Never raises."""
+    enable_welcome_email + a configured email provider + an email. Never raises."""
     if not settings.enable_welcome_email:
         log.info("payment_failed_email_skipped_flag_off", email=email)
         return False
@@ -1142,7 +1238,7 @@ def render_subscription_canceled_html() -> str:
 
 async def send_subscription_canceled(email: str) -> bool:
     """Best-effort cancellation confirmation (background-task entrypoint). Gated on
-    enable_welcome_email + a SendGrid key + an email. Never raises."""
+    enable_welcome_email + a configured email provider + an email. Never raises."""
     if not settings.enable_welcome_email:
         log.info("subscription_canceled_email_skipped_flag_off", email=email)
         return False
@@ -1197,7 +1293,7 @@ def render_referral_reward_html(days: int) -> str:
 
 async def send_referral_reward(email: str, days: int = 30) -> bool:
     """Best-effort 'you earned free Pro days' notice to a referrer (background-task entrypoint). Gated
-    on enable_welcome_email + a SendGrid key + an email. Never raises."""
+    on enable_welcome_email + a configured email provider + an email. Never raises."""
     if not settings.enable_welcome_email:
         log.info("referral_reward_email_skipped_flag_off", email=email)
         return False

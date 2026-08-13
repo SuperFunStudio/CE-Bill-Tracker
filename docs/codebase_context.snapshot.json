@@ -1,0 +1,1257 @@
+{
+ "endpoints": {
+  "DELETE /admin/outcomes/{outcome_id}": {
+   "file": "app/api/admin.py",
+   "func": "delete_outcome",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "DELETE /me/account": {
+   "file": "app/api/user.py",
+   "func": "delete_account",
+   "gates": []
+  },
+  "DELETE /me/watchlist/{bill_id}": {
+   "file": "app/api/user.py",
+   "func": "remove_watch",
+   "gates": [
+    "require_pro"
+   ]
+  },
+  "DELETE /research/drafts/{draft_id}": {
+   "file": "app/api/research.py",
+   "func": "delete_content_draft",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "DELETE /subscriptions/{subscription_id}": {
+   "file": "app/api/alerts.py",
+   "func": "delete_subscription",
+   "gates": []
+  },
+  "GET /admin/access-requests": {
+   "file": "app/api/admin.py",
+   "func": "list_access_requests",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /admin/account": {
+   "file": "app/api/admin.py",
+   "func": "admin_account",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /admin/entitlements": {
+   "file": "app/api/admin.py",
+   "func": "list_entitlements",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /admin/me": {
+   "file": "app/api/admin.py",
+   "func": "admin_me",
+   "gates": []
+  },
+  "GET /admin/outcomes": {
+   "file": "app/api/admin.py",
+   "func": "list_outcomes",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /admin/stats": {
+   "file": "app/api/admin.py",
+   "func": "admin_stats",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /admin/subscribers": {
+   "file": "app/api/admin.py",
+   "func": "list_subscribers",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /billing/founding-seats": {
+   "file": "app/api/billing.py",
+   "func": "founding_seats",
+   "gates": []
+  },
+  "GET /billing/me": {
+   "file": "app/api/billing.py",
+   "func": "billing_me",
+   "gates": []
+  },
+  "GET /bills": {
+   "file": "app/api/bills.py",
+   "func": "list_bills",
+   "gates": []
+  },
+  "GET /bills/collection-target-basis": {
+   "file": "app/api/bills.py",
+   "func": "get_collection_target_basis",
+   "gates": []
+  },
+  "GET /bills/deadlines/summary": {
+   "file": "app/api/bills.py",
+   "func": "deadlines_summary",
+   "gates": []
+  },
+  "GET /bills/deadlines/upcoming": {
+   "file": "app/api/bills.py",
+   "func": "list_upcoming_deadlines",
+   "gates": []
+  },
+  "GET /bills/instrument-material-matrix": {
+   "file": "app/api/bills.py",
+   "func": "get_instrument_material_matrix",
+   "gates": []
+  },
+  "GET /bills/laws-in-force": {
+   "file": "app/api/bills.py",
+   "func": "get_laws_in_force",
+   "gates": []
+  },
+  "GET /bills/map-summary": {
+   "file": "app/api/bills.py",
+   "func": "get_map_summary",
+   "gates": []
+  },
+  "GET /bills/outcomes": {
+   "file": "app/api/bills.py",
+   "func": "list_bill_outcomes",
+   "gates": []
+  },
+  "GET /bills/search": {
+   "file": "app/api/bills.py",
+   "func": "search_bills",
+   "gates": []
+  },
+  "GET /bills/stance-momentum": {
+   "file": "app/api/bills.py",
+   "func": "get_stance_momentum",
+   "gates": []
+  },
+  "GET /bills/text-coverage": {
+   "file": "app/api/bills.py",
+   "func": "bill_text_coverage",
+   "gates": []
+  },
+  "GET /bills/timeline": {
+   "file": "app/api/bills.py",
+   "func": "get_bill_timeline",
+   "gates": []
+  },
+  "GET /bills/{bill_id}": {
+   "file": "app/api/bills.py",
+   "func": "get_bill",
+   "gates": []
+  },
+  "GET /bills/{bill_id}/company-exposure": {
+   "file": "app/api/companies.py",
+   "func": "get_bill_company_exposure",
+   "gates": []
+  },
+  "GET /bills/{bill_id}/litigation-cases": {
+   "file": "app/api/bills.py",
+   "func": "get_bill_litigation_cases",
+   "gates": []
+  },
+  "GET /bills/{bill_id}/text": {
+   "file": "app/api/bills.py",
+   "func": "get_bill_text",
+   "gates": []
+  },
+  "GET /companies": {
+   "file": "app/api/companies.py",
+   "func": "list_companies",
+   "gates": []
+  },
+  "GET /companies/exposure-ranking": {
+   "file": "app/api/companies.py",
+   "func": "get_exposure_ranking",
+   "gates": []
+  },
+  "GET /companies/{company_id}": {
+   "file": "app/api/companies.py",
+   "func": "get_company",
+   "gates": []
+  },
+  "GET /companies/{company_id}/exposure-brief": {
+   "file": "app/api/companies.py",
+   "func": "get_or_generate_exposure_brief",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /companies/{company_id}/impact-scores": {
+   "file": "app/api/companies.py",
+   "func": "get_company_impact_scores",
+   "gates": []
+  },
+  "GET /companies/{company_id}/obligations": {
+   "file": "app/api/companies.py",
+   "func": "get_company_obligations",
+   "gates": []
+  },
+  "GET /compliance/eco-modulation": {
+   "file": "app/api/compliance.py",
+   "func": "eco_modulation",
+   "gates": []
+  },
+  "GET /compliance/fee-amounts": {
+   "file": "app/api/compliance.py",
+   "func": "fee_amounts",
+   "gates": []
+  },
+  "GET /compliance/fee-amounts/summary": {
+   "file": "app/api/compliance.py",
+   "func": "fee_amounts_summary",
+   "gates": []
+  },
+  "GET /compliance/fee-schedule": {
+   "file": "app/api/compliance.py",
+   "func": "fee_schedule",
+   "gates": []
+  },
+  "GET /compliance/pathways": {
+   "file": "app/api/compliance.py",
+   "func": "list_pathways",
+   "gates": []
+  },
+  "GET /compliance/producer-attribution": {
+   "file": "app/api/compliance.py",
+   "func": "producer_attribution",
+   "gates": []
+  },
+  "GET /design-guide/full": {
+   "file": "app/api/design.py",
+   "func": "full_guide",
+   "gates": [
+    "require_capability(CAP_DESIGN_GUIDE)"
+   ]
+  },
+  "GET /entity-match-queue": {
+   "file": "app/api/companies.py",
+   "func": "list_match_queue",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /evaluate/material-map": {
+   "file": "app/api/evaluate.py",
+   "func": "get_material_map",
+   "gates": []
+  },
+  "GET /federal-actions": {
+   "file": "app/api/federal.py",
+   "func": "list_federal_actions",
+   "gates": []
+  },
+  "GET /health": {
+   "file": "app/api/health.py",
+   "func": "health",
+   "gates": []
+  },
+  "GET /insights/champions": {
+   "file": "app/api/insights.py",
+   "func": "get_champions",
+   "gates": []
+  },
+  "GET /insights/champions/{person_id:path}/bills": {
+   "file": "app/api/insights.py",
+   "func": "get_champion_bills",
+   "gates": []
+  },
+  "GET /insights/state-cycles": {
+   "file": "app/api/insights.py",
+   "func": "get_state_cycles",
+   "gates": []
+  },
+  "GET /insights/state-gap": {
+   "file": "app/api/insights.py",
+   "func": "get_state_gap",
+   "gates": []
+  },
+  "GET /litigation-cases": {
+   "file": "app/api/federal.py",
+   "func": "list_litigation_cases",
+   "gates": []
+  },
+  "GET /litigation-cases/{case_id}": {
+   "file": "app/api/federal.py",
+   "func": "get_litigation_case",
+   "gates": []
+  },
+  "GET /me/settings": {
+   "file": "app/api/user.py",
+   "func": "get_settings",
+   "gates": []
+  },
+  "GET /me/watchlist": {
+   "file": "app/api/user.py",
+   "func": "get_watchlist",
+   "gates": [
+    "require_pro"
+   ]
+  },
+  "GET /me/watchlist/prefs": {
+   "file": "app/api/user.py",
+   "func": "get_watchlist_prefs",
+   "gates": [
+    "require_pro"
+   ]
+  },
+  "GET /pipeline/seed-coverage": {
+   "file": "app/api/pipeline.py",
+   "func": "seed_coverage",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /pipeline/status": {
+   "file": "app/api/pipeline.py",
+   "func": "pipeline_status",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /referrals/me": {
+   "file": "app/api/referrals.py",
+   "func": "my_referral",
+   "gates": []
+  },
+  "GET /research/admin/turns": {
+   "file": "app/api/research.py",
+   "func": "admin_research_turns",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /research/bills": {
+   "file": "app/api/research.py",
+   "func": "research_bills",
+   "gates": [
+    "require_capability(CAP_ASK)"
+   ]
+  },
+  "GET /research/drafts": {
+   "file": "app/api/research.py",
+   "func": "list_content_drafts",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /research/drafts/{draft_id}": {
+   "file": "app/api/research.py",
+   "func": "get_content_draft",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "GET /research/my-sessions": {
+   "file": "app/api/research.py",
+   "func": "my_research_sessions",
+   "gates": [
+    "require_capability(CAP_ASK)"
+   ]
+  },
+  "GET /research/published/{token}": {
+   "file": "app/api/research.py",
+   "func": "published_article",
+   "gates": []
+  },
+  "GET /research/session/{session_id}": {
+   "file": "app/api/research.py",
+   "func": "research_session",
+   "gates": [
+    "require_capability(CAP_ASK)"
+   ]
+  },
+  "GET /research/shared/{token}": {
+   "file": "app/api/research.py",
+   "func": "shared_session",
+   "gates": []
+  },
+  "PATCH /admin/outcomes/{outcome_id}": {
+   "file": "app/api/admin.py",
+   "func": "update_outcome",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "PATCH /entity-match-queue/{queue_id}/resolve": {
+   "file": "app/api/companies.py",
+   "func": "resolve_queue_entry",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "PATCH /me/settings": {
+   "file": "app/api/user.py",
+   "func": "patch_settings",
+   "gates": []
+  },
+  "PATCH /research/drafts/{draft_id}": {
+   "file": "app/api/research.py",
+   "func": "update_content_draft",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /access-requests": {
+   "file": "app/api/access.py",
+   "func": "create_access_request",
+   "gates": []
+  },
+  "POST /admin/access-requests/{request_id}/review": {
+   "file": "app/api/admin.py",
+   "func": "review_access_request",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /admin/account/delete": {
+   "file": "app/api/admin.py",
+   "func": "admin_delete_account",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /admin/account/disable": {
+   "file": "app/api/admin.py",
+   "func": "admin_set_account_disabled",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /admin/grant-pro": {
+   "file": "app/api/admin.py",
+   "func": "grant_pro",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /admin/revoke-pro": {
+   "file": "app/api/admin.py",
+   "func": "revoke_pro",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /admin/subscribers/{subscription_id}/active": {
+   "file": "app/api/admin.py",
+   "func": "set_subscriber_active",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /anon-scope": {
+   "file": "app/api/scope.py",
+   "func": "upsert_anon_scope",
+   "gates": []
+  },
+  "POST /auth/send-password-reset": {
+   "file": "app/api/auth_email.py",
+   "func": "send_password_reset",
+   "gates": []
+  },
+  "POST /auth/send-verification": {
+   "file": "app/api/auth_email.py",
+   "func": "send_verification",
+   "gates": []
+  },
+  "POST /billing/checkout": {
+   "file": "app/api/billing.py",
+   "func": "create_checkout",
+   "gates": []
+  },
+  "POST /billing/portal": {
+   "file": "app/api/billing.py",
+   "func": "billing_portal",
+   "gates": []
+  },
+  "POST /billing/signup-trial": {
+   "file": "app/api/billing.py",
+   "func": "signup_trial",
+   "gates": []
+  },
+  "POST /billing/webhook": {
+   "file": "app/api/billing.py",
+   "func": "stripe_webhook",
+   "gates": []
+  },
+  "POST /evaluate/bill": {
+   "file": "app/api/evaluate.py",
+   "func": "evaluate_bill",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /me/watchlist": {
+   "file": "app/api/user.py",
+   "func": "add_watch",
+   "gates": [
+    "require_pro"
+   ]
+  },
+  "POST /pipeline/purge-legiscan": {
+   "file": "app/api/pipeline.py",
+   "func": "purge_legiscan",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /pipeline/reset-classification": {
+   "file": "app/api/pipeline.py",
+   "func": "reset_classification",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /pipeline/run": {
+   "file": "app/api/pipeline.py",
+   "func": "trigger_pipeline",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /pipeline/run-classification": {
+   "file": "app/api/pipeline.py",
+   "func": "trigger_classification",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /pipeline/run-federal": {
+   "file": "app/api/pipeline.py",
+   "func": "trigger_federal",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /pipeline/run-openstates": {
+   "file": "app/api/pipeline.py",
+   "func": "trigger_openstates",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /pipeline/run-scoring": {
+   "file": "app/api/pipeline.py",
+   "func": "trigger_scoring",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /pipeline/seed": {
+   "file": "app/api/pipeline.py",
+   "func": "trigger_seed",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /referrals/attribute": {
+   "file": "app/api/referrals.py",
+   "func": "attribute",
+   "gates": []
+  },
+  "POST /research/ask": {
+   "file": "app/api/research.py",
+   "func": "ask_the_atlas",
+   "gates": []
+  },
+  "POST /research/drafts": {
+   "file": "app/api/research.py",
+   "func": "create_content_draft",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /research/drafts/{draft_id}/publish": {
+   "file": "app/api/research.py",
+   "func": "publish_content_draft",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /research/drafts/{draft_id}/unpublish": {
+   "file": "app/api/research.py",
+   "func": "unpublish_content_draft",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /research/pulse": {
+   "file": "app/api/research.py",
+   "func": "research_pulse",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /research/session/{session_id}/share": {
+   "file": "app/api/research.py",
+   "func": "share_session",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /research/session/{session_id}/unshare": {
+   "file": "app/api/research.py",
+   "func": "unshare_session",
+   "gates": [
+    "require_admin"
+   ]
+  },
+  "POST /subscriptions": {
+   "file": "app/api/alerts.py",
+   "func": "create_subscription",
+   "gates": []
+  },
+  "POST /webhooks/courtlistener": {
+   "file": "app/api/webhooks.py",
+   "func": "courtlistener_webhook",
+   "gates": []
+  },
+  "PUT /me/settings": {
+   "file": "app/api/user.py",
+   "func": "put_settings",
+   "gates": []
+  },
+  "PUT /me/watchlist/prefs": {
+   "file": "app/api/user.py",
+   "func": "put_watchlist_prefs",
+   "gates": [
+    "require_pro"
+   ]
+  }
+ },
+ "frontend": [
+  "/",
+  "/about",
+  "/account",
+  "/admin",
+  "/admin/research",
+  "/ask",
+  "/beta",
+  "/bill/[id]/[slug]",
+  "/company",
+  "/compliance",
+  "/design-guide",
+  "/developers",
+  "/embed",
+  "/evaluate",
+  "/faq",
+  "/federal",
+  "/insights",
+  "/jurisdictions/[region]/[code]",
+  "/label",
+  "/library",
+  "/methodology",
+  "/p",
+  "/pricing",
+  "/privacy",
+  "/r",
+  "/states",
+  "/states/[abbr]",
+  "/studio",
+  "/terms",
+  "/watchlist"
+ ],
+ "generated": "2026-08-13 06:30 UTC",
+ "head": "2c9b211",
+ "jobs": {
+  "alert_dispatch": "cron hour='8-18', minute='*/30'",
+  "bill_text_refresh": "cron hour=6, minute=30",
+  "cl_bill_match_reconcile": "cron hour=8, minute=0",
+  "cl_new_cases": "cron day_of_week='mon', hour=6, minute=0",
+  "cl_refresh_cases": "cron hour=7, minute=30",
+  "daily_ingestion": "cron hour=2, minute=0",
+  "daily_interpretation": "cron hour=4, minute=0",
+  "daily_scoring": "cron hour=3, minute=0",
+  "deadline_alerts": "cron hour=12, minute=0",
+  "eurlex_refresh": "cron day_of_week='tue', hour=5, minute=30",
+  "federal_register_poll": "interval hours=settings.federal_register_poll_interval_hours",
+  "monthly_digest": "cron day=1, hour=13, minute=0",
+  "new_bill_alerts": "cron hour=11, minute=30",
+  "source_link_audit": "cron day_of_week='sat', hour=5, minute=0",
+  "trial_reminders": "cron hour=13, minute=30",
+  "watchlist_onboarding": "interval minutes=20",
+  "watchlist_recap": "interval minutes=20",
+  "weekly_company_refresh": "cron day_of_week='sun', hour=4, minute=0",
+  "weekly_digest": "cron day_of_week='mon', hour=13, minute=0"
+ },
+ "migration_head": "048",
+ "migrations": 48,
+ "settings": {
+  "access_request_notify_email": "'kenny@superfun.studio'",
+  "admin_emails": "<...>",
+  "africa_laws_api_key": "\"\"",
+  "anthropic_api_key": "\"\"",
+  "api_base_url": "<redacted>",
+  "app_base_url": "<redacted>",
+  "bill_text_refresh_all_bills": "False",
+  "bill_text_refresh_batch_size": "200",
+  "business_address": "\"\"",
+  "cloud_run_region": "'us-central1'",
+  "comtrade_api_key": "\"\"",
+  "courtlistener_api_token": "\"\"",
+  "courtlistener_base_url": "<redacted>",
+  "courtlistener_request_delay_seconds": "5.0",
+  "courtlistener_webhook_secret": "\"\"",
+  "database_url": "<redacted>",
+  "deadline_reminder_days": "<...>",
+  "digest_window_days": "30",
+  "edu_email_suffixes": "<...>",
+  "email_click_tracking": "False",
+  "email_from": "None",
+  "email_from_name": "'Atlas Circular'",
+  "email_hello_from": "None",
+  "email_hello_from_name": "'Kenny at Atlas Circular'",
+  "email_reply_to": "None",
+  "enable_auth_emails": "True",
+  "enable_bill_text_refresh": "False",
+  "enable_caa_registry": "True",
+  "enable_courtlistener": "False",
+  "enable_deadline_alerts": "False",
+  "enable_digest": "False",
+  "enable_epa_frs": "True",
+  "enable_eurlex_ingestion": "False",
+  "enable_interpretation": "False",
+  "enable_legiscan_ingestion": "False",
+  "enable_link_audit": "False",
+  "enable_llm_classification": "False",
+  "enable_new_bill_alerts": "False",
+  "enable_openstates_ingestion": "True",
+  "enable_sec_edgar": "True",
+  "enable_sonnet_extraction": "False",
+  "enable_trial_reminders": "False",
+  "enable_watchlist_recap": "False",
+  "enable_weekly_digest": "False",
+  "enable_welcome_email": "True",
+  "enable_welcome_recap": "True",
+  "eurlex_in_force_only": "True",
+  "federal_register_poll_interval_hours": "6",
+  "firebase_project_id": "'ce-bill-tracker'",
+  "fmp_api_key": "\"\"",
+  "fred_api_key": "\"\"",
+  "google_cloud_project": "'ce-bill-tracker'",
+  "internal_emails": "<...>",
+  "interpretation_brief_ttl_days": "7",
+  "lawgokr_oc": "\"\"",
+  "lawsafrica_token": "\"\"",
+  "legifrance_client_id": "\"\"",
+  "legifrance_client_secret": "\"\"",
+  "legiscan_api_key": "\"\"",
+  "legiscan_poll_interval_hours": "24",
+  "link_audit_batch_size": "400",
+  "max_cl_cases_per_poll": "10",
+  "max_cl_cases_per_seed_run": "50",
+  "max_edgar_companies_per_run": "50",
+  "max_eurlex_acts_per_run": "400",
+  "max_haiku_calls_per_run": "100",
+  "max_interpretation_calls_per_run": "10",
+  "max_legiscan_calls_per_run": "5000",
+  "max_openstates_calls_per_run": "5000",
+  "max_sonnet_calls_per_run": "20",
+  "new_bill_alert_window_days": "7",
+  "newsapi_key": "\"\"",
+  "nrel_api_key": "\"\"",
+  "nys_api_key": "\"\"",
+  "open_states_api_key": "\"\"",
+  "openstates_recent_window_days": "2",
+  "openstates_request_delay_seconds": "6.0",
+  "postmark_api_key": "\"\"",
+  "postmark_broadcast_stream": "'broadcast'",
+  "postmark_message_stream": "'outbound'",
+  "postmark_server_id": "\"\"",
+  "scoring_geographic_weight": "0.35",
+  "scoring_material_weight": "0.35",
+  "scoring_severity_weight": "0.3",
+  "sec_user_agent": "'AtlasCircular/1.0 contact@atlascircular.com'",
+  "sendgrid_api_key": "\"\"",
+  "sendgrid_from_email": "\"\"",
+  "sendgrid_hello_email": "\"\"",
+  "sendgrid_reply_to": "\"\"",
+  "slack_webhook_url": "None",
+  "stripe_founding_coupon_id": "\"\"",
+  "stripe_founding_trial_days": "90",
+  "stripe_pro_annual_price_id": "\"\"",
+  "stripe_pro_monthly_price_id": "\"\"",
+  "stripe_publishable_key": "\"\"",
+  "stripe_research_annual_price_id": "\"\"",
+  "stripe_research_monthly_price_id": "\"\"",
+  "stripe_secret_key": "\"\"",
+  "stripe_student_product_id": "\"\"",
+  "stripe_webhook_secret": "\"\"",
+  "test_database_url": "<redacted>",
+  "trial_reminder_lead_days": "2",
+  "unsubscribe_secret": "\"\"",
+  "weekly_digest_window_days": "7"
+ },
+ "tables": {
+  "access_requests": [
+   "created_at",
+   "email",
+   "id",
+   "message",
+   "name",
+   "organization",
+   "plan_interest",
+   "reviewed_at",
+   "reviewed_by",
+   "source",
+   "status"
+  ],
+  "alert_subscriptions": [
+   "active",
+   "alert_on",
+   "created_at",
+   "deactivated_at",
+   "deactivation_source",
+   "email",
+   "firebase_uid",
+   "id",
+   "instrument_types",
+   "material_categories",
+   "min_confidence",
+   "onboarding_email_sent_at",
+   "organization",
+   "region_scope",
+   "scope",
+   "slack_webhook",
+   "states",
+   "watchlist_recap_sent_at"
+  ],
+  "anon_scope": [
+   "client_id",
+   "configured",
+   "created_at",
+   "id",
+   "material_categories",
+   "scoped",
+   "states",
+   "updated_at"
+  ],
+  "bill_changes": [
+   "alert_sent",
+   "bill_id",
+   "change_type",
+   "detected_at",
+   "id",
+   "new_value",
+   "old_value"
+  ],
+  "bill_design_signal": [
+   "bill_id",
+   "confidence",
+   "created_at",
+   "design_action",
+   "extractor_model",
+   "id",
+   "lever",
+   "obligation_type",
+   "reviewed",
+   "source_excerpt",
+   "threshold_unit",
+   "threshold_value"
+  ],
+  "bill_fee_citation": [
+   "basis",
+   "bill_id",
+   "confidence",
+   "created_at",
+   "extracted_value",
+   "extractor_model",
+   "fact_type",
+   "id",
+   "notes",
+   "reviewed",
+   "source_excerpt",
+   "source_url",
+   "value_unit"
+  ],
+  "bill_outcome": [
+   "as_of_date",
+   "attribution",
+   "bill_id",
+   "bill_number",
+   "confidence",
+   "created_at",
+   "direction",
+   "id",
+   "instrument_type",
+   "law_title",
+   "material_categories",
+   "metric_display",
+   "metric_label",
+   "metric_unit",
+   "metric_value",
+   "region",
+   "remediated_by_bill_id",
+   "remediation_bill_number",
+   "remediation_checked_at",
+   "remediation_note",
+   "reviewed",
+   "slug",
+   "source_name",
+   "source_url",
+   "state",
+   "summary"
+  ],
+  "bill_product_coverage": [
+   "bill_id",
+   "category",
+   "confidence",
+   "created_at",
+   "defined_by_reference",
+   "extractor_model",
+   "id",
+   "product_slug",
+   "relationship_type",
+   "reviewed",
+   "source_excerpt",
+   "status",
+   "threshold_unit",
+   "threshold_value"
+  ],
+  "bill_texts": [
+   "bill_id",
+   "char_len",
+   "fetched_at",
+   "indexed_change_hash",
+   "source",
+   "text",
+   "text_tsv"
+  ],
+  "bills": [
+   "adjacency",
+   "ai_summary",
+   "bill_number",
+   "ce_relevant",
+   "celex_id",
+   "change_hash",
+   "compliance_details",
+   "confidence_score",
+   "created_at",
+   "description",
+   "effective_date",
+   "foreign_id",
+   "id",
+   "instrument_type",
+   "instrument_types",
+   "jurisdiction_id",
+   "last_action_date",
+   "last_fetched_at",
+   "legiscan_bill_id",
+   "litigation_risk",
+   "material_categories",
+   "needs_review",
+   "new_bill_alert_sent",
+   "openstates_id",
+   "policy_stance",
+   "region",
+   "reviewed",
+   "source_url",
+   "source_url_checked_at",
+   "source_url_final",
+   "source_url_status",
+   "stance_source",
+   "state",
+   "status",
+   "status_date",
+   "title",
+   "title_native",
+   "title_native_lang",
+   "updated_at",
+   "urgency"
+  ],
+  "cl_alert_subscriptions": [
+   "active",
+   "alert_type",
+   "cl_alert_id",
+   "created_at",
+   "docket_id",
+   "id",
+   "query_string"
+  ],
+  "classification_changes": [
+   "bill_id",
+   "created_at",
+   "id",
+   "new_value",
+   "old_value",
+   "run_id"
+  ],
+  "company": [
+   "cik",
+   "created_at",
+   "duns_number",
+   "epa_registry_id",
+   "hq_state",
+   "id",
+   "naics_codes",
+   "name",
+   "operating_states",
+   "region",
+   "total_annual_volume_tonnes",
+   "updated_at",
+   "volume_confidence",
+   "volume_source"
+  ],
+  "company_alias": [
+   "alias_name",
+   "company_id",
+   "id",
+   "match_confidence",
+   "source",
+   "verified",
+   "verified_at",
+   "verified_by"
+  ],
+  "company_material": [
+   "annual_volume_tonnes",
+   "company_id",
+   "id",
+   "material_category",
+   "source",
+   "volume_confidence"
+  ],
+  "company_state_presence": [
+   "company_id",
+   "id",
+   "is_primary",
+   "presence_type",
+   "region",
+   "state"
+  ],
+  "compliance_deadlines": [
+   "bill_id",
+   "deadline_date",
+   "deadline_type",
+   "description",
+   "federal_action_id",
+   "id",
+   "region",
+   "reminder_sent",
+   "source_url",
+   "state",
+   "who_affected"
+  ],
+  "compliance_entity": [
+   "created_at",
+   "description",
+   "entity_type",
+   "home_state",
+   "id",
+   "jurisdiction_scope",
+   "materials",
+   "name",
+   "region",
+   "registration_url",
+   "slug",
+   "url"
+  ],
+  "compliance_pathway": [
+   "action_summary",
+   "action_type",
+   "basis",
+   "bill_id",
+   "confidence",
+   "created_at",
+   "entity_id",
+   "has_fee",
+   "id",
+   "management_model",
+   "next_deadline_date",
+   "region",
+   "registration_url",
+   "reviewed"
+  ],
+  "content_drafts": [
+   "body_markdown",
+   "created_at",
+   "created_by",
+   "dek",
+   "id",
+   "published_at",
+   "share_token",
+   "slug",
+   "source_seq",
+   "source_session_id",
+   "status",
+   "title",
+   "updated_at"
+  ],
+  "entitlements": [
+   "comp",
+   "comp_granted_at",
+   "comp_granted_by",
+   "comp_note",
+   "created_at",
+   "current_period_end",
+   "email",
+   "firebase_uid",
+   "founding",
+   "id",
+   "plan",
+   "preview_until",
+   "referral_code",
+   "signup_trial_used",
+   "status",
+   "stripe_customer_id",
+   "stripe_subscription_id",
+   "trial_reminder_sent_for",
+   "updated_at"
+  ],
+  "entity_match_queue": [
+   "candidate_name",
+   "confidence",
+   "id",
+   "resolved",
+   "resolved_at",
+   "source",
+   "suggested_company_id"
+  ],
+  "exposure_brief": [
+   "bill_id",
+   "brief_json",
+   "company_id",
+   "generated_at",
+   "id",
+   "ttl_expires_at"
+  ],
+  "federal_actions": [
+   "action_type",
+   "agency",
+   "ai_summary",
+   "ce_relevant",
+   "comment_deadline",
+   "created_at",
+   "document_url",
+   "effective_date",
+   "federal_register_document_number",
+   "friction_type",
+   "id",
+   "instrument_type",
+   "material_categories",
+   "preemption_risk",
+   "published_date",
+   "raw_data",
+   "title"
+  ],
+  "impact_score": [
+   "bill_id",
+   "calculated_at",
+   "company_id",
+   "composite_score",
+   "cost_confidence",
+   "estimated_annual_cost",
+   "geographic_score",
+   "id",
+   "material_score",
+   "score_breakdown",
+   "severity_score",
+   "volume_confidence"
+  ],
+  "jurisdictions": [
+   "aliases",
+   "bill_count",
+   "code",
+   "id",
+   "level",
+   "name",
+   "parent_id",
+   "path"
+  ],
+  "litigation_cases": [
+   "assigned_judge",
+   "case_name",
+   "case_status",
+   "ce_relevant",
+   "challenge_type",
+   "cl_url",
+   "court_id",
+   "court_name",
+   "courtlistener_id",
+   "created_at",
+   "date_filed",
+   "date_terminated",
+   "docket_number",
+   "id",
+   "key_plaintiffs",
+   "last_activity_date",
+   "plaintiff_type",
+   "preemption_risk",
+   "region",
+   "related_law_id",
+   "related_state",
+   "related_statute",
+   "relevance_checked_at",
+   "relevance_reason",
+   "relevance_source",
+   "updated_at"
+  ],
+  "litigation_events": [
+   "case_id",
+   "courtlistener_entry_id",
+   "created_at",
+   "date_filed",
+   "description",
+   "document_url",
+   "event_type",
+   "id",
+   "significance",
+   "summary"
+  ],
+  "referrals": [
+   "created_at",
+   "id",
+   "referred_email",
+   "referred_uid",
+   "referrer_uid"
+  ],
+  "research_sessions": [
+   "created_at",
+   "id",
+   "owner_uid",
+   "share_token",
+   "title",
+   "updated_at",
+   "visibility"
+  ],
+  "research_turns": [
+   "answer",
+   "bill_ids",
+   "bill_total",
+   "created_at",
+   "facets",
+   "id",
+   "question",
+   "rewritten_query",
+   "seq",
+   "session_id",
+   "strategy"
+  ],
+  "user_settings": [
+   "created_at",
+   "email",
+   "firebase_uid",
+   "id",
+   "prefs",
+   "updated_at"
+  ],
+  "user_watchlist": [
+   "bill_id",
+   "created_at",
+   "firebase_uid",
+   "id"
+  ]
+ }
+}

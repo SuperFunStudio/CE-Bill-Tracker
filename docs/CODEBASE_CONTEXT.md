@@ -1,6 +1,25 @@
 # Atlas Circular — Codebase Context
 
-_Generated 2026-08-08 06:26 UTC by `scripts/generate_codebase_context.py` (level: standard). Regenerate rather than hand-editing — every section below the preamble is derived from the source tree._
+_Generated 2026-08-13 06:30 UTC by `scripts/generate_codebase_context.py` (level: standard). Regenerate rather than hand-editing — every section below the preamble is derived from the source tree._
+
+## Current focus
+
+- **Launch comms and measurement.** Email has just moved to Postmark (both streams, compliant
+  footer, verifiable sender); GA4 is now queryable from the terminal, with a pre-post traffic
+  baseline recorded so a launch spike has something to be measured against.
+- **The exposure calculator.** Speccing and building producer attribution — answering "who owes
+  this" before "how much", starting from the OR/CO fee schedules.
+- **Corpus text integrity.** Reversible repair paths for wrong-text bills, split by which failure
+  actually happened, and extraction running against the enacted version rather than the
+  introduced draft.
+- **Conversion surfaces.** Paywalls all reporting themselves the same way, referral in email,
+  and the pricing page argued rather than listed.
+
+_Source: [docs/FOCUS.md](docs/FOCUS.md), last edited (uncommitted)._
+
+Where the commits have actually landed in the last 21 days — derived, so it corroborates or contradicts the block above:
+
+`dashboard-next/src/components` (121) · `dashboard-next/src/app` (100) · `app/api` (48) · `dashboard-next/src/lib` (45) · `app/alerts` (42) · `tests/test_alerts` (18) · `app/ingestion` (17) · `dashboard-next/scripts/og-assets` (13)
 
 ## What this is
 
@@ -15,8 +34,9 @@ surface ("Ask the Atlas") that answers questions with citations back to specific
 
 Stack: **FastAPI + SQLAlchemy 2.0 (typed `Mapped`) + Postgres + Alembic** on the backend,
 **Next.js (App Router, static export) + Tailwind** in `dashboard-next/`, Anthropic API for
-classification/extraction/synthesis, APScheduler for recurring ingest, SendGrid for email,
-Stripe for billing, Firebase Auth for identity.
+classification/extraction/synthesis, APScheduler for recurring ingest, Postmark for email
+(transactional + broadcast streams; the `SENDGRID_*` settings are inert legacy names kept so an
+old environment still boots), Stripe for billing, Firebase Auth for identity.
 
 Hosting is **Google Cloud**, project `ce-bill-tracker`: Cloud Run for the API, Cloud Run Jobs
 for the pipeline, Cloud SQL Postgres, Firebase Hosting for the dashboard.
@@ -37,54 +57,213 @@ Consequence worth holding onto when advising: a remote/cloud agent sees only wha
 can differ, and only the prod deploy guard forces them to agree.
 
 
+## Capabilities
+
+What the product can do, grouped by user-facing job. Each cluster's pages and endpoints are derived from the tree; only the grouping is hand-declared (`CLUSTERS` in the generator), so anything new shows up either in a cluster or in **Unclustered** at the end.
+
+"Gated by" lists the auth dependencies the backend actually enforces — a capability name maps to the cheapest plan carrying it, per `PLAN_CAPS`. Endpoints with no gate are public.
+
+### Corpus browse & filter
+
+The atlas itself: the bill corpus, per-bill pages, jurisdiction and state profiles, and the embeddable/anonymous slices.
+
+- Pages: `/`, `/bill/[id]/[slug]`, `/embed`, `/jurisdictions/[region]/[code]`, `/library`, `/states`, `/states/[abbr]`
+- API: 16 endpoints (16 public) in `app/api/bills.py`, `app/api/scope.py`
+- Gated by: nothing — fully public
+
+### Ask the Atlas (research)
+
+LLM research surface — cited answers over the corpus, persisted research sessions, shared `/r/` links and published `/p/` pages.
+
+- Pages: `/ask`, `/p`, `/r`
+- API: 17 endpoints (3 public) in `app/api/research.py`
+- Gated by: admin, ask (student+)
+
+### Compliance pathways
+
+What a given obligation actually requires: deadlines, structured compliance dimensions, and how-to-comply links.
+
+- Pages: `/compliance`
+- API: 6 endpoints (6 public) in `app/api/compliance.py`
+- Gated by: nothing — fully public
+
+### Company exposure & bill evaluation
+
+Producer attribution — which companies a measure reaches — plus the fit-score evaluator for a single bill.
+
+- Pages: `/company`, `/evaluate`
+- API: 11 endpoints (7 public) in `app/api/companies.py`, `app/api/evaluate.py`
+- Gated by: admin
+
+### Federal actions & litigation
+
+US federal regulatory actions and tracked litigation, alongside the legislative corpus.
+
+- Pages: `/federal`
+- API: 3 endpoints (3 public) in `app/api/federal.py`
+- Gated by: nothing — fully public
+
+### Insights & analytics
+
+Momentum, heatmaps, passage-rate baselines and real-world outcomes.
+
+- Pages: `/insights`
+- API: 4 endpoints (4 public) in `app/api/insights.py`
+- Gated by: nothing — fully public
+
+### Design guide & packaging studio
+
+Design-for-EPR principles, the packaging reference catalog, material swatches and labeling.
+
+- Pages: `/design-guide`, `/label`, `/studio`
+- API: 1 endpoint (0 public) in `app/api/design.py`
+- Gated by: design_guide (student+)
+
+### Watchlist & alerts
+
+Per-user tracking with new-bill, deadline and digest email triggers.
+
+- Pages: `/watchlist`
+- API: 2 endpoints (2 public) in `app/api/alerts.py`
+- Gated by: nothing — fully public
+
+### Accounts, billing & access
+
+Identity, entitlements and plan resolution, Stripe checkout and webhooks, referrals, beta access requests.
+
+- Pages: `/account`, `/beta`, `/pricing`
+- API: 21 endpoints (16 public) in `app/api/access.py`, `app/api/auth_email.py`, `app/api/billing.py`, `app/api/referrals.py`, `app/api/user.py`, `app/api/webhooks.py`
+- Gated by: Pro
+
+### Admin & pipeline ops
+
+Internal only: corpus review queues, the research log, and manual triggers for the ingest/classify pipeline.
+
+- Pages: `/admin`, `/admin/research`
+- API: 25 endpoints (1 public) in `app/api/admin.py`, `app/api/pipeline.py`
+- Gated by: admin
+
+### Static & marketing
+
+Content pages with no backing API surface of their own.
+
+- Pages: `/about`, `/developers`, `/faq`, `/methodology`, `/privacy`, `/terms`
+- Gated by: nothing — fully public
+
+### Unclustered
+
+Not claimed by any cluster above — add them to `CLUSTERS` in `scripts/generate_codebase_context.py`.
+
+- API: 1 endpoint (1 public) in `app/api/health.py`
+- Gated by: nothing — fully public
+
+### Plan matrix
+
+From `PLAN_CAPS` in `app/api/auth.py` — plans in declaration order, cheapest first.
+
+| Capability | Free | Student | Research | Pro | Enterprise | What it unlocks |
+| --- | --- | --- | --- | --- | --- | --- |
+| `explore` | ● | ● | ● | ● | ● | Bill Explorer + jurisdiction data |
+| `ask` | · | ● | ● | ● | ● | Ask the Atlas (research Q&A) |
+| `design_guide` | · | ● | ● | ● | ● | full Design Guide |
+| `insights_impact` | · | · | ● | ● | ● | Real-World Impact table + Bills-over-time chart |
+| `deadlines` | · | · | · | ● | ● | Upcoming Deadlines calendar |
+| `alerts` | · | · | · | ● | ● | watchlist / new-bill + deadline alerts |
+| `studio` | · | · | · | ● | ● | Packaging Studio |
+| `federal` | · | · | · | ● | ● | Federal Actions (also US-region gated at the route) |
+
+> **Enforced server-side: `ask`, `design_guide`.** The rest — `explore`, `insights_impact`, `deadlines`, `alerts`, `studio`, `federal` — appear in `PLAN_CAPS` but are not required by any route, so the paywall for them is client-side and the API is reachable without the plan.
+
+### Behavior behind default-off flags
+
+These `app/config.py` settings default to **False**, so the code exists but is inert unless the environment turns it on. Reading the code alone will overstate what's running.
+
+`ENABLE_EURLEX_INGESTION`, `ENABLE_LEGISCAN_INGESTION`, `ENABLE_LLM_CLASSIFICATION`, `ENABLE_SONNET_EXTRACTION`, `ENABLE_INTERPRETATION`, `ENABLE_COURTLISTENER`, `ENABLE_DIGEST`, `ENABLE_WEEKLY_DIGEST`, `ENABLE_DEADLINE_ALERTS`, `ENABLE_NEW_BILL_ALERTS`, `ENABLE_TRIAL_REMINDERS`, `ENABLE_WATCHLIST_RECAP`, `ENABLE_LINK_AUDIT`, `ENABLE_BILL_TEXT_REFRESH`
+
 ## Repo state at generation time
 
 - Remote: `https://github.com/SuperFunStudio/CE-Bill-Tracker.git`
-- Branch: `main` — HEAD `204d628 2026-08-07 Respect CourtListener's 50/hour budget in the poller and the prune`
-- Uncommitted files: **6** (app/ingestion/law_dates.py, dashboard-next/src/app/page.tsx, dashboard-next/src/components/research/ResearchThread.tsx, docs/CODEBASE_CONTEXT.md, scripts/generate_codebase_context.py, tests/test_ingestion/test_law_dates.py)
-- Unpushed commits on this branch: **4**
-- Alembic head: **046** (46 migrations)
-- Size: 32 tables · 104 API endpoints · 30 frontend routes · 19 scheduled jobs · 109 scripts
+- Branch: `main` — HEAD `2c9b211 2026-08-12 Say what the Atlas holds, and put each control next to the thing it acts on`
+- Uncommitted files: **6** (.claude/settings.json, cloudbuild.yaml, docs/CODEBASE_CONTEXT.md, scripts/generate_codebase_context.py, docs/FOCUS.md, docs/codebase_context.snapshot.json)
+- Unpushed commits on this branch: **0**
+- Alembic head: **048** (48 migrations)
+- Size: 33 tables · 107 API endpoints · 30 frontend routes · 19 scheduled jobs · 116 scripts
 
 > Note: the working tree is **not** clean/synced, so this summary describes code that a remote agent cloning `origin` would not see.
 
 ## Recent commits
 
 ```
-204d628 2026-08-07  Respect CourtListener's 50/hour budget in the poller and the prune
-47f0467 2026-08-07  Re-enable CourtListener behind the gate; add the pricing walkthrough band
-156ee35 2026-08-07  Merge fix-litigation-relevance-gate: screen litigation before alerting; date the digest by when law moved
-beaac12 2026-08-07  Screen litigation for relevance before alerting; date the digest by when law moved
-d6b5f74 2026-08-07  Rework the welcome email as a State of Play briefing; send it from hello@
-7876964 2026-08-06  Make sitemap lastmod mean "when this page changed"
-80adba2 2026-08-06  Send auth emails as Atlas Circular; fix the tracked-link cert break; rework alert chrome
-9fd14fa 2026-08-06  Answer "what must I do" on deadlines and bill pages; ungate the per-bill record
-64b505c 2026-08-06  Match Ask-the-Atlas cost triggers on word boundaries
-81a79d4 2026-08-06  Fix Ask-the-Atlas retrieval: EU as a market, and answer the cost question
-17a02f9 2026-08-05  Ground Ask-the-Atlas ranks, status, and corpus shares in SQL
-daee697 2026-08-05  Shrink the globe, compact the subscribe form, unify the corpus headline
-1e4a728 2026-08-04  Lead Explore with the search bar; cut the hint to one line
-38d39be 2026-08-04  Fix region-scoped search + add keyword→facet bridge, complete material dropdown
-3e9bf2e 2026-08-04  BillDotExplorer: smaller marks on mobile (≤640px)
+2c9b211 2026-08-12  Say what the Atlas holds, and put each control next to the thing it acts on
+21fb85e 2026-08-12  Send every email through Postmark, from one identity with two voices
+d2a01c3 2026-08-12  Tell an admin mute apart from a real unsubscribe
+2010327 2026-08-12  Record the pre-post traffic baseline so the spike has something to be measured against
+1247a3c 2026-08-12  Stop shipping the corpus raw and uncached on every homepage load
+18b6acd 2026-08-12  Read journeys out of the GA4 export, with the bots taken out first
+5a6428f 2026-08-11  Wire BUSINESS_ADDRESS into the API and migration-job deploys
+86ba639 2026-08-11  Give every outbound email a compliant footer and a verifiable sender
+e9bd58c 2026-08-11  Answer "who owes it" before "how much": producer attribution + OR/CO fee schedules
+dc6c598 2026-08-11  Stop losing the first page_view, and let anonymous readers personalize
+c845a66 2026-08-11  Spec the exposure calculator
+5e4b693 2026-08-11  Query GA4 from the terminal instead of its UI
+e2f6fdd 2026-08-11  Offer the referral in email, and make the visit measurable
+75da995 2026-08-11  Make every paywall report itself the same way
+6b3c148 2026-08-11  Extract from the version that IS the law, not the introduced draft
 ```
+
+## Changed since last generation
+
+_Baseline: snapshot taken 2026-08-13 06:30 UTC at `2c9b211`. Structural only — a rewritten function body with the same signature doesn't appear here._
+
+**New endpoints**
+
+- `GET /admin/access-requests` — `list_access_requests` in app/api/admin.py (gated: require_admin)
+
+**Removed endpoints**
+
+- `GET /ghost/route`
+
+**Moved gates**
+
+- `DELETE /admin/outcomes/{outcome_id}` — was ungated → now require_admin
+
+**Removed tables**
+
+- `ghost_table`
+
+**Changed columns**
+
+- `access_requests`: +`created_at`
+
+**New pages**
+
+- `/ask`
+
+**Changed defaults**
+
+- `ENABLE_DIGEST` — was `True` → now `False`
+
+**Migrations**
+
+- head `047` → `048` (+1 revision)
 
 ## Directory map
 
 ```
 alembic/  (1 py)  — Database migrations (single linear history)
-  versions/  (46 py)
+  versions/  (48 py)
 app/  (11 py)  — FastAPI backend (all Python application code)
   alerts/  (19 py)  — Email alerting, digests, subscriber notification triggers
-  api/  (22 py)  — HTTP routers — one module per surface
+  api/  (23 py)  — HTTP routers — one module per surface
   classification/  (10 py)  — Claude-backed classifiers + keyword gates that decide scope and axes
   company_intel/  (6 py)  — Company entity resolution + exposure briefs
   evaluation/  (6 py)  — Bill strength / fit-score evaluator
   geo/  (2 py)  — Jurisdiction tree + region/state normalization
-  ingestion/  (16 py)  — Source adapters: LegiScan, OpenStates, EUR-Lex, Federal Register, per-country foreign clients
+  ingestion/  (17 py)  — Source adapters: LegiScan, OpenStates, EUR-Lex, Federal Register, per-country foreign clients
   links/  (2 py)  — Source-link health classification and repair
   research/  (3 py)  — Ask-the-Atlas retrieval, facet routing, session/turn persistence
   scheduler/  (2 py)  — APScheduler job definitions for recurring ingest/refresh
-  scoring/  (7 py)  — Company impact scoring (gated, pre-launch)
+  scoring/  (8 py)  — Company impact scoring (gated, pre-launch)
   static/
   synthesis/  (7 py)  — LLM synthesis (design principles, briefings) over classified bills
   utils/  (5 py)  — Shared helpers
@@ -99,6 +278,7 @@ data/  — Seed data and exports (data/seed IS shipped into the image)
   exports/
   seed/
 docs/  — Design specs, roadmaps, plans, assessments
+  research/
 hackathon/  — Hackathon prototypes
   compliance-cliff/
   compliance-copilot-mcp/
@@ -110,14 +290,14 @@ hackathon/  — Hackathon prototypes
   swap-studio/
   under-appeal/
   whip-count/
-scripts/  (109 py)  — One-off + operational scripts (backfills, audits, ingest runs, deploys)
+scripts/  (116 py)  — One-off + operational scripts (backfills, audits, ingest runs, deploys)
 tests/  (3 py)  — pytest suite
   eval/  (2 py)
-  test_alerts/  (10 py)
-  test_api/  (7 py)
+  test_alerts/  (12 py)
+  test_api/  (13 py)
   test_classification/  (2 py)
   test_company_intel/  (6 py)
-  test_ingestion/  (4 py)
+  test_ingestion/  (6 py)
   test_scoring/  (2 py)
   test_synthesis/  (1 py)
 ```
@@ -171,6 +351,7 @@ FastAPI app: `app/main.py`. Routers live in `app/api/` and are registered there.
 | Method | Path | Handler | Notes |
 | --- | --- | --- | --- |
 | POST | `/billing/checkout` | `create_checkout` | Open a Checkout Session for the requested membership and return its hosted URL (or, for a $0 |
+| GET | `/billing/founding-seats` | `founding_seats` | How many founding seats are gone — the pricing page's seat counter, made true. |
 | GET | `/billing/me` | `billing_me` | The dashboard's entitlement check — is the signed-in user on Pro. |
 | POST | `/billing/portal` | `billing_portal` | Stripe-hosted customer portal so subscribers can manage/cancel their plan. |
 | POST | `/billing/signup-trial` | `signup_trial` | Grant this account its one-time 7-day signup trial (full Pro, no card) and send the account |
@@ -219,6 +400,7 @@ FastAPI app: `app/main.py`. Routers live in `app/api/` and are registered there.
 | GET | `/compliance/fee-amounts/summary` | `fee_amounts_summary` | Open, full aggregate over the bill-sourced fee entries — the breadth teaser + chartable stat. |
 | GET | `/compliance/fee-schedule` | `fee_schedule` | CA SB 54 (2027 draft) per-material-format producer fee schedule. Public reference data. |
 | GET | `/compliance/pathways` | `list_pathways` |  |
+| GET | `/compliance/producer-attribution` | `producer_attribution` | Which party owes the packaging obligation, per jurisdiction and regime, with citations. |
 
 ### app/api/design.py — `/design-guide`
 
@@ -300,6 +482,12 @@ FastAPI app: `app/main.py`. Routers live in `app/api/` and are registered there.
 | POST | `/research/session/{session_id}/unshare` | `unshare_session` | Revoke sharing: back to private AND drop the token, so a link that already leaked stops working |
 | GET | `/research/shared/{token}` | `shared_session` | PUBLIC read of a shared research thread — no auth. Resolves ONLY when the session is explicitly |
 
+### app/api/scope.py — `/anon-scope`
+
+| Method | Path | Handler | Notes |
+| --- | --- | --- | --- |
+| POST | `/anon-scope` | `upsert_anon_scope` | Record (or update) an anonymous visitor's scope. Returns 204 — the client is the source of |
+
 ### app/api/user.py — `/me`
 
 | Method | Path | Handler | Notes |
@@ -322,7 +510,7 @@ FastAPI app: `app/main.py`. Routers live in `app/api/` and are registered there.
 
 ## Data model
 
-SQLAlchemy 2.0 typed models in `app/models.py` (32 tables). Migrations are a single linear Alembic history in `alembic/versions/`.
+SQLAlchemy 2.0 typed models in `app/models.py` (33 tables). Migrations are a single linear Alembic history in `alembic/versions/`.
 
 ### `bills` — `Bill` ([app/models.py:25](app/models.py#L25))
 
@@ -382,111 +570,117 @@ Relationships: `bill`
 
 A subscription to bill movement, in one of two scopes (the `scope` column):
 
-Columns: `id`, `firebase_uid`, `scope`, `email`, `organization`, `slack_webhook`, `states`, `region_scope`, `material_categories`, `instrument_types`, `min_confidence`, `alert_on`, `active`, `created_at`, `onboarding_email_sent_at`, `watchlist_recap_sent_at`
+Columns: `id`, `firebase_uid`, `scope`, `email`, `organization`, `slack_webhook`, `states`, `region_scope`, `material_categories`, `instrument_types`, `min_confidence`, `alert_on`, `active`, `created_at`, `onboarding_email_sent_at`, `watchlist_recap_sent_at`, `deactivated_at`, `deactivation_source`
 
-### `access_requests` — `AccessRequest` ([app/models.py:493](app/models.py#L493))
+### `access_requests` — `AccessRequest` ([app/models.py:523](app/models.py#L523))
 
 A captured "request access / pricing" click — the willingness-to-pay field experiment, and
 
 Columns: `id`, `email`, `name`, `organization`, `plan_interest`, `message`, `source`, `status`, `reviewed_by`, `reviewed_at`, `created_at`
 
-### `federal_actions` — `FederalAction` ([app/models.py:527](app/models.py#L527))
+### `federal_actions` — `FederalAction` ([app/models.py:557](app/models.py#L557))
 
 Columns: `id`, `federal_register_document_number`, `agency`, `title`, `action_type`, `material_categories`, `published_date`, `comment_deadline`, `effective_date`, `document_url`, `ce_relevant`, `preemption_risk`, `friction_type`, `instrument_type`, `ai_summary`, `raw_data`, `created_at`
 
-### `compliance_deadlines` — `ComplianceDeadline` ([app/models.py:556](app/models.py#L556))
+### `compliance_deadlines` — `ComplianceDeadline` ([app/models.py:586](app/models.py#L586))
 
 Columns: `id`, `bill_id`, `federal_action_id`, `region`, `state`, `deadline_type`, `deadline_date`, `description`, `who_affected`, `source_url`, `reminder_sent`
 
 Relationships: `bill`
 
-### `company` — `Company` ([app/models.py:590](app/models.py#L590))
+### `company` — `Company` ([app/models.py:620](app/models.py#L620))
 
 Columns: `id`, `name`, `duns_number`, `cik`, `epa_registry_id`, `region`, `hq_state`, `naics_codes`, `operating_states`, `total_annual_volume_tonnes`, `volume_source`, `volume_confidence`, `created_at`, `updated_at`
 
 Relationships: `aliases`, `materials`, `state_presences`, `impact_scores`
 
-### `company_alias` — `CompanyAlias` ([app/models.py:630](app/models.py#L630))
+### `company_alias` — `CompanyAlias` ([app/models.py:660](app/models.py#L660))
 
 Columns: `id`, `company_id`, `alias_name`, `source`, `match_confidence`, `verified`, `verified_by`, `verified_at`
 
 Relationships: `company`
 
-### `company_material` — `CompanyMaterial` ([app/models.py:660](app/models.py#L660))
+### `company_material` — `CompanyMaterial` ([app/models.py:690](app/models.py#L690))
 
 Columns: `id`, `company_id`, `material_category`, `annual_volume_tonnes`, `volume_confidence`, `source`
 
 Relationships: `company`
 
-### `company_state_presence` — `CompanyStatePresence` ([app/models.py:679](app/models.py#L679))
+### `company_state_presence` — `CompanyStatePresence` ([app/models.py:709](app/models.py#L709))
 
 Columns: `id`, `company_id`, `region`, `state`, `presence_type`, `is_primary`
 
 Relationships: `company`
 
-### `impact_score` — `ImpactScore` ([app/models.py:702](app/models.py#L702))
+### `impact_score` — `ImpactScore` ([app/models.py:732](app/models.py#L732))
 
 Columns: `id`, `company_id`, `bill_id`, `composite_score`, `material_score`, `geographic_score`, `severity_score`, `estimated_annual_cost`, `cost_confidence`, `volume_confidence`, `score_breakdown`, `calculated_at`
 
 Relationships: `company`, `bill`
 
-### `entity_match_queue` — `EntityMatchQueue` ([app/models.py:733](app/models.py#L733))
+### `entity_match_queue` — `EntityMatchQueue` ([app/models.py:763](app/models.py#L763))
 
 Columns: `id`, `candidate_name`, `source`, `suggested_company_id`, `confidence`, `resolved`, `resolved_at`
 
-### `exposure_brief` — `ExposureBrief` ([app/models.py:751](app/models.py#L751))
+### `exposure_brief` — `ExposureBrief` ([app/models.py:781](app/models.py#L781))
 
 Columns: `id`, `company_id`, `bill_id`, `brief_json`, `generated_at`, `ttl_expires_at`
 
 Relationships: `company`, `bill`
 
-### `litigation_cases` — `LitigationCase` ([app/models.py:781](app/models.py#L781))
+### `litigation_cases` — `LitigationCase` ([app/models.py:811](app/models.py#L811))
 
 Columns: `id`, `courtlistener_id`, `case_name`, `docket_number`, `court_id`, `court_name`, `date_filed`, `date_terminated`, `assigned_judge`, `case_status`, `challenge_type`, `plaintiff_type`, `key_plaintiffs`, `related_law_id`, `region`, `related_state`, `related_statute`, `preemption_risk`, `cl_url`, `last_activity_date`, `ce_relevant`, `relevance_reason`, `relevance_source`, `relevance_checked_at`, `created_at`, `updated_at`
 
 Relationships: `related_law`, `events`
 
-### `litigation_events` — `LitigationEvent` ([app/models.py:836](app/models.py#L836))
+### `litigation_events` — `LitigationEvent` ([app/models.py:866](app/models.py#L866))
 
 Columns: `id`, `case_id`, `courtlistener_entry_id`, `event_type`, `date_filed`, `description`, `summary`, `significance`, `document_url`, `created_at`
 
 Relationships: `case`
 
-### `cl_alert_subscriptions` — `CLAlertSubscription` ([app/models.py:858](app/models.py#L858))
+### `cl_alert_subscriptions` — `CLAlertSubscription` ([app/models.py:888](app/models.py#L888))
 
 Columns: `id`, `alert_type`, `cl_alert_id`, `query_string`, `docket_id`, `active`, `created_at`
 
-### `entitlements` — `Entitlement` ([app/models.py:872](app/models.py#L872))
+### `entitlements` — `Entitlement` ([app/models.py:902](app/models.py#L902))
 
 A paid seat. One row per account, keyed by email — the stable identity that bridges Firebase
 
 Columns: `id`, `email`, `firebase_uid`, `plan`, `status`, `stripe_customer_id`, `stripe_subscription_id`, `current_period_end`, `comp`, `comp_note`, `comp_granted_by`, `comp_granted_at`, `founding`, `referral_code`, `signup_trial_used`, `trial_reminder_sent_for`, `preview_until`, `created_at`, `updated_at`
 
-### `referrals` — `Referral` ([app/models.py:946](app/models.py#L946))
+### `referrals` — `Referral` ([app/models.py:976](app/models.py#L976))
 
 One completed share-to-unlock referral: a NEW account (referred) signed up via a referrer's
 
 Columns: `id`, `referrer_uid`, `referred_uid`, `referred_email`, `created_at`
 
-### `user_settings` — `UserSettings` ([app/models.py:968](app/models.py#L968))
+### `user_settings` — `UserSettings` ([app/models.py:998](app/models.py#L998))
 
 Per-account UI preferences, keyed by the immutable Firebase uid. Today this holds the saved
 
 Columns: `id`, `firebase_uid`, `email`, `prefs`, `created_at`, `updated_at`
 
-### `user_watchlist` — `WatchlistItem` ([app/models.py:991](app/models.py#L991))
+### `anon_scope` — `AnonScope` ([app/models.py:1021](app/models.py#L1021))
+
+The scope an ANONYMOUS visitor chose — the signed-out counterpart to
+
+Columns: `id`, `client_id`, `states`, `material_categories`, `configured`, `scoped`, `created_at`, `updated_at`
+
+### `user_watchlist` — `WatchlistItem` ([app/models.py:1061](app/models.py#L1061))
 
 A bill an account follows — the Pro 'personal watch list'. Keyed by Firebase uid + bill, with
 
 Columns: `id`, `firebase_uid`, `bill_id`, `created_at`
 
-### `compliance_entity` — `ComplianceEntity` ([app/models.py:1020](app/models.py#L1020))
+### `compliance_entity` — `ComplianceEntity` ([app/models.py:1090](app/models.py#L1090))
 
 A real-world body a producer interacts with to comply: a stewardship organization
 
 Columns: `id`, `slug`, `name`, `entity_type`, `region`, `url`, `registration_url`, `jurisdiction_scope`, `home_state`, `materials`, `description`, `created_at`
 
-### `compliance_pathway` — `CompliancePathway` ([app/models.py:1057](app/models.py#L1057))
+### `compliance_pathway` — `CompliancePathway` ([app/models.py:1127](app/models.py#L1127))
 
 The "how do I comply with THIS law" record — one primary next-action per enacted law.
 
@@ -494,7 +688,7 @@ Columns: `id`, `bill_id`, `entity_id`, `region`, `management_model`, `action_typ
 
 Relationships: `bill`, `entity`
 
-### `bill_outcome` — `BillOutcome` ([app/models.py:1115](app/models.py#L1115))
+### `bill_outcome` — `BillOutcome` ([app/models.py:1185](app/models.py#L1185))
 
 One documented real-world outcome attributable to (or enabled by) an enacted law.
 
@@ -502,7 +696,7 @@ Columns: `id`, `slug`, `bill_id`, `region`, `state`, `bill_number`, `law_title`,
 
 Relationships: `bill`
 
-### `research_sessions` — `ResearchSession` ([app/models.py:1185](app/models.py#L1185))
+### `research_sessions` — `ResearchSession` ([app/models.py:1255](app/models.py#L1255))
 
 A persisted 'Ask the Bills' research thread — the primitive that turns ephemeral asks into a
 
@@ -510,7 +704,7 @@ Columns: `id`, `owner_uid`, `title`, `visibility`, `share_token`, `created_at`, 
 
 Relationships: `turns`
 
-### `research_turns` — `ResearchTurn` ([app/models.py:1212](app/models.py#L1212))
+### `research_turns` — `ResearchTurn` ([app/models.py:1282](app/models.py#L1282))
 
 One question+answer within a ResearchSession. `bill_ids` snapshots the ranked relevant set at
 
@@ -518,7 +712,7 @@ Columns: `id`, `session_id`, `seq`, `question`, `rewritten_query`, `facets`, `st
 
 Relationships: `session`
 
-### `content_drafts` — `ContentDraft` ([app/models.py:1239](app/models.py#L1239))
+### `content_drafts` — `ContentDraft` ([app/models.py:1309](app/models.py#L1309))
 
 An editorial draft distilled from a research turn — the staging area behind the Substack content
 
@@ -526,10 +720,8 @@ Columns: `id`, `source_session_id`, `source_seq`, `title`, `dek`, `body_markdown
 
 ## Migration history
 
-_Most recent 15 of 46; run with `--level full` for all._
+_Most recent 15 of 48; run with `--level full` for all._
 
-- `032` — Make region a first-class dimension + region-keyed subscription scope
-- `033` — Generic foreign-source id for multi-country national-law ingestion
 - `034` — Multi-value instrument_types (a law is often several instruments at once)
 - `035` — Classification audit log + needs_review flag
 - `036` — Atlas Circular jurisdiction tree + bills.jurisdiction_id
@@ -543,6 +735,8 @@ _Most recent 15 of 46; run with `--level full` for all._
 - `044` — Add original-language title columns to bills
 - `045` — Add bills.adjacency scope-provenance tag (transboundary / toxics …)
 - `046` — Add the relevance verdict to litigation_cases (ce_relevant + provenance)
+- `047` — Persist the scope anonymous visitors choose (states + materials), keyed by a client-generated id
+- `048` — Record WHY a subscription went inactive, not just that it did
 
 ## Scheduled jobs
 
@@ -616,16 +810,26 @@ Next.js App Router in `dashboard-next/src/app`, built as a **static export** and
 | `legiscan_api_key` | `str` | `""` |
 | `open_states_api_key` | `str` | `""` |
 | `anthropic_api_key` | `str` | `""` |
+| `postmark_api_key` | `str` | `""` |
+| `postmark_server_id` | `str` | `""` |
+| `postmark_message_stream` | `str` | `'outbound'` |
+| `postmark_broadcast_stream` | `str` | `'broadcast'` |
 | `sendgrid_api_key` | `str` | `""` |
-| `sendgrid_from_email` | `str` | `'alerts@atlascircular.com'` |
-| `sendgrid_reply_to` | `str` | `'kenny@atlascircular.com'` |
-| `sendgrid_hello_email` | `str` | `'hello@atlascircular.com'` |
-| `sendgrid_click_tracking` | `bool` | `False` |
+| `sendgrid_from_email` | `str` | `""` |
+| `sendgrid_reply_to` | `str` | `""` |
+| `sendgrid_hello_email` | `str` | `""` |
+| `email_from` | `str | None` | `None` |
+| `email_reply_to` | `str | None` | `None` |
+| `email_hello_from` | `str | None` | `None` |
+| `email_from_name` | `str` | `'Atlas Circular'` |
+| `email_hello_from_name` | `str` | `'Kenny at Atlas Circular'` |
+| `email_click_tracking` | `bool` | `False` |
 | `legifrance_client_id` | `str` | `""` |
 | `legifrance_client_secret` | `str` | `""` |
 | `lawgokr_oc` | `str` | `""` |
 | `lawsafrica_token` | `str` | `""` |
 | `nys_api_key` | `str` | `""` |
+| `business_address` | `str` | `""` |
 | `slack_webhook_url` | `str | None` | `None` |
 | `fmp_api_key` | `str` | `""` |
 | `fred_api_key` | `str` | `""` |
@@ -701,13 +905,14 @@ Next.js App Router in `dashboard-next/src/app`, built as a **static export** and
 | `edu_email_suffixes` | `list[str]` | `<...>` |
 | `firebase_project_id` | `str` | `'ce-bill-tracker'` |
 | `admin_emails` | `list[str]` | `<...>` |
+| `internal_emails` | `list[str]` | `<...>` |
 | `app_base_url` | `str` | `<redacted>` |
 | `api_base_url` | `str` | `<redacted>` |
 | `unsubscribe_secret` | `str` | `""` |
 
 ## Operational scripts
 
-`scripts/` (109 files). Most take a `--prod-dsn`/`--dsn` and default to dry-run; read the docstring before running anything against prod.
+`scripts/` (116 files). Most take a `--prod-dsn`/`--dsn` and default to dry-run; read the docstring before running anything against prod.
 
 - `add_bill_from_legiscan.py` — Add a single bill that ingestion missed, sourced from LegiScan and classified by Haiku.
 - `add_missing_bills.py` — Batch-add the in-scope bills found by find_missing_bills.py (the keyword-filter gaps).
@@ -733,9 +938,11 @@ Next.js App Router in `dashboard-next/src/app`, built as a **static export** and
 - `classify_federal.py` — Backfill federal-action enrichment: ce_relevant, preemption_risk, ai_summary, material_categories.
 - `classify_stance.py` — Backfill Bill.policy_stance for already-classified (ce_relevant) bills.
 - `compute_dump_baseline.py` — Compute the all-bills passage-rate baseline + CE champion roster from a restored OpenStates dump.
+- `content_asks.py` — Content-lane asks: run a fixed list of PUBLISHABLE questions through the REAL Ask-the-Atlas
 - `corpus_survey_ask.py` — One-off: run a fixed list of corpus-survey questions through the REAL Ask-the-Atlas handler
 - `correct_management_model.py` — Accuracy pass over management_model, using two HIGH-PRECISION signals the first
 - `coverage_by_region.py` — Report per-region bill counts + full-text coverage + stored language — the scope map.
+- `detect_bill_text_collisions.py` — Find bill_texts rows holding the WRONG bill's text (same number, different session).
 - `enrich_bill_fees.py` — One-time script to enrich known_epr_laws.json with numeric fee fields.
 - `estimate_dispersion.py` — One-time Sonnet estimate of the `dispersion` axis for the seed materials (MATERIAL_PROFILES).
 - `export_demo_snapshot.py` — Static demo snapshot exporter.
@@ -751,8 +958,12 @@ Next.js App Router in `dashboard-next/src/app`, built as a **static export** and
 - `followup_germany_china.py` — Reproduce the founder's exact Germany→China thread through the real /ask handler (post-fix),
 - `followup_smoke.py` — End-to-end smoke test for research follow-up threading — drives the real /ask handler in-process
 - `foreign_rank_reachability.py` — Prove (or disprove) the foreign full-text RANK-REACHABILITY problem, per region.
+- `ga4_admin_check.py` — Dump GA4 (property 529411970) CONFIG -- streams, enhanced measurement, custom dimensions, key events.
+- `ga4_journeys.py` — Journey analysis over the GA4 BigQuery export — the questions the GA4 UI can't answer.
+- `ga4_report.py` — Query GA4 (property 529411970) via the Data API and print a report to the terminal.
 - `generate_codebase_context.py` — Generate a portable codebase summary you can paste into a web/app Claude chat.
 - `generate_design_teaser.py` — Generate the free Design Guide teaser (dashboard-next/src/data/designGuideTeaser.ts).
+- `hide_docket_shells.py` — Take pre-filing docket shells out of scope (ce_relevant True -> False).
 - `hide_negated_labeling_preemption.py` — Hide labeling/preemption bills the classifier itself judged out of scope.
 - `hide_untracked_instruments.py` — Hide bills that are only in scope because of an instrument we no longer track.
 - `illustration_probe.py` — Exercise the router's illustration-vs-filter lever on purpose-built questions.
@@ -792,6 +1003,7 @@ Next.js App Router in `dashboard-next/src/app`, built as a **static export** and
 - `region_balance_ab.py` — Read-only A/B for the relevance-gated region-balanced deep read (_balance_read_set).
 - `region_perspective_sweep.py` — Run the /research/ask synthesis pipeline for one comparative question, once per region.
 - `render_design_guide.py` — Render tmp/design_guide.md into a branded, print-ready single-file HTML artifact.
+- `repair_bill_text_collisions.py` — Repair bill_texts rows holding the WRONG bill's text (see detect_bill_text_collisions.py).
 - `rescore_companies.py` — Re-compute all ImpactScore rows using the updated CostEstimator.
 - `research_pulse.py` — Timeliness PRE-PASS for the short-form article pipeline — a "social listening" step that runs BEFORE
 - `reset_classification.py` — Reset classification on bills so the next classification cycle re-judges them.
@@ -823,14 +1035,18 @@ Next.js App Router in `dashboard-next/src/app`, built as a **static export** and
 
 Longer-form plans and specs live in `docs/`:
 
+- [docs/ASK_LATENCY_PLAN.md](docs/ASK_LATENCY_PLAN.md) — Ask-the-Atlas latency — why answers get lost, and how to fix it for good
+- [docs/ASK_SURFACE_SPEC.md](docs/ASK_SURFACE_SPEC.md) — Ask the Atlas gets a real home — routing spec
 - [docs/ATLAS_A0_A1_SPEC.md](docs/ATLAS_A0_A1_SPEC.md) — Atlas Circular — A0 + A1 Implementation Spec
 - [docs/ATLAS_CIRCULAR_ROADMAP.md](docs/ATLAS_CIRCULAR_ROADMAP.md) — Atlas Circular — Platform Roadmap & Next Major Phase
 - [docs/CODEBASE_CONTEXT.md](docs/CODEBASE_CONTEXT.md) — Atlas Circular — Codebase Context
 - [docs/DESIGN_REVIEW_BACKLOG.md](docs/DESIGN_REVIEW_BACKLOG.md) — Design Review — Batch 2 & 3 Backlog
 - [docs/DIMENSION_EXPANSION_PLAN.md](docs/DIMENSION_EXPANSION_PLAN.md) — Dimension expansion — routing (done) + extraction plan
 - [docs/EMAIL_DELIVERABILITY.md](docs/EMAIL_DELIVERABILITY.md) — Email deliverability — keeping our mail out of spam
+- [docs/EXPOSURE_CALCULATOR_SPEC.md](docs/EXPOSURE_CALCULATOR_SPEC.md) — Obligation & Exposure Engine (`/exposure`) — Spec v2
 - [docs/FEDERATED_EXPANSION_PLAN.md](docs/FEDERATED_EXPANSION_PLAN.md) — Federated-Jurisdiction Expansion Plan — Australia, Canada, China
 - [docs/FEE_DATA_API_SPEC.md](docs/FEE_DATA_API_SPEC.md) — Fee Data API — Spec
+- [docs/FOCUS.md](docs/FOCUS.md) — Current focus
 - [docs/foreign_coverage_tracker.md](docs/foreign_coverage_tracker.md) — Foreign EPR Law — Coverage Tracker
 - [docs/FOREIGN_INGESTION_AUTOMATION_PLAN.md](docs/FOREIGN_INGESTION_AUTOMATION_PLAN.md) — Foreign-region ingestion automation plan
 - [docs/GAP_A_ENABLER_RECALL_PLAN.md](docs/GAP_A_ENABLER_RECALL_PLAN.md) — Gap-A: Cross-jurisdiction enabler recall pass
@@ -841,6 +1057,7 @@ Longer-form plans and specs live in `docs/`:
 - [docs/SEARCH_MODE_TOGGLE_PLAN.md](docs/SEARCH_MODE_TOGGLE_PLAN.md) — Search-mode toggle: Keyword ⇄ Deep Search
 - [docs/SECURITY_ASSESSMENT.md](docs/SECURITY_ASSESSMENT.md) — SignalScout / Compliance Scout — Adversarial Security Assessment & Remediation Plan
 - [docs/SECURITY_DETECTION.md](docs/SECURITY_DETECTION.md) — Security detection — probing & abuse telemetry
+- [docs/SENDGRID_COMPLIANCE_RESPONSE.md](docs/SENDGRID_COMPLIANCE_RESPONSE.md) — SendGrid compliance ticket — response
 - [docs/V1_SUMMARY.md](docs/V1_SUMMARY.md) — SignalScout / Compliance Scout — V1 Summary
 - [docs/V2_FULLTEXT_SEARCH_PLAN.md](docs/V2_FULLTEXT_SEARCH_PLAN.md) — V2 — Full-Text Bill Search with Material-Attribute Precision & In-Text Highlighting
 

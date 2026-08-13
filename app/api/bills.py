@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import Integer, and_, case, func, literal_column, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_optional_pro
+from app.api.auth import CAP_INSIGHTS_IMPACT, get_optional_capability, get_optional_pro
 from app.classification.sonnet_extractor import EXTRACTION_VERSION
 from app.database import get_db
 from app.models import (
@@ -40,6 +40,10 @@ router = APIRouter(prefix="/bills", tags=["bills"])
 # (DeadlineStats, ungated — they drive conversion) plus only the soonest few rows as a taste; the full
 # merged list is served only to a verified Pro seat. See docs/SECURITY_ASSESSMENT.md C-1.
 DEADLINE_TEASER_LIMIT = 5
+
+# Same shape for the documented-outcomes feed (CAP_INSIGHTS_IMPACT): the homepage ticker rotates a
+# handful, the Insights impact table is the full set.
+OUTCOME_TEASER_LIMIT = 6
 DEADLINE_PAST_CAP_DAYS = 5 * 365
 
 
@@ -581,6 +585,7 @@ async def list_bill_outcomes(
     state: str | None = None,
     region: str | None = None,  # US (default), EU, or "all"
     reviewed_only: bool = True,
+    has_impact: bool = Depends(get_optional_capability(CAP_INSIGHTS_IMPACT)),
     db: AsyncSession = Depends(get_db),
 ):
     """Documented real-world outcomes of enacted laws — the Insights "Real-World Impact" feed.
@@ -603,6 +608,11 @@ async def list_bill_outcomes(
     if reviewed_only:
         q = q.where(BillOutcome.reviewed.is_(True))
     q = q.order_by(BillOutcome.as_of_date.desc().nullslast(), BillOutcome.id.desc())
+    # The full documented-impact set is the Insights "Real-World Impact" table (CAP_INSIGHTS_IMPACT).
+    # Everyone else gets the newest few, which is exactly what the free homepage ticker rotates
+    # through — so the teaser is the free surface's real requirement, not a degraded version of it.
+    if not has_impact:
+        q = q.limit(OUTCOME_TEASER_LIMIT)
     rows = (await db.execute(q)).scalars().all()
     return [BillOutcomeSummary.model_validate(r) for r in rows]
 

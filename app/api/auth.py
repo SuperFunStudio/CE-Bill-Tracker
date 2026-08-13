@@ -99,8 +99,19 @@ CAP_STUDIO = "studio"                   # Packaging Studio
 CAP_FEDERAL = "federal"                 # Federal Actions (also US-region gated at the route)
 
 _CAPS_STUDENT = {CAP_EXPLORE, CAP_ASK, CAP_DESIGN_GUIDE}
-_CAPS_RESEARCH = _CAPS_STUDENT | {CAP_INSIGHTS_IMPACT}
-_CAPS_PRO = _CAPS_RESEARCH | {CAP_DEADLINES, CAP_ALERTS, CAP_STUDIO, CAP_FEDERAL}
+# Researcher adds citation/export workflow rather than a new gated surface — the measure-history it is
+# sold on (/bills/timeline) is public. CAP_INSIGHTS_IMPACT deliberately does NOT sit here: the Insights
+# briefing room is a Pro feature, which is what the page has always told visitors and what /pricing
+# sells. It lived in this set while nothing enforced it, so the discrepancy was invisible; wiring the
+# capability to a route made it real, and Pro-only is the intended answer.
+_CAPS_RESEARCH = _CAPS_STUDENT
+_CAPS_PRO = _CAPS_RESEARCH | {
+    CAP_INSIGHTS_IMPACT,
+    CAP_DEADLINES,
+    CAP_ALERTS,
+    CAP_STUDIO,
+    CAP_FEDERAL,
+}
 
 # plan → the capabilities it carries. Enterprise mirrors Pro on features (its extras are seats/support,
 # handled operationally, not by a feature flag).
@@ -246,6 +257,38 @@ async def get_optional_pro(
         return True
     ent = await get_entitlement(db, user)
     return is_pro(ent)
+
+
+def get_optional_capability(capability: str):
+    """Build the non-raising counterpart of require_capability, for teaser/full endpoints.
+
+    Returns a dependency yielding True only for a verified caller whose plan carries `capability`
+    (admins always True), and False for anonymous, malformed-token, expired-token, or under-entitled
+    callers — never a 401. This is the shape a gate needs when the SAME endpoint has to keep serving
+    public traffic: /bills/deadlines/upcoming has done it via get_optional_pro since C-1, and
+    /federal-actions and /bills/outcomes need it because free surfaces (the homepage preemption
+    banner, the outcome ticker, the Standings board) read the same routes the paid page does.
+
+    Prefer require_capability when a route has no free consumer at all — a hard 403 is clearer than a
+    silently-empty list. Reach for this only where a teaser genuinely exists.
+    """
+
+    async def _dep(
+        authorization: str | None = Header(default=None),
+        db: AsyncSession = Depends(get_db),
+    ) -> bool:
+        if not authorization or not authorization.lower().startswith("bearer "):
+            return False
+        try:
+            user = await get_current_user(authorization)
+        except HTTPException:
+            return False
+        if is_admin(user):
+            return True
+        ent = await get_entitlement(db, user)
+        return has_capability(ent, capability)
+
+    return _dep
 
 
 def require_capability(capability: str):

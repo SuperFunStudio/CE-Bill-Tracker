@@ -18,11 +18,27 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import CAP_INSIGHTS_IMPACT, require_capability
 from app.database import get_db
 from app.models import Bill
 from app.schemas import ChampionBill, ChampionSummary, StateCycleRow, StateGapRow
 
-router = APIRouter(prefix="/insights", tags=["insights"])
+# CAP_INSIGHTS_IMPACT at the router level. The capability was defined for exactly this surface and
+# then never wired to a route, so the Insights page's membership wall was a client-side `if` in front
+# of four open endpoints — the analysis is the product here, and it was reachable with curl.
+#
+# A hard 403 rather than a teaser: every consumer of these four routes is the gated Insights page
+# itself, so there is no public surface to keep alive here. The page's teaser is built from data that
+# is already public — /bills/timeline and the laws-in-force aggregate — rather than from a degraded
+# version of these routes, which keeps the gate absolute and the taste honest.
+#
+# Pro-only: CAP_INSIGHTS_IMPACT was moved out of the Researcher set when this gate went in (see
+# app/api/auth.py). Researcher is sold on citation and export workflow, not the briefing room.
+router = APIRouter(
+    prefix="/insights",
+    tags=["insights"],
+    dependencies=[Depends(require_capability(CAP_INSIGHTS_IMPACT))],
+)
 
 _ANALYSIS_DIR = Path(__file__).resolve().parents[2] / "data" / "analysis"
 # States below this many advancing-CE bills are dropped from the gap table — too few to compare

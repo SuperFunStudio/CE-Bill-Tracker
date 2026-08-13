@@ -662,6 +662,13 @@ class DeadlineStats(BaseModel):
     states: list[str] = []
 
 
+class FederalActionStats(BaseModel):
+    """Ungated counts behind /federal-actions/summary — what the free surfaces need instead of the
+    gated rows. Mirrors DeadlineStats' role for the deadline calendar."""
+    total: int
+    high_preemption: int
+
+
 class FederalActionSummary(BaseModel):
     id: int
     agency: str | None
@@ -700,6 +707,11 @@ class SubscriptionResponse(SubscriptionCreate):
     id: int
     active: bool
     created_at: datetime
+    # Double opt-in state (migration 049). A fresh emailed sign-up comes back active=False /
+    # pending_confirmation=True — the client should say "check your inbox", NOT "you're on the list",
+    # because nothing is subscribed until the emailed link is clicked.
+    confirmed_at: datetime | None = None
+    pending_confirmation: bool = False
 
     model_config = {"from_attributes": True}
 

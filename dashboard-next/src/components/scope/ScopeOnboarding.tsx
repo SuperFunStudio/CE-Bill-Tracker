@@ -6,7 +6,8 @@ import { CheckIcon } from '@/components/ui/icons';
 import { useScope } from './ScopeContext';
 import { useAuth } from '@/components/auth/AuthContext';
 import { track } from '@/lib/analytics';
-import { EMPTY_SCOPE, type Scope } from '@/lib/scope';
+import { EMPTY_SCOPE, normalizeScope, type Scope } from '@/lib/scope';
+import { REGION_CODES, regionLabel } from '@/components/insights/RegionFilter';
 
 export function formatMaterial(slug: string): string {
   return slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -31,12 +32,14 @@ export function ScopeOnboarding() {
   // rather than a toll. Framed as an addition to something they already have, never as a warning.
   const showSyncPitch = open && !user;
 
+  const [regions, setRegions] = useState<string[]>([]);
   const [states, setStates] = useState<string[]>([]);
   const [materials, setMaterials] = useState<string[]>([]);
 
   // Seed the draft from the current scope whenever the modal opens.
   useEffect(() => {
     if (open) {
+      setRegions(scope.regions);
       setStates(scope.states);
       setMaterials(scope.materials);
     }
@@ -49,7 +52,16 @@ export function ScopeOnboarding() {
     if (showSyncPitch) track('scope_sync_shown', { feature: 'scope_editor' });
   }, [showSyncPitch]);
 
-  const draft: Scope = useMemo(() => ({ states, materials }), [states, materials]);
+  // normalizeScope here rather than at the save call: a reader who ticks only US states has chosen
+  // the US, and the draft should say so before it's persisted or summarised anywhere.
+  const draft: Scope = useMemo(
+    () => normalizeScope({ regions, states, materials }),
+    [regions, states, materials],
+  );
+
+  // The US state list is a sub-filter of the US, so it only earns its space when the US is in play —
+  // either explicitly picked, or by nothing being picked at all (which still means "everywhere").
+  const showStates = regions.length === 0 || regions.includes('US');
 
   if (!open) return null;
 
@@ -75,7 +87,7 @@ export function ScopeOnboarding() {
             See what&apos;s coming for you.
           </h2>
           <p className="text-text-secondary text-body leading-relaxed">
-            Pick your products, materials &amp; states once. We&apos;ll surface the bills and
+            Pick your products, materials &amp; regions once. We&apos;ll surface the bills and
             deadlines that hit your portfolio — and skip the ones that don&apos;t.
           </p>
         </div>
@@ -108,31 +120,72 @@ export function ScopeOnboarding() {
           </div>
         </fieldset>
 
-        {/* States */}
+        {/* Regions — the corpus is global, so this is the jurisdiction question. It leads the states
+            list because picking the US is what makes that list relevant at all. Chips rather than the
+            checkbox grid the states use: there are ~33 regions against 51 states, and a chip carries
+            the selected state in its own styling without a second column of boxes. */}
         <fieldset>
           <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
-            States
+            Regions
           </legend>
-          <div className="max-h-44 overflow-y-auto rounded-md border border-border-default bg-bg-primary p-2 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1">
-            {STATE_ENTRIES.map(([abbr, name]) => (
-              <label
-                key={abbr}
-                className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer py-0.5"
-              >
-                <input
-                  type="checkbox"
-                  checked={states.includes(abbr)}
-                  onChange={() => toggle(states, setStates, abbr)}
-                  className="accent-green-accent shrink-0"
-                />
-                <span className="truncate" title={name}>{name}</span>
-              </label>
-            ))}
+          <div className="max-h-36 overflow-y-auto flex flex-wrap gap-2">
+            {REGION_CODES.map(code => {
+              const on = regions.includes(code);
+              return (
+                <button
+                  key={code}
+                  type="button"
+                  onClick={() => toggle(regions, setRegions, code)}
+                  aria-pressed={on}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors ${
+                    on
+                      ? 'border-green-accent bg-green-dark text-green-accent'
+                      : 'border-border-default text-text-secondary hover:border-green-accent/40 hover:text-text-primary'
+                  }`}
+                >
+                  {on && <CheckIcon className="text-xs" />}
+                  {regionLabel(code)}
+                </button>
+              );
+            })}
           </div>
-          <p className="text-text-muted text-xs mt-1">
-            {states.length > 0 ? `${states.length} selected` : 'Leave empty to follow every state.'}
+          <p className="text-text-muted text-xs mt-1.5">
+            {regions.length > 0
+              ? `${regions.length} selected`
+              : 'Leave empty to follow every region worldwide.'}
           </p>
         </fieldset>
+
+        {/* States — a sub-filter of the US, hidden when the reader has scoped away from it entirely
+            (a list of Californias is noise to someone watching only Japan). */}
+        {showStates && (
+          <fieldset>
+            <legend className="font-serif text-text-muted text-meta uppercase tracking-wider mb-2">
+              US States
+            </legend>
+            <div className="max-h-44 overflow-y-auto rounded-md border border-border-default bg-bg-primary p-2 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1">
+              {STATE_ENTRIES.map(([abbr, name]) => (
+                <label
+                  key={abbr}
+                  className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer py-0.5"
+                >
+                  <input
+                    type="checkbox"
+                    checked={states.includes(abbr)}
+                    onChange={() => toggle(states, setStates, abbr)}
+                    className="accent-green-accent shrink-0"
+                  />
+                  <span className="truncate" title={name}>{name}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-text-muted text-xs mt-1">
+              {states.length > 0
+                ? `${states.length} selected — narrows the US only, not the other regions you follow.`
+                : 'Leave empty to follow every state.'}
+            </p>
+          </fieldset>
+        )}
         </div>
 
         {/* Cross-device upsell — signed-out only. Sits above the actions rather than inside the

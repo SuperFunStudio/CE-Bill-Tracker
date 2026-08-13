@@ -30,6 +30,14 @@ const NON_EU_LABELS: Record<string, string> = {
   CA: 'Canada',
   AU: 'Australia',
   IN: 'India',
+  // Adapters that shipped without being added here, so their bills were in the corpus and reachable
+  // by URL but unselectable in every region filter. Türkiye keeps its diacritic — it's the country's
+  // own English-language name, and the label is display text, not a key.
+  TR: 'Türkiye',
+  CO: 'Colombia',
+  PE: 'Peru',
+  UY: 'Uruguay',
+  RW: 'Rwanda',
 };
 
 export function regionLabel(code: string): string {
@@ -42,9 +50,10 @@ export function regionLabel(code: string): string {
 // pick here (keep it complete vs the corpus: every foreign region we ingest should appear).
 const ANCHORS = ['US', 'EU'];
 const REST = [
-  'UK', 'FR', 'DE', 'JP', 'PL', 'SE', 'NL', 'ES', 'FI', 'IE', 'DK',
+  'UK', 'FR', 'DE', 'IT', 'JP', 'PL', 'SE', 'NL', 'ES', 'FI', 'IE', 'DK',
   'CL', 'CH', 'SI', 'BR', 'AT', 'LU', 'LV', 'SK', 'LT', 'CZ', 'EE',
   'CN', 'CA', 'AU', 'IN', 'KR', 'ZA', 'KE', 'NO', 'MX',
+  'TR', 'CO', 'PE', 'UY', 'RW',
 ].sort((a, b) => regionLabel(a).localeCompare(regionLabel(b)));
 export const REGION_CODES = [...ANCHORS, ...REST];
 

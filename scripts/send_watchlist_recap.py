@@ -73,7 +73,11 @@ async def run(dsn: str | None, debounce_minutes: int | None, only_email: str | N
             from app.alerts.unsubscribe import unsubscribe_url
 
             if not settings.email_configured:
-                print("ERROR: --send given but SENDGRID_API_KEY is not set.", file=sys.stderr)
+                print(
+                    f"ERROR: --send given but the email channel is unconfigured: no "
+                    f"API key for EMAIL_PROVIDER={settings.email_provider}.",
+                    file=sys.stderr,
+                )
                 return 1
             sender = EmailSender()
         else:

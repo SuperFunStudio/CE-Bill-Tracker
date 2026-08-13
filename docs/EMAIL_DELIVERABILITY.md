@@ -1,30 +1,53 @@
 # Email deliverability — keeping our mail out of spam
 
-**Provider: Postmark** (migrated off SendGrid). `app/alerts/email_sender.py` posts to
-`https://api.postmarkapp.com/email` with the **server** API token (`POSTMARK_API_KEY`); there's no
-SDK. `hello@atlascircular.com` is the single sending identity (`email_from` in `app/config.py`),
-aligned with the public brand domain. One address for everything: a second local-part is a second
-reputation to warm for no gain at this volume. What varies is the **display name**, not the mailbox
-— `email_from_name` ("Atlas Circular") on the automated cycles, `email_hello_from_name` ("Kenny from
-Atlas Circular") on the templates that ask for a reply. `_from_header()` picks by what the caller
-asked for rather than by address, since both resolve to the same mailbox.
+**Provider: SendGrid** (`EMAIL_PROVIDER=sendgrid`, the default). Postmark is fully wired and idle:
+its account is still in review, SendGrid's was approved first, so the live transport is SendGrid and
+the switch back is one environment variable.
 
-**Reputation does not migrate.** The warmth the digest/alert cycles built on SendGrid belonged to
-SendGrid's IPs, not to us. On a new provider the domain starts from its authenticated DNS and
-nothing else, so ramp volume rather than resuming the old cadence in one cycle.
+**Two transports, one seam.** `app/alerts/email_sender.py` builds a provider-neutral message
+(`_build_message`) and a `_Transport` renders, sends, and reads the verdict — SendGrid via a Bearer
+key to `https://api.sendgrid.com/v3/mail/send`, Postmark via the **server** token to
+`https://api.postmarkapp.com/email`. Neither needs an SDK. Nothing above `_post` names a provider;
+every caller gates on `settings.email_configured`, which reports on whichever provider is active.
+`settings.email_provider` picks; unset, it falls to whichever API key is present, so an environment
+carrying one credential can't send into the provider that has none.
 
-**Message streams.** Postmark refuses to mix transactional and bulk traffic on one stream, and the
-separation is what stops a digest opt-out from suppressing a password-reset email. `_stream_for()`
-picks the stream from one signal: a send carrying a one-click unsubscribe URL is bulk and goes on
-`postmark_broadcast_stream`; everything else is transactional and goes on `postmark_message_stream`.
-Both streams must exist on the server or those sends 422.
+`hello@atlascircular.com` is the single sending identity (`email_from` in `app/config.py`), aligned
+with the public brand domain. One address for everything: a second local-part is a second reputation
+to warm for no gain at this volume. What varies is the **display name**, not the mailbox —
+`email_from_name` ("Atlas Circular") on the automated cycles, `email_hello_from_name` ("Kenny at
+Atlas Circular") on the templates that ask for a reply. `_from_parts()` picks by what the caller
+asked for rather than by address, since both resolve to the same mailbox; each transport then
+formats it (Postmark wants one header string, SendGrid `{email, name}`).
 
-**200 is not success.** Postmark answers `200` for rejected messages too — the verdict is the body's
-`ErrorCode`, which must be `0`. `406` means the recipient is on the server's suppression list (hard
-bounce or spam complaint) and retrying won't help; `300` is an unverified From-address; `412` is
-**account pending approval**, where every recipient must be on the From domain — verified live on
-2026-08-12, when a send to `kenny@superfun.studio` was refused while `@atlascircular.com` delivered.
-`tests/test_alerts/test_postmark_transport.py` pins the contract.
+**Reputation does not migrate — in either direction.** The warmth the digest/alert cycles built on
+SendGrid belongs to SendGrid's IPs. Coming back to it after a fortnight away is the cheap direction;
+going the other way starts the domain from its authenticated DNS and nothing else. Either way, ramp
+volume rather than resuming the old cadence in one cycle.
+
+**What success looks like differs, which is the whole risk of a switch.**
+
+- **SendGrid: `202`, empty body.** Anything else is a failure; the messages live under `errors[]`.
+  A `403` reading "does not match a verified Sender Identity" is the one to know — check domain
+  authentication first.
+- **Postmark: `200` is not success.** It answers `200` for rejected messages too; the verdict is the
+  body's `ErrorCode`, which must be `0`. `406` means the recipient is on the server's suppression
+  list (hard bounce or spam complaint) and retrying won't help; `300` is an unverified From-address;
+  `412` is **account pending approval**, where every recipient must be on the From domain — seen live
+  on 2026-08-12, when a send to `kenny@superfun.studio` was refused while `@atlascircular.com`
+  delivered.
+
+Reading either provider's status line the other's way reports every rejection as delivered.
+`tests/test_alerts/test_email_transport.py` pins both verdicts against the other's shape, so a switch
+fails in CI rather than in the inbox.
+
+**Message streams (Postmark only).** Postmark refuses to mix transactional and bulk traffic on one
+stream, and the separation is what stops a digest opt-out from suppressing a password-reset email.
+`_stream_for()` picks the stream from one signal: a send carrying a one-click unsubscribe URL is bulk
+and goes on `postmark_broadcast_stream`, everything else on `postmark_message_stream`. Both streams
+must exist on the server or those sends 422. SendGrid has no equivalent — the same unsubscribe URL
+only sets its RFC 8058 headers, which is why the neutral message records the URL rather than a
+resolved stream name.
 
 **The principle, for anything new:** spam classification weights sender reputation and domain
 authentication far above content. No amount of body tuning overrides an unauthenticated, misaligned
@@ -34,20 +57,24 @@ existing sender, not a new one.
 
 ## Click tracking is OFF — and why
 
-The provider's click tracking rewrites every `href` to go through a branded click host. Under
-SendGrid that host (`url7082.atlascircular.com`) served a certificate that didn't cover it, so a
-recipient clicking **any** link in **any** email — "Open your dashboard", a bill deep link, a
-verification button — landed on Chrome's full-page `NET::ERR_CERT_COMMON_NAME_INVALID` warning.
-Every outbound message was affected, not just one template.
+The provider's click tracking rewrites every `href` to go through a branded click host. On SendGrid
+that host (`url7082.atlascircular.com`) served a certificate that didn't cover it, so a recipient
+clicking **any** link in **any** email — "Open your dashboard", a bill deep link, a verification
+button — landed on Chrome's full-page `NET::ERR_CERT_COMMON_NAME_INVALID` warning. Every outbound
+message was affected, not just one template. **And SendGrid is what we are back on**, so this is a
+live hazard again, not a historical note.
 
-`_build_payload()` in `app/alerts/email_sender.py` sends `TrackLinks: "None"` unless
-`email_click_tracking` is set, so hrefs go out verbatim. Cost: no click stats. Benefit: links work,
-and there's one less host mismatch for a spam filter to weigh.
+Each transport reads `email_click_tracking` and defaults it off: SendGrid gets
+`click_tracking.enable=false` **with `enable_text=false`** (disabling only the HTML rewrite leaves
+the plain-text part pointing at the broken host), Postmark gets `TrackLinks: "None"`. Hrefs go out
+verbatim. Cost: no click stats. Benefit: links work, and there's one less host mismatch for a spam
+filter to weigh.
 
-**To re-enable**, set up link tracking in Postmark first (Servers → Message Streams → Settings), and
-if you brand the click host, add its DNS and let Postmark issue the cert. Confirm a tracked link
-loads cleanly in a browser, *then* set `email_click_tracking=true`. Don't flip the flag first and
-check later — the failure mode is a security interstitial on every link we've ever sent.
+**To re-enable**, fix the click host at the active provider first — SendGrid: Sender Authentication →
+Link Branding → validate SSL; Postmark: Servers → Message Streams → Settings, plus DNS if you brand
+the host. Confirm a tracked link loads cleanly in a browser, *then* set `email_click_tracking=true`.
+Don't flip the flag first and check later — the failure mode is a security interstitial on every link
+we've ever sent.
 
 ## Masthead, preheader, footer
 
@@ -155,8 +182,8 @@ spam-prone mail we sent *and* the two messages a user is most likely to be waiti
 
 They now route through our own pipeline instead (`app/alerts/auth_emails.py`,
 `app/api/auth_email.py`): firebase-admin still mints the action link — same one-time `oobCode`,
-same expiry and single-use semantics — and we render it in the shared masthead and send it as
-`alerts@atlascircular.com`.
+same expiry and single-use semantics — and we render it in the shared masthead and send it from our
+own authenticated identity (`email_from`, `hello@atlascircular.com`).
 
 Fail-soft by design. `POST /auth/send-verification` and `POST /auth/send-password-reset` return
 `{"sent": false}` whenever the branded send didnt happen (flag off, email unconfigured, send
@@ -183,17 +210,21 @@ Google/Microsoft sign-in redirect.
 Recorded here because it's the part that actually moves mail out of spam, and any future sending
 domain needs the same treatment.
 
-1. **Verify the domain at the provider** — Postmark → Sender Signatures → **Domains** → Add Domain,
-   using `atlascircular.com` (the apex — **not** `www.atlascircular.com`; a `www` entry authorises
-   nothing for `alerts@atlascircular.com`). Postmark issues a DKIM TXT record
-   (`<selector>._domainkey.atlascircular.com`) and a Return-Path CNAME (e.g. `pm-bounces` →
-   `pm.mtasv.net`). Add both, click Verify. This is what establishes DKIM — and, via the custom
-   Return-Path, SPF alignment. A verified *signature* (one address) is not the same thing: it covers
-   only that address and skips the Return-Path, so verify the domain even if `hello@` already works.
+1. **Authenticate the domain at the provider** — always the apex `atlascircular.com`, **not**
+   `www.atlascircular.com`; a `www` entry authorises nothing for `hello@atlascircular.com`. Verifying
+   a *signature* (one address) is not the same thing: it covers only that address and skips the
+   Return-Path, so do the domain even if `hello@` already works.
 
-   Historic: the SendGrid equivalent was Sender Authentication → Authenticate Your Domain, which
-   issued `s1`/`s2._domainkey` CNAMEs. Those records are dead once the cutover is done and can be
-   removed from DNS after the last SendGrid send has left the queue.
+   - **SendGrid** — Sender Authentication → Authenticate Your Domain, which issues `s1`/`s2`
+     `._domainkey` CNAMEs plus a Return-Path CNAME (`emXXXX` → `uXXXX.wl.sendgrid.net`).
+   - **Postmark** — Sender Signatures → **Domains** → Add Domain, which issues a DKIM TXT record
+     (`<selector>._domainkey.atlascircular.com`) and a Return-Path CNAME (`pm-bounces` →
+     `pm.mtasv.net`).
+
+   **Keep both sets live in DNS while both providers are wired.** They don't collide — different
+   selectors, different Return-Path hosts — and each provider signs only with its own. Deleting the
+   idle provider's records is what turns `EMAIL_PROVIDER=<other>` from a switch into an outage: mail
+   goes out unsigned and DMARC fails. Prune only after deciding a provider is gone for good.
 2. **DMARC** — a TXT record at `_dmarc.atlascircular.com`. Live value, verified 2026-08-11:
    ```
    v=DMARC1; p=none; rua=mailto:kenny@atlascircular.com; fo=1
@@ -208,16 +239,17 @@ domain needs the same treatment.
      reports should be clean. Tighten to `p=quarantine` once a parser confirms that — an enforcing
      policy is also a favorable signal in an ESP compliance review.
 
-   Alignment rides on **DKIM**, not the apex SPF record: the provider's DKIM TXT record makes mail
-   signed `d=atlascircular.com`, and DMARC passes on that alone. The apex SPF record is
-   `v=spf1 include:_spf.google.com ~all` and deliberately does **not** list the ESP — the custom
+   Alignment rides on **DKIM**, not the apex SPF record: the provider's DKIM record makes mail signed
+   `d=atlascircular.com`, and DMARC passes on that alone. This is also what makes the provider switch
+   invisible to DMARC — the signature domain is ours either way. The apex SPF record is
+   `v=spf1 include:_spf.google.com ~all` and deliberately does **not** list either ESP — each custom
    Return-Path subdomain carries its own SPF, which is what SPF alignment is checked against. Adding
-   `include:spf.mtasv.net` at the apex would buy nothing and spend one of the ten permitted DNS
-   lookups.
-3. **From-address on the verified domain** — `EMAIL_FROM=hello@atlascircular.com`, set as a plain
-   env var in `cloudbuild.yaml` (an address isn't a secret) and read at startup, so redeploy after
-   changing. `SENDGRID_FROM_EMAIL` is still accepted as a fallback for environments that predate the
-   cutover. The local-part doesn't matter; the domain does. **Reply-To** is
+   `include:sendgrid.net` or `include:spf.mtasv.net` at the apex would buy nothing and spend the
+   permitted DNS lookups.
+3. **From-address on the authenticated domain** — `EMAIL_FROM=hello@atlascircular.com`, set as a
+   plain env var in `cloudbuild.yaml` (an address isn't a secret) and read at startup, so redeploy
+   after changing. `SENDGRID_FROM_EMAIL` is still accepted as a fallback for environments that
+   predate it. The local-part doesn't matter; the domain does. **Reply-To** is
    separate and points at a monitored human mailbox (`email_reply_to`, default
    `kenny@atlascircular.com`, applied to every send). Keep the two distinct: the From stays on the
    warmed identity, replies reach a person. Same verified domain, so a new local-part needs a
@@ -234,8 +266,29 @@ domain needs the same treatment.
   account-security templates render against a synthetic link (minting a real one would email a working
   verify/reset link for a live account).
 - In the received message → "Show original" (Gmail) / "View source" (Outlook), confirm `SPF: PASS`,
-  `DKIM: PASS`, `DMARC: PASS`, and that the DKIM `d=` domain is `atlascircular.com`, not `pm.mtasv.net`.
+  `DKIM: PASS`, `DMARC: PASS`, and that the DKIM `d=` domain is `atlascircular.com` — not
+  `sendgrid.net`, not `pm.mtasv.net`. A provider's own domain in `d=` means the send fell back to
+  their signature because ours isn't authenticated.
 - Run the From-address through https://www.mail-tester.com — aim for 9–10/10.
+
+## Switching providers
+
+The switch is `EMAIL_PROVIDER` — `sendgrid` or `postmark` — plus the matching API key. Everything
+else (templates, identities, unsubscribe wiring, the footer) is provider-neutral by construction.
+
+1. Confirm the target provider's DNS is still live (see the DNS section) and its account isn't in a
+   review that restricts recipients — Postmark's `412` means every recipient must be on the From
+   domain, which looks exactly like "email is broken for customers".
+2. Confirm the key: `gcloud secrets versions access latest --secret=SENDGRID_API_KEY` /
+   `POSTMARK_API_KEY`. Both secrets exist and `signalscout-api@` reads them via a project-level
+   `secretAccessor` binding. Watch for a trailing newline in the stored payload — it reads back as a
+   401. Write with `[IO.File]::WriteAllText($p, $t, (New-Object Text.UTF8Encoding $false))`, never
+   `"token" | gcloud secrets versions add --data-file=-`, which appends CRLF in PowerShell.
+3. Flip `EMAIL_PROVIDER` in `cloudbuild.yaml` (both the API service and the pipeline job) and deploy.
+4. Send yourself one of each stream: `scripts/send_email_samples.py` covers all 21 templates,
+   including the founder-voice and unsubscribe-carrying ones, which is what exercises the bulk path.
+5. Suppression lists, opens, and click stats are **per provider** and do not transfer. A recipient
+   suppressed on the provider you left is not suppressed on the one you moved to.
 
 ## What the code already does
 

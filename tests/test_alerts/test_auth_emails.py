@@ -17,6 +17,7 @@ from app.alerts.auth_emails import (
     render_verify_subject,
     send_verification_email,
 )
+from tests.test_alerts.conftest import _email_off, _email_on
 
 LINK = "https://ce-bill-tracker.firebaseapp.com/__/auth/action?mode=verifyEmail&oobCode=abc123"
 
@@ -70,28 +71,28 @@ class TestSendIsFailSoft:
     @pytest.mark.asyncio
     async def test_returns_false_without_api_key(self, monkeypatch):
         monkeypatch.setattr(auth_emails.settings, "enable_auth_emails", True)
-        monkeypatch.setattr(auth_emails.settings, "postmark_api_key", "")
+        _email_off(monkeypatch, auth_emails.settings)
         assert await send_verification_email("a@example.com") is False
 
     @pytest.mark.asyncio
     async def test_returns_false_when_firebase_wont_mint_a_link(self, monkeypatch):
         """Unknown address / Identity Toolkit error — caller falls back, and we never raise."""
         monkeypatch.setattr(auth_emails.settings, "enable_auth_emails", True)
-        monkeypatch.setattr(auth_emails.settings, "postmark_api_key", "pm-test-token")
+        _email_on(monkeypatch, auth_emails.settings)
         with patch.object(auth_emails, "_generate_link", AsyncMock(return_value=None)):
             assert await send_verification_email("nobody@example.com") is False
 
     @pytest.mark.asyncio
     async def test_swallows_an_unexpected_error(self, monkeypatch):
         monkeypatch.setattr(auth_emails.settings, "enable_auth_emails", True)
-        monkeypatch.setattr(auth_emails.settings, "postmark_api_key", "pm-test-token")
+        _email_on(monkeypatch, auth_emails.settings)
         with patch.object(auth_emails, "_generate_link", AsyncMock(side_effect=RuntimeError("boom"))):
             assert await send_verification_email("a@example.com") is False
 
     @pytest.mark.asyncio
     async def test_true_only_when_provider_accepted_it(self, monkeypatch):
         monkeypatch.setattr(auth_emails.settings, "enable_auth_emails", True)
-        monkeypatch.setattr(auth_emails.settings, "postmark_api_key", "pm-test-token")
+        _email_on(monkeypatch, auth_emails.settings)
         sender = MagicMock()  # the class; calling it yields the instance
         sender.return_value.send_html = AsyncMock(return_value=True)
         with patch.object(auth_emails, "_generate_link", AsyncMock(return_value=LINK)), \

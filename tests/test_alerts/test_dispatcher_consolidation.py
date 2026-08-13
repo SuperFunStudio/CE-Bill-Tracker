@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 import app.alerts.dispatcher as dispatcher_mod
 from app.alerts.dispatcher import AlertDispatcher, _Bundle
 from app.alerts.detector import ChangeDetector
+from tests.test_alerts.conftest import _email_off, _email_on
 
 
 def _bill(bid, **kw):
@@ -89,7 +90,7 @@ def _dispatcher(subs_for_bill):
 
 
 def _patch_env(monkeypatch):
-    monkeypatch.setattr(dispatcher_mod.settings, "postmark_api_key", "pm-test-token")
+    _email_on(monkeypatch, dispatcher_mod.settings)
 
     async def _no_litigation(_db, _bill_id):
         return ""
@@ -143,7 +144,7 @@ class TestConsolidation:
 
     async def test_slack_consolidated_and_no_email_without_key(self, monkeypatch):
         _patch_env(monkeypatch)
-        monkeypatch.setattr(dispatcher_mod.settings, "postmark_api_key", "")  # no email channel
+        _email_off(monkeypatch, dispatcher_mod.settings)  # no email channel
         sub = _sub(email=None, slack_webhook="https://hooks.slack/x")
         d = _dispatcher([sub])
         await d.dispatch_changes(_FakeDB([_bill(1), _bill(2)]), [_change(1), _change(2)])
@@ -210,7 +211,7 @@ class TestOutageHold:
         Slack delivery and completes — otherwise a deliberately email-less deployment would retry
         the same changes to Slack forever."""
         _patch_env(monkeypatch)
-        monkeypatch.setattr(dispatcher_mod.settings, "postmark_api_key", "")
+        _email_off(monkeypatch, dispatcher_mod.settings)
         d = _dispatcher([_sub(email=None, slack_webhook="https://hooks.slack/x")])
         changes = [_change(1)]
         await d.dispatch_changes(_FakeDB([_bill(1)]), changes)

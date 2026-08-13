@@ -11,7 +11,16 @@ class Settings(BaseSettings):
     legiscan_api_key: str = ""
     open_states_api_key: str = ""
     anthropic_api_key: str = ""
-    # ── Email (Postmark) ────────────────────────────────────────────────────
+    # ── Email ───────────────────────────────────────────────────────────────
+    # Which transport puts mail on the wire: "sendgrid" or "postmark". Both are implemented and both
+    # sets of credentials can be present at once, because which provider we're on is an operational
+    # question (whose account is approved this week), not an architectural one — SendGrid approved
+    # the account first, so it is the default; Postmark stays wired so the switch back is this one
+    # variable rather than a rewrite.
+    #
+    # None means "pick whichever key is present" (see _resolve_email_provider), so an environment
+    # carrying exactly one provider's key can't send its mail into a provider that has none.
+    email_provider: str | None = None
     # The Postmark SERVER API token (Servers → <server> → API Tokens), NOT the account token and NOT
     # the server ID. Every send path gates on `email_configured` below, so an empty key disables the
     # email channel rather than failing sends.
@@ -26,10 +35,11 @@ class Settings(BaseSettings):
     # stream. Both streams must exist on the server — the IDs here are Postmark's defaults.
     postmark_message_stream: str = "outbound"
     postmark_broadcast_stream: str = "broadcast"
-    # Legacy SendGrid env names, kept so an environment still carrying them (prod Secret Manager, a
-    # developer's .env) boots instead of dying on extra='forbid'. sendgrid_api_key is inert; the
-    # other three are the fallback source for the email_* identities below — see
-    # _inherit_legacy_email_env. Delete once the old variables are gone from every environment.
+    # The SendGrid API key (Settings → API Keys, "Mail Send" permission is enough). Live again as of
+    # 2026-08-13: SendGrid approved the sending account while Postmark's review is still pending.
+    # The other three names are also the fallback source for the email_* identities below — see
+    # _inherit_legacy_email_env — so an environment that only ever set SENDGRID_FROM_EMAIL still
+    # resolves a From address.
     sendgrid_api_key: str = ""
     sendgrid_from_email: str = ""
     sendgrid_reply_to: str = ""
@@ -37,8 +47,11 @@ class Settings(BaseSettings):
     # The sending identity. ONE address for everything — a second local-part means a second
     # reputation to warm for no gain at this volume. Falls back to SENDGRID_FROM_EMAIL (see
     # _inherit_legacy_email_env) so the old prod secret keeps working through the Postmark cutover.
-    # The domain must be VERIFIED in Postmark (Sender Signatures → Domains, DKIM + Return-Path DNS);
-    # a single verified signature would authorise only that one address.
+    # The domain must be authenticated at whichever provider is active — SendGrid Sender
+    # Authentication, or Postmark Sender Signatures → Domains — since only a DOMAIN authorises every
+    # local-part; a single verified sender signature would authorise this one address and nothing
+    # else. The two providers publish DIFFERENT DKIM/Return-Path records, so both sets have to be
+    # live in DNS for the provider switch to be a switch rather than an outage.
     # None means "unset": the validator below fills it. Never None after construction.
     email_from: str | None = None
     # Where replies go. The From stays alerts@ — that's the warmed, domain-authenticated identity and
@@ -63,11 +76,12 @@ class Settings(BaseSettings):
     # Changing these churns that recognition, so pick once and leave them.
     email_from_name: str = "Atlas Circular"
     email_hello_from_name: str = "Kenny at Atlas Circular"
-    # Link tracking rewrites every href to the provider's click host. Under SendGrid that host
-    # (url7082.atlascircular.com) served a cert that didn't cover it, so every link dead-ended on a
-    # browser "connection is not private" interstitial — hence OFF. Postmark's default click host is
-    # its own (which works), but a BRANDED one needs its own DNS + SSL, so keep this off until a
-    # branded link has been clicked and verified. Off = hrefs go out verbatim, no click stats.
+    # Link tracking rewrites every href to the provider's click host. On SendGrid that host
+    # (url7082.atlascircular.com) served a certificate that didn't cover it, so every link in every
+    # email dead-ended on a browser "connection is not private" interstitial — which is why this is
+    # OFF, and it is SendGrid we are back on. Re-enable only after clicking a real link end-to-end
+    # (SendGrid: Sender Authentication → Link Branding → validate SSL). Off = hrefs go out verbatim,
+    # no rewrite, no interstitial, no click stats.
     email_click_tracking: bool = False
 
     @model_validator(mode="after")
@@ -89,11 +103,41 @@ class Settings(BaseSettings):
             self.email_hello_from = self.sendgrid_hello_email or self.email_from
         return self
 
+    @model_validator(mode="after")
+    def _resolve_email_provider(self):
+        """Settle on one transport, so nothing downstream has to ask "which provider?" twice.
+
+        An explicit EMAIL_PROVIDER always wins — that's the deliberate choice, including the case
+        where both keys are present and one account is the one that's approved. With nothing set,
+        the provider that HAS a key wins, because the alternative is an environment holding exactly
+        one working credential and silently sending nothing through the other. SendGrid breaks the
+        tie when both or neither are set: it is the approved account today.
+        """
+        if self.email_provider:
+            self.email_provider = self.email_provider.strip().lower()
+            if self.email_provider not in ("sendgrid", "postmark"):
+                raise ValueError(
+                    f"email_provider must be 'sendgrid' or 'postmark', got {self.email_provider!r}"
+                )
+        elif self.postmark_api_key and not self.sendgrid_api_key:
+            self.email_provider = "postmark"
+        else:
+            self.email_provider = "sendgrid"
+        return self
+
+    @property
+    def email_api_key(self) -> str:
+        """The credential for whichever transport is active. Deliberately NOT a fallback to the other
+        provider's key: a key belongs to one API, and reaching for the wrong one turns a
+        misconfiguration into a wall of 401s instead of the clean "email is off" that
+        `email_configured` gives every caller."""
+        return self.postmark_api_key if self.email_provider == "postmark" else self.sendgrid_api_key
+
     @property
     def email_configured(self) -> bool:
         """Whether the email channel can send. Every caller gates on this instead of poking at a
         provider-specific key, so swapping providers doesn't mean touching thirty call sites."""
-        return bool(self.postmark_api_key)
+        return bool(self.email_api_key)
     # Légifrance API via PISTE (France national law — app/ingestion/foreign.py LegifranceClient).
     # Free OAuth2 client-credentials from https://piste.gouv.fr/registration. Empty = FR ingest disabled.
     legifrance_client_id: str = ""
@@ -127,6 +171,7 @@ class Settings(BaseSettings):
         "anthropic_api_key",
         "legiscan_api_key",
         "postmark_api_key",
+        "sendgrid_api_key",
         "open_states_api_key",
         "nys_api_key",
         "stripe_secret_key",

@@ -144,7 +144,11 @@ async def run(email: str, bill_id: int, old_status: str, new_status: str, send: 
             return 0
 
         if not settings.email_configured:
-            print("ERROR: --send given but SENDGRID_API_KEY is not set.", file=sys.stderr)
+            print(
+                f"ERROR: --send given but the email channel is unconfigured: no "
+                f"API key for EMAIL_PROVIDER={settings.email_provider}.",
+                file=sys.stderr,
+            )
             return 1
 
         # Run the REAL dispatcher over just our change, so it exercises is_alert_worthy + watch-list

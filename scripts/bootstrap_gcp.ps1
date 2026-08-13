@@ -100,6 +100,9 @@ $secrets = @{
     "LEGISCAN_API_KEY"            = $envVars["LEGISCAN_API_KEY"]
     "OPEN_STATES_API_KEY"         = $envVars["OPEN_STATES_API_KEY"].Trim()
     "ANTHROPIC_API_KEY"           = $envVars["ANTHROPIC_API_KEY"]
+    # Both email providers: whichever one EMAIL_PROVIDER names is the one that sends, and the empty
+    # ones are skipped below rather than created blank.
+    "SENDGRID_API_KEY"            = $envVars["SENDGRID_API_KEY"]
     "POSTMARK_API_KEY"            = $envVars["POSTMARK_API_KEY"]
     "SLACK_WEBHOOK_URL"           = $envVars["SLACK_WEBHOOK_URL"]
     "COURTLISTENER_API_TOKEN"     = $envVars["COURTLISTENER_API_TOKEN"]

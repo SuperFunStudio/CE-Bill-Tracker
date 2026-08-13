@@ -14,7 +14,7 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()  # pull the prod POSTMARK_API_KEY (and everything else) out of .env first
+load_dotenv()  # pull the active provider's API key (and everything else) out of .env first
 # ...then override the from-address so it wins over whatever .env carries.
 os.environ["EMAIL_FROM"] = "hello@atlascircular.com"
 
@@ -492,7 +492,7 @@ def _text_alert_chrome() -> dict:
 
 # --- Send helpers --------------------------------------------------------------------------------
 # Which templates the LIVE cycles send as bulk — i.e. pass a one-click unsubscribe URL. That single
-# argument also decides the Postmark message stream (broadcast vs transactional, see _stream_for), so
+# argument also decides Postmark's message stream (broadcast vs transactional, see _stream_for), so
 # a sample that omits it silently tests the wrong stream and ships without the List-Unsubscribe
 # header. Mirrors the send sites in scheduler/jobs.py, alerts/dispatcher.py and welcome_email.py.
 BULK_TEMPLATES = {
@@ -592,7 +592,7 @@ def safe_print(line: str) -> None:
 
 
 def main():
-    # `--render-only` stops after the dry pass: files on disk, not one API call to SendGrid. Use it
+    # `--render-only` stops after the dry pass: files on disk, not one API call to any provider. Use it
     # for anything that only changes chrome (footer, masthead, copy) — you can read the result in a
     # browser, and a render check has no business touching a sending reputation that's under review.
     render_only = "--render-only" in sys.argv

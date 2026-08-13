@@ -79,8 +79,10 @@ class TestPlainTextFooter:
 
         captured = {}
 
-        async def _fake_post(payload, event):
-            captured.update(payload)
+        # _post receives the provider-NEUTRAL message, so this assertion holds whichever transport
+        # is active — the footer is a CAN-SPAM obligation, not a provider detail.
+        async def _fake_post(message, event):
+            captured.update(message)
             return True
 
         monkeypatch.setattr(email_sender, "_post", _fake_post)
@@ -89,5 +91,5 @@ class TestPlainTextFooter:
         asyncio.run(
             email_sender.EmailSender().send_html("a@b.com", "s", "<p>hi</p>", text="hand written")
         )
-        assert "hand written" in captured["TextBody"]
-        assert "1924 Example St" in captured["TextBody"]
+        assert "hand written" in captured["text"]
+        assert "1924 Example St" in captured["text"]

@@ -67,7 +67,11 @@ async def run(lead_days: int | None, only_email: str | None, send: bool) -> int:
             from app.alerts.email_sender import EmailSender
 
             if not settings.email_configured:
-                print("ERROR: --send given but SENDGRID_API_KEY is not set.", file=sys.stderr)
+                print(
+                    f"ERROR: --send given but the email channel is unconfigured: no "
+                    f"API key for EMAIL_PROVIDER={settings.email_provider}.",
+                    file=sys.stderr,
+                )
                 return 1
             sender = EmailSender()
         else:

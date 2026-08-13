@@ -516,7 +516,7 @@ from app.alerts.email_shell import DASHBOARD_URL as _DASHBOARD_URL
 
 
 def render_digest_subject(content: DigestContent, period_label: str) -> str:
-    return f"Atlas Circular — your {period_label} EPR digest ({content.total} updates)"
+    return f"Your {period_label} EPR digest — {content.total} updates"
 
 
 def _byline(b: Bill, extra: str = "") -> str:

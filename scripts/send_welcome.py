@@ -68,12 +68,12 @@ async def run(only_email: str | None, send: bool) -> int:
         if send:
             from app.config import settings
 
-            if not settings.sendgrid_api_key:
+            if not settings.email_configured:
                 print("ERROR: --send given but SENDGRID_API_KEY is not set.", file=sys.stderr)
                 return 1
-            from app.alerts.sendgrid_sender import SendGridSender
+            from app.alerts.email_sender import EmailSender
 
-            sender = SendGridSender()
+            sender = EmailSender()
 
         out_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tmp"

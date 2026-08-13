@@ -744,16 +744,16 @@ async def run_digest_cycle(
     from sqlalchemy import func, select
 
     from app.alerts.digest import build_digests, render_digest_html, render_digest_subject
-    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.email_sender import EmailSender
     from app.alerts.unsubscribe import unsubscribe_url
     from app.database import AsyncSessionLocal
 
-    if not settings.sendgrid_api_key:
-        log.warning("digest_skipped_no_sendgrid_key", period=period_label)
+    if not settings.email_configured:
+        log.warning("digest_skipped_no_email_key", period=period_label)
         return
 
     days = window_days if window_days is not None else settings.digest_window_days
-    sender = SendGridSender()
+    sender = EmailSender()
     async with AsyncSessionLocal() as db:
         now = (await db.execute(select(func.now()))).scalar_one()
         since = now - timedelta(days=days)
@@ -788,17 +788,17 @@ async def run_deadline_alert_cycle() -> None:
         render_deadline_alert_html,
         render_deadline_alert_subject,
     )
-    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.email_sender import EmailSender
     from app.alerts.unsubscribe import unsubscribe_url
     from app.database import AsyncSessionLocal
     from app.models import ComplianceDeadline
 
-    if not settings.sendgrid_api_key:
-        log.warning("deadline_alerts_skipped_no_sendgrid_key")
+    if not settings.email_configured:
+        log.warning("deadline_alerts_skipped_no_email_key")
         return
 
     lead_days = max(settings.deadline_reminder_days) if settings.deadline_reminder_days else 30
-    sender = SendGridSender()
+    sender = EmailSender()
     async with AsyncSessionLocal() as db:
         today = (await db.execute(select(func.current_date()))).scalar_one()
         alerts = await build_deadline_alerts(db, today, lead_days)
@@ -833,7 +833,7 @@ async def run_trial_reminder_cycle() -> None:
     account emailed, so it sends once per trial expiry."""
     from datetime import datetime, timezone
 
-    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.email_sender import EmailSender
     from app.alerts.trial_reminders import (
         build_trial_reminders,
         render_trial_reminder_html,
@@ -841,11 +841,11 @@ async def run_trial_reminder_cycle() -> None:
     )
     from app.database import AsyncSessionLocal
 
-    if not settings.sendgrid_api_key:
-        log.warning("trial_reminders_skipped_no_sendgrid_key")
+    if not settings.email_configured:
+        log.warning("trial_reminders_skipped_no_email_key")
         return
 
-    sender = SendGridSender()
+    sender = EmailSender()
     async with AsyncSessionLocal() as db:
         now = datetime.now(timezone.utc)
         items = await build_trial_reminders(db, now, settings.trial_reminder_lead_days)
@@ -868,7 +868,7 @@ async def run_watchlist_onboarding_cycle() -> None:
     Gated by settings.enable_welcome_email. See app/alerts/watchlist_onboarding.py."""
     from datetime import datetime, timezone
 
-    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.email_sender import EmailSender
     from app.alerts.unsubscribe import unsubscribe_url
     from app.alerts.watchlist_onboarding import (
         build_watchlist_onboarding,
@@ -878,11 +878,11 @@ async def run_watchlist_onboarding_cycle() -> None:
     )
     from app.database import AsyncSessionLocal
 
-    if not settings.sendgrid_api_key:
-        log.warning("watchlist_onboarding_skipped_no_sendgrid_key")
+    if not settings.email_configured:
+        log.warning("watchlist_onboarding_skipped_no_email_key")
         return
 
-    sender = SendGridSender()
+    sender = EmailSender()
     async with AsyncSessionLocal() as db:
         now = datetime.now(timezone.utc)
         items = await build_watchlist_onboarding(db, now)
@@ -910,7 +910,7 @@ async def run_watchlist_recap_cycle() -> None:
     See app/alerts/watchlist_recap.py."""
     from datetime import datetime, timezone
 
-    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.email_sender import EmailSender
     from app.alerts.unsubscribe import unsubscribe_url
     from app.alerts.watchlist_recap import (
         build_watchlist_recap,
@@ -923,11 +923,11 @@ async def run_watchlist_recap_cycle() -> None:
     if not settings.enable_watchlist_recap:
         log.info("watchlist_recap_skipped", reason="enable_watchlist_recap=false")
         return
-    if not settings.sendgrid_api_key:
-        log.warning("watchlist_recap_skipped_no_sendgrid_key")
+    if not settings.email_configured:
+        log.warning("watchlist_recap_skipped_no_email_key")
         return
 
-    sender = SendGridSender()
+    sender = EmailSender()
     async with AsyncSessionLocal() as db:
         now = datetime.now(timezone.utc)
         items = await build_watchlist_recap(db, now)
@@ -961,16 +961,16 @@ async def run_new_bill_alert_cycle() -> None:
         render_new_bill_alert_html,
         render_new_bill_alert_subject,
     )
-    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.email_sender import EmailSender
     from app.alerts.unsubscribe import unsubscribe_url
     from app.database import AsyncSessionLocal
     from app.models import Bill
 
-    if not settings.sendgrid_api_key:
-        log.warning("new_bill_alerts_skipped_no_sendgrid_key")
+    if not settings.email_configured:
+        log.warning("new_bill_alerts_skipped_no_email_key")
         return
 
-    sender = SendGridSender()
+    sender = EmailSender()
     async with AsyncSessionLocal() as db:
         today = (await db.execute(select(func.current_date()))).scalar_one()
         alerts = await build_new_bill_alerts(db, today, settings.new_bill_alert_window_days)
@@ -1228,7 +1228,7 @@ async def refresh_active_cases() -> None:
         render_litigation_subject,
     )
     from app.alerts.unsubscribe import unsubscribe_url
-    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.email_sender import EmailSender
     from app.alerts.slack_sender import SlackSender
     from app.models import AlertSubscription
 
@@ -1257,7 +1257,7 @@ async def refresh_active_cases() -> None:
             )
             active_cases = result.scalars().all()
 
-            email_sender = SendGridSender()
+            email_sender = EmailSender()
             slack_sender = SlackSender()
 
             # Load subscriptions once
@@ -1387,7 +1387,7 @@ async def refresh_active_cases() -> None:
                             states = sub.states or []
                             if "ALL" not in states and notif_case.related_state and notif_case.related_state not in states:
                                 continue
-                            if sub.email and settings.sendgrid_api_key:
+                            if sub.email and settings.email_configured:
                                 try:
                                     await email_sender.send_text_alert(
                                         sub.email,

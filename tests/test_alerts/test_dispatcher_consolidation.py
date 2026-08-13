@@ -89,7 +89,7 @@ def _dispatcher(subs_for_bill):
 
 
 def _patch_env(monkeypatch):
-    monkeypatch.setattr(dispatcher_mod.settings, "sendgrid_api_key", "sg-key")
+    monkeypatch.setattr(dispatcher_mod.settings, "postmark_api_key", "pm-test-token")
 
     async def _no_litigation(_db, _bill_id):
         return ""
@@ -143,7 +143,7 @@ class TestConsolidation:
 
     async def test_slack_consolidated_and_no_email_without_key(self, monkeypatch):
         _patch_env(monkeypatch)
-        monkeypatch.setattr(dispatcher_mod.settings, "sendgrid_api_key", "")  # no email channel
+        monkeypatch.setattr(dispatcher_mod.settings, "postmark_api_key", "")  # no email channel
         sub = _sub(email=None, slack_webhook="https://hooks.slack/x")
         d = _dispatcher([sub])
         await d.dispatch_changes(_FakeDB([_bill(1), _bill(2)]), [_change(1), _change(2)])
@@ -173,3 +173,45 @@ class TestConsolidation:
         await d.dispatch_changes(_FakeDB([_bill(1)]), [change])
         assert d.email_sender.send_consolidated_alert.await_count == 0
         assert change.alert_sent  # still marked handled so it won't be retried forever
+
+
+class TestOutageHold:
+    """A bill change is consumed on dispatch — no later cycle re-derives it — so marking it sent
+    while the email channel is dark loses legislative movement silently. That is exactly the risk
+    during a provider cutover, when the token is present but every send is rejected."""
+
+    async def test_total_failure_holds_the_batch(self, monkeypatch):
+        _patch_env(monkeypatch)
+        d = _dispatcher([_sub(email="one@x.com")])
+        d.email_sender.send_consolidated_alert = AsyncMock(return_value=False)
+        changes = [_change(1), _change(2)]
+        db = _FakeDB([_bill(1), _bill(2)])
+
+        await d.dispatch_changes(db, changes)
+
+        # Nobody received it, so holding can't double-send anyone — and the next cycle retries.
+        assert not any(c.alert_sent for c in changes)
+        assert db.committed
+
+    async def test_partial_failure_still_marks(self, monkeypatch):
+        """One bad address must not make everyone else get the alert twice on the next cycle."""
+        _patch_env(monkeypatch)
+        d = _dispatcher([_sub(id=1, email="good@x.com"), _sub(id=2, email="bad@x.com")])
+        d.email_sender.send_consolidated_alert = AsyncMock(side_effect=[True, False])
+        changes = [_change(1)]
+
+        await d.dispatch_changes(_FakeDB([_bill(1)]), changes)
+
+        assert d.email_sender.send_consolidated_alert.await_count == 2
+        assert all(c.alert_sent for c in changes)
+
+    async def test_slack_only_deployment_is_not_held(self, monkeypatch):
+        """With no email channel configured at all there are no email bundles, so the batch is a
+        Slack delivery and completes — otherwise a deliberately email-less deployment would retry
+        the same changes to Slack forever."""
+        _patch_env(monkeypatch)
+        monkeypatch.setattr(dispatcher_mod.settings, "postmark_api_key", "")
+        d = _dispatcher([_sub(email=None, slack_webhook="https://hooks.slack/x")])
+        changes = [_change(1)]
+        await d.dispatch_changes(_FakeDB([_bill(1)]), changes)
+        assert all(c.alert_sent for c in changes)

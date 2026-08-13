@@ -61,13 +61,13 @@ async def run(window_days: int, only_email: str | None, send: bool) -> int:
 
     sender = None
     if send:
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
         from app.config import settings
 
-        if not settings.sendgrid_api_key:
+        if not settings.email_configured:
             print("ERROR: --send given but SENDGRID_API_KEY is not set.", file=sys.stderr)
             return 1
-        sender = SendGridSender()
+        sender = EmailSender()
 
     print(f"{'SENDING' if send else 'DRY RUN'} — {len(digests)} digest(s), window {window_days}d:\n")
     sent = 0

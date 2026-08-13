@@ -44,12 +44,16 @@ class TestRendering:
         assert "display:none" in html
         assert html.index("display:none") < html.index("Atlas Circular")
 
-    def test_subjects_name_the_brand_and_the_action(self):
-        # These land in an inbox next to a dozen other verification mails — the brand has to be in
-        # the subject line, not only the body.
-        assert "Atlas Circular" in render_verify_subject()
-        assert "Atlas Circular" in render_reset_subject()
+    def test_subjects_name_the_action_and_leave_the_brand_to_the_sender(self):
+        # These land next to a dozen other verification mails, so the brand does have to be visible
+        # — but it's the From display name that carries it now ("Atlas Circular", set in
+        # _from_header), and every major client renders that ahead of the subject. Repeating it here
+        # spent the scarcest characters in the inbox restating the line above. The subject's whole
+        # job is the action.
+        assert "Atlas Circular" not in render_verify_subject()
+        assert "Atlas Circular" not in render_reset_subject()
         assert "password" in render_reset_subject().lower()
+        assert "email" in render_verify_subject().lower()
 
     def test_reset_reassures_the_unintended_recipient(self):
         # A reset email to someone who didn't ask for one must say so — otherwise it reads as a
@@ -64,34 +68,34 @@ class TestSendIsFailSoft:
         assert await send_verification_email("a@example.com") is False
 
     @pytest.mark.asyncio
-    async def test_returns_false_without_sendgrid_key(self, monkeypatch):
+    async def test_returns_false_without_api_key(self, monkeypatch):
         monkeypatch.setattr(auth_emails.settings, "enable_auth_emails", True)
-        monkeypatch.setattr(auth_emails.settings, "sendgrid_api_key", "")
+        monkeypatch.setattr(auth_emails.settings, "postmark_api_key", "")
         assert await send_verification_email("a@example.com") is False
 
     @pytest.mark.asyncio
     async def test_returns_false_when_firebase_wont_mint_a_link(self, monkeypatch):
         """Unknown address / Identity Toolkit error — caller falls back, and we never raise."""
         monkeypatch.setattr(auth_emails.settings, "enable_auth_emails", True)
-        monkeypatch.setattr(auth_emails.settings, "sendgrid_api_key", "SG.test")
+        monkeypatch.setattr(auth_emails.settings, "postmark_api_key", "pm-test-token")
         with patch.object(auth_emails, "_generate_link", AsyncMock(return_value=None)):
             assert await send_verification_email("nobody@example.com") is False
 
     @pytest.mark.asyncio
     async def test_swallows_an_unexpected_error(self, monkeypatch):
         monkeypatch.setattr(auth_emails.settings, "enable_auth_emails", True)
-        monkeypatch.setattr(auth_emails.settings, "sendgrid_api_key", "SG.test")
+        monkeypatch.setattr(auth_emails.settings, "postmark_api_key", "pm-test-token")
         with patch.object(auth_emails, "_generate_link", AsyncMock(side_effect=RuntimeError("boom"))):
             assert await send_verification_email("a@example.com") is False
 
     @pytest.mark.asyncio
-    async def test_true_only_when_sendgrid_accepted_it(self, monkeypatch):
+    async def test_true_only_when_provider_accepted_it(self, monkeypatch):
         monkeypatch.setattr(auth_emails.settings, "enable_auth_emails", True)
-        monkeypatch.setattr(auth_emails.settings, "sendgrid_api_key", "SG.test")
+        monkeypatch.setattr(auth_emails.settings, "postmark_api_key", "pm-test-token")
         sender = MagicMock()  # the class; calling it yields the instance
         sender.return_value.send_html = AsyncMock(return_value=True)
         with patch.object(auth_emails, "_generate_link", AsyncMock(return_value=LINK)), \
-             patch("app.alerts.sendgrid_sender.SendGridSender", sender):
+             patch("app.alerts.email_sender.EmailSender", sender):
             assert await send_verification_email("a@example.com") is True
         to, subject, html = sender.return_value.send_html.await_args.args
         assert to == "a@example.com"

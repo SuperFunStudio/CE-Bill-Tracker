@@ -275,7 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Both of these prefer our own branded, domain-authenticated send (see lib/authEmails) and fall back
   // to the Firebase SDK's `noreply@…firebaseapp.com` mailer only if that didn't go out. The fallback is
-  // the point: a SendGrid outage or a flipped flag should cost us the masthead, not the user's ability
+  // the point: an email-provider outage or a flipped flag should cost us the masthead, not the user's ability
   // to verify an address or recover an account.
   const resendVerification = useCallback(async () => {
     if (!auth.currentUser || auth.currentUser.emailVerified) return;

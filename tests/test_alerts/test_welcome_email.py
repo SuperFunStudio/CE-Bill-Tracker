@@ -7,6 +7,7 @@ corpus size that goes stale, and the studio byline creeping back into the masthe
 import types
 from datetime import date
 
+from app.config import settings
 from app.alerts.welcome_email import (
     CorpusStats,
     StandingRow,
@@ -135,10 +136,14 @@ class TestBreakdownsAddUp:
 
 class TestChromeAndCopy:
     def test_sets_expectations_about_the_alerts_sender(self):
-        """The welcome comes from hello@; everything after it comes from alerts@. Saying so is both
-        courtesy and a deliverability nudge."""
+        """Naming the address the ongoing alerts will come from is both courtesy and a
+        deliverability nudge ("add us to your contacts").
+
+        It reads the address from settings rather than a literal: the welcome used to promise mail
+        from alerts@ while every send moved to one identity, which made the copy quietly false. A
+        hard-coded address here is a promise nothing enforces."""
         html = render_welcome_html(_sub(), _sop(), "August 2026", corpus=CORPUS, window=WINDOW)
-        assert "alerts@atlascircular.com" in html
+        assert settings.email_from in html
 
     def test_links_the_substack(self):
         html = render_welcome_html(_sub(), _sop(), "August 2026", corpus=CORPUS, window=WINDOW)

@@ -39,13 +39,17 @@ def _event_label(event_type: str | None) -> str:
 
 def render_litigation_subject(case: Any, significance: str | None) -> str:
     """Subject line. An injunction is the one outcome that changes what a compliance team must do
-    tomorrow, so it leads — everything else is a severity emoji plus the case name."""
+    tomorrow, so it leads; otherwise the severity leads in words.
+
+    No emoji. A siren in a subject line is a mild spam-filter signal, it renders as tofu in some
+    clients, and it spends the most valuable characters we own on decoration — "ENFORCEMENT STAYED"
+    already carries every bit of the urgency a 🚨 was doing. `significance` still shapes the line, it
+    just says the word instead of drawing it.
+    """
     if getattr(case, "case_status", None) == "injunction_granted":
-        # One siren, not two — the stay already carries the urgency, and a critical-significance
-        # event on a stayed case used to render "🚨 ENFORCEMENT STAYED — 🚨 EPR Litigation Update".
-        return f"🚨 ENFORCEMENT STAYED — EPR Litigation Update: {case.case_name}"
-    emoji = "🚨" if (significance or "").lower() == _CRITICAL else "⚠️"
-    return f"{emoji} EPR Litigation Update: {case.case_name}"
+        return f"ENFORCEMENT STAYED — EPR Litigation Update: {case.case_name}"
+    prefix = "CRITICAL — " if (significance or "").lower() == _CRITICAL else ""
+    return f"{prefix}EPR Litigation Update: {case.case_name}"
 
 
 def render_litigation_kicker(date_filed: Any = None) -> str:

@@ -6,7 +6,7 @@ from app.alerts.applinks import litigation_case_url
 from app.alerts.detector import ChangeDetector
 from app.alerts.digest import load_watchlists, subscription_matches_bill
 from app.alerts.retention import filter_retained_subscriptions
-from app.alerts.sendgrid_sender import SendGridSender
+from app.alerts.email_sender import EmailSender
 from app.alerts.slack_sender import SlackSender
 from app.alerts.unsubscribe import unsubscribe_url
 from app.config import settings
@@ -34,7 +34,9 @@ async def _get_litigation_context(db: AsyncSession, bill_id: int) -> str:
     for case in cases:
         injunction_flag = ""
         if case.case_status == "injunction_granted":
-            injunction_flag = " 🚨 ENFORCEMENT STAYED"
+            # Words, not a siren: this block is embedded in the Legislative Update email, where an
+            # emoji reads as alarmist next to the measured tone of everything around it.
+            injunction_flag = " — ENFORCEMENT STAYED"
         # The case's Atlas Circular page, not case.cl_url: it carries the docket timeline, the
         # preemption analysis and an onward CourtListener link. Bare URL because this block is shared
         # verbatim with Slack; the email sender linkifies it. See applinks.litigation_case_url.
@@ -83,7 +85,7 @@ class _Bundle:
 class AlertDispatcher:
     def __init__(self):
         self.detector = ChangeDetector()
-        self.email_sender = SendGridSender()
+        self.email_sender = EmailSender()
         self.slack_sender = SlackSender()
 
     async def dispatch_changes(
@@ -95,8 +97,9 @@ class AlertDispatcher:
         bills move in a single cycle got ten separate emails. Now we group the alert-worthy changes by
         bill, match each bill to its subscribers once, accumulate every (bill, changes) a recipient
         should hear about, and send a single consolidated message — the same one-message-per-recipient
-        shape the digest and new-bill cycles already use. Every processed change is marked
-        alert_sent regardless of send outcome (as before), so a transient send failure can't loop it.
+        shape the digest and new-bill cycles already use. A processed change is marked alert_sent
+        regardless of any individual send's outcome — retrying would double-send everyone the failure
+        didn't affect — with one exception: a total email outage holds the batch. See step 4.
         """
         # 1) Keep only alert-worthy changes, grouped by bill. Non-worthy changes are marked handled.
         changes_by_bill: dict[int, list[BillChange]] = {}
@@ -143,7 +146,7 @@ class AlertDispatcher:
                     litigation_by_bill[bill_id] = await _get_litigation_context(db, bill_id)
                 litigation = litigation_by_bill[bill_id]
 
-                if sub.email and settings.sendgrid_api_key:
+                if sub.email and settings.email_configured:
                     email_bundles.setdefault(sub.email.lower(), _Bundle(sub)).add(
                         bill, wanted, litigation
                     )
@@ -153,26 +156,43 @@ class AlertDispatcher:
                     )
 
         # 3) One consolidated send per recipient.
+        delivered = 0
         for bundle in email_bundles.values():
-            await self.email_sender.send_consolidated_alert(
+            if await self.email_sender.send_consolidated_alert(
                 bundle.sub.email,
                 bundle.items(),
                 list_unsubscribe_url=unsubscribe_url(bundle.sub.id),
-            )
+            ):
+                delivered += 1
         for webhook, bundle in slack_bundles.items():
             await self.slack_sender.send_consolidated_alert(webhook, bundle.items())
 
-        # 4) Mark every processed change handled and persist.
-        for bill_changes in changes_by_bill.values():
-            for change in bill_changes:
-                change.alert_sent = True
+        # 4) Mark every processed change handled and persist — unless the email channel was
+        #    configured and every single send failed. That's an outage (bad token, unverified
+        #    sender, provider down), not one bad address: nobody received this batch, so holding it
+        #    can't double-send anyone, and marking it would silently drop legislative movement that
+        #    no later cycle re-derives. Partial failure still marks, because a retry WOULD duplicate
+        #    for every recipient the failure didn't touch.
+        outage = bool(email_bundles) and delivered == 0
+        if outage:
+            log.error(
+                "alert_cycle_email_outage_batch_held",
+                changes=sum(len(v) for v in changes_by_bill.values()),
+                email_recipients=len(email_bundles),
+            )
+        else:
+            for bill_changes in changes_by_bill.values():
+                for change in bill_changes:
+                    change.alert_sent = True
         await db.commit()
         log.info(
             "alert_dispatched",
             bills=len(changes_by_bill),
             changes=sum(len(v) for v in changes_by_bill.values()),
             email_recipients=len(email_bundles),
+            email_delivered=delivered,
             slack_recipients=len(slack_bundles),
+            held=outage,
         )
 
     async def _subscriptions_for_bill(

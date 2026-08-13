@@ -75,24 +75,19 @@ class TestPlainTextFooter:
     def test_hand_written_text_parts_get_it_appended(self, address, monkeypatch):
         """The two senders that build their own text/plain part bypass html_to_text, so the identity
         has to be appended explicitly or the MIME parts diverge — itself a spam signal."""
-        from app.alerts import sendgrid_sender
+        from app.alerts import email_sender
 
         captured = {}
 
-        class _FakeMail:
-            def __init__(self, **kwargs):
-                captured.update(kwargs)
+        async def _fake_post(payload, event):
+            captured.update(payload)
+            return True
 
-        monkeypatch.setattr(sendgrid_sender, "Mail", _FakeMail)
-        sender = sendgrid_sender.SendGridSender.__new__(sendgrid_sender.SendGridSender)
-
-        class _FakeSG:
-            def send(self, message):
-                raise RuntimeError("no network in tests")
-
-        sender._sg = _FakeSG()
+        monkeypatch.setattr(email_sender, "_post", _fake_post)
         import asyncio
 
-        asyncio.run(sender.send_html("a@b.com", "s", "<p>hi</p>", text="hand written"))
-        assert "hand written" in captured["plain_text_content"]
-        assert "1924 Example St" in captured["plain_text_content"]
+        asyncio.run(
+            email_sender.EmailSender().send_html("a@b.com", "s", "<p>hi</p>", text="hand written")
+        )
+        assert "hand written" in captured["TextBody"]
+        assert "1924 Example St" in captured["TextBody"]

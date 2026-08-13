@@ -51,7 +51,7 @@ def _shell(title: str, body: str) -> str:
 
 
 def render_confirmation_subject(plan: str | None) -> str:
-    return f"Thanks — your Atlas Circular {plan_label(plan)} request is in"
+    return f"Thanks — your {plan_label(plan)} request is in"
 
 
 def render_confirmation_html(name: str | None, plan: str | None) -> str:
@@ -134,13 +134,13 @@ async def send_access_request_emails(
     attribution: dict[str, str] | None = None,
 ) -> None:
     """Best-effort: auto-reply to the requester + notify the team. Never raises."""
-    if not settings.sendgrid_api_key:
-        log.info("access_request_emails_skipped_no_sendgrid_key", email=email)
+    if not settings.email_configured:
+        log.info("access_request_emails_skipped_no_email_key", email=email)
         return
     try:
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
-        sender = SendGridSender()
+        sender = EmailSender()
         await sender.send_html(
             email, render_confirmation_subject(plan), render_confirmation_html(name, plan)
         )

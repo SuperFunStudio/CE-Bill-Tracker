@@ -54,7 +54,7 @@ Everything listed here has been reviewed against actual source code. No stubs, n
 |--------|------|--------|-------|
 | Change detector | [app/alerts/detector.py](app/alerts/detector.py) | ✅ Full | Status changes, text hash updates, score delta ≥10 pts |
 | Alert dispatcher | [app/alerts/dispatcher.py](app/alerts/dispatcher.py) | ✅ Full | Subscription matching by state + material category, litigation context enrichment |
-| SendGrid sender | [app/alerts/sendgrid_sender.py](app/alerts/sendgrid_sender.py) | ✅ Full | Real SendGrid API, styled HTML email templates |
+| Email sender | [app/alerts/email_sender.py](app/alerts/email_sender.py) | ✅ Full | Postmark HTTP API, styled HTML email templates |
 | Slack sender | [app/alerts/slack_sender.py](app/alerts/slack_sender.py) | ✅ Full | Real webhook, Block Kit formatting, retry/backoff |
 
 ### API Endpoints
@@ -200,7 +200,7 @@ Live HTML scraping of the Circular Action Alliance registry with regex-based tab
 | Cost estimator | — | ❌ No tests |
 | Exposure brief generator | — | ❌ No tests |
 | Alert dispatcher | — | ❌ No tests |
-| SendGrid / Slack senders | — | ❌ No tests |
+| Email / Slack senders | — | ❌ No tests |
 | All API endpoints | — | ❌ No tests |
 | CourtListener webhook | — | ❌ No tests |
 
@@ -262,7 +262,7 @@ Live HTML scraping of the Circular Action Alliance registry with regex-based tab
 | LLM | Anthropic Claude — Haiku (classify), Sonnet (extract compliance details + generate Exposure Briefs) |
 | Scheduler | APScheduler (AsyncIOScheduler) |
 | HTTP client | httpx + tenacity (retry/backoff) |
-| Notifications | SendGrid (email), Slack webhooks |
+| Notifications | Postmark (email), Slack webhooks |
 | Dashboard | Streamlit + Plotly |
 | Config | Pydantic Settings + python-dotenv |
 | Logging | structlog (structured JSON) |
@@ -295,7 +295,7 @@ LEGISCAN_API_KEY=...
 Optional:
 ```
 OPEN_STATES_API_KEY=...          # Required for ENABLE_OPENSTATES_INGESTION=true
-SENDGRID_API_KEY=...
+POSTMARK_API_KEY=...
 SLACK_WEBHOOK_URL=...
 COURTLISTENER_API_KEY=...        # Required for ENABLE_COURTLISTENER=true
 COURTLISTENER_WEBHOOK_SECRET=... # Required for webhook signature verification

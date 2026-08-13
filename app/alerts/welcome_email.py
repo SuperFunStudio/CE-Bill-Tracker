@@ -698,7 +698,7 @@ def render_welcome_html(
       <strong>{_topics_summary(sub)}</strong>{mat_html} in
       <strong>{_jurisdictions_summary(sub)}</strong>, or a status change on one you're already
       tracking. Only genuinely recent action, never a months-old event dressed up as news.
-      Those arrive from <strong>alerts@atlascircular.com</strong> — worth adding to your contacts so
+      Those arrive from <strong>{settings.email_from}</strong> — worth adding to your contacts so
       they don't land in spam.</p>
     <p style="margin:16px 0 0;">{cta_button(_DASHBOARD_URL, "Open your dashboard →")}</p>
     <p style="font:14px {_SERIF};color:{_MUTED};line-height:1.6;margin:18px 0 0;">
@@ -751,13 +751,13 @@ async def send_welcome_email(db: AsyncSession, sub: AlertSubscription) -> bool:
         return False
     if not sub.email:
         return False
-    if not settings.sendgrid_api_key:
-        log.info("welcome_email_skipped_no_sendgrid_key", email=sub.email)
+    if not settings.email_configured:
+        log.info("welcome_email_skipped_no_email_key", email=sub.email)
         return False
     try:
         from sqlalchemy import func
 
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
         now = (await db.execute(select(func.now()))).scalar_one()
         today = now.date()
@@ -774,15 +774,15 @@ async def send_welcome_email(db: AsyncSession, sub: AlertSubscription) -> bool:
         # Pass the List-Unsubscribe header (RFC 8058 one-click), matching the body's link — the
         # roundup is a bulk send and Gmail/Outlook penalise bulk mail without it. Same as the digest
         # and new-bill cycles.
-        ok = await SendGridSender().send_html(
+        ok = await EmailSender().send_html(
             sub.email,
             subject,
             html,
             list_unsubscribe_url=unsubscribe_url(sub.id),
-            # The welcome is the one email written in a person's voice, so it comes from hello@
-            # rather than alerts@ — and its closing tells the reader the automated cycles will
-            # arrive from alerts@ instead. Replies still route to sendgrid_reply_to.
-            from_email=settings.sendgrid_hello_email,
+            # The welcome is the one email written in a person's voice, so it goes out under the
+            # founder display name ("Kenny at Atlas Circular") rather than the brand one. Same
+            # mailbox either way — see _from_header. Replies still route to email_reply_to.
+            from_email=settings.email_hello_from,
         )
         log.info(
             "welcome_email_sent",
@@ -827,7 +827,7 @@ async def send_welcome_for_subscription(subscription_id: int) -> None:
 
 def render_account_welcome_subject() -> str:
     # Public brand is "Atlas Circular" — never the internal "Atlas Circular" codename in a subject.
-    return "Welcome to Atlas Circular — your 7-day Pro trial is live"
+    return "Welcome to the Atlas — your 7-day Pro trial is live"
 
 
 def render_account_welcome_html() -> str:
@@ -861,12 +861,12 @@ async def send_account_welcome(email: str) -> bool:
     if not settings.enable_welcome_email:
         log.info("account_welcome_skipped_flag_off", email=email)
         return False
-    if not email or not settings.sendgrid_api_key:
+    if not email or not settings.email_configured:
         return False
     try:
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
-        ok = await SendGridSender().send_html(
+        ok = await EmailSender().send_html(
             email, render_account_welcome_subject(), render_account_welcome_html()
         )
         log.info("account_welcome_sent", email=email, ok=ok)
@@ -893,7 +893,7 @@ def _comp_duration_label(days: int | None) -> str:
 
 
 def render_comp_grant_subject() -> str:
-    return "Your complimentary access to Atlas Circular"
+    return "Your complimentary access is live"
 
 
 def render_comp_grant_html(duration_label: str, name: str | None = None) -> str:
@@ -923,13 +923,13 @@ async def send_comp_grant_welcome(email: str, days: int | None = None, name: str
     if not settings.enable_welcome_email:
         log.info("comp_grant_welcome_skipped_flag_off", email=email)
         return False
-    if not email or not settings.sendgrid_api_key:
+    if not email or not settings.email_configured:
         return False
     try:
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
         html = render_comp_grant_html(_comp_duration_label(days), name=name)
-        ok = await SendGridSender().send_html(email, render_comp_grant_subject(), html)
+        ok = await EmailSender().send_html(email, render_comp_grant_subject(), html)
         log.info("comp_grant_welcome_sent", email=email, ok=ok, days=days)
         return ok
     except Exception as e:
@@ -946,9 +946,9 @@ async def send_comp_grant_welcome(email: str, days: int | None = None, name: str
 
 def render_pro_welcome_subject(is_trial: bool = False) -> str:
     return (
-        "Your Atlas Circular Pro trial is live"
+        "Your Pro trial is live"
         if is_trial
-        else "You're in — your Atlas Circular Pro plan is active"
+        else "You're in — your Pro plan is active"
     )
 
 
@@ -1005,13 +1005,13 @@ async def send_pro_welcome(email: str, is_trial: bool = False, founding: bool = 
     if not settings.enable_welcome_email:
         log.info("pro_welcome_skipped_flag_off", email=email)
         return False
-    if not email or not settings.sendgrid_api_key:
+    if not email or not settings.email_configured:
         return False
     try:
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
         html = render_pro_welcome_html(is_trial=is_trial, founding=founding)
-        ok = await SendGridSender().send_html(
+        ok = await EmailSender().send_html(
             email, render_pro_welcome_subject(is_trial=is_trial), html
         )
         log.info("pro_welcome_sent", email=email, ok=ok, is_trial=is_trial, founding=founding)
@@ -1061,7 +1061,7 @@ _cta_button = cta_button
 
 
 def render_payment_failed_subject() -> str:
-    return "Action needed — your Atlas Circular Pro payment didn't go through"
+    return "Action needed — your Pro payment didn't go through"
 
 
 def render_payment_failed_html() -> str:
@@ -1093,12 +1093,12 @@ async def send_payment_failed(email: str) -> bool:
     if not settings.enable_welcome_email:
         log.info("payment_failed_email_skipped_flag_off", email=email)
         return False
-    if not email or not settings.sendgrid_api_key:
+    if not email or not settings.email_configured:
         return False
     try:
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
-        ok = await SendGridSender().send_html(
+        ok = await EmailSender().send_html(
             email, render_payment_failed_subject(), render_payment_failed_html()
         )
         log.info("payment_failed_email_sent", email=email, ok=ok)
@@ -1114,7 +1114,7 @@ async def send_payment_failed(email: str) -> bool:
 
 
 def render_subscription_canceled_subject() -> str:
-    return "Your Atlas Circular Pro subscription has been canceled"
+    return "Your Pro subscription has been canceled"
 
 
 def render_subscription_canceled_html() -> str:
@@ -1146,12 +1146,12 @@ async def send_subscription_canceled(email: str) -> bool:
     if not settings.enable_welcome_email:
         log.info("subscription_canceled_email_skipped_flag_off", email=email)
         return False
-    if not email or not settings.sendgrid_api_key:
+    if not email or not settings.email_configured:
         return False
     try:
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
-        ok = await SendGridSender().send_html(
+        ok = await EmailSender().send_html(
             email, render_subscription_canceled_subject(), render_subscription_canceled_html()
         )
         log.info("subscription_canceled_email_sent", email=email, ok=ok)
@@ -1168,7 +1168,7 @@ async def send_subscription_canceled(email: str) -> bool:
 
 
 def render_referral_reward_subject(days: int) -> str:
-    return f"You just earned {days} free days of Atlas Circular Pro"
+    return f"You just earned {days} free days of Pro"
 
 
 def render_referral_reward_html(days: int) -> str:
@@ -1201,12 +1201,12 @@ async def send_referral_reward(email: str, days: int = 30) -> bool:
     if not settings.enable_welcome_email:
         log.info("referral_reward_email_skipped_flag_off", email=email)
         return False
-    if not email or not settings.sendgrid_api_key:
+    if not email or not settings.email_configured:
         return False
     try:
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
-        ok = await SendGridSender().send_html(
+        ok = await EmailSender().send_html(
             email, render_referral_reward_subject(days), render_referral_reward_html(days)
         )
         log.info("referral_reward_email_sent", email=email, ok=ok, days=days)

@@ -340,7 +340,7 @@ async def _process_search_alert(results: list[dict], db: AsyncSession) -> None:
 async def _dispatch_litigation_alerts(db: AsyncSession) -> None:
     """Dispatch SendGrid/Slack alerts for recent high/critical litigation events."""
     from datetime import datetime, timezone, timedelta
-    from app.alerts.sendgrid_sender import SendGridSender
+    from app.alerts.email_sender import EmailSender
     from app.alerts.slack_sender import SlackSender
     from app.models import AlertSubscription
 
@@ -365,7 +365,7 @@ async def _dispatch_litigation_alerts(db: AsyncSession) -> None:
     if not subs:
         return
 
-    email_sender = SendGridSender()
+    email_sender = EmailSender()
     slack_sender = SlackSender()
 
     for event in notable_events:
@@ -403,7 +403,7 @@ async def _dispatch_litigation_alerts(db: AsyncSession) -> None:
             if "ALL" not in states and case.related_state and case.related_state not in states:
                 continue
 
-            if sub.email and settings.sendgrid_api_key:
+            if sub.email and settings.email_configured:
                 try:
                     await email_sender.send_text_alert(
                         sub.email,

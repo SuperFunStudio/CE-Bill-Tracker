@@ -3,7 +3,7 @@
 Every outbound email should look like it came from the same publication and echo the web app's
 "gazette" identity. Before this module each sender hand-rolled its own masthead HTML (the same
 double-rule block copy-pasted across a dozen files) and one path — the real-time alert in
-sendgrid_sender — used a different Arial/blue-bar aesthetic entirely. This centralises the look:
+email_sender — used a different Arial/blue-bar aesthetic entirely. This centralises the look:
 
   - tokens (colors, fonts) live here, once;
   - `render_shell()` produces the masthead + optional dateline + body + colophon;

@@ -121,7 +121,7 @@ async def setup(db, email: str, bill_id: int, old_status: str, new_status: str):
 
 
 async def run(email: str, bill_id: int, old_status: str, new_status: str, send: bool) -> int:
-    from app.alerts.sendgrid_sender import _build_email_html
+    from app.alerts.email_sender import _build_email_html
     from app.config import settings
     from app.database import AsyncSessionLocal
 
@@ -143,7 +143,7 @@ async def run(email: str, bill_id: int, old_status: str, new_status: str, send: 
             print(f"Wrote preview to {os.path.relpath(path)}. Re-run with --send to email it.")
             return 0
 
-        if not settings.sendgrid_api_key:
+        if not settings.email_configured:
             print("ERROR: --send given but SENDGRID_API_KEY is not set.", file=sys.stderr)
             return 1
 

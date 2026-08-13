@@ -61,12 +61,12 @@ async def run(lead_days: int | None, only_email: str | None, send: bool) -> int:
         out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tmp")
         sender = None
         if send:
-            from app.alerts.sendgrid_sender import SendGridSender
+            from app.alerts.email_sender import EmailSender
 
-            if not settings.sendgrid_api_key:
+            if not settings.email_configured:
                 print("ERROR: --send given but SENDGRID_API_KEY is not set.", file=sys.stderr)
                 return 1
-            sender = SendGridSender()
+            sender = EmailSender()
         else:
             os.makedirs(out_dir, exist_ok=True)
 

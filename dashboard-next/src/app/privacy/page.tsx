@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 // NOTE FOR REVIEW (Kenny): have counsel review before treating this as final. The entity, governing
 // state, effective year, and the third-party processors listed below reflect the actual stack in this
-// repo (Firebase Auth, Stripe, Google Analytics 4, SendGrid) — keep this list in sync if that changes.
+// repo (Firebase Auth, Stripe, Google Analytics 4, Postmark) — keep this list in sync if that changes.
 const EFFECTIVE_DATE = '2026';
 const ENTITY = 'SUPERFUN STUDIO LLC ("we," "us," or "the Company")';
 const GOVERNING_STATE = 'New York';
@@ -127,7 +127,7 @@ export default function PrivacyPage() {
             analytics.
           </li>
           <li>
-            <span className="text-text-primary font-medium">SendGrid (Twilio)</span> — transactional
+            <span className="text-text-primary font-medium">Postmark (ActiveCampaign)</span> — transactional
             and subscription email delivery.
           </li>
           <li>

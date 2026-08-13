@@ -2,8 +2,8 @@
 sample of each to a single hardcoded recipient.
 
 Visual / deliverability test for the Atlas Circular rebrand. This NEVER touches the database
-and NEVER emails a real subscriber: the recipient is hardcoded to kenny@superfun.studio and
-the from-address is forced to alerts@atlascircular.com.
+and NEVER emails a real subscriber: the recipient is hardcoded to kenny@atlascircular.com and
+the from-address is forced to hello@atlascircular.com.
 
 Run:  venv/Scripts/python.exe scripts/send_email_samples.py
 """
@@ -14,9 +14,9 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()  # pull the prod SENDGRID_API_KEY (and everything else) out of .env first
+load_dotenv()  # pull the prod POSTMARK_API_KEY (and everything else) out of .env first
 # ...then override the from-address so it wins over whatever .env carries.
-os.environ["SENDGRID_FROM_EMAIL"] = "alerts@atlascircular.com"
+os.environ["EMAIL_FROM"] = "hello@atlascircular.com"
 
 import asyncio
 import sys
@@ -34,10 +34,14 @@ from app.alerts.applinks import litigation_case_url, subscribe_url
 from app.alerts.unsubscribe import unsubscribe_url
 from app.alerts import new_bill_alerts, trial_reminders, watchlist_onboarding, watchlist_recap
 from app.alerts import welcome_email
-from app.alerts.sendgrid_sender import SendGridSender, _build_email_html, build_text_alert_html
+from app.alerts.email_sender import EmailSender, _build_email_html, build_text_alert_html
 from app.alerts.welcome_email import StandingRow, StateOfPlay
+from app.config import settings
 
-RECIPIENT = "kenny@superfun.studio"  # ALWAYS and ONLY this address
+# ALWAYS and ONLY this address. It moved from kenny@superfun.studio to the atlascircular.com mailbox
+# during the Postmark cutover: while the sending account is pending approval Postmark refuses any
+# recipient outside the From domain (ErrorCode 412), so samples to superfun.studio never send.
+RECIPIENT = "kenny@atlascircular.com"
 SUBJECT_PREFIX = "[Atlas sample] "
 # Synthetic litigation case id for the sample alert's in-app CTA. Points at a real route
 # (/federal?case=…) with an id that won't resolve — the button's styling and target are what's under
@@ -142,7 +146,7 @@ def sample_bills():
 def build_registry():
     reg = []
 
-    # 1. Per-bill status-change alert (sendgrid_sender._build_email_html).
+    # 1. Per-bill status-change alert (email_sender._build_email_html).
     def _per_bill():
         bill = make_bill(
             id=101, state="CA", bill_number="SB 54", status="enacted", policy_stance="advances",
@@ -310,8 +314,8 @@ def build_registry():
             federal_actions=[fed],
             status_overflow=3, new_overflow=0, federal_overflow=0,
         )
-        html = digest_mod.render_digest_html(sub, content, "month")
-        return digest_mod.render_digest_subject(content, "month"), html
+        html = digest_mod.render_digest_html(sub, content, "monthly")
+        return digest_mod.render_digest_subject(content, "monthly"), html
 
     reg.append(("digest", "html", _digest))
 
@@ -487,11 +491,41 @@ def _text_alert_chrome() -> dict:
 
 
 # --- Send helpers --------------------------------------------------------------------------------
-async def _send(kind: str, subject: str, payload: str) -> bool:
-    sender = SendGridSender()
+# Which templates the LIVE cycles send as bulk — i.e. pass a one-click unsubscribe URL. That single
+# argument also decides the Postmark message stream (broadcast vs transactional, see _stream_for), so
+# a sample that omits it silently tests the wrong stream and ships without the List-Unsubscribe
+# header. Mirrors the send sites in scheduler/jobs.py, alerts/dispatcher.py and welcome_email.py.
+BULK_TEMPLATES = {
+    "per_bill_status_alert",
+    "subscription_welcome",
+    "digest",
+    "deadline_single",
+    "deadline_multi",
+    "new_bill_alert",
+    "watchlist_onboarding",
+    "watchlist_recap",
+}
+# Templates written in a person's voice, sent with the founder display name rather than the brand
+# one. Same mailbox — only the From display name differs. See email_sender._from_header.
+FOUNDER_VOICE_TEMPLATES = {"subscription_welcome"}
+
+
+async def _send(label: str, kind: str, subject: str, payload: str) -> bool:
+    sender = EmailSender()
     if kind == "text":
+        # The litigation chrome already carries its own unsubscribe URL.
         return await sender.send_text_alert(RECIPIENT, subject, payload, **_text_alert_chrome())
-    return await sender.send_html(RECIPIENT, subject, payload)
+    return await sender.send_html(
+        RECIPIENT,
+        subject,
+        payload,
+        list_unsubscribe_url=(
+            unsubscribe_url(SAMPLE_SUBSCRIPTION_ID) if label in BULK_TEMPLATES else None
+        ),
+        from_email=(
+            settings.email_hello_from if label in FOUNDER_VOICE_TEMPLATES else None
+        ),
+    )
 
 
 def _write_contact_sheet(rendered: dict, render_status: dict) -> None:
@@ -612,7 +646,7 @@ def main():
         _, subject, payload = rendered[label]
         full_subject = SUBJECT_PREFIX + subject
         try:
-            ok = asyncio.run(_send(kind, full_subject, payload))
+            ok = asyncio.run(_send(label, kind, full_subject, payload))
             send_status[label] = "SENT ok" if ok else "send FAILED"
             safe_print(f"  [{'SENT' if ok else 'FAIL'}] {label:<28} {full_subject}")
         except Exception as e:

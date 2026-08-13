@@ -2,7 +2,7 @@
 
 Firebase Auth will happily send these itself, but its mailer is a separate sending identity —
 `noreply@ce-bill-tracker.firebaseapp.com`, unauthenticated against our brand domain and cold. Every
-other Atlas Circular email already goes out as `alerts@atlascircular.com` (SPF/DKIM/DMARC-aligned,
+other Atlas Circular email already goes out as `hello@atlascircular.com` (SPF/DKIM/DMARC-aligned,
 reputation warmed by the digest/alert cycles) wrapped in the shared masthead, so a verification mail
 from a firebaseapp.com address was both the most spam-prone message we send and the one that looked
 least like us — for a brand-new user, the very first impression.
@@ -12,7 +12,7 @@ So we keep Firebase as the *source of the link* and take over the delivery:
   - firebase-admin mints the real action link (generate_email_verification_link /
     generate_password_reset_link) — same one-time oobCode the built-in template would carry, so the
     /__/auth/action handler, expiry and single-use semantics are unchanged;
-  - we render it in the shared shell (app/alerts/email_shell) and send it via SendGridSender.
+  - we render it in the shared shell (app/alerts/email_shell) and send it via EmailSender.
 
 Best-effort by design: every entry point returns a bool and never raises. A False return means the
 caller should fall back to the Firebase client SDK's own send (see app/api/auth_email.py), so a
@@ -114,7 +114,7 @@ def _fallback_link(link: str) -> str:
 
 
 def render_verify_subject() -> str:
-    return "Confirm your email to activate your Atlas Circular account"
+    return "Confirm your email to activate your account"
 
 
 def render_verify_html(link: str) -> str:
@@ -137,7 +137,7 @@ def render_verify_html(link: str) -> str:
 
 
 def render_reset_subject() -> str:
-    return "Reset your Atlas Circular password"
+    return "Reset your password"
 
 
 def render_reset_html(link: str) -> str:
@@ -168,14 +168,14 @@ async def _send(kind: str, email: str) -> bool:
     if not settings.enable_auth_emails:
         log.info("auth_email_skipped_flag_off", kind=kind, email=email)
         return False
-    if not email or not settings.sendgrid_api_key:
+    if not email or not settings.email_configured:
         log.info("auth_email_skipped_unconfigured", kind=kind)
         return False
     try:
         link = await _generate_link(kind, email)
         if not link:
             return False
-        from app.alerts.sendgrid_sender import SendGridSender
+        from app.alerts.email_sender import EmailSender
 
         if kind == "verify":
             subject, html = render_verify_subject(), render_verify_html(link)
@@ -183,7 +183,7 @@ async def _send(kind: str, email: str) -> bool:
             subject, html = render_reset_subject(), render_reset_html(link)
         # No List-Unsubscribe header here, unlike the digest/alert cycles: these are strictly
         # transactional account-security messages, not bulk mail you can opt out of.
-        ok = await SendGridSender().send_html(email, subject, html)
+        ok = await EmailSender().send_html(email, subject, html)
         log.info("auth_email_sent", kind=kind, email=email, ok=ok)
         return ok
     except Exception as e:

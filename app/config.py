@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,25 +11,89 @@ class Settings(BaseSettings):
     legiscan_api_key: str = ""
     open_states_api_key: str = ""
     anthropic_api_key: str = ""
+    # ── Email (Postmark) ────────────────────────────────────────────────────
+    # The Postmark SERVER API token (Servers → <server> → API Tokens), NOT the account token and NOT
+    # the server ID. Every send path gates on `email_configured` below, so an empty key disables the
+    # email channel rather than failing sends.
+    postmark_api_key: str = ""
+    # Not used by the send API — declared only so a .env carrying POSTMARK_SERVER_ID doesn't trip
+    # extra='forbid'. Useful when calling the account-level API (servers, bounce streams).
+    postmark_server_id: str = ""
+    # Postmark refuses to mix transactional and bulk traffic on one stream, and it's the mechanism
+    # that keeps a digest opt-out from suppressing password-reset mail. Transactional sends use
+    # `postmark_message_stream`; anything carrying a one-click unsubscribe URL (digest, new-bill
+    # alerts, watchlist recap, consolidated bill alerts) is bulk and goes out on the broadcast
+    # stream. Both streams must exist on the server — the IDs here are Postmark's defaults.
+    postmark_message_stream: str = "outbound"
+    postmark_broadcast_stream: str = "broadcast"
+    # Legacy SendGrid env names, kept so an environment still carrying them (prod Secret Manager, a
+    # developer's .env) boots instead of dying on extra='forbid'. sendgrid_api_key is inert; the
+    # other three are the fallback source for the email_* identities below — see
+    # _inherit_legacy_email_env. Delete once the old variables are gone from every environment.
     sendgrid_api_key: str = ""
-    sendgrid_from_email: str = "alerts@atlascircular.com"
+    sendgrid_from_email: str = ""
+    sendgrid_reply_to: str = ""
+    sendgrid_hello_email: str = ""
+    # The sending identity. ONE address for everything — a second local-part means a second
+    # reputation to warm for no gain at this volume. Falls back to SENDGRID_FROM_EMAIL (see
+    # _inherit_legacy_email_env) so the old prod secret keeps working through the Postmark cutover.
+    # The domain must be VERIFIED in Postmark (Sender Signatures → Domains, DKIM + Return-Path DNS);
+    # a single verified signature would authorise only that one address.
+    # None means "unset": the validator below fills it. Never None after construction.
+    email_from: str | None = None
     # Where replies go. The From stays alerts@ — that's the warmed, domain-authenticated identity and
     # moving bulk sends to a new local-part would throw that reputation away — but four templates end
     # with "or reply to this email" (the cancellation one explicitly asks for churn feedback), and
     # without this those replies land in a send-only mailbox nobody reads. Same authenticated domain,
     # so no extra DNS. Set to "" to send with no Reply-To.
-    sendgrid_reply_to: str = "kenny@atlascircular.com"
-    # An alternate sending identity for founder-voice / one-off sends, passed explicitly as
-    # `from_email=` — never the default. The automated cycles stay on sendgrid_from_email, which is
-    # the address carrying the warmed reputation. Needs no mailbox and no new DNS: SendGrid domain
-    # authentication covers every local-part on the domain. Replies still land on sendgrid_reply_to.
-    sendgrid_hello_email: str = "hello@atlascircular.com"
-    # SendGrid click tracking rewrites every href to the branded click host (url7082.atlascircular.com).
-    # That host's TLS cert doesn't cover it, so every link in every email currently dead-ends on a
-    # browser "Your connection is not private" interstitial. OFF until the cert is fixed in SendGrid
-    # (Sender Authentication → Link Branding → validate SSL); flip back on once a branded link loads
-    # cleanly. With it off, hrefs go out verbatim — no rewrite, no interstitial, no click stats.
-    sendgrid_click_tracking: bool = False
+    email_reply_to: str | None = None
+    # The founder-voice identity, passed explicitly as `from_email=` by the handful of templates that
+    # speak as a person (welcome, cancellation) — never the default. It is the SAME ADDRESS as
+    # email_from by default: what differs is the display name, not the mailbox, so there's one
+    # reputation and one inbox thread rather than two. Set it to a different address only if you
+    # actually want a second identity to warm.
+    email_hello_from: str | None = None
+    # The display names the inbox shows. Kept here, not in the provider's sender-signature UI, so
+    # they're version-controlled and can differ per voice even on one address.
+    #
+    # The automated cycles send as the brand: a subscriber who signed up for Atlas Circular and gets
+    # mail from an unfamiliar first name is being invited to mark it as spam, and recognition only
+    # compounds if the name never varies. The founder voice keeps a person's name, because the
+    # templates carrying it ask for a reply and a brand name doesn't get one.
+    # Changing these churns that recognition, so pick once and leave them.
+    email_from_name: str = "Atlas Circular"
+    email_hello_from_name: str = "Kenny at Atlas Circular"
+    # Link tracking rewrites every href to the provider's click host. Under SendGrid that host
+    # (url7082.atlascircular.com) served a cert that didn't cover it, so every link dead-ended on a
+    # browser "connection is not private" interstitial — hence OFF. Postmark's default click host is
+    # its own (which works), but a BRANDED one needs its own DNS + SSL, so keep this off until a
+    # branded link has been clicked and verified. Off = hrefs go out verbatim, no click stats.
+    email_click_tracking: bool = False
+
+    @model_validator(mode="after")
+    def _inherit_legacy_email_env(self):
+        """Resolve the sending identities, preferring EMAIL_* and falling back to the SendGrid names.
+
+        Done here rather than with a validation alias because both spellings can be present at once
+        (prod injects SENDGRID_FROM_EMAIL from Secret Manager; a developer's .env may set either),
+        and an alias consumes only one of them — leaving the other as an undeclared env var, which
+        extra='forbid' turns into a boot crash. Empty string is a meaningful value for the reply
+        address ("send with no Reply-To"), so None is what "unset" means here.
+        """
+        if self.email_from is None:
+            self.email_from = self.sendgrid_from_email or "hello@atlascircular.com"
+        if self.email_reply_to is None:
+            self.email_reply_to = self.sendgrid_reply_to or "kenny@atlascircular.com"
+        # Defaults to email_from, not to a literal: one address unless someone deliberately splits.
+        if self.email_hello_from is None:
+            self.email_hello_from = self.sendgrid_hello_email or self.email_from
+        return self
+
+    @property
+    def email_configured(self) -> bool:
+        """Whether the email channel can send. Every caller gates on this instead of poking at a
+        provider-specific key, so swapping providers doesn't mean touching thirty call sites."""
+        return bool(self.postmark_api_key)
     # Légifrance API via PISTE (France national law — app/ingestion/foreign.py LegifranceClient).
     # Free OAuth2 client-credentials from https://piste.gouv.fr/registration. Empty = FR ingest disabled.
     legifrance_client_id: str = ""
@@ -62,7 +126,7 @@ class Settings(BaseSettings):
     @field_validator(
         "anthropic_api_key",
         "legiscan_api_key",
-        "sendgrid_api_key",
+        "postmark_api_key",
         "open_states_api_key",
         "nys_api_key",
         "stripe_secret_key",
@@ -249,7 +313,7 @@ class Settings(BaseSettings):
     bill_text_refresh_all_bills: bool = False
 
     # Where "request access / pricing" lead notifications go. Each capture also auto-replies to the
-    # requester. Both sends are best-effort and require sendgrid_api_key + a verified from-address.
+    # requester. Both sends are best-effort and require email_configured + a verified from-address.
     access_request_notify_email: str = "kenny@superfun.studio"
 
     # Stripe premium-seat billing + Firebase Auth. Dev reads sandbox keys from .env; prod pulls

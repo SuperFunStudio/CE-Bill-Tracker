@@ -4,10 +4,10 @@
 // Firebase's own mailer sends from `noreply@<project>.firebaseapp.com` — a cold sending identity that
 // doesn't match the brand and isn't SPF/DKIM-aligned with atlascircular.com, on the two emails a user
 // is most likely to be waiting on. The backend mints the same Firebase action link but delivers it via
-// our authenticated SendGrid domain, wrapped in the Atlas Circular masthead. See app/api/auth_email.py.
+// our authenticated sending domain, wrapped in the Atlas Circular masthead. See app/api/auth_email.py.
 //
 // Both helpers return `false` rather than throwing when the branded send didn't happen (flag off,
-// SendGrid unconfigured, network error). The caller MUST fall back to the Firebase SDK on false —
+// email provider unconfigured, network error). The caller MUST fall back to the Firebase SDK on false —
 // losing the pretty email must never mean a user can't verify or recover their account.
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 

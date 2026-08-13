@@ -1,9 +1,16 @@
+"""Outbound email: the templates every alert/lifecycle message is rendered from, and the Postmark
+transport that puts them on the wire.
+
+Provider note: this used to talk to SendGrid. Postmark's send API is a single JSON POST, so there's
+no SDK — just httpx and the server token. The only structural difference that leaks into callers is
+message streams: Postmark keeps transactional and bulk traffic apart (see `_stream_for`)."""
+
 import re
 from datetime import date
+from typing import Any
 
+import httpx
 import structlog
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
 
 from app.alerts.applinks import bill_url, subscribe_url
 from app.alerts.email_shell import (
@@ -23,40 +30,134 @@ from app.models import Bill, BillChange
 log = structlog.get_logger()
 
 
-def _apply_reply_to(message: Mail) -> None:
-    """Route replies to a monitored human mailbox instead of the sending identity.
+POSTMARK_ENDPOINT = "https://api.postmarkapp.com/email"
+# Postmark answers 200 with an ErrorCode of 0 on success; anything else is a failure described in
+# the body. 406 is the one worth naming: the recipient is on the server's suppression list (hard
+# bounce or spam complaint), so this is a deliberate refusal, not an outage — retrying won't help.
+# Two other codes show up as whole-batch failures rather than per-address ones: 300 (unverified
+# From-address) and 412 (account pending approval — every recipient must be on the From domain,
+# observed 2026-08-12 during the SendGrid cutover). Both mean nobody gets mail, which is what the
+# dispatcher's outage hold is for.
+_INACTIVE_RECIPIENT = 406
 
-    Applied to every outbound message: a reader hitting Reply on a transactional email expects to
-    reach someone, whether or not that template invited it. Skipped when unconfigured so a deployment
-    without the setting sends exactly as before.
+
+def _stream_for(list_unsubscribe_url: str | None) -> str:
+    """Pick the Postmark message stream for one send.
+
+    Postmark refuses to mix transactional and bulk traffic on a single stream, and the separation is
+    what keeps a digest opt-out from suppressing a password-reset email. Carrying a one-click
+    unsubscribe URL is exactly what makes a send bulk here — the digest, new-bill alerts, the
+    watchlist recap and the consolidated bill alerts all pass one; verification, welcome, receipts
+    and access-request mail don't.
     """
-    if not settings.sendgrid_reply_to:
-        return
-    from sendgrid.helpers.mail import ReplyTo
-
-    message.reply_to = ReplyTo(settings.sendgrid_reply_to)
+    return settings.postmark_broadcast_stream if list_unsubscribe_url else settings.postmark_message_stream
 
 
-def _apply_tracking(message: Mail) -> None:
-    """Turn SendGrid's link rewriting off unless it's explicitly re-enabled.
+def _from_header(from_email: str | None) -> str:
+    """Render the From header, display name included.
 
-    Click tracking replaces every href with a redirect through the branded click host
-    (url7082.atlascircular.com). That host is serving a certificate that doesn't cover it, so a
-    recipient clicking ANY link — "Open your dashboard", a bill deep link, a verification button —
-    lands on Chrome's full-page "Your connection is not private" warning instead. Until that cert is
-    fixed in SendGrid, sending the real href is strictly better than sending a tracked one: the link
-    works, and the message carries no host mismatch for a spam filter to notice.
+    Everything ships from one address; the two voices differ only by display name (the brand for the
+    automated cycles, a person for the templates that ask for a reply). So the name is chosen by what
+    the CALLER asked for, not by the address: `from_email=settings.email_hello_from` means the
+    founder voice even though that resolves to the same mailbox as the default. Checking the address
+    first would collapse the two the moment they point at the same place — which is the default.
 
-    Applied to every outbound message, so no send path can quietly keep the rewrite.
+    An address that is neither identity (a genuine one-off override) goes out bare rather than
+    borrowing a name that doesn't describe it.
+
+    RFC 5322 quoted-string, always — a display name containing a comma or a period is otherwise a
+    malformed header, and quoting unconditionally is one rule instead of a character class to get
+    wrong.
     """
-    if settings.sendgrid_click_tracking:
-        return
-    from sendgrid.helpers.mail import ClickTracking, TrackingSettings
+    address = from_email or settings.email_from
+    if from_email is None:
+        name = settings.email_from_name
+    elif from_email == settings.email_hello_from:
+        name = settings.email_hello_from_name
+    elif from_email == settings.email_from:
+        name = settings.email_from_name
+    else:
+        name = ""
+    if not name:
+        return address
+    escaped = name.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}" <{address}>'
 
-    tracking = TrackingSettings()
-    # enable_text=False as well — otherwise the plain-text part keeps the rewritten URLs.
-    tracking.click_tracking = ClickTracking(enable=False, enable_text=False)
-    message.tracking_settings = tracking
+
+def _build_payload(
+    to_email: str,
+    subject: str,
+    html: str,
+    text: str,
+    from_email: str | None = None,
+    list_unsubscribe_url: str | None = None,
+) -> dict[str, Any]:
+    """Assemble one Postmark /email request body.
+
+    Always multipart: HtmlBody plus TextBody, because an HTML-only message scores worse with spam
+    filters. Reply-To is set on every message — a reader hitting Reply expects to reach a human,
+    whether or not that template invited it — and skipped when unconfigured so an unset deployment
+    sends as before.
+    """
+    payload: dict[str, Any] = {
+        "From": _from_header(from_email),
+        "To": to_email,
+        "Subject": subject,
+        "HtmlBody": html,
+        "TextBody": text,
+        "MessageStream": _stream_for(list_unsubscribe_url),
+        "TrackOpens": True,
+        # Link tracking rewrites hrefs through the provider's click host. See email_click_tracking:
+        # off until a branded click host is verified to load cleanly.
+        "TrackLinks": "HtmlAndText" if settings.email_click_tracking else "None",
+    }
+    if settings.email_reply_to:
+        payload["ReplyTo"] = settings.email_reply_to
+    if list_unsubscribe_url:
+        # RFC 8058 one-click, carrying the same token as the in-body button so the two unsubscribe
+        # routes can't disagree. Postmark only injects its own List-Unsubscribe on a broadcast stream
+        # when the message doesn't already have one, so setting it here keeps our endpoint in charge.
+        payload["Headers"] = [
+            {"Name": "List-Unsubscribe", "Value": f"<{list_unsubscribe_url}>"},
+            {"Name": "List-Unsubscribe-Post", "Value": "List-Unsubscribe=One-Click"},
+        ]
+    return payload
+
+
+async def _post(payload: dict[str, Any], event: str) -> bool:
+    """POST one message to Postmark. Returns whether it was accepted; never raises."""
+    to_email = payload.get("To")
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                POSTMARK_ENDPOINT,
+                json=payload,
+                headers={
+                    "X-Postmark-Server-Token": settings.postmark_api_key,
+                    "Accept": "application/json",
+                },
+            )
+    except Exception as e:  # network/timeout — the send is lost, but the caller isn't
+        log.error(f"{event}_exception", error=str(e), to=to_email)
+        return False
+
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    error_code = body.get("ErrorCode", -1)
+    if response.status_code == 200 and error_code == 0:
+        return True
+    log.warning(
+        f"{event}_failed",
+        status=response.status_code,
+        error_code=error_code,
+        message=body.get("Message", response.text[:200]),
+        suppressed=error_code == _INACTIVE_RECIPIENT,
+        to=to_email,
+        stream=payload.get("MessageStream"),
+    )
+    return False
 
 
 def _linkify(text: str) -> str:
@@ -235,13 +336,13 @@ def _build_consolidated_html(
 def _consolidated_subject(items: list[AlertItem]) -> str:
     if len(items) == 1:
         bill = items[0][0]
-        return f"[Atlas Circular] {bill.state} {bill.bill_number or 'Bill'} — Legislative Update"
-    return f"[Atlas Circular] {len(items)} bills you follow moved"
+        return f"{bill.state} {bill.bill_number or 'Bill'} — Legislative Update"
+    return f"{len(items)} bills you follow moved"
 
 
-class SendGridSender:
-    def __init__(self):
-        self._sg = SendGridAPIClient(api_key=settings.sendgrid_api_key)
+class EmailSender:
+    """Every outbound message goes through here. Stateless — the token is read per send, so a
+    settings change (or a test monkeypatching it) takes effect without re-instantiating."""
 
     async def send_html(
         self,
@@ -260,35 +361,21 @@ class SendGridSender:
         unsubscribe control and Gmail/Outlook honour one-click (RFC 8058).
 
         `from_email` overrides the sending identity for one send — e.g. a founder-voice broadcast as
-        hello@. Domain authentication covers every local-part on atlascircular.com, so no new DNS or
-        SendGrid setup is needed. Use it sparingly: the automated cycles should stay on the default
-        alerts@, which is the address with the warmed reputation. Replies go to sendgrid_reply_to
-        regardless of who the mail is from."""
-        message = Mail(
-            from_email=from_email or settings.sendgrid_from_email,
-            to_emails=to_email,
-            subject=subject,
+        hello@. A verified DOMAIN in Postmark covers every local-part on atlascircular.com, so no new
+        DNS is needed; a single verified sender signature would not. Use it sparingly: the automated
+        cycles should stay on the default identity, which is the one with the warmed reputation.
+        Replies go to email_reply_to regardless of who the mail is from."""
+        payload = _build_payload(
+            to_email,
+            subject,
+            html,
             # A caller-supplied text part skips the HTML, so it'd otherwise ship without the sender
             # identity the HTML footer carries; derived parts already include it via html_to_text.
-            plain_text_content=(text + identity_text()) if text else html_to_text(html),
-            html_content=html,
+            (text + identity_text()) if text else html_to_text(html),
+            from_email=from_email,
+            list_unsubscribe_url=list_unsubscribe_url,
         )
-        if list_unsubscribe_url:
-            from sendgrid.helpers.mail import Header
-
-            message.header = Header("List-Unsubscribe", f"<{list_unsubscribe_url}>")
-            message.header = Header("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
-        _apply_reply_to(message)
-        _apply_tracking(message)
-        try:
-            response = self._sg.send(message)
-            success = response.status_code in (200, 202)
-            if not success:
-                log.warning("sendgrid_html_failed", status=response.status_code, to=to_email)
-            return success
-        except Exception as e:
-            log.error("sendgrid_html_exception", error=str(e), to=to_email)
-            return False
+        return await _post(payload, "email_html")
 
     async def send_text_alert(
         self,
@@ -326,28 +413,18 @@ class SendGridSender:
         if unsubscribe_url:
             text_part += f"\n\nUnsubscribe: {unsubscribe_url}"
         text_part += identity_text()
-        message = Mail(
-            from_email=from_email or settings.sendgrid_from_email,
-            to_emails=to_email,
-            subject=subject,
-            plain_text_content=text_part,
-            html_content=html,
+        # An unsubscribe URL both sets the RFC 8058 one-click header (matching the body's button —
+        # bulk-ish mail without it is penalised by Gmail/Outlook) and routes the send to the
+        # broadcast stream. See _stream_for.
+        payload = _build_payload(
+            to_email,
+            subject,
+            html,
+            text_part,
+            from_email=from_email,
+            list_unsubscribe_url=unsubscribe_url,
         )
-        if unsubscribe_url:
-            # RFC 8058 one-click, matching the body's button — same as the digest/new-bill cycles.
-            # Bulk-ish mail without it is penalised by Gmail/Outlook.
-            from sendgrid.helpers.mail import Header
-
-            message.header = Header("List-Unsubscribe", f"<{unsubscribe_url}>")
-            message.header = Header("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
-        _apply_reply_to(message)
-        _apply_tracking(message)
-        try:
-            response = self._sg.send(message)
-            return response.status_code in (200, 202)
-        except Exception as e:
-            log.error("sendgrid_text_alert_failed", error=str(e), to=to_email)
-            return False
+        return await _post(payload, "email_text_alert")
 
     async def send_consolidated_alert(
         self,

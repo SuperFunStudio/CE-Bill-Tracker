@@ -73,7 +73,7 @@ def _when(days_until: int) -> str:
 
 
 def render_trial_reminder_subject(item: TrialReminderItem) -> str:
-    return f"Your Atlas Circular Pro trial ends {_when(item.days_until)}"
+    return f"Your Pro trial ends {_when(item.days_until)}"
 
 
 def render_trial_reminder_html(item: TrialReminderItem) -> str:

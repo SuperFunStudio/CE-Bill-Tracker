@@ -3,10 +3,12 @@
 Three regressions are pinned here, all of which shipped to real inboxes:
   - markdown emphasis in a body that also goes to Slack (email printed the literal asterisks);
   - the reader being handed a raw CourtListener docket URL instead of our analysis;
-  - SendGrid click tracking rewriting every href through a branded host with a broken TLS cert.
+  - provider click tracking rewriting every href through a branded host with a broken TLS cert.
 """
 import types
 from datetime import date
+
+import pytest
 
 from app.alerts.applinks import litigation_case_url, with_utm
 from app.alerts.litigation_alerts import (
@@ -15,12 +17,9 @@ from app.alerts.litigation_alerts import (
     render_litigation_preheader,
     render_litigation_subject,
 )
-from sendgrid.helpers.mail import Mail
-
-from app.alerts.sendgrid_sender import (
-    _apply_reply_to,
-    _apply_tracking,
+from app.alerts.email_sender import (
     _bill_block,
+    _build_payload,
     _linkify,
     build_text_alert_html,
 )
@@ -186,52 +185,103 @@ class TestLinkify:
         assert _linkify(html) == html
 
 
+def _payload(**kw):
+    return _build_payload(
+        kw.pop("to_email", "a@example.com"),
+        kw.pop("subject", "s"),
+        kw.pop("html", "<p>t</p>"),
+        kw.pop("text", "t"),
+        **kw,
+    )
+
+
 class TestReplyTo:
     """Four templates end with "or reply to this email" — including the cancellation email, which
     asks for churn feedback. Without a Reply-To those replies go to the send-only alerts@ identity."""
 
     def test_replies_route_to_the_monitored_mailbox(self, monkeypatch):
-        monkeypatch.setattr(settings, "sendgrid_reply_to", "kenny@atlascircular.com")
-        message = Mail(
-            from_email="alerts@atlascircular.com", to_emails="a@example.com",
-            subject="s", plain_text_content="t", html_content="<p>t</p>",
-        )
-        _apply_reply_to(message)
-        assert message.get()["reply_to"] == {"email": "kenny@atlascircular.com"}
+        monkeypatch.setattr(settings, "email_reply_to", "kenny@atlascircular.com")
+        assert _payload()["ReplyTo"] == "kenny@atlascircular.com"
 
     def test_reply_to_is_independent_of_who_the_mail_is_from(self, monkeypatch):
         """A founder-voice send as hello@ still routes replies to the monitored mailbox."""
-        monkeypatch.setattr(settings, "sendgrid_reply_to", "kenny@atlascircular.com")
-        message = Mail(
-            from_email=settings.sendgrid_hello_email, to_emails="a@example.com",
-            subject="s", plain_text_content="t", html_content="<p>t</p>",
+        monkeypatch.setattr(settings, "email_reply_to", "kenny@atlascircular.com")
+        payload = _payload(from_email=settings.email_hello_from)
+        assert "hello@atlascircular.com" in payload["From"]
+        assert payload["ReplyTo"] == "kenny@atlascircular.com"
+
+
+class TestFromDisplayName:
+    """The name is derived from the address, so a send path can't put the brand's face on the
+    founder identity or vice versa. "Kenny" alone — an unfamiliar first name to someone who signed
+    up for Atlas Circular — is what this replaced."""
+
+    @pytest.fixture(autouse=True)
+    def _one_address(self, monkeypatch):
+        """The shipped configuration: both voices on one mailbox."""
+        monkeypatch.setattr(settings, "email_from", "hello@atlascircular.com")
+        monkeypatch.setattr(settings, "email_hello_from", "hello@atlascircular.com")
+
+    def test_automated_mail_sends_as_the_brand(self):
+        assert _payload()["From"] == '"Atlas Circular" <hello@atlascircular.com>'
+
+    def test_founder_voice_sends_as_a_person_from_the_same_mailbox(self):
+        """The whole point of choosing by caller intent rather than by address: one mailbox, two
+        names. Keying off the address would silently hand the welcome email the brand name."""
+        payload = _payload(from_email=settings.email_hello_from)
+        assert payload["From"] == '"Kenny at Atlas Circular" <hello@atlascircular.com>'
+
+    def test_a_split_identity_still_works_if_someone_wants_one(self, monkeypatch):
+        monkeypatch.setattr(settings, "email_hello_from", "kenny@atlascircular.com")
+        assert _payload(from_email="kenny@atlascircular.com")["From"] == (
+            '"Kenny at Atlas Circular" <kenny@atlascircular.com>'
         )
-        _apply_reply_to(message)
-        assert message.get()["from"] == {"email": "hello@atlascircular.com"}
-        assert message.get()["reply_to"] == {"email": "kenny@atlascircular.com"}
+
+    def test_an_unrecognised_override_goes_out_bare(self):
+        """Better no display name than one that describes a different identity."""
+        assert _payload(from_email="ops@atlascircular.com")["From"] == "ops@atlascircular.com"
+
+    def test_a_quote_in_the_name_cannot_break_the_header(self, monkeypatch):
+        monkeypatch.setattr(settings, "email_from_name", 'Atlas "AC" Circular')
+        assert _payload()["From"] == f'"Atlas \\"AC\\" Circular" <{settings.email_from}>'
+
+    def test_an_empty_name_falls_back_to_the_bare_address(self, monkeypatch):
+        monkeypatch.setattr(settings, "email_from_name", "")
+        assert _payload()["From"] == settings.email_from
 
     def test_unconfigured_sends_exactly_as_before(self, monkeypatch):
-        monkeypatch.setattr(settings, "sendgrid_reply_to", "")
-        message = Mail(
-            from_email="alerts@atlascircular.com", to_emails="a@example.com",
-            subject="s", plain_text_content="t", html_content="<p>t</p>",
-        )
-        _apply_reply_to(message)
-        assert "reply_to" not in message.get()
+        monkeypatch.setattr(settings, "email_reply_to", "")
+        assert "ReplyTo" not in _payload()
 
 
 class TestClickTracking:
     def test_disabled_by_default(self, monkeypatch):
-        """SendGrid's rewrite sends every link through url7082.atlascircular.com, whose certificate
-        doesn't cover it — so every link in every email dead-ends on a browser security warning."""
-        monkeypatch.setattr(settings, "sendgrid_click_tracking", False)
-        message = types.SimpleNamespace()
-        _apply_tracking(message)
-        assert message.tracking_settings.click_tracking.enable is False
-        assert message.tracking_settings.click_tracking.enable_text is False
+        """The rewrite sends every link through the provider's click host. Under SendGrid that host
+        (url7082.atlascircular.com) had a certificate that didn't cover it, so every link in every
+        email dead-ended on a browser security warning. Stays off until a branded host is verified."""
+        monkeypatch.setattr(settings, "email_click_tracking", False)
+        assert _payload()["TrackLinks"] == "None"
 
-    def test_left_untouched_when_re_enabled(self, monkeypatch):
-        monkeypatch.setattr(settings, "sendgrid_click_tracking", True)
-        message = types.SimpleNamespace()
-        _apply_tracking(message)
-        assert not hasattr(message, "tracking_settings")
+    def test_rewrites_both_parts_when_re_enabled(self, monkeypatch):
+        monkeypatch.setattr(settings, "email_click_tracking", True)
+        assert _payload()["TrackLinks"] == "HtmlAndText"
+
+
+class TestMessageStream:
+    """Postmark rejects bulk traffic on a transactional stream, and mixing them means a digest
+    opt-out can suppress a password-reset email. Carrying a one-click unsubscribe URL is what marks
+    a send as bulk."""
+
+    def test_transactional_by_default(self):
+        assert _payload()["MessageStream"] == settings.postmark_message_stream
+
+    def test_unsubscribable_mail_goes_out_on_the_broadcast_stream(self):
+        payload = _payload(list_unsubscribe_url="https://x.test/u?t=1")
+        assert payload["MessageStream"] == settings.postmark_broadcast_stream
+
+    def test_one_click_headers_ride_along(self):
+        headers = {h["Name"]: h["Value"] for h in _payload(
+            list_unsubscribe_url="https://x.test/u?t=1"
+        )["Headers"]}
+        assert headers["List-Unsubscribe"] == "<https://x.test/u?t=1>"
+        assert headers["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"

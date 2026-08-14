@@ -430,8 +430,9 @@ export default function HomePage() {
         </p>
 
         {/* Control row UNDER the bar — now just the facets. Kept OUT of the <form> so a facet dropdown
-            can never accidentally submit. They open by default: they're the only controls on this row,
-            so hiding them behind a second click buys nothing. */}
+            can never accidentally submit. They open by default on sm+: they're the only controls on
+            that row, so hiding them behind a second click buys nothing. On a phone they stay collapsed
+            — six stacked dropdowns above the fold is the whole screen before any bill is visible. */}
         <div className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-text-primary/15 pb-4">
           <div className="w-full min-w-0">
             <BillFilters

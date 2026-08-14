@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
-import { CheckIcon, CloseIcon, CalendarIcon } from '@/components/ui/icons';
+import { CheckIcon, CloseIcon, CalendarIcon, ChevronDownIcon } from '@/components/ui/icons';
 import { useRegion } from '@/components/layout/RegionContext';
 import { RegionFilter } from '@/components/insights/RegionFilter';
 
@@ -159,10 +159,10 @@ interface BillFiltersProps {
       derive with `resinOptionsFromBills(bills)`. Omitted/empty → the filter is hidden (e.g. before the
       polymer scan has populated any data), so no surface shows a dead control. */
   resinOptions?: string[];
-  /** Start the home-explorer's "More filters" panel expanded (`showRegion` layouts only). Set on
+  /** Start the home-explorer's "Filters" panel expanded (`showRegion` layouts only). Set on
    *  surfaces where nothing else occupies the row under the search bar — with the AI Analysis
    *  toggle + Ask hidden, the facets are the only thing left to do there, so collapsing them just
-   *  buries the controls. */
+   *  buries the controls. Honored on sm+ only: see the effect in the component. */
   expandFiltersByDefault?: boolean;
 }
 
@@ -189,7 +189,7 @@ function Select({
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-meta">▾</span>
+        <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-text-muted text-sm" />
       </div>
     </div>
   );
@@ -250,7 +250,7 @@ export function MultiSelect({
         >
           <span className={`truncate ${values.length ? 'text-text-primary' : 'text-text-muted'}`}>{summary}</span>
         </button>
-        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-meta">▾</span>
+        <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-text-muted text-sm" />
         {open && (
           <div className="absolute left-0 z-30 mt-1 w-max min-w-full max-h-60 overflow-y-auto rounded-md border border-border-default bg-bg-secondary shadow-lg p-1">
             {options.map(o => {
@@ -376,7 +376,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
   }, []);
 
   // Home-explorer (showRegion) layout keeps Region + State up front and folds the rest behind a
-  // "More filters" toggle. Start expanded if one of those secondary filters is already active (so a
+  // "Filters" toggle. Start expanded if one of those secondary filters is already active (so a
   // filtered arrival isn't hidden) or if the host surface asked for it (expandFiltersByDefault).
   const secondaryActiveCount = [
     filters.status,
@@ -386,7 +386,15 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     filters.polymers.length > 0,
     filters.dateType,
   ].filter(Boolean).length;
-  const [showMore, setShowMore] = useState(secondaryActiveCount > 0 || !!expandFiltersByDefault);
+  const [showMore, setShowMore] = useState(secondaryActiveCount > 0);
+  // `expandFiltersByDefault` only applies where there's room for it. On a phone the secondary panel is
+  // six stacked controls — auto-expanding it fills the screen with dropdowns before the reader has
+  // seen a single bill, so mobile starts collapsed and desktop keeps the open-by-default behaviour.
+  // An already-active secondary filter still wins on both (handled by the initial state above).
+  useEffect(() => {
+    if (!expandFiltersByDefault) return;
+    if (window.matchMedia?.('(min-width: 640px)').matches) setShowMore(true);
+  }, [expandFiltersByDefault]);
   // On a fixed-state context, reset preserves the locked state instead of clearing it.
   const reset = () => onChange(hideState ? { ...DEFAULT_FILTERS, state: filters.state } : DEFAULT_FILTERS);
 
@@ -412,7 +420,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
   }));
 
   // The Status / Instrument / Materials / Compliance / Resin controls — shared between the default
-  // grid and the collapsible "More filters" panel of the home-explorer layout.
+  // grid and the collapsible "Filters" panel of the home-explorer layout.
   const secondaryFields = (
     <>
       <Select
@@ -464,7 +472,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     </>
   );
 
-  // Home-explorer layout: Region + State (US) always visible; the rest fold behind "More filters" so
+  // Home-explorer layout: Region + State (US) always visible; the rest fold behind "Filters" so
   // the bar stays calm above the ask box.
   if (showRegion) {
     return (
@@ -488,11 +496,11 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
             aria-expanded={showMore}
             className="flex items-center gap-1.5 pb-1 text-left transition-colors group"
           >
-            <span className="font-serif text-text-muted group-hover:text-text-primary text-meta uppercase tracking-wider">More filters</span>
+            <span className="font-serif text-text-muted group-hover:text-text-primary text-meta uppercase tracking-wider">Filters</span>
             {secondaryActiveCount > 0 && (
               <span className="rounded-full bg-green-dark/40 text-green-accent text-[10px] leading-none px-1.5 py-0.5">{secondaryActiveCount}</span>
             )}
-            <span className={`text-text-muted text-meta transition-transform ${showMore ? 'rotate-180' : ''}`}>▾</span>
+            <ChevronDownIcon className={`text-text-muted text-sm transition-transform ${showMore ? 'rotate-180' : ''}`} />
           </button>
           {(activeCount > 0 || regions.length > 0) && (
             <button
@@ -506,14 +514,14 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
           )}
         </div>
 
-        {/* Secondary controls. Tracks are CAPPED at 11rem rather than sharing the row equally: these
-            are short underline selects ("All Statuses", "Any"), and a control stretched to half a
-            phone screen reads as a text field waiting for input rather than a dropdown. auto-fill
-            packs as many capped tracks as fit — two on a phone, three in the desktop left rail beside
-            the globe — so the same rule handles both without a breakpoint. The 9rem floor keeps
-            "Materials & Products" from wrapping to three lines on the narrowest phones. */}
+        {/* Secondary controls. On a phone: a hard two-column grid. auto-fill with a 9rem floor was
+            meant to pack two tracks there, but the floor plus the gap exceeds the usable width on a
+            360px screen, so it silently fell back to ONE full-bleed column per row — the stretched
+            control that reads as a text field waiting for input rather than a dropdown. Two equal
+            columns are narrower than the old cap and always fit. From sm up, auto-fill takes over and
+            packs as many 11rem-capped tracks as the (much wider) rail allows. */}
         {showMore && (
-          <div className="grid gap-x-4 gap-y-3 pt-1 [grid-template-columns:repeat(auto-fill,minmax(9rem,11rem))]">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3 pt-1 sm:gap-x-4 sm:[grid-template-columns:repeat(auto-fill,minmax(9rem,11rem))]">
             {secondaryFields}
           </div>
         )}

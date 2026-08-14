@@ -5,6 +5,7 @@ import { BillModal } from '@/components/ui/BillModal';
 import { formatInstrumentType, fixEncoding } from '@/lib/utils';
 import { regionLabel } from '@/components/insights/RegionFilter';
 import { track } from '@/lib/analytics';
+import { ChevronDownIcon } from '@/components/ui/icons';
 
 /**
  * Homepage-B explorer: the whole (already-filtered) bill set drawn as one mark per bill, grouped by a
@@ -174,7 +175,7 @@ export function BillDotExplorer({ bills }: { bills: BillSummary[] }) {
 
   return (
     <section>
-      {/* Controls: view switcher + More filters */}
+      {/* Controls: view switcher + Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <div className="inline-flex rounded-lg border border-border-default bg-bg-secondary p-0.5" role="group" aria-label="Group bills by">
           {VIEWS.map((v) => (
@@ -195,7 +196,7 @@ export function BillDotExplorer({ bills }: { bills: BillSummary[] }) {
           aria-expanded={moreOpen}
           className="text-sm text-text-secondary hover:text-text-primary inline-flex items-center gap-1"
         >
-          More filters <span className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`}>▾</span>
+          Filters <ChevronDownIcon className={`text-sm transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
         </button>
         <span className="ml-auto text-sm text-text-muted tabular-nums"><b className="text-text-primary font-semibold">{displayBills.length.toLocaleString()}</b> bills</span>
       </div>

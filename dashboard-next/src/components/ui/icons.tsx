@@ -137,6 +137,17 @@ export function ChevronRightIcon(props: IconProps) {
   );
 }
 
+/** Down chevron — the dropdown affordance on our underline selects. A drawn chevron rather than the
+ *  "▾" glyph: at meta size that character rendered as a two- or three-pixel smudge that read as a
+ *  rendering artifact rather than a control, and its size was at the mercy of the fallback font. */
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <Icon {...props} strokeWidth={2}>
+      <path d="M6 9l6 6 6-6" />
+    </Icon>
+  );
+}
+
 export function StarIcon(props: IconProps) {
   return (
     <Icon {...props} fill="currentColor" stroke="none">

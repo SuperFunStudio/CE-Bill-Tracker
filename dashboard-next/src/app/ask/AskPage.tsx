@@ -72,7 +72,7 @@ export default function AskPage() {
         <div>
           <h1 className="font-serif text-2xl sm:text-3xl text-text-primary">Ask the Atlas</h1>
           <p className="mt-1 text-sm text-text-muted">
-            Grounded in the corpus, cited to the bills it read.
+            Answers are grounded in extracted bill text and cited to primary sources.
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -82,7 +82,7 @@ export default function AskPage() {
             </button>
           )}
           <Link href="/" className="text-sm text-green-accent hover:underline">
-            ← Back to the Atlas
+            ← Back to Explore
           </Link>
         </div>
       </div>

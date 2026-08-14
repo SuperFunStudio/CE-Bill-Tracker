@@ -92,7 +92,7 @@ function UsStandings() {
       <GazetteHeader title="State Leaderboard" subtitle="US circular-economy law momentum" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
+        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to Explore</Link>
         <div className="inline-flex rounded-md border border-border-default overflow-hidden text-xs">
           {([['active', 'Most active'], ['enacted', 'Most enacted']] as const).map(([mode, label]) => (
             <button
@@ -238,7 +238,7 @@ function RegionStandings() {
       <GazetteHeader title={title} subtitle={subtitle} />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
+        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to Explore</Link>
       </div>
 
       <p className="text-text-secondary text-body -mt-2">
@@ -474,10 +474,10 @@ function WorldStandings() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
-      <GazetteHeader title="Leaderboard" subtitle="A global index of the regions advancing the circular economy" />
+      <GazetteHeader title="Leaderboard" subtitle="Global rankings of regions enabling the circular economy" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to the front page</Link>
+        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to Explore</Link>
       </div>
 
       <p className="text-text-secondary text-body -mt-2">

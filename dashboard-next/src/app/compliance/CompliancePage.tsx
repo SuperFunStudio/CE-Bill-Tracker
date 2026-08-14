@@ -6,14 +6,14 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { DeadlineModal } from '@/components/compliance/DeadlineModal';
 import { QuarterDeadlinesModal } from '@/components/compliance/QuarterDeadlinesModal';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
+import { ScopeBar } from '@/components/scope/ScopeBar';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { UpcomingDeadlinesLock } from '@/components/compliance/UpcomingDeadlinesLock';
 import { DeadlinesTabs } from '@/components/compliance/DeadlinesTabs';
 import { ComplianceChecker } from '@/components/compliance/ComplianceChecker';
-import { RegionFilter, regionLabel } from '@/components/insights/RegionFilter';
+import { RegionFilter } from '@/components/insights/RegionFilter';
 import { LockIcon } from '@/components/ui/icons';
-import { deadlineInScope, scopeJurisdictionCodes } from '@/lib/scope';
-import { formatMaterial } from '@/components/scope/ScopeOnboarding';
+import { deadlineInScope, scopeJurisdictionCodes, isEmptyScope } from '@/lib/scope';
 import { formatDate, daysUntil, downloadCsv, STATE_NAMES } from '@/lib/utils';
 import type { DeadlineSummary } from '@/lib/types';
 import { SkeletonList } from '@/components/ui/SkeletonList';
@@ -65,8 +65,14 @@ export default function CompliancePage() {
   const [selected, setSelected] = useState<DeadlineSummary | null>(null);
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
 
-  const { scope, openEditor } = useScope();
+  // `scoped` from the context is deliberately NOT destructured here: this file already uses that name
+  // for the scope-filtered deadline list below.
+  const { scope, setScoped, openEditor } = useScope();
   const scopeActive = useScopeActive();
+  // A scope EXISTS (whether or not it's currently applied). This — not scopeActive — is what decides
+  // whether the scope strip renders: gating the strip on scopeActive made "Show everything" a one-way
+  // door, since turning the scope off removed the only control that could turn it back on.
+  const hasScope = !isEmptyScope(scope);
   const { isPro, isAdmin, loading } = useAuth();
   const gatePro = useProGate();
   const proView = isPro || isAdmin;
@@ -222,8 +228,16 @@ export default function CompliancePage() {
         {scopeActive && overdueCount > 0 && <> · <span className="text-urgency-high font-semibold">{overdueCount} overdue</span></>}
       </p>
 
-      {/* Unscoped readers get the invitation where the alarm used to be. */}
-      {!scopeActive && (
+      {/* Scope controls. Readers with no scope get the invitation; readers with one get the standing
+          strip (summary + Edit + Show everything). The strip used to be missing from this page
+          entirely — the "set your scope" button vanished the moment a scope was set, and the note
+          below pointed at a scope bar that only ever existed on Explore. Pick a jurisdiction with no
+          deadlines and you landed on an empty page with no control left to undo it. */}
+      {hasScope ? (
+        <div className="-mx-6 -mt-3">
+          <ScopeBar />
+        </div>
+      ) : (
         <p className="text-sm text-text-muted -mt-3">
           Showing every jurisdiction we track.{' '}
           <button onClick={openEditor} className="text-green-accent hover:underline">
@@ -270,20 +284,20 @@ export default function CompliancePage() {
         </button>
       </div>
 
-      {scopeActive && (
-        <p className="text-xs text-text-muted -mt-2">
-          Filtered to your scope
-          {scope.materials.length > 0 && <> · <span className="text-text-secondary">{scope.materials.map(formatMaterial).join(', ')}</span></>}
-          {scope.regions.length > 0 && <> · <span className="text-text-secondary">{scope.regions.map(regionLabel).join(', ')}</span></>}
-          {scope.states.length > 0 && <> · <span className="text-text-secondary">{scope.states.join(', ')}</span></>}
-          . Use “Show everything” in the scope bar to see all deadlines.
-        </p>
-      )}
+      {/* The old "Filtered to your scope · plastic packaging · Estonia" note lived here. The scope
+          strip above now says exactly that, with working controls attached, so repeating it was two
+          summaries of the same state one above the other. */}
 
       {/* The one glance-chart: shape of the year by quarter (Pro; the full calendar).
           Each bar opens that quarter's deadlines so the density is a doorway, not just a warning. */}
       {proView && railTotal > 0 && (
         <div>
+          {/* The instruction sits ABOVE the bars, not under them. Below, it read as a caption on a
+              chart the reader had already decided was decorative — nothing about a bar chart says
+              "tappable", so the affordance has to be announced before the eye moves past it. */}
+          <p className="text-xs text-text-muted mb-1.5">
+            Tap a quarter to see that quarter&rsquo;s milestones.
+          </p>
           <div
             className="grid gap-1 items-end h-20 border-b border-border-default pb-1"
             style={{ gridTemplateColumns: `repeat(${rail.length}, minmax(0, 1fr))` }}
@@ -318,7 +332,6 @@ export default function CompliancePage() {
               );
             })}
           </div>
-          <p className="text-xs text-text-muted mt-1.5">Tap a quarter to see its deadlines.</p>
         </div>
       )}
 
@@ -326,7 +339,43 @@ export default function CompliancePage() {
       {(isLoading || loading) ? (
         <SkeletonList rows={6} />
       ) : windowed.length === 0 ? (
-        <EmptyState title="No deadlines found for the selected filters." />
+        // An empty calendar has to name which control emptied it and offer to undo that one — a bare
+        // "no deadlines found" next to four filters is a dead end. Scope is checked first because it
+        // is the filter set on another page, so it's the one a reader has forgotten about.
+        <EmptyState
+          title="No deadlines here yet."
+          body={
+            scopeActive
+              ? 'Nothing in the jurisdictions and materials you scoped to has a dated obligation in this window. Widen the horizon, or step outside your scope.'
+              : selectedRegions.length
+                ? 'None of the selected regions has a dated obligation in this window. Try a longer horizon or another region.'
+                : 'Nothing falls inside the current horizon. Try a longer one.'
+          }
+          action={
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
+              {scopeActive && (
+                <button onClick={() => setScoped(false)} className="text-green-accent hover:underline">
+                  Show every jurisdiction
+                </button>
+              )}
+              {hasScope && (
+                <button onClick={openEditor} className="text-green-accent hover:underline">
+                  Edit your scope
+                </button>
+              )}
+              {selectedRegions.length > 0 && (
+                <button onClick={() => setSelectedRegions([])} className="text-green-accent hover:underline">
+                  Clear the region filter
+                </button>
+              )}
+              {daysAhead < 1095 && (
+                <button onClick={() => setDaysAhead(1095)} className="text-green-accent hover:underline">
+                  Look 3 years ahead
+                </button>
+              )}
+            </div>
+          }
+        />
       ) : (
         <div className="space-y-7">
           {bands.map(band => {

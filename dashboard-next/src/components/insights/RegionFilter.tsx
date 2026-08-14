@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { EU_MEMBERS } from '@/lib/jurisdictions';
+import { ChevronDownIcon } from '@/components/ui/icons';
 
 /**
  * Insights region filter — a multi-select popover styled like the BillFilters materials/topics
@@ -115,7 +116,7 @@ export function RegionFilter({
             {summary}
           </span>
         </button>
-        <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-text-muted text-meta">▾</span>
+        <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-text-muted text-sm" />
         {open && (
           <div className="absolute left-0 z-30 mt-1 w-max min-w-full max-h-72 overflow-y-auto rounded-md border border-border-default bg-bg-secondary shadow-lg p-1">
             {/* "All regions" reset row — clears the selection (= aggregate everything). */}

@@ -8,7 +8,6 @@ import { StanceMomentumChart } from '@/components/insights/StanceMomentumChart';
 import { CollectionTargetBasisChart } from '@/components/insights/CollectionTargetBasisChart';
 import { FeeCoverageChart } from '@/components/insights/FeeCoverageChart';
 import { InstrumentMaterialMatrix } from '@/components/insights/InstrumentMaterialMatrix';
-import { WorldCoverageMap } from '@/components/insights/WorldCoverageMap';
 import { RegionInstrumentMatrix } from '@/components/insights/RegionInstrumentMatrix';
 import { StateGapTable } from '@/components/insights/StateGapTable';
 import { StateCyclesView } from '@/components/insights/StateCyclesView';
@@ -18,6 +17,7 @@ import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
 import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
 import { BillFlowSankey } from '@/components/insights/BillFlowSankey';
 import { useRegion } from '@/components/layout/RegionContext';
+import { RegionFilter } from '@/components/insights/RegionFilter';
 import { useAuth } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
 import Link from 'next/link';
@@ -35,15 +35,30 @@ const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = 
   ),
 ];
 
-// Tabs group the visualizations so the page isn't one long scroll. The region filter applies to the
-// region-generalizable tabs (Momentum, Coverage); Geography is US-only by construction — see below.
+// Tabs group the visualizations so the page isn't one long scroll.
+//
+// Momentum LEADS. The old first tab was "World", whose global-coverage choropleth said the same thing
+// as the globe on Explore — so the briefing room opened on a restatement of the front page. Momentum
+// (are these laws multiplying, and in which direction?) is the question the corpus can answer and the
+// map can't, so it opens the page; Coverage — which instruments meet which materials — follows.
+//
+// "World" is gone. Its two sections split: the global map was a duplicate and is dropped, and the
+// regulatory-personality matrix (region × instrument) moved into Coverage, where the other matrix
+// already lived. Two tabs both called "coverage" was the confusion.
+//
+// The region multi-select applies to Momentum ALONE (see the filter inside that panel). Coverage now
+// reads the whole corpus deliberately: it's a "what has ever been tried, anywhere" reference, and a
+// region filter left on from another tab quietly emptied its cells.
+//
+// Geography is admin-only. Its endpoints (state passage-gap, cycles, champions) 401 for ordinary Pro
+// seats — the sponsor/vote ingestion behind them isn't a shipped product yet — so a visible tab was a
+// promise the API breaks. See memory: state-profile-pages / legislative-analytics-dump.
 const TABS = [
-  { id: 'world', label: 'World' },
   { id: 'momentum', label: 'Momentum' },
   { id: 'coverage', label: 'Coverage' },
   { id: 'flows', label: 'Flows' },
-  { id: 'geography', label: 'Geography · US' },
   { id: 'impact', label: 'Impact' },
+  { id: 'geography', label: 'Geography · US', adminOnly: true },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
@@ -89,9 +104,11 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default function InsightsPage() {
-  const [tab, setTab] = useState<TabId>('world');
-  // The global region filter (the bar under the nav) scopes the timeline + momentum + coverage.
-  const { regionsParam: regionsCsv } = useRegion();
+  const [tab, setTab] = useState<TabId>('momentum');
+  // The region selection now lives IN the Momentum panel rather than in the site-wide bar under the
+  // nav (which /insights no longer renders — see REGION_BAR_HIDDEN in AppShell). It's still the same
+  // shared RegionContext, so a selection made here survives a nav to Explore and back.
+  const { regions, setRegions, regionsParam: regionsCsv } = useRegion();
   const { isPro, isAdmin, user, openAuth } = useAuth();
 
   const [points, setPoints] = useState<BillTimelinePoint[] | null>(null);
@@ -194,11 +211,11 @@ export default function InsightsPage() {
           </div>
           <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2 text-body text-text-secondary">
             {[
-              ['World coverage', 'which jurisdictions have laws in force, and on what'],
               ['Momentum', 'whether bills are strengthening obligations or rolling them back'],
+              ['Laws in force over time', 'the running count, region by region, on one axis'],
+              ['Regulatory personality', 'which instrument each jurisdiction reaches for first'],
               ['Instrument × material', 'which policy tools are aimed at which materials'],
-              ['State gaps & cycles', 'who is behind their peers, and when their session opens'],
-              ['Champions', 'the legislators who keep carrying these bills'],
+              ['Producer fees', 'what compliance costs, read from the enacting text'],
               ['Real-world impact', 'documented outcomes of enacted laws, with citations'],
             ].map(([title, desc]) => (
               <li key={title} className="flex gap-2">
@@ -239,10 +256,10 @@ export default function InsightsPage() {
         subtitle="Field notes on the circular-economy policy landscape — for the people writing it."
       />
 
-      {/* Tab bar. The region filter is the global one (the bar under the nav). */}
+      {/* Tab bar. The region filter is not here — it belongs to Momentum, the only view it changes. */}
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border-default">
         <div className="flex flex-wrap gap-1 -mb-px" role="tablist">
-          {TABS.map((t) => {
+          {TABS.filter((t) => !('adminOnly' in t && t.adminOnly) || isAdmin).map((t) => {
             const active = t.id === tab;
             return (
               <button
@@ -266,36 +283,6 @@ export default function InsightsPage() {
         </div>
       </div>
 
-      {tab === 'world' && (
-        <>
-          <div className="rounded-lg border border-border-default bg-bg-primary px-4 py-3 text-sm text-text-secondary">
-            <span className="font-semibold text-text-primary">Every region.</span> This is the cross-jurisdiction
-            overview — it spans the whole tracked corpus regardless of the region filter above. Use it to compare
-            jurisdictions, then click into one to scope the rest of the site.
-          </div>
-
-          <Section kicker="Global coverage" title="Circular-economy laws in force around the world">
-            <p className="text-text-secondary text-body leading-relaxed">
-              The reach of enacted circular-economy law, jurisdiction by jurisdiction — the United States and
-              its states, the EU-central body binding all 27 members, and the national laws we track across
-              Europe, Asia-Pacific, and the Americas. Each country is shaded by how many in-force laws apply
-              there; hover for the count, or click to filter the whole site to that jurisdiction.
-            </p>
-            <WorldCoverageMap />
-          </Section>
-
-          <Section kicker="Regulatory personality" title="Which instruments each jurisdiction leans on">
-            <p className="text-text-secondary text-body leading-relaxed">
-              Every jurisdiction regulates circularity with a different toolkit. Read across a row to see the
-              mix — where a region reaches first for extended-producer-responsibility, where for deposit-return,
-              recycled-content mandates, or right-to-repair. The contrasts are the story: the EU&apos;s ecodesign
-              tilt, the US EPR build-out, France&apos;s repairability push.
-            </p>
-            <RegionInstrumentMatrix />
-          </Section>
-        </>
-      )}
-
       {tab === 'flows' && (
         <Section kicker="Structure" title="How circular-economy law flows between material, instrument, and jurisdiction">
           <p className="text-text-secondary text-body leading-relaxed">
@@ -309,6 +296,26 @@ export default function InsightsPage() {
 
       {tab === 'momentum' && (
         <>
+          {/* The region multi-select, at the top of the one tab that reads it. As the site-wide bar it
+              sat above every tab and changed three charts out of a dozen — so on the tabs it did
+              nothing it was noise, and on the tabs it DID something the effect was invisible. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border-default bg-bg-primary px-4 py-3">
+            <RegionFilter selected={regions} onChange={setRegions} />
+            <p className="text-xs text-text-muted">
+              {regions.length === 0
+                ? 'Every tracked region, aggregated. Pick regions to trace their trajectories side by side.'
+                : 'Scoping the three charts below. The other tabs read the whole corpus.'}
+            </p>
+            {regions.length > 0 && (
+              <button
+                onClick={() => setRegions([])}
+                className="ml-auto text-xs text-green-accent hover:underline"
+              >
+                All regions
+              </button>
+            )}
+          </div>
+
           <Section kicker="Laws on the books" title="Circular-economy laws in force over time">
             <p className="text-text-secondary text-body leading-relaxed">
               The running count of enacted laws on the books, by the year each came into force. Unlike
@@ -406,13 +413,29 @@ export default function InsightsPage() {
 
       {tab === 'coverage' && (
         <>
+          <div className="rounded-lg border border-border-default bg-bg-primary px-4 py-3 text-sm text-text-secondary">
+            <span className="font-semibold text-text-primary">Every region.</span> Coverage is a reference
+            for what has been tried anywhere, so these views read the whole tracked corpus. The region
+            filter lives on the Momentum tab, where it changes what you see.
+          </div>
+
+          <Section kicker="Regulatory personality" title="Which instruments each jurisdiction leans on">
+            <p className="text-text-secondary text-body leading-relaxed">
+              Every jurisdiction regulates circularity with a different toolkit. Read across a row to see the
+              mix — where a region reaches first for extended-producer-responsibility, where for deposit-return,
+              recycled-content mandates, or right-to-repair. The contrasts are the story: the EU&apos;s ecodesign
+              tilt, the US EPR build-out, France&apos;s repairability push.
+            </p>
+            <RegionInstrumentMatrix />
+          </Section>
+
           <Section kicker="Coverage" title="Where instruments meet materials">
             <p className="text-text-secondary text-body leading-relaxed">
               Which policy tools have been aimed at which materials. The dense cells are well-trodden
               ground; the empty ones are the white space — a material with deposit-return or labeling
               precedent but no EPR yet is often where the next wave of bills lands.
             </p>
-            <InstrumentMaterialMatrix regions={regionsCsv} />
+            <InstrumentMaterialMatrix />
           </Section>
 
           <Section kicker="Intervention regime" title="Which materials can go circular incrementally — and which need critical mass">
@@ -435,7 +458,7 @@ export default function InsightsPage() {
               critical-metals angle) or apply <em>material-specific</em> mandates. Extracted per target
               from each bill&apos;s text, so a bill with several targets contributes several.
             </p>
-            <CollectionTargetBasisChart regions={regionsCsv} />
+            <CollectionTargetBasisChart />
           </Section>
 
           <Section kicker="Producer fees" title="What compliance actually costs: fees across jurisdictions">

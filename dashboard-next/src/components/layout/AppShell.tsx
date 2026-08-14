@@ -21,7 +21,9 @@ import { ScopeOnboarding } from '@/components/scope/ScopeOnboarding';
 // '/pricing' has nothing a jurisdiction filter could scope — the coverage figures there are deliberately
 // whole-corpus, and a filter above them invites the reader to shrink the thing being priced. '/methodology'
 // is the same case: it describes how the whole engine works, and its counts are the whole-corpus totals.
-const REGION_BAR_HIDDEN = ['/', '/compliance', '/federal', '/studio', '/ask', '/pricing', '/methodology'];
+// '/insights' hosts the Regions selector inside its Momentum panel — the only tab whose charts read it.
+// Site-wide, it hovered above a dozen visualizations and changed three of them.
+const REGION_BAR_HIDDEN = ['/', '/compliance', '/federal', '/studio', '/ask', '/pricing', '/methodology', '/insights'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

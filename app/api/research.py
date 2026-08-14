@@ -282,18 +282,26 @@ def _wants_year_chart(question: str) -> bool:
 
 
 def _year_chart(question: str, agg_scoped: dict, scope_labels: list[str]) -> ResearchChart | None:
-    """A bills-by-year TREND LINE from the SCOPED year aggregate, when the question asks for a trend and
+    """A by-year TREND LINE from the SCOPED year aggregate, when the question asks for a trend and
     the set spans ≥2 years. Change-over-time reads better as a connected line than as bars (the dataviz
-    form heuristic). Returns None otherwise (the AnswerChart component hides an absent chart)."""
+    form heuristic). Returns None otherwise (the AnswerChart component hides an absent chart).
+
+    Plots ENACTED, not all statuses, to match both the prose rule in _DEEP_SYSTEM and the Insights
+    momentum chart. The all-status series steps up ~10x at 2020 purely because continuous bill
+    tracking starts there, so charting it drew a hockey stick out of a coverage change. Falls back to
+    all-status only when the scoped set contains no enacted law at all — there the line is honestly
+    about proposals, and the title says so."""
     if not _wants_year_chart(question):
         return None
     by_year = (agg_scoped or {}).get("bills_by_year") or []
     if len({b["year"] for b in by_year}) < 2:
         return None
-    bars = [ResearchChartBar(label=str(b["year"]), value=b["count"])
-            for b in sorted(by_year, key=lambda b: b["year"])]
+    rows = sorted(by_year, key=lambda b: b["year"])
+    enacted_basis = any(b.get("enacted") for b in rows)
+    key, noun = ("enacted", "Laws enacted") if enacted_basis else ("count", "Bills")
+    bars = [ResearchChartBar(label=str(b["year"]), value=b.get(key) or 0) for b in rows]
     suffix = f" — {', '.join(scope_labels)}" if scope_labels else ""
-    return ResearchChart(title=f"Bills by year{suffix}", kind="line", bars=bars)
+    return ResearchChart(title=f"{noun} by year{suffix}", kind="line", bars=bars)
 
 
 # A "which places lead / rank jurisdictions" question wants the by_jurisdiction ranking shown as a
@@ -958,8 +966,23 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
     # title), so this is no longer US-only. `undated` is reported alongside so the model can state the
     # coverage honestly ("N of the set carry no date yet") instead of falsely claiming absence — the
     # exact failure that motivated this (a starved sample made it deny corpus-wide year data existed).
+    #
+    # `n_enacted` is split out because the ALL-STATUS count is not comparable across the 2019/2020
+    # boundary and the model kept narrating it as if it were. Before ~2019 the corpus is reconstructed
+    # enacted law, overwhelmingly non-US regulation with no introduced/committee rows to record; from
+    # 2020 it also carries the live US pipeline. So all-status per-year jumps ~10x at 2020 while the
+    # enacted series — the only one measured the same way on both sides — steps up ~3x and then
+    # plateaus. Answers that used `count` alone reported a tracking change as a policy trend.
+    #
+    # `n_enacted` counts DISTINCT LAWS: amending acts (bills.is_amending, migration 050) are excluded,
+    # matching /bills/timeline. An act that edits another act is not a second law, and the corpus
+    # usually holds the act it edits — so counting both told the model there were more laws than there
+    # are, unevenly by region. They stay in `n`, which is a count of legislative documents, not laws.
     year = func.extract("year", Bill.status_date)
-    year_q = (select(year.label("yr"), func.count().label("n"))
+    year_q = (select(year.label("yr"), func.count().label("n"),
+                     func.count().filter(Bill.status == "enacted",
+                                         Bill.is_amending.isnot(True)).label("n_enacted"),
+                     func.count().filter(Bill.is_amending.is_(True)).label("n_amending"))
               .select_from(Bill).where(Bill.ce_relevant.is_(True))
               .where(Bill.status_date.isnot(None)))
     for c in extra:
@@ -1017,7 +1040,21 @@ async def _aggregates(db: AsyncSession, extra=(), jurisdiction_granularity: str 
         "instrument_breakdown": [{"instrument": r.itype, "count": r.n} for r in itype_rows],
         "dimension_prevalence": {d: getattr(prevalence_row, d) for d in DIMENSION_KEYS},
         "material_coverage": [{"material": r.material, "count": r.n} for r in mat_rows],
-        "bills_by_year": [{"year": int(r.yr), "count": r.n} for r in year_rows if r.yr is not None],
+        "bills_by_year": [{"year": int(r.yr), "count": r.n, "enacted": r.n_enacted,
+                           "amending": r.n_amending}
+                          for r in year_rows if r.yr is not None],
+        "bills_by_year_note": (
+            "'amending' counts acts that EDIT another law (e.g. '(Amendment) Regulations 2010'); they "
+            "are already excluded from 'enacted' so it counts distinct laws, and they are the reason a "
+            "naive count overstates the UK and EU. Do not describe an amending act as a new law. "
+            "'count' is ALL statuses; 'enacted' is laws actually passed. These are NOT comparable "
+            "across time in the same way: continuous bill tracking (introduced/in-committee/failed) "
+            "begins around 2019, so pre-2019 years are enacted law only and 'count' there is "
+            "effectively 'enacted'. Use the 'enacted' series for any claim about growth or trend. "
+            "The two most recent years are incomplete on 'enacted' — bills filed then are still "
+            "moving through the pipeline and convert to enacted later, so a decline at the end of "
+            "the series is not evidence that lawmaking is slowing."
+        ),
         "undated_bills": undated,
         # Enacted-only basis for _comparative_context; popped before the model sees the aggregates.
         "_enacted_basis": {
@@ -1532,7 +1569,13 @@ Rules:
 - NEVER claim something is absent when SCOPE.total > 0 — describe what the material shows. A true zero
   is only when SCOPE.total = 0.
 - For "over time / by year / trend" questions, use AGGREGATES.bills_by_year (exact per-year counts from
-  the corpus, not the read sample) to describe the distribution. If AGGREGATES.undated_bills > 0, say so
+  the corpus, not the read sample) to describe the distribution, and READ bills_by_year_note first — it
+  governs which of the two series you may draw a trend from. Base every growth/acceleration/decline
+  claim on the 'enacted' series, NOT on 'count'. The all-status 'count' rises sharply at 2020 because
+  that is when continuous bill tracking began, not because legislatures acted ~10x more; presenting
+  that jump as a policy finding is a factual error. If you cite all-status figures at all, say what
+  they include and that pre-2019 years contain enacted law only. Do not call the final year or two a
+  decline — those years are still resolving. If AGGREGATES.undated_bills > 0, say so
   plainly ("N bills carry no date yet and are excluded from the year breakdown") — this is a coverage
   caveat, NOT evidence that year data is missing. Never infer from the read sample that the corpus lacks
   dates; the year counts are authoritative.

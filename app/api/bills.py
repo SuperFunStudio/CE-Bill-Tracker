@@ -382,13 +382,23 @@ async def get_bill_timeline(
     instrument_type: str | None = None,
     material_category: str | None = None,
     regions: str | None = None,
+    include_amending: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     """Per-year, per-status, per-region counts of EPR-relevant bills, bucketed by year of status_date.
 
-    Powers the Insights timeline: cumulate the `enacted` series for "laws on the books over
-    time", and toggle the other statuses to see the "shots on goal" (introductions) behind them.
-    Grouped by region so the chart can compare jurisdictions; `regions` (CSV) narrows the set.
+    Powers the Insights timeline: read the `enacted` series for laws passed each year, and toggle the
+    other statuses to see the "shots on goal" (introductions) behind them. Grouped by region so the
+    chart can compare jurisdictions; `regions` (CSV) narrows the set.
+
+    COUNTS DISTINCT LAWS: rows flagged `is_amending` (acts that edit another law — see migration 050)
+    are EXCLUDED by default. Counting "The End-of-Life Vehicles (Amendment) Regulations 2010" as a law
+    beside the principal act it amends double-counts one regime, and it does so unevenly — the UK and
+    EU legislate by amendment far more than jurisdictions that re-enact, so including them overstated
+    exactly the cross-region comparison this endpoint exists to support. Pass `include_amending=true`
+    to count every enacted instrument instead. Rows never assessed (is_amending IS NULL) are INCLUDED:
+    absence of a verdict is not a verdict, and dropping them would let an unfinished backfill quietly
+    shrink the corpus.
     """
     year = func.extract("year", Bill.status_date)
     q = (
@@ -399,6 +409,8 @@ async def get_bill_timeline(
         .group_by("year", Bill.status, Bill.region)
         .order_by("year")
     )
+    if not include_amending:
+        q = q.where(Bill.is_amending.isnot(True))
     if instrument_type:
         q = q.where(Bill.instrument_type == instrument_type)
     if material_category:
@@ -546,14 +558,25 @@ async def get_collection_target_basis(
 @router.get("/laws-in-force", response_model=list[LawsInForcePoint])
 async def get_laws_in_force(
     regions: str | None = None,
+    include_amending: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     """Per-year, per-region counts of enacted CE laws that came INTO FORCE that year.
 
-    The year is the extracted `effective_date` (the only date foreign regulations carry — they have no
-    introduced→enacted pipeline, so the timeline/momentum charts are empty for them), falling back to
-    `status_date` for US enacted laws that weren't Sonnet-extracted. The frontend cumulates these into
-    a "laws on the books over time" line per region — the momentum view that works cross-jurisdiction.
+    The year is the extracted `effective_date`, falling back to `status_date`. Consumers are the
+    homepage globe, the coverage map, and the pricing/methodology totals — all of which want a
+    per-region SUM, not a time series.
+
+    NOT a momentum chart any more. It used to back an Insights "laws in force over time" line that sat
+    directly above the /bills/timeline chart, and the two disagreed (656 vs 662 cumulative at 2020)
+    because this keys on effective_date while that keys on status_date, and because this includes ~6
+    enacted rows with an effective_date but no status_date. Foreign regulations now carry a backfilled
+    status_date (scripts/backfill_foreign_dates.py), so /bills/timeline covers every jurisdiction and
+    is the single momentum view; the earlier claim that foreign law had no date for the timeline to
+    plot is no longer true. Don't rebuild a second cumulative chart on this endpoint.
+
+    Excludes amending acts by default, on the same reasoning as /bills/timeline — these totals shade a
+    map and rank regions, so counting the UK's 50 amendment instruments as 50 laws mis-ranks it.
     """
     # In-force year = effective_date's year when it's a well-formed date, else the status_date year.
     # A JSONB text cast to date can throw on malformed values, so guard with a regex and take the
@@ -572,6 +595,8 @@ async def get_laws_in_force(
         .having(yr.isnot(None))
         .order_by("year")
     )
+    if not include_amending:
+        q = q.where(Bill.is_amending.isnot(True))
     region_codes = _parse_regions(regions)
     if region_codes:
         q = q.where(Bill.region.in_(region_codes))

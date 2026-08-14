@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTimelineChart } from '@/components/insights/BillTimelineChart';
-import { LawsInForceChart } from '@/components/insights/LawsInForceChart';
 import { StanceMomentumChart } from '@/components/insights/StanceMomentumChart';
 import { CollectionTargetBasisChart } from '@/components/insights/CollectionTargetBasisChart';
 import { FeeCoverageChart } from '@/components/insights/FeeCoverageChart';
@@ -131,8 +130,13 @@ export default function InsightsPage() {
     };
   }, [instrument, regionsCsv]);
 
-  // Headline figures: total laws on the books, and the most recent full year's introductions.
+  // Headline figures: total laws on the books, and the current year's introductions.
   // points are region-grouped now, so sum across regions for the aggregate stat.
+  //
+  // The introductions figure used to be labelled "(peak year)", picked by max(). That was a coverage
+  // artifact dressed up as a finding: continuous bill tracking only starts ~2019, so the peak is
+  // always the newest year and the label implied a record where there was only a deeper dataset.
+  // Now it names the year plainly and lets the chart carry the trend.
   const stats = useMemo(() => {
     if (!points) return null;
     const enacted = points.filter((p) => p.status === 'enacted').reduce((s, p) => s + p.count, 0);
@@ -140,10 +144,10 @@ export default function InsightsPage() {
     for (const p of points) {
       if (p.status === 'introduced') introByYear.set(p.year, (introByYear.get(p.year) ?? 0) + p.count);
     }
-    let peak = { year: 0, count: 0 };
-    for (const [year, count] of introByYear) if (count > peak.count) peak = { year, count };
+    const latestIntroYear = introByYear.size ? Math.max(...introByYear.keys()) : 0;
+    const latestIntro = { year: latestIntroYear, count: introByYear.get(latestIntroYear) ?? 0 };
     const firstYear = points.reduce((m, p) => Math.min(m, p.year), Infinity);
-    return { enacted, peak, firstYear: Number.isFinite(firstYear) ? firstYear : null };
+    return { enacted, latestIntro, firstYear: Number.isFinite(firstYear) ? firstYear : null };
   }, [points]);
 
   // Insights is a Pro membership feature, but a locked door sells nothing — a visitor who can't see
@@ -182,10 +186,10 @@ export default function InsightsPage() {
                 value={stats.enacted.toLocaleString()}
                 label="Circular-economy laws enacted to date"
               />
-              {stats.peak.year > 0 && (
+              {stats.latestIntro.year > 0 && (
                 <Stat
-                  value={stats.peak.count.toLocaleString()}
-                  label={`Bills introduced in ${stats.peak.year} (peak year)`}
+                  value={stats.latestIntro.count.toLocaleString()}
+                  label={`Bills introduced in ${stats.latestIntro.year} so far`}
                 />
               )}
               {stats.firstYear && <Stat value={`${stats.firstYear}`} label="Earliest law tracked" />}
@@ -212,7 +216,7 @@ export default function InsightsPage() {
           <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2 text-body text-text-secondary">
             {[
               ['Momentum', 'whether bills are strengthening obligations or rolling them back'],
-              ['Laws in force over time', 'the running count, region by region, on one axis'],
+              ['Region-by-region trajectories', 'scope the enacted line to any set of jurisdictions'],
               ['Regulatory personality', 'which instrument each jurisdiction reaches for first'],
               ['Instrument × material', 'which policy tools are aimed at which materials'],
               ['Producer fees', 'what compliance costs, read from the enacting text'],
@@ -304,7 +308,7 @@ export default function InsightsPage() {
             <p className="text-xs text-text-muted">
               {regions.length === 0
                 ? 'Every tracked region, aggregated. Pick regions to trace their trajectories side by side.'
-                : 'Scoping the three charts below. The other tabs read the whole corpus.'}
+                : 'Scoping the two charts below. The other tabs read the whole corpus.'}
             </p>
             {regions.length > 0 && (
               <button
@@ -316,17 +320,6 @@ export default function InsightsPage() {
             )}
           </div>
 
-          <Section kicker="Laws on the books" title="Circular-economy laws in force over time">
-            <p className="text-text-secondary text-body leading-relaxed">
-              The running count of enacted laws on the books, by the year each came into force. Unlike
-              the pipeline view below (a US introduced-through-enacted funnel), this works for every
-              jurisdiction — including the EU and national regulations that have no legislative pipeline —
-              so it&apos;s the one momentum view you can compare across regions. Pick regions in the filter
-              above to trace their trajectories side by side.
-            </p>
-            <LawsInForceChart regions={regionsCsv} />
-          </Section>
-
           <Section
             kicker="Timeline"
             title={
@@ -336,11 +329,13 @@ export default function InsightsPage() {
             }
           >
             <p className="text-text-secondary text-body leading-relaxed">
-              The headline line is the running count of circular-economy laws on the books — across every
+              The headline line is how many circular-economy laws were enacted each year — across every
               instrument we track (EPR, deposit-return, right-to-repair, recycled-content, and more), not
               EPR alone. Toggle the upstream statuses to see the full pipeline — how many bills get
               introduced, advance through committee, and pass a chamber for each one that finally becomes
-              law. Pick a policy instrument to slice the same total.
+              law. Pick a policy instrument to slice the same total, or switch to Cumulative for a running
+              tally — but read the note under the chart first, because a running total counts each
+              amending act as a new law and never subtracts one that has been repealed.
             </p>
 
             {/* Instrument selector — another view on the same running total. */}
@@ -380,10 +375,10 @@ export default function InsightsPage() {
                   value={stats.enacted.toLocaleString()}
                   label={instrument ? `${formatInstrumentType(instrument)} laws enacted to date` : 'Circular-economy laws enacted to date'}
                 />
-                {stats.peak.year > 0 && (
+                {stats.latestIntro.year > 0 && (
                   <Stat
-                    value={stats.peak.count.toLocaleString()}
-                    label={`Bills introduced in ${stats.peak.year} (peak year)`}
+                    value={stats.latestIntro.count.toLocaleString()}
+                    label={`Bills introduced in ${stats.latestIntro.year} so far`}
                   />
                 )}
                 {stats.firstYear && <Stat value={`${stats.firstYear}`} label="Earliest law tracked" />}

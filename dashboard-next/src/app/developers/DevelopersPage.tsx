@@ -43,8 +43,8 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
     title: 'Analytics',
     blurb: 'Pre-computed aggregates — the same series behind the Insights dashboards, ready to chart.',
     endpoints: [
-      { method: 'GET', path: '/bills/timeline', desc: 'Bill counts per year by status (introduced → enacted). Params: instrument_type, material_category, regions.' },
-      { method: 'GET', path: '/bills/laws-in-force', desc: 'Cumulative enacted laws in force over time, per region.' },
+      { method: 'GET', path: '/bills/timeline', desc: 'Bill counts per year by status (introduced → enacted). Counts distinct laws: acts that only amend another law are excluded unless include_amending=true. Params: instrument_type, material_category, regions, include_amending.' },
+      { method: 'GET', path: '/bills/laws-in-force', desc: 'Enacted law totals per region, by year in force. Excludes amending acts unless include_amending=true.' },
       { method: 'GET', path: '/bills/stance-momentum', desc: 'Per-year counts by policy stance (advances / weakens / neutral).' },
       { method: 'GET', path: '/bills/instrument-material-matrix', desc: 'Coverage heatmap: bill counts per (policy instrument × material).' },
       { method: 'GET', path: '/bills/collection-target-basis', desc: 'How collection targets are measured (weight vs value-recovered vs …), per region.' },

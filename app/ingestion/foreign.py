@@ -1305,6 +1305,12 @@ class ChileLeychileClient(ForeignSourceClient):
 SE_LIST = "https://data.riksdagen.se/dokumentlista/"
 SE_DOC = "https://data.riksdagen.se/dokument/{id}.html"
 SE_PAGE = "https://data.riksdagen.se/dokument/{id}"
+# Title source. The .html endpoint returns a document FRAGMENT with no <title> tag, so _SE_TITLE_RE
+# never matched and every non-seeded law fell back to its own id — 30 rows shipped titled
+# "sfs-2021-1000". This metadata endpoint carries the official name in `titel`
+# ("Förordning (2021:1000) om producentansvar för våtservetter"). See scripts/repair_law_titles.py,
+# which backfilled the rows that landed before this was fixed.
+SE_META = "https://data.riksdagen.se/dokumentstatus/{id}.json"
 SE_MAXREC = 40
 
 SE_SEED_LAWS: list[dict] = [
@@ -1350,16 +1356,31 @@ class SwedenRiksdagenClient(ForeignSourceClient):
         except httpx.HTTPError as e:
             log.warning("se_fetch_failed", id=source_id, error=str(e))
             return None
-        tm = _SE_TITLE_RE.search(r.text)
-        title = _strip_tags(tm.group(1)) if tm else (english_label or source_id)
         full_text = _strip_tags(r.text)
         if len(full_text) < 100:
             log.warning("se_thin_text", id=source_id, chars=len(full_text))
             return None
+        # Official name from the metadata endpoint; the <title> scrape is kept only as a fallback for
+        # the day riksdagen changes shape again, and the id remains the last resort.
+        title = await self._fetch_title(source_id)
+        if not title:
+            tm = _SE_TITLE_RE.search(r.text)
+            title = _strip_tags(tm.group(1)) if tm else (english_label or source_id)
         return ForeignLaw(
             source_id=source_id, region=self.region, source=self.source, title=title,
             full_text=full_text, source_url=SE_PAGE.format(id=source_id), english_label=english_label,
         )
+
+    async def _fetch_title(self, source_id: str) -> str:
+        """The law's official Swedish name, or "" if the metadata endpoint can't supply one."""
+        try:
+            r = await self.http.get(SE_META.format(id=source_id))
+            r.raise_for_status()
+            titel = ((r.json().get("dokumentstatus") or {}).get("dokument") or {}).get("titel")
+        except (httpx.HTTPError, ValueError, AttributeError) as e:
+            log.warning("se_title_fetch_failed", id=source_id, error=str(e))
+            return ""
+        return (titel or "").strip()
 
 
 # --------------------------------------------------------------------------------------------------

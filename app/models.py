@@ -127,6 +127,14 @@ class Bill(Base):
     # See docs/SCOPE_FACET_AND_MATERIAL_NAVIGATION.md.
     adjacency: Mapped[str | None] = mapped_column(String(24), nullable=True)
 
+    # Does this row EDIT another law, or stand on its own? (migration 050) Three-valued:
+    # NULL = not assessed, False = principal act, True = amends another instrument.
+    # An amending act carries real obligations and stays fully in the corpus — this flag excludes it
+    # only from counts of DISTINCT LAWS, where counting a patch alongside the act it patches inflates
+    # the total (and inflates the UK/EU hardest, since they legislate by amendment). Classified by
+    # app/ingestion/act_role.py, populated by scripts/backfill_act_role.py.
+    is_amending: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
     @property
     def date_precision(self) -> str:
         """Granularity of this row's activity date, for honest UI rendering. US rows carry a real

@@ -22,7 +22,11 @@ const ENGINE = {
   universe: '1.5 million',   // bills in the U.S. legislative corpus screened wholesale
   jurisdictions: '37',       // EU + national governments ingested worldwide (37 region codes live, 2026-08)
   relevant: '2,544',         // fallback only — live count comes from useBills() (~2,544 on 2026-08)
-  inForce: '1,156',          // fallback only — live count comes from useLawsInForce() (~1,156 on 2026-08)
+  // Fallback only — live count comes from useLawsInForce(). DISTINCT LAWS: the endpoint stopped
+  // counting acts that merely amend another law (migration 050), which moved this from ~1,156 to
+  // ~1,064 on 2026-08-14. Not a corpus shrink — the amending acts are all still tracked; they just no
+  // longer count twice alongside the law they edit.
+  inForce: '1,064',
 };
 
 const INSTRUMENTS = [
@@ -114,9 +118,12 @@ export default function MethodologyPage() {
       </section>
       <p className="-mt-4 text-center text-xs text-text-muted">
         A live snapshot — the engine re-runs as bills move and new sessions open. Of the {relevant} tracked
-        measures, <span className="text-text-secondary">{inForce}</span> are enacted laws in force — the
-        figure the <Link href="/" className="text-green-accent hover:underline">homepage globe</Link> shades
-        jurisdictions by. The rest are pending, failed, or superseded bills we keep on the record.
+        measures, <span className="text-text-secondary">{inForce}</span> are distinct enacted laws in
+        force — the figure the <Link href="/" className="text-green-accent hover:underline">homepage globe</Link>{' '}
+        shades jurisdictions by. The rest are pending, failed, or superseded bills we keep on the record,
+        plus the acts that only <em>amend</em> a law already counted here: those are tracked and searchable
+        like any other, but counting an amendment beside the law it edits would report one regime as two,
+        and would do it hardest to the jurisdictions that legislate by amendment.
       </p>
 
       {/* Anchor target for the lede's "a consistent set of circular economy criteria" link. scroll-mt

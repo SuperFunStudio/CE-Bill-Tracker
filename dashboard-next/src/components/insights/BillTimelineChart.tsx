@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -18,13 +19,29 @@ import { chartAxis, chartGrid, chartTooltip, countAxis, useChartTheme } from '@/
 import { BillDrilldownPanel } from './BillDrilldownPanel';
 
 /**
- * "Shots on goal" timeline. Enacted is the headline series (cumulative laws on the books);
- * the upstream statuses are off by default and can be toggled on to show how many bills it
- * takes moving through the pipeline to land each enacted law.
+ * "Shots on goal" timeline — the ONE momentum chart. Enacted is the headline series; the upstream
+ * statuses are off by default and can be toggled on to show how many bills it takes moving through
+ * the pipeline to land each enacted law.
  *
  * Buckets come from /bills/timeline, keyed by year of status_date (date of the most recent
- * status transition). So a bill counts under its CURRENT status in the year it last moved —
- * enacted cumulates cleanly into "laws to date", while the upstream series read as activity.
+ * status transition). So a bill counts under its CURRENT status in the year it last moved.
+ *
+ * DEFAULTS TO PER-YEAR, NOT CUMULATIVE, and that is deliberate. A running total of "laws on the
+ * books" is the least defensible reading this corpus supports, for two reasons that both push the
+ * same direction — up (counts audited against prod, ce_relevant rows only):
+ *   1. 143 enacted rows are AMENDING acts ("…(Amendment) Regulations 2010", "Regulation 733/2014
+ *      amending Regulation 1418/2007") — EU 56, UK 52, US 13, AU 12, FR 6. A cumulative line counts
+ *      each one as a new law on top of the law it edits. bills.is_amending now marks them.
+ *   2. Superseded law never leaves. Only 2 rows corpus-wide carry status='repealed'. A monotonic
+ *      line is the wrong shape for a body of law that gets recast.
+ * Per-year counts degrade gracefully under both; a cumulative total compounds them and can never
+ * correct downward. Cumulative is still available as a toggle, just not the opening claim.
+ *
+ * This chart also absorbed the old separate "laws in force over time" section, which read the same
+ * enacted rows off /bills/laws-in-force keyed on effective_date instead of status_date. Two charts
+ * both kickered "laws on the books" disagreed by 6 at 2020 (656 vs 662) with nothing on the page
+ * explaining why. Its one advantage — covering foreign regulation that has no legislative pipeline
+ * — is moot now that foreign rows carry a backfilled status_date.
  */
 
 interface StatusConfig {
@@ -55,7 +72,7 @@ export function BillTimelineChart({
   points: BillTimelinePoint[];
   instrument?: string;
 }) {
-  const [mode, setMode] = useState<Mode>('cumulative');
+  const [mode, setMode] = useState<Mode>('annual');
   // Enacted is the headline; upstream series start hidden so the page opens clean.
   const [visible, setVisible] = useState<Set<string>>(() => new Set(['enacted']));
   const [drillYear, setDrillYear] = useState<number | null>(null);
@@ -121,6 +138,17 @@ export function BillTimelineChart({
     (rows[0].year as number) < trackingStartYear &&
     [...visible].some((k) => k !== 'enacted');
 
+  // Right-censoring band over the two most recent years. Enacted counts there are NOT final: a bill
+  // introduced this session is still in committee, and converts to enacted later. Without this the
+  // trailing dip reads as "circular-economy lawmaking is slowing down" when it mostly means "these
+  // bills haven't finished moving" — the current year alone still has 143 in-committee and 123
+  // introduced bills outstanding. Only meaningful per-year; a cumulative line hides the effect.
+  const openYears = useMemo(() => {
+    if (rows.length < 3 || mode !== 'annual') return null;
+    const maxY = rows[rows.length - 1].year as number;
+    return { from: maxY - 1, to: maxY };
+  }, [rows, mode]);
+
   function toggle(key: string) {
     setVisible((prev) => {
       const next = new Set(prev);
@@ -142,7 +170,7 @@ export function BillTimelineChart({
       {/* Cumulative vs annual */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="inline-flex rounded-md border border-border-default overflow-hidden text-sm">
-          {(['cumulative', 'annual'] as Mode[]).map((m) => (
+          {(['annual', 'cumulative'] as Mode[]).map((m) => (
             <button
               key={m}
               onClick={() => {
@@ -160,7 +188,9 @@ export function BillTimelineChart({
           ))}
         </div>
         <p className="text-text-muted text-xs">
-          {mode === 'cumulative' ? 'Running totals through each year' : 'New bills reaching each status that year'}
+          {mode === 'cumulative'
+            ? 'Running totals — counts amendments as new laws and never removes repealed ones'
+            : 'New bills reaching each status that year'}
         </p>
       </div>
 
@@ -176,6 +206,20 @@ export function BillTimelineChart({
             <XAxis dataKey="year" {...chartAxis(colors)} />
             <YAxis {...chartAxis(colors)} {...countAxis} />
             <Tooltip {...chartTooltip} />
+            {openYears && (
+              <ReferenceArea
+                x1={openYears.from}
+                x2={openYears.to}
+                fill={colors.muted}
+                fillOpacity={0.09}
+                label={{
+                  value: 'still resolving',
+                  position: 'insideTop',
+                  fontSize: 10,
+                  fill: colors.muted,
+                }}
+              />
+            )}
             {showTrackingStart && (
               <ReferenceLine
                 x={trackingStartYear!}
@@ -236,10 +280,25 @@ export function BillTimelineChart({
 
       <p className="text-text-muted text-xs leading-relaxed">
         Bills are bucketed by the year of their most recent status change, so each bill counts once,
-        under its current status. The <span className="text-text-secondary">Enacted</span> line is a true
-        running tally of circular-economy laws on the books. Upstream-status data (introduced, in committee, …)
-        only begins around 2019, when continuous bill tracking started — earlier years reflect enacted laws
-        reconstructed from the historical record.{' '}
+        under its current status.{' '}
+        <span className="text-text-secondary">Read the two halves of this axis separately.</span>{' '}
+        Before ~2019 the corpus is enacted law reconstructed from the historical record, and it is
+        overwhelmingly non-US regulation (EU, Japan, UK, Poland, France), which has no
+        introduced-through-enacted pipeline to record. Continuous bill tracking — and with it every
+        upstream status — begins around 2019 and is US-weighted. So the jump in total bills at 2020 is
+        mostly a change in what we track, not a change in what legislatures did; the{' '}
+        <span className="text-text-secondary">Enacted</span> series is the one measure that spans both
+        halves on the same basis.{' '}
+        {mode === 'annual' && (
+          <>The shaded years are still resolving — bills filed there haven&apos;t finished moving, so
+          their enacted counts will rise.{' '}</>
+        )}
+        These are counts of <span className="text-text-secondary">distinct laws</span>: 114 enacted
+        rows are amending acts that edit a law already counted here (&ldquo;(Amendment) Regulations
+        2010&rdquo;), and they are left out rather than counted twice — which matters most for the UK
+        and EU, who legislate by amendment far more than jurisdictions that re-enact. Most pre-2020
+        dates are year-only: the year is derived from the law&apos;s title or identifier, so a measure
+        sits in the right year but carries no month or day.{' '}
         <span className="text-text-secondary">Click any year to see the bills behind it, each linked to its source.</span>
       </p>
 

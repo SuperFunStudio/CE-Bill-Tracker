@@ -64,7 +64,7 @@ A public read API serves the same data at `https://api.atlascircular.com`. Usefu
 - `/bills` — the corpus, filterable (`ce_relevant`, `regions`, `status`, `material_category`, `instrument_type`)
 - `/bills/{id}` and `/bills/{id}/text` — one measure, and its full statute text
 - `/bills/search?q=` — full-text search across ingested statute text
-- `/bills/laws-in-force` — enacted law counts by jurisdiction
+- `/bills/laws-in-force` — enacted law counts by jurisdiction (distinct laws; acts that only amend another law are excluded unless `include_amending=true`)
 - `/bills/deadlines/upcoming` — compliance deadlines with dates
 - `/bills/text-coverage?by_region=true` — honest per-region coverage, for qualifying any claim
 - `/compliance/pathways` — the concrete next action per enacted law (which body to register with)

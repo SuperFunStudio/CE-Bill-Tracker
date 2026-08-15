@@ -119,14 +119,46 @@ def _client(router):
     return TestClient(app)
 
 
+INSIGHTS_PATHS = ["/insights/state-gap", "/insights/state-cycles?state=CA", "/insights/champions"]
+
+
 def test_insights_routes_401_an_anonymous_caller():
     from app.api.insights import router
 
     client = _client(router)
     # Every route on the router, not just one — the gate is declared router-level and a future
     # route added below it must inherit it.
-    for path in ["/insights/state-gap", "/insights/state-cycles?state=CA", "/insights/champions"]:
+    for path in INSIGHTS_PATHS:
         assert client.get(path).status_code == 401, path
+
+
+def test_insights_routes_403_a_paying_non_admin(monkeypatch):
+    """The /insights router is ADMIN-only, not Pro. Its four routes rest on OpenStates sponsor data
+    backfilled for US states alone, which is why the views they feed were moved off the member-facing
+    Insights page into the admin console. A Pro seat reaching them directly would be sold access to
+    unfinished analysis, so a paying non-admin must be refused as firmly as a stranger.
+
+    Pinned because the failure is silent in the UI: nothing member-facing calls these, so a gate that
+    drifted back down to Pro would look exactly like a gate that hadn't.
+    """
+    from app.api import insights as insights_mod
+    from app.api.auth import get_current_user
+
+    async def _user():
+        return auth_mod.AuthedUser(uid="u1", email="pro@example.com", email_verified=True)
+
+    # get_current_user is captured by reference inside require_admin's signature at import time, so
+    # monkeypatching the module attribute does NOT reach it — the token would really be verified
+    # against Firebase and 401 first. FastAPI's dependency_overrides is the seam that works here.
+    # is_admin, by contrast, is looked up as a module global when require_admin runs, so it patches.
+    app = FastAPI()
+    app.include_router(insights_mod.router)
+    app.dependency_overrides[get_current_user] = _user
+    monkeypatch.setattr(auth_mod, "is_admin", lambda _u: False)
+
+    client = TestClient(app)
+    for path in INSIGHTS_PATHS:
+        assert client.get(path, headers={"Authorization": "Bearer t"}).status_code == 403, path
 
 
 def test_bulk_litigation_401s_an_anonymous_caller():

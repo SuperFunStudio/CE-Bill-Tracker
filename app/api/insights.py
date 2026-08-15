@@ -18,26 +18,32 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import CAP_INSIGHTS_IMPACT, require_capability
+from app.api.auth import require_admin
 from app.database import get_db
 from app.models import Bill
 from app.schemas import ChampionBill, ChampionSummary, StateCycleRow, StateGapRow
 
-# CAP_INSIGHTS_IMPACT at the router level. The capability was defined for exactly this surface and
-# then never wired to a route, so the Insights page's membership wall was a client-side `if` in front
-# of four open endpoints — the analysis is the product here, and it was reachable with curl.
+# ADMIN-ONLY at the router level, not Pro.
 #
-# A hard 403 rather than a teaser: every consumer of these four routes is the gated Insights page
-# itself, so there is no public surface to keep alive here. The page's teaser is built from data that
-# is already public — /bills/timeline and the laws-in-force aggregate — rather than from a degraded
-# version of these routes, which keeps the gate absolute and the taste honest.
+# History worth keeping, because the gate has now moved twice for different reasons. First it moved
+# from nothing to CAP_INSIGHTS_IMPACT: the capability was defined for exactly this surface and then
+# never wired to a route, so the Insights page's membership wall was a client-side `if` in front of
+# four open endpoints — the analysis is the product here, and it was reachable with curl.
 #
-# Pro-only: CAP_INSIGHTS_IMPACT was moved out of the Researcher set when this gate went in (see
-# app/api/auth.py). Researcher is sold on citation and export workflow, not the briefing room.
+# Now it moves from Pro to admin, because the honest status of this analysis changed the answer. All
+# four routes rest on OpenStates sponsor and vote data that is backfilled for US states alone, which
+# is why the views they feed were pulled off the member-facing Insights page and into the admin
+# console's "Pending Insights" tab. A Pro gate on routes no member-facing surface calls sells a seat
+# access to unfinished work — the gate should say what the feature actually is.
+#
+# A hard 403 rather than a teaser: no free or member consumer exists, so a refusal is the honest
+# answer where a silently-truncated list would not be. When the ingestion behind these covers enough
+# jurisdictions to ship, this comes back to require_capability(CAP_INSIGHTS_IMPACT) — the capability
+# still exists and still gates the documented-outcomes feed in app/api/bills.py.
 router = APIRouter(
     prefix="/insights",
     tags=["insights"],
-    dependencies=[Depends(require_capability(CAP_INSIGHTS_IMPACT))],
+    dependencies=[Depends(require_admin)],
 )
 
 _ANALYSIS_DIR = Path(__file__).resolve().parents[2] / "data" / "analysis"

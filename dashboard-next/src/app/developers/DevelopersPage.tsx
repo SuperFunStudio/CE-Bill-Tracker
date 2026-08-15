@@ -48,8 +48,11 @@ const GROUPS: { title: string; blurb: string; endpoints: Endpoint[] }[] = [
       { method: 'GET', path: '/bills/stance-momentum', desc: 'Per-year counts by policy stance (advances / weakens / neutral).' },
       { method: 'GET', path: '/bills/instrument-material-matrix', desc: 'Coverage heatmap: bill counts per (policy instrument × material).' },
       { method: 'GET', path: '/bills/collection-target-basis', desc: 'How collection targets are measured (weight vs value-recovered vs …), per region.' },
-      { method: 'GET', path: '/insights/state-gap', desc: 'Each US state’s CE passage rate vs its all-bills baseline.' },
-      { method: 'GET', path: '/insights/champions', desc: 'Legislators leading CE bills, ranked; drill into their bills.' },
+      // /insights/state-gap and /insights/champions were listed here as open endpoints. They are now
+      // admin-only (app/api/insights.py): both rest on OpenStates sponsor and vote data backfilled
+      // for US states alone, so the analysis isn't finished enough to sell. Documenting an endpoint
+      // that answers a developer with 403 is worse than not documenting it — they come back when the
+      // coverage is real.
     ],
   },
   {

@@ -19,7 +19,7 @@ export function SiteFooter() {
 
   // Pro members still benefit — a referral extends their membership by a month — but the copy shifts
   // from "get" to "give / extend" so it reads honestly to someone who already subscribes.
-  const heading = isPro ? 'Give a month of Pro, get a month of Pro' : 'Get a free month of Pro';
+  const heading = isPro ? 'Get a month of Pro on us' : 'Get a free month of Pro';
   const blurb = isPro
     ? 'Share Atlas with a colleague. When they create a free account through your link, a month of Pro is added to your membership — on us.'
     : 'Share Atlas with a colleague. When they create a free account through your link, you get a full month of Pro — no card, on us.';

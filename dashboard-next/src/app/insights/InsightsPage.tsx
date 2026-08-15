@@ -8,9 +8,6 @@ import { CollectionTargetBasisChart } from '@/components/insights/CollectionTarg
 import { FeeCoverageChart } from '@/components/insights/FeeCoverageChart';
 import { InstrumentMaterialMatrix } from '@/components/insights/InstrumentMaterialMatrix';
 import { RegionInstrumentMatrix } from '@/components/insights/RegionInstrumentMatrix';
-import { StateGapTable } from '@/components/insights/StateGapTable';
-import { StateCyclesView } from '@/components/insights/StateCyclesView';
-import { ChampionRoster } from '@/components/insights/ChampionRoster';
 import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
 import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
@@ -49,15 +46,18 @@ const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = 
 // reads the whole corpus deliberately: it's a "what has ever been tried, anywhere" reference, and a
 // region filter left on from another tab quietly emptied its cells.
 //
-// Geography is admin-only. Its endpoints (state passage-gap, cycles, champions) 401 for ordinary Pro
-// seats — the sponsor/vote ingestion behind them isn't a shipped product yet — so a visible tab was a
-// promise the API breaks. See memory: state-profile-pages / legislative-analytics-dump.
+// Geography · US has MOVED to the admin console's "Pending Insights" tab. It was admin-only here,
+// which made this page carry a tab only one person could see, on top of analysis that isn't finished:
+// the passage-gap, cycle, and champion views all rest on OpenStates sponsor/vote data backfilled for
+// US states alone. Unfinished work belongs in the staging ground with the unreviewed outcome queue,
+// not behind a hidden flap on a member-facing page. The views themselves live on in
+// components/insights/GeographyPanels — promoting one back is an import.
+// See memory: state-profile-pages / legislative-analytics-dump.
 const TABS = [
   { id: 'momentum', label: 'Momentum' },
   { id: 'coverage', label: 'Coverage' },
   { id: 'flows', label: 'Flows' },
   { id: 'impact', label: 'Impact' },
-  { id: 'geography', label: 'Geography · US', adminOnly: true },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
@@ -65,7 +65,7 @@ type TabId = (typeof TABS)[number]['id'];
  * Insights — a curated, link-shareable briefing room for legislative staffers. A Pro membership
  * feature: surfaced in the nav for Pro members/admins, gated with the standard sign-up-or-purchase
  * card for everyone else (still reachable by URL, where the gate does the selling). Organized into
- * tabs (World / Momentum / Coverage / Geography / Impact) with a region filter on the
+ * tabs (Momentum / Coverage / Flows / Impact) with a region filter on the
  * cross-jurisdiction views.
  */
 
@@ -263,7 +263,7 @@ export default function InsightsPage() {
       {/* Tab bar. The region filter is not here — it belongs to Momentum, the only view it changes. */}
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border-default">
         <div className="flex flex-wrap gap-1 -mb-px" role="tablist">
-          {TABS.filter((t) => !('adminOnly' in t && t.adminOnly) || isAdmin).map((t) => {
+          {TABS.map((t) => {
             const active = t.id === tab;
             return (
               <button
@@ -475,53 +475,6 @@ export default function InsightsPage() {
               before they&apos;re formalized.
             </p>
             <OutliersPlaylist />
-          </Section>
-        </>
-      )}
-
-      {tab === 'geography' && (
-        <>
-          <div className="rounded-lg border border-border-default bg-bg-primary px-4 py-3 text-sm text-text-secondary">
-            <span className="font-semibold text-text-primary">United States only.</span> These views rank
-            jurisdictions against a passage-rate baseline and sponsor record that we only have for US
-            states — so they don&apos;t honor the region filter. An equivalent for EU member states is a
-            future addition.
-          </div>
-
-          <Section
-            kicker="State passage gap"
-            title="Does each state pass circular-economy bills above or below its own average?"
-          >
-            <p className="text-text-secondary text-body leading-relaxed">
-              A state&apos;s circular-economy passage rate means little in isolation — Minnesota passes ~1% of{' '}
-              <em>everything</em>. So we compare each state&apos;s advancing-CE rate against its <em>all-bills</em>{' '}
-              baseline (computed from the full legislative record). The gap is the real signal: where CE bills
-              clear the bar more readily than the average bill, and where they hit contested-policy drag.
-            </p>
-            <StateGapTable />
-          </Section>
-
-          <Section kicker="By legislative cycle" title="Is a state's circular-economy gap widening or closing?">
-            <p className="text-text-secondary text-body leading-relaxed">
-              The same gap, broken out by two-year legislative cycle, so you can see the trend — where
-              circular-economy bills are gaining ground session over session, and where momentum has stalled.
-              Pick a state to trace its cycles.
-            </p>
-            <StateCyclesView />
-          </Section>
-
-          <Section kicker="Champions" title="Who's carrying these bills">
-            <p className="text-text-secondary text-body leading-relaxed">
-              The legislators currently in office moving circular-economy bills, ranked by how many they
-              lead-sponsor. Pick a state to see its delegation; expand anyone to see their bills and sources.
-            </p>
-            <div className="rounded-lg border border-border-default bg-bg-primary p-3 text-body text-text-secondary">
-              <span className="font-semibold text-text-primary">One non-obvious pattern:</span> bipartisan bills
-              (a sponsor from each party) become law at roughly <span className="text-text-primary font-semibold">
-              twice the rate</span> of single-party bills (~17% vs ~9%) — the rare Republican co-sponsor is the
-              strongest signal a CE bill will pass.
-            </div>
-            <ChampionRoster />
           </Section>
         </>
       )}

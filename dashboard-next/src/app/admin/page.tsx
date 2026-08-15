@@ -27,6 +27,7 @@ import {
   type AdminOutcome,
   type OutcomeEdit,
 } from '@/lib/admin';
+import { GeographyPanels } from '@/components/insights/GeographyPanels';
 
 type GetToken = () => Promise<string | null>;
 
@@ -86,7 +87,23 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Two tabs, split by what the panels are FOR rather than by subject. "Operations" is the live console
+// — accounts, seats, sign-ups, leads — where every control acts on production immediately. "Pending
+// Insights" is the staging ground: analysis that exists but isn't member-facing yet, either because a
+// human hasn't vetted it (the outcome queue) or because the data underneath it is only backfilled for
+// part of the world (the US Geography views, moved here off the public Insights page).
+//
+// The split is worth the tab bar because the two demand different attention: operations panels are
+// answered on the spot, staging panels are worked through in a sitting. Mixed into one scroll, the
+// pending queue sat between account management and entitlements and got skipped.
+const ADMIN_TABS = [
+  { id: 'operations', label: 'Operations' },
+  { id: 'pending', label: 'Pending Insights' },
+] as const;
+type AdminTabId = (typeof ADMIN_TABS)[number]['id'];
+
 function Console({ getToken, adminEmail }: { getToken: GetToken; adminEmail: string }) {
+  const [tab, setTab] = useState<AdminTabId>('operations');
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [statsErr, setStatsErr] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -112,13 +129,57 @@ function Console({ getToken, adminEmail }: { getToken: GetToken; adminEmail: str
           Research &amp; Content →
         </a>
       </div>
-      <StatsPanel stats={stats} error={statsErr} />
-      <OutcomesPanel getToken={getToken} reloadKey={reloadKey} />
-      <GrantPanel getToken={getToken} onChange={bump} />
-      <AccountPanel getToken={getToken} adminEmail={adminEmail} onChange={bump} />
-      <EntitlementsPanel getToken={getToken} reloadKey={reloadKey} onChange={bump} />
-      <SubscribersPanel getToken={getToken} reloadKey={reloadKey} />
-      <AccessRequestsPanel getToken={getToken} reloadKey={reloadKey} />
+
+      {/* Nested so the active tab's 2px underline sits ON the 1px divider (-mb-px) instead of
+          stacking above it as a doubled line — same structure as the Insights tab bar. */}
+      <div className="border-b border-border-default">
+        <div className="flex flex-wrap gap-1 -mb-px" role="tablist">
+          {ADMIN_TABS.map(t => {
+            const active = t.id === tab;
+            return (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(t.id)}
+                className={`border-b-2 px-4 py-2 text-sm transition-colors ${
+                  active
+                    ? 'border-green-accent text-text-primary font-semibold'
+                    : 'border-transparent text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Both tabs stay mounted-on-select rather than always rendered: the Geography panels each fire
+          their own /insights fetch on mount, and paying for three gated round-trips on every visit to
+          the accounts console is the cost this split exists to avoid. */}
+      {tab === 'operations' ? (
+        <>
+          <StatsPanel stats={stats} error={statsErr} />
+          <GrantPanel getToken={getToken} onChange={bump} />
+          <AccountPanel getToken={getToken} adminEmail={adminEmail} onChange={bump} />
+          <EntitlementsPanel getToken={getToken} reloadKey={reloadKey} onChange={bump} />
+          <SubscribersPanel getToken={getToken} reloadKey={reloadKey} />
+          <AccessRequestsPanel getToken={getToken} reloadKey={reloadKey} />
+        </>
+      ) : (
+        <>
+          <p className="text-text-secondary text-sm leading-relaxed">
+            Analysis that isn&apos;t member-facing yet. The outcome queue needs a human to verify each
+            figure against its source before it publishes; the Geography views below are built on
+            OpenStates sponsor and vote data that we only have backfilled for US states, so they stay
+            here until the ingestion behind them covers enough jurisdictions to be worth shipping.
+          </p>
+          <OutcomesPanel getToken={getToken} reloadKey={reloadKey} />
+          <GeographyPanels />
+        </>
+      )}
+
       <p className="text-text-muted text-xs text-center pt-2">Signed in as admin · {adminEmail}</p>
     </Shell>
   );

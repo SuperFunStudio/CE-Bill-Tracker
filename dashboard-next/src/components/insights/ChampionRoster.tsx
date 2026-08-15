@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchChampions, fetchChampionBills } from '@/lib/api';
+import { useAuth } from '@/components/auth/AuthContext';
 import { STATE_NAMES, formatInstrumentType, fixEncoding } from '@/lib/utils';
 import { track } from '@/lib/analytics';
 import type { ChampionSummary, ChampionBill } from '@/lib/types';
@@ -26,15 +27,21 @@ function partyChip(party: string | null): { label: string; cls: string } | null 
 
 function ChampionBills({ personId }: { personId: string }) {
   const [bills, setBills] = useState<ChampionBill[] | null>(null);
+  const { getToken } = useAuth();
   useEffect(() => {
     let cancelled = false;
-    fetchChampionBills(personId)
-      .then((d) => !cancelled && setBills(d))
-      .catch(() => !cancelled && setBills([]));
+    (async () => {
+      try {
+        const d = await fetchChampionBills(personId, await getToken());
+        if (!cancelled) setBills(d);
+      } catch {
+        if (!cancelled) setBills([]);
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [personId]);
+  }, [personId, getToken]);
 
   if (!bills) return <div className="h-10 animate-pulse rounded bg-bg-tertiary" />;
   return (
@@ -113,18 +120,24 @@ export function ChampionRoster() {
   const [state, setState] = useState<string>('');
   const [champs, setChamps] = useState<ChampionSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { getToken } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
     setChamps(null);
     setError(null);
-    fetchChampions({ state: state || undefined, limit: 50 })
-      .then((d) => !cancelled && setChamps(d))
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load the roster.'));
+    (async () => {
+      try {
+        const d = await fetchChampions(await getToken(), { state: state || undefined, limit: 50 });
+        if (!cancelled) setChamps(d);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load the roster.');
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, [state]);
+  }, [state, getToken]);
 
   return (
     <div className="space-y-4">

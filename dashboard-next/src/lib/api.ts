@@ -323,30 +323,39 @@ export async function fetchLawsInForce(params?: { regions?: string }): Promise<L
   );
 }
 
+// The whole /insights router is behind CAP_INSIGHTS_IMPACT (a router-level dependency — see
+// app/api/insights.py), so these four are token-REQUIRED, not token-optional: called without one they
+// 401 for everyone, admins included. That is exactly what the Geography tab was doing. There is no
+// teaser to fall back to here, so the token is a required argument rather than an optional tail
+// parameter — a caller that forgets it should fail to compile, not at runtime in front of a member.
 /** Per-state CE-vs-baseline passage gap — the Insights "Atlas Circular" table. */
-export async function fetchStateGap(): Promise<StateGapRow[]> {
-  return apiFetch<StateGapRow[]>(buildUrl('/insights/state-gap'));
+export async function fetchStateGap(token: string | null): Promise<StateGapRow[]> {
+  return apiFetch<StateGapRow[]>(buildUrl('/insights/state-gap'), token);
 }
 
 /** CE champion roster (slim). Active-only by default; filter by state. */
-export async function fetchChampions(params?: {
-  state?: string;
-  active_only?: boolean;
-  limit?: number;
-}): Promise<ChampionSummary[]> {
+export async function fetchChampions(
+  token: string | null,
+  params?: {
+    state?: string;
+    active_only?: boolean;
+    limit?: number;
+  },
+): Promise<ChampionSummary[]> {
   return apiFetch<ChampionSummary[]>(
     buildUrl('/insights/champions', params as Record<string, string | number | boolean | undefined>),
+    token,
   );
 }
 
 /** One state's per-biennium CE-vs-baseline gap — the Insights per-cycle view. */
-export async function fetchStateCycles(state: string): Promise<StateCycleRow[]> {
-  return apiFetch<StateCycleRow[]>(buildUrl('/insights/state-cycles', { state }));
+export async function fetchStateCycles(state: string, token: string | null): Promise<StateCycleRow[]> {
+  return apiFetch<StateCycleRow[]>(buildUrl('/insights/state-cycles', { state }), token);
 }
 
 /** A champion's sponsored bills, each with its source_url. person_id contains a slash — pass it raw. */
-export async function fetchChampionBills(personId: string): Promise<ChampionBill[]> {
-  return apiFetch<ChampionBill[]>(buildUrl(`/insights/champions/${personId}/bills`));
+export async function fetchChampionBills(personId: string, token: string | null): Promise<ChampionBill[]> {
+  return apiFetch<ChampionBill[]>(buildUrl(`/insights/champions/${personId}/bills`), token);
 }
 
 /** Documented real-world outcomes of enacted laws — powers the Insights "Real-World Impact" spotlight. */

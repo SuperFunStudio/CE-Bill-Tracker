@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchStateGap } from '@/lib/api';
+import { useAuth } from '@/components/auth/AuthContext';
 import { STATE_NAMES } from '@/lib/utils';
 import { track } from '@/lib/analytics';
 import type { StateGapRow, BillParams } from '@/lib/types';
@@ -40,16 +41,22 @@ export function StateGapTable() {
   const [rows, setRows] = useState<StateGapRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drill, setDrill] = useState<{ params: BillParams; title: string } | null>(null);
+  const { getToken } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
-    fetchStateGap()
-      .then((d) => !cancelled && setRows(d))
-      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load the gap table.'));
+    (async () => {
+      try {
+        const d = await fetchStateGap(await getToken());
+        if (!cancelled) setRows(d);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load the gap table.');
+      }
+    })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [getToken]);
 
   function openState(r: StateGapRow) {
     setDrill({

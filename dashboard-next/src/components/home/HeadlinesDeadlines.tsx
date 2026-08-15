@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { fetchBillOutcomes } from '@/lib/api';
+import { fetchBill, fetchBillOutcomes } from '@/lib/api';
 import { track } from '@/lib/analytics';
 import { formatDate, STATE_NAMES, billHref } from '@/lib/utils';
 import { EU_MEMBERS, FOREIGN_COUNTRY_NAMES, REGION_LABELS } from '@/lib/jurisdictions';
@@ -77,19 +77,34 @@ function OutcomeTicker() {
     return () => clearInterval(id);
   }, [reduced, paused, items.length]);
 
-  if (!items.length) return null;
+  const current = items.length ? items[idx % items.length] : null;
 
-  const o = items[idx % items.length];
+  // The canonical bill row, fetched for its TITLE and nothing else. An outcome carries a
+  // denormalized law_title written for this card — "…Redemption Law (Bottle Bill)", "…Act 2022
+  // (Tasmania)" — which is free to differ from bills.title, and did on 4 of 6 rows. The bill page is
+  // a static export whose slug generateStaticParams built from bills.title, so a slug derived from
+  // law_title addresses a file that was never generated and there is no fallback route to catch it:
+  // every shared headline landed on a 404. Slug from the same field the build did.
+  const { data: bill } = useQuery({
+    queryKey: ['bill', current?.bill_id],
+    queryFn: () => fetchBill(current!.bill_id!),
+    enabled: current?.bill_id != null,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  if (!current) return null;
+
+  const o = current;
   const metric = metricText(o)!;
   const place = jurisdiction(o.state);
   // Something a reader can picture. Pure unit arithmetic — see lib/outcomeScale for why this stops at
   // physical equivalence and doesn't attempt "harm avoided".
   const scale = scaleComparison(o.metric_value, o.metric_unit);
   // The law itself, on the Atlas. bill_id is a soft link: famous laws we haven't ingested as rows
-  // carry the denormalized number only, and those stay plain text rather than linking nowhere.
-  const billPath = o.bill_id
-    ? billHref({ id: o.bill_id, bill_number: o.bill_number, title: o.law_title })
-    : null;
+  // carry the denormalized number only, and those stay plain text rather than linking nowhere — as
+  // does a bill whose row hasn't loaded yet, or one outside the ce_relevant set the pages are built
+  // from, since neither has a page at the other end.
+  const billPath = bill && bill.ce_relevant !== false ? billHref(bill) : null;
   const attribution = [place, o.bill_number].filter(Boolean).join(' · ');
 
   // Share the LAW's page, not the homepage: it's the durable, indexable URL, and it's where someone
@@ -115,10 +130,14 @@ function OutcomeTicker() {
     utm_content: o.slug,
   });
 
+  // LINK ONLY, in both channels. Every target worth sharing to renders a preview card off the URL —
+  // headline, description, image — so a `text` payload that restates the figure gets typed into the
+  // message body ABOVE that card and says the same thing twice. `title` stays: share sheets label
+  // themselves with it, and the apps that ignore it were the ones duplicating the body.
   async function share() {
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
-        await navigator.share({ title: shareText, text: shareText, url: shareUrl });
+        await navigator.share({ title: shareText, url: shareUrl });
         track('outcome_share', shareEvent('native'));
         return;
       } catch {
@@ -126,7 +145,7 @@ function OutcomeTicker() {
       }
     }
     try {
-      await navigator.clipboard.writeText(`${shareText} — ${shareUrl}`);
+      await navigator.clipboard.writeText(shareUrl);
       setShared(true);
       setTimeout(() => setShared(false), 1800);
       track('outcome_share', shareEvent('copy'));

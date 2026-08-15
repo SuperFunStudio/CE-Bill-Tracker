@@ -202,6 +202,21 @@ class Settings(BaseSettings):
     # SEC EDGAR — user-agent required by SEC fair-use policy
     sec_user_agent: str = "AtlasCircular/1.0 contact@atlascircular.com"
 
+    # ── Bulk-read ceiling for anonymous callers ──────────────────────────────────────────────────
+    # The largest `limit` an UNAUTHENTICATED caller may ask /bills for. A signed-in caller is never
+    # capped, so this is about the open pipe, not about members.
+    #
+    # Defaults to 5000 — the schema maximum, i.e. NO enforcement — on purpose. Every public page used
+    # to pull the whole corpus live, so a cap would have broken the site; that traffic now comes off
+    # the CDN snapshot instead (dashboard-next/src/hooks/useBills.ts), which is what makes a cap
+    # possible at all. Shipping the mechanism dormant lets the rollout be: deploy, watch how much
+    # anonymous bulk traffic actually remains, then tighten with a Cloud Run env var — reversible in
+    # seconds, no redeploy, no code change. 500 is the intended setting once that's confirmed.
+    #
+    # Enforced as a 400, never a silent truncation: a caller who asked for 5000 and got 500 rows with
+    # a 200 would reasonably believe that is the whole corpus.
+    anon_bulk_limit: int = 5000
+
     # Phase 3 feature flags — gate external data source calls
     enable_epa_frs: bool = True
     enable_caa_registry: bool = True

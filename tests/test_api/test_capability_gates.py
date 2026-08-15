@@ -19,17 +19,19 @@ The third property is the one the reviewer of this code missed entirely and is t
 was worth nothing before: the CDN snapshot builder must not bake gated data into public/data/*.json.
 A static fallback for a gated feed is unauthenticated by construction.
 """
+import inspect
 import json
 import re
 from pathlib import Path
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.api import auth as auth_mod
 from app.api.auth import CAP_FEDERAL, CAP_INSIGHTS_IMPACT, get_optional_capability
 from app.api.federal import FEDERAL_TEASER_LIMIT
+from app.config import settings
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -218,6 +220,64 @@ def test_snapshot_still_carries_the_free_aggregates():
     paths = _snapshot_endpoint_paths()
     assert any(p.startswith("/federal-actions/summary") for p in paths)
     assert any(p.startswith("/bills/deadlines/summary") for p in paths)
+
+
+def test_snapshot_bills_query_covers_every_region():
+    """The corpus snapshot is the PRIMARY source for whole-corpus reads now (hooks/useBills.ts), not
+    just a cold-API fallback — so an incomplete one is wrong data on the homepage, not a degraded
+    fallback. /bills defaults to US-ONLY when no region is given, which had this baking 1,576 of
+    2,493 rows and silently dropping every non-US jurisdiction from the file the site reads.
+    """
+    bills = [p for p in _snapshot_endpoint_paths() if p.startswith("/bills?")]
+    assert bills, "the bills corpus is no longer snapshotted"
+    for path in bills:
+        assert "region=all" in path, f"{path} bakes only the US corpus — non-US rows would vanish"
+
+
+# --- the anonymous bulk ceiling ------------------------------------------------------------------
+
+
+def test_anon_bulk_limit_ships_dormant():
+    """Pinned deliberately: the cap must NOT start enforcing on deploy. Public pages read the corpus
+    from the CDN snapshot now, but that only became true in the same change — so enforcement is a
+    Cloud Run env var flipped after watching real traffic, not a surprise in a build. A future edit
+    lowering this default is a product decision that should have to change this test on purpose.
+    """
+    from app.api.bills import list_bills
+
+    # Dormant means "equal to the schema maximum", so read that maximum off the route rather than
+    # hardcoding it twice — if someone raises the ceiling on the Query, this still checks alignment.
+    limit_q = inspect.signature(list_bills).parameters["limit"].default
+    schema_max = next(getattr(m, "le") for m in limit_q.metadata if hasattr(m, "le"))
+    assert settings.anon_bulk_limit == schema_max == 5000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "header",
+    [None, "", "Basic abc", "Bearer", "bearer garbage"],
+    ids=["missing", "empty", "wrong-scheme", "no-token", "unverifiable"],
+)
+async def test_bulk_ceiling_treats_an_unverified_caller_as_anonymous(header):
+    """A header sniff would let `Authorization: Bearer anything` lift the cap for everyone, which is
+    the whole failure this is supposed to prevent."""
+    from app.api.bills import _caller_is_authenticated
+
+    assert await _caller_is_authenticated(header) is False
+
+
+@pytest.mark.asyncio
+async def test_bulk_ceiling_refuses_rather_than_truncates(monkeypatch):
+    """400, not a short 200. A caller who asked for the corpus and received a capped slice with a
+    success status would reasonably publish it as the whole corpus."""
+    from app.api import bills as bills_mod
+
+    monkeypatch.setattr(bills_mod.settings, "anon_bulk_limit", 500)
+    with pytest.raises(HTTPException) as exc:
+        await bills_mod.list_bills(limit=5000, authorization=None, db=None)
+    assert exc.value.status_code == 400
+    # The refusal has to name the way through, or it's just a wall.
+    assert "/data/bills.json" in exc.value.detail and "limit/offset" in exc.value.detail
 
 
 def test_no_gated_snapshot_files_are_left_on_disk():

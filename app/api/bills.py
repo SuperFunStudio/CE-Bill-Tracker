@@ -1,10 +1,16 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from sqlalchemy import Integer, and_, case, func, literal_column, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import CAP_INSIGHTS_IMPACT, get_optional_capability, get_optional_pro
+from app.api.auth import (
+    CAP_INSIGHTS_IMPACT,
+    get_current_user,
+    get_optional_capability,
+    get_optional_pro,
+)
+from app.config import settings
 from app.classification.sonnet_extractor import EXTRACTION_VERSION
 from app.database import get_db
 from app.models import (
@@ -45,6 +51,23 @@ DEADLINE_TEASER_LIMIT = 5
 # handful, the Insights impact table is the full set.
 OUTCOME_TEASER_LIMIT = 6
 DEADLINE_PAST_CAP_DAYS = 5 * 365
+
+
+async def _caller_is_authenticated(authorization: str | None) -> bool:
+    """True for any caller presenting a VERIFIED Firebase token — plan-agnostic, never raises.
+
+    The bulk ceiling is about who is accountable for a request, not about what they've paid for, so
+    this asks the cheapest honest question: is there a real account behind this? A malformed or
+    expired token is anonymous, and so is a missing one. Verification is real (not a header sniff) —
+    otherwise `Authorization: Bearer anything` would lift the cap for everyone.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return False
+    try:
+        await get_current_user(authorization)
+        return True
+    except HTTPException:
+        return False
 
 
 def _lit_subquery():
@@ -112,8 +135,22 @@ async def list_bills(
     limit: int = Query(default=100, le=5000),
     offset: int = 0,
     response: Response = None,  # noqa: B008 — FastAPI injects; used only to set Cache-Control
+    authorization: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
+    # Bulk ceiling for anonymous callers (settings.anon_bulk_limit; see app/config.py for why it
+    # ships dormant). Checked HERE rather than as a router dependency so the Firebase verification
+    # only happens on requests that actually ask for bulk — an ordinary paged request pays nothing.
+    if limit > settings.anon_bulk_limit and not await _caller_is_authenticated(authorization):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"limit above {settings.anon_bulk_limit} requires authentication. "
+                f"Page with limit/offset, or read the full public corpus from "
+                f"https://www.atlascircular.com/data/bills.json"
+            ),
+        )
+
     # Shared-cacheable for 5 minutes. This is the hottest endpoint on the site — the homepage asks for
     # the whole relevant corpus on every load — and it was going out with no Cache-Control at all, so
     # every visitor round-tripped to Postgres for a corpus that only changes on an ingestion cadence.

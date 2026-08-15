@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { fetchBills } from '@/lib/api';
+import { loadBuildCorpus } from '@/lib/buildCorpus';
 import { billHref } from '@/lib/utils';
 
 const SITE_URL = 'https://www.atlascircular.com';
@@ -64,7 +64,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   let billEntries: MetadataRoute.Sitemap = [];
   try {
-    const bills = await fetchBills({ ce_relevant: true, region: 'all', limit: 5000 });
+    const bills = await loadBuildCorpus();
     billEntries = bills.map(b => ({
       url: `${SITE_URL}${billHref(b)}`,
       lastModified: pageLastModified(b.status_date || b.last_action_date),

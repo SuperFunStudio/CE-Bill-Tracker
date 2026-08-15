@@ -22,7 +22,15 @@ const OUT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public',
 const ENDPOINTS = [
   // The bills list no longer carries compliance_details (the paid extraction) — this is just the
   // public Bill Explorer metadata, safe to bake to the CDN.
-  { name: 'bills', path: '/bills?ce_relevant=true&limit=5000' },
+  //
+  // region=all, added deliberately. This used to omit the region param, which the API reads as
+  // US-ONLY — so the "whole corpus" snapshot silently held ~1,535 of ~2,335 relevant bills, and
+  // every non-US row was missing from the fallback that the homepage, /states and every
+  // jurisdiction profile rely on. Those surfaces all ask the live API for regions=all, so the
+  // snapshot has to be the same superset or it is not a fallback, it is a different dataset.
+  // It is also now the PRIMARY source for those reads (see hooks/useBills.ts), which makes the
+  // completeness load-bearing rather than merely nice.
+  { name: 'bills', path: '/bills?ce_relevant=true&region=all&limit=5000' },
   { name: 'map-summary', path: '/bills/map-summary' },
   // Only the ungated deadline COUNTS are baked. The deadline rows are Pro-gated server-side, so we
   // deliberately do NOT snapshot /bills/deadlines/upcoming (an unauthenticated build would only get
@@ -37,6 +45,17 @@ const ENDPOINTS = [
 ];
 
 const TIMEOUT_MS = 30_000;
+
+// Sanity floors, by snapshot name. A snapshot that comes back implausibly short is WORSE than one
+// that fails outright: a failure is logged and the file is skipped (the frontend falls back to live),
+// while a short file is written, cached, and served from the CDN as if it were the whole corpus.
+// That is the failure mode this guards — e.g. an API-side limit cap, a bad region default, or a
+// half-migrated database quietly halving what the homepage shows for a whole deploy cycle.
+// 2000 is chosen against the specific regression it has to catch, not as a round number. Dropping
+// `region=all` yields the US-only corpus — 1,576 rows against 2,493 for every region, measured on
+// prod 2026-08-15 — so a floor below that would sail straight past the exact bug this guards. The
+// corpus only grows (37 regions and counting), so the headroom is in the safe direction.
+const MIN_ROWS = { bills: 2000 };
 
 async function fetchJson(path) {
   const controller = new AbortController();
@@ -60,6 +79,12 @@ async function main() {
   for (const { name, path } of ENDPOINTS) {
     try {
       const data = await fetchJson(path);
+      const floor = MIN_ROWS[name];
+      if (floor !== undefined && (!Array.isArray(data) || data.length < floor)) {
+        // Thrown, not warned: this takes the same path as a failed fetch, so the short file is never
+        // written and the frontend degrades to live instead of serving a truncated corpus as truth.
+        throw new Error(`only ${Array.isArray(data) ? data.length : 'non-array'} rows, expected >= ${floor}`);
+      }
       await writeFile(resolve(OUT_DIR, `${name}.json`), JSON.stringify(data));
       counts[name] = Array.isArray(data) ? data.length : null;
       ok += 1;

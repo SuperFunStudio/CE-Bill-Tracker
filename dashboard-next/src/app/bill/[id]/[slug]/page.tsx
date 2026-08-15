@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
-import { fetchBill, fetchBills, fetchBillText, fetchCompliancePathways } from '@/lib/api';
+import { fetchBill, fetchBillText, fetchCompliancePathways } from '@/lib/api';
+import { loadBuildCorpus } from '@/lib/buildCorpus';
 import type { BillDetail, BillFullText, BillSummary, CompliancePathway } from '@/lib/types';
 import {
   billSlug,
@@ -34,9 +35,10 @@ const getBill = cache(async (id: number): Promise<BillDetail | null> => {
   }
 });
 
-/** The full ce_relevant corpus, fetched once for generateStaticParams. */
+/** The full ce_relevant corpus, read once for generateStaticParams — from the build's baked snapshot
+ *  when it exists, else live. See lib/buildCorpus. */
 const getAllBills = cache(async (): Promise<BillSummary[]> => {
-  return fetchBills({ ce_relevant: true, region: 'all', limit: 5000 });
+  return loadBuildCorpus();
 });
 
 /** One bill's ingested full statute text — server-rendered into the page (the reason to visit the

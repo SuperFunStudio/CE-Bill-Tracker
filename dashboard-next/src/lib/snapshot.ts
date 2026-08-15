@@ -84,6 +84,20 @@ async function fetchSnapshotFile<T>(name: SnapshotName): Promise<T | null> {
   }
 }
 
+/**
+ * Read one baked snapshot from the CDN and cache it, for callers that need it as a PRIMARY source
+ * rather than a fallback (whole-corpus bill reads — see hooks/useBills.ts). Returns null if the file
+ * is absent, which is the caller's cue to go live. Distinct from getSnapshot, which is synchronous
+ * and only sees what's already hydrated.
+ */
+export async function loadSnapshot<T>(name: SnapshotName): Promise<T | null> {
+  const cached = getSnapshot<T>(name);
+  if (cached !== null) return cached;
+  const val = await fetchSnapshotFile<T>(name);
+  if (val !== null) store(name, val);
+  return val;
+}
+
 let hydrated = false;
 /** Load every baked snapshot into memory + localStorage. Call once on app boot. */
 export async function hydrateSnapshots(): Promise<void> {

@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
-import { fetchBill, fetchBillText, fetchCompliancePathways } from '@/lib/api';
+import { fetchBill, fetchBillOutcomeIndex, fetchBillText, fetchCompliancePathways } from '@/lib/api';
 import { loadBuildCorpus } from '@/lib/buildCorpus';
-import type { BillDetail, BillFullText, BillSummary, CompliancePathway } from '@/lib/types';
+import type { BillDetail, BillFullText, BillOutcome, BillSummary, CompliancePathway } from '@/lib/types';
 import {
   billSlug,
   billHref,
@@ -14,7 +14,9 @@ import {
   resolveSourceLink,
 } from '@/lib/utils';
 import { jurisdictionDisplayName } from '@/lib/jurisdictions';
+import { outcomeMetricText } from '@/lib/outcomeMetric';
 import { BillComplianceLayers } from '@/components/bills/BillComplianceLayers';
+import { BillImpact } from '@/components/bills/BillImpact';
 import { NextSteps } from '@/components/compliance/NextSteps';
 import { ShareBillButton } from '@/components/bills/ShareBillButton';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -65,6 +67,19 @@ const getPathwayIndex = cache(async (): Promise<Map<number, CompliancePathway>> 
   }
 });
 
+/**
+ * Every documented outcome, indexed by bill id — fetched ONCE for the whole static build, like the
+ * pathway index above and for the same reason (2,450 per-page requests otherwise). Feeds the
+ * "What this law has produced" block. A failure degrades to no impact block, never a failed build.
+ */
+const getOutcomeIndex = cache(async (): Promise<Record<string, BillOutcome[]>> => {
+  try {
+    return await fetchBillOutcomeIndex();
+  } catch {
+    return {};
+  }
+});
+
 export async function generateStaticParams(): Promise<{ id: string; slug: string }[]> {
   const bills = await getAllBills();
   return bills.map(b => ({ id: String(b.id), slug: billSlug(b) }));
@@ -100,9 +115,19 @@ export async function generateMetadata({
   const num = bill.bill_number ? `${bill.bill_number} · ` : '';
   const cleanTitle = fixEncoding(bill.title) || 'Untitled bill';
   const title = `${num}${cleanTitle} — ${jur} | Atlas Circular`;
-  const description =
+  const summary =
     clip(bill.ai_summary || bill.description) ||
     `${cleanTitle} — circular-economy legislation tracked in ${jur} on Atlas Circular.`;
+  // A documented figure LEADS the description, so the preview card a shared link expands into says
+  // the result rather than restating the bill title next to it. This is the same figure the share
+  // came from; putting it in the card is what lets the message body be nothing but the link.
+  const figure = (await getOutcomeIndex())[params.id]
+    ?.map(o => {
+      const m = outcomeMetricText(o);
+      return m ? `${m}${o.metric_label ? ` ${o.metric_label}` : ''}` : null;
+    })
+    .find(Boolean);
+  const description = figure ? clip(`${figure} — ${summary}`) : summary;
   const canonical = billHref(bill);
 
   return {
@@ -162,6 +187,7 @@ export default async function BillPage({ params }: { params: { id: string; slug:
   const link = resolveSourceLink(bill);
   const fullText = await getBillText(bill.id);
   const pathway = (await getPathwayIndex()).get(bill.id) ?? null;
+  const outcomes = (await getOutcomeIndex())[String(bill.id)] ?? [];
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -238,6 +264,10 @@ export default async function BillPage({ params }: { params: { id: string; slug:
             ))}
           </div>
         )}
+
+        {/* What the law has been documented to DO, above what it requires — see BillImpact. Renders
+            nothing for the (many) bills with no researched outcome yet. */}
+        <BillImpact outcomes={outcomes} />
 
         {/* The action layer — what a producer actually does under this law. Server-rendered from the
             public pathway endpoint, so it's in the HTML for crawlers too. See NextSteps. */}

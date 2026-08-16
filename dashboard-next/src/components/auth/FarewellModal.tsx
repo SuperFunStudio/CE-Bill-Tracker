@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { fetchBillOutcomes } from '@/lib/api';
 import { track } from '@/lib/analytics';
+import { outcomeMetricText } from '@/lib/outcomeMetric';
 import type { BillOutcome } from '@/lib/types';
 
 /**
@@ -29,20 +30,11 @@ function clip(text: string | null | undefined, maxChars: number): string {
   return out.length < t.length && !/[.!?]$/.test(out) ? `${out}…` : out;
 }
 
-function metricText(o: BillOutcome): string | null {
-  if (o.metric_display) return o.metric_display;
-  if (o.metric_value != null) {
-    const v = o.metric_value.toLocaleString();
-    return o.metric_unit ? `${v} ${o.metric_unit}` : v;
-  }
-  return null;
-}
-
 // Prefer a positive, human-reviewed outcome that carries a headline metric — the most shareable kind.
 function pickShareable(outcomes: BillOutcome[]): BillOutcome | null {
   if (!outcomes.length) return null;
   const positive = outcomes.filter(o => o.direction === 'positive');
-  const withMetric = positive.filter(o => metricText(o));
+  const withMetric = positive.filter(o => outcomeMetricText(o));
   const pool = withMetric.length ? withMetric : positive.length ? positive : outcomes;
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -65,7 +57,7 @@ export function FarewellModal() {
 
   if (!farewellOpen) return null;
 
-  const metric = outcome ? metricText(outcome) : null;
+  const metric = outcome ? outcomeMetricText(outcome) : null;
   const lawLabel = outcome ? [outcome.state, outcome.bill_number].filter(Boolean).join(' ') : '';
   const shareText = outcome
     ? `${metric ? metric + (outcome.metric_label ? ` ${clip(outcome.metric_label, 70)}` : '') + ' — ' : ''}${clip(outcome.summary, 180)}${lawLabel ? ` (${lawLabel})` : ''} · via Atlas Circular`

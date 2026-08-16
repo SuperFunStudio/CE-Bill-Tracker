@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { fetchBill, fetchBillOutcomes } from '@/lib/api';
@@ -7,9 +7,14 @@ import { track } from '@/lib/analytics';
 import { formatDate, STATE_NAMES, billHref } from '@/lib/utils';
 import { EU_MEMBERS, FOREIGN_COUNTRY_NAMES, REGION_LABELS } from '@/lib/jurisdictions';
 import { scaleComparison } from '@/lib/outcomeScale';
-import { downloadOutcomeCard } from '@/lib/outcomeShareImage';
+import { outcomeMetricText } from '@/lib/outcomeMetric';
 import { CheckIcon } from '@/components/ui/icons';
 import type { BillOutcome } from '@/lib/types';
+
+// How long a touch holds the rotation still. Long enough to read a card that a thumb landed on,
+// short enough that scrolling past the block doesn't silently retire the ticker for the session —
+// which is what an unbounded touch-pause does, since a phone has no mouseleave to undo it.
+const TOUCH_PAUSE_MS = 30000;
 
 // 14s, not 8s. Each card is now a figure, a clause explaining it, an equivalence to picture it by,
 // and an attribution line with a link in it — four things to read and one to decide whether to click.
@@ -30,15 +35,6 @@ function jurisdiction(code: string | null | undefined): string {
   return STATE_NAMES[c] ?? EU_MEMBERS[c] ?? FOREIGN_COUNTRY_NAMES[c] ?? REGION_LABELS[c] ?? c;
 }
 
-function metricText(o: BillOutcome): string | null {
-  if (o.metric_display) return o.metric_display;
-  if (o.metric_value != null) {
-    const v = o.metric_value.toLocaleString();
-    return o.metric_unit ? `${v} ${o.metric_unit}` : v;
-  }
-  return null;
-}
-
 /**
  * A slow rotation through the documented POSITIVE outcomes of enacted law — the answer to "so does
  * any of this actually work?", which nothing else on the front page answers.
@@ -49,7 +45,10 @@ function metricText(o: BillOutcome): string | null {
  * the block is date-relevant without any curation step.
  *
  * Rotation pauses on hover and on keyboard focus, and never starts at all under prefers-reduced-motion
- * — a figure that swaps itself out from under a reader who asked for less motion is just a bug.
+ * — a figure that swaps itself out from under a reader who asked for less motion is just a bug. It
+ * also stops — for 30 seconds on a touch, for good once an arrow is pressed. Hover is the desktop
+ * signal for "I'm reading this" and a phone doesn't send it, so a phone reader had no way to hold a
+ * card still, and a card that changes mid-read is how a figure gets read against the wrong caption.
  */
 function OutcomeTicker() {
   const { data: outcomes } = useQuery({
@@ -62,6 +61,8 @@ function OutcomeTicker() {
 
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
+  /** The reader took the wheel (arrows or a tap). Auto-advance doesn't come back. */
+  const [manual, setManual] = useState(false);
   const [reduced, setReduced] = useState(false);
   const [shared, setShared] = useState(false);
 
@@ -69,13 +70,29 @@ function OutcomeTicker() {
     setReduced(!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   }, []);
 
-  const items = useMemo(() => (outcomes ?? []).filter(o => metricText(o)), [outcomes]);
+  const items = useMemo(() => (outcomes ?? []).filter(o => outcomeMetricText(o)), [outcomes]);
 
   useEffect(() => {
-    if (reduced || paused || items.length < 2) return;
+    if (reduced || paused || manual || items.length < 2) return;
     const id = setInterval(() => setIdx(i => (i + 1) % items.length), ROTATE_MS);
     return () => clearInterval(id);
-  }, [reduced, paused, items.length]);
+  }, [reduced, paused, manual, items.length]);
+
+  /** Touch is the only "I'm reading this" signal a phone sends. Hold the card, then let go —
+   *  pressing an arrow is the deliberate version and stops the rotation outright. */
+  const touchPause = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdForTouch = () => {
+    setPaused(true);
+    if (touchPause.current) clearTimeout(touchPause.current);
+    touchPause.current = setTimeout(() => setPaused(false), TOUCH_PAUSE_MS);
+  };
+  useEffect(() => () => { if (touchPause.current) clearTimeout(touchPause.current); }, []);
+
+  /** Step the rotation by hand. `+ items.length` before the modulo: JS keeps the sign on -1 % n. */
+  const step = (delta: number) => {
+    setManual(true);
+    setIdx(i => (i + delta + items.length) % items.length);
+  };
 
   const current = items.length ? items[idx % items.length] : null;
 
@@ -95,7 +112,7 @@ function OutcomeTicker() {
   if (!current) return null;
 
   const o = current;
-  const metric = metricText(o)!;
+  const metric = outcomeMetricText(o)!;
   const place = jurisdiction(o.state);
   // Something a reader can picture. Pure unit arithmetic — see lib/outcomeScale for why this stops at
   // physical equivalence and doesn't attempt "harm avoided".
@@ -105,7 +122,6 @@ function OutcomeTicker() {
   // does a bill whose row hasn't loaded yet, or one outside the ce_relevant set the pages are built
   // from, since neither has a page at the other end.
   const billPath = bill && bill.ce_relevant !== false ? billHref(bill) : null;
-  const attribution = [place, o.bill_number].filter(Boolean).join(' · ');
 
   // Share the LAW's page, not the homepage: it's the durable, indexable URL, and it's where someone
   // arriving from the post can check the figure against the statute.
@@ -117,13 +133,18 @@ function OutcomeTicker() {
   // dimension, utm_content as the WHICH-headline breakdown). Untagged, those arrivals land in Direct
   // and the loop is unmeasurable. utm_* param names are GA-safe; bare `campaign`/`content` are not —
   // see the reserved-name rule in lib/analytics.
+  //
+  // #impact is load-bearing, not decoration: it lands the reader ON the block that repeats the figure
+  // they tapped. Without it a shared "$16 million/year" opens a page whose first screen is the bill's
+  // identity and metadata, and the promise the share made goes unkept.
   const shareUrl =
     `${SITE_URL}${billPath ?? '/insights/'}` +
-    `?utm_source=share&utm_medium=social&utm_campaign=outcome_headline&utm_content=${encodeURIComponent(o.slug)}`;
+    `?utm_source=share&utm_medium=social&utm_campaign=outcome_headline&utm_content=${encodeURIComponent(o.slug)}` +
+    (billPath ? '#impact' : '');
   const shareText = `${metric} ${o.metric_label ?? ''}${place ? ` — ${place}` : ''}`.trim();
 
-  /** One shape for every share event, so the GA dimensions can't drift between the three channels. */
-  const shareEvent = (channel: 'native' | 'copy' | 'image') => ({
+  /** One shape for every share event, so the GA dimensions can't drift between the two channels. */
+  const shareEvent = (channel: 'native' | 'copy') => ({
     share_channel: channel,
     outcome_slug: o.slug,
     utm_campaign: 'outcome_headline',
@@ -154,18 +175,6 @@ function OutcomeTicker() {
     }
   }
 
-  async function saveCard() {
-    try {
-      await downloadOutcomeCard(
-        { metric, label: o.metric_label ?? '', comparison: scale?.text, attribution },
-        `atlas-circular-${o.slug}.png`,
-      );
-      track('outcome_share', shareEvent('image'));
-    } catch {
-      /* canvas/blob unavailable — the link share above is always there as the fallback */
-    }
-  }
-
   return (
     <div
       className="flex h-full flex-col rounded-lg border border-green-accent/30 bg-green-dark/20 px-4 py-3"
@@ -173,6 +182,7 @@ function OutcomeTicker() {
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
+      onTouchStart={holdForTouch}
     >
       {items.length > 1 && (
         <div className="flex justify-end">
@@ -189,10 +199,18 @@ function OutcomeTicker() {
           than growing into it. */}
       <div aria-live="polite" className="mt-1.5 flex flex-1 flex-col justify-center py-2">
         <p className="min-h-[2.5rem] font-serif text-3xl leading-tight text-green-accent tabular-nums">{metric}</p>
-        {/* Clamped AND floored at two lines: the clamp stops a long metric_label from growing the card,
-            the min-height stops a short one from shrinking it. Both are needed — either alone still
-            lets the card change size between entries, which is the jump. */}
-        <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-sm leading-snug text-text-secondary" title={o.metric_label ?? undefined}>
+        {/* Clamped AND floored: the clamp stops a long metric_label from growing the card, the
+            min-height stops a short one from shrinking it. Both are needed — either alone still lets
+            the card change size between entries, which is the jump.
+            The MOBILE budget is separate and larger, because the line is narrower there: two lines
+            hold ~90 characters on a phone and the longest curated caption runs to 128, so a
+            desktop-shaped clamp cut Maine's mid-word at "instead of bein…". Four lines of headroom
+            with three reserved: every caption in the set lands inside three, so the card holds still
+            through the whole rotation, and a longer one grows by a line instead of losing its end. */}
+        <p
+          className="mt-2 line-clamp-4 min-h-[3.7rem] text-sm leading-snug text-text-secondary sm:line-clamp-2 sm:min-h-[2.5rem]"
+          title={o.metric_label ?? undefined}
+        >
           {o.metric_label}
         </p>
         {/* The figure, made picturable. Sits with the figure rather than in its own block — it's a
@@ -242,40 +260,45 @@ function OutcomeTicker() {
             Discover more insights →
           </Link>
           {/* Sharing sits next to the read-more, because they're the same impulse: this figure landed,
-              now what. Two channels — the tagged link for a message or a post, and a rendered card for
-              a platform that wants an image. */}
-          <span className="flex items-center gap-2 text-xs text-text-muted">
-            <button
-              type="button"
-              onClick={share}
-              aria-label="Copy a shareable link to this outcome"
-              className={`inline-flex items-center gap-1 transition-colors ${
-                shared ? 'text-green-accent' : 'hover:text-text-primary'
-              }`}
-            >
-              {shared ? <CheckIcon /> : <LinkGlyph />}
-              {shared ? 'Copied' : 'Share'}
-            </button>
-            <span className="text-border-default">|</span>
-            <button
-              type="button"
-              onClick={saveCard}
-              aria-label="Download this outcome as a social image"
-              className="transition-colors hover:text-text-primary"
-            >
-              Save image
-            </button>
-          </span>
-        </div>
-        {items.length > 1 && !reduced && (
+              now what. One channel: the tagged link, which every target expands into a preview card
+              of its own. (There was a "Save image" here too, rendering the card as a PNG. It went:
+              two ways to share one figure is a decision to make, and the link is the one that carries
+              the tagging, the citation, and a way back to the law.) */}
           <button
             type="button"
-            onClick={() => setIdx(i => (i + 1) % items.length)}
-            aria-label="Next outcome"
-            className="shrink-0 text-text-muted transition-colors hover:text-text-primary"
+            onClick={share}
+            aria-label="Copy a shareable link to this outcome"
+            className={`inline-flex items-center gap-1 text-xs transition-colors ${
+              shared ? 'text-green-accent' : 'text-text-muted hover:text-text-primary'
+            }`}
           >
-            ›
+            {shared ? <CheckIcon /> : <LinkGlyph />}
+            {shared ? 'Copied' : 'Share'}
           </button>
+        </div>
+        {/* Both directions. Forward-only meant a reader who let a card rotate past — or who looked up
+            mid-sentence — had to sit through the whole loop to get back to it, and on a phone, where
+            hover can't pause anything, that was the only way back. Stepping stops the auto-advance
+            (see `manual`), so the card they came back to stays put. */}
+        {items.length > 1 && (
+          <div className="flex shrink-0 items-center gap-1 text-text-muted">
+            <button
+              type="button"
+              onClick={() => step(-1)}
+              aria-label="Previous outcome"
+              className="px-1 transition-colors hover:text-text-primary"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={() => step(1)}
+              aria-label="Next outcome"
+              className="px-1 transition-colors hover:text-text-primary"
+            >
+              ›
+            </button>
+          </div>
         )}
       </div>
     </div>

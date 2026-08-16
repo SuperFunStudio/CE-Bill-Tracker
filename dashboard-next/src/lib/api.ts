@@ -377,6 +377,13 @@ export async function fetchBillOutcomes(params?: {
   );
 }
 
+/** Reviewed outcomes keyed by bill id — ONE request for the whole static build, read by every bill
+ *  page's impact block. Ungated (one law's effect on that law's page is depth, not the cross-bill
+ *  table); keys are strings because that's what JSON object keys are. */
+export async function fetchBillOutcomeIndex(): Promise<Record<string, BillOutcome[]>> {
+  return apiFetch<Record<string, BillOutcome[]>>(buildUrl('/bills/outcomes/by-bill'));
+}
+
 /** The Upcoming Deadlines list. Pro seats (pass a Firebase token) get the full merged calendar; an
  *  anonymous/free call gets only the soonest few rows as a teaser — the gate is enforced server-side. */
 export async function fetchDeadlines(params?: DeadlineParams, token?: string | null): Promise<DeadlineSummary[]> {

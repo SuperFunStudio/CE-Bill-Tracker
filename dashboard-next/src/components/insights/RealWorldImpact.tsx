@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { fetchBillOutcomes } from '@/lib/api';
+// ATTRIBUTION_NOTE and the figure formatter are shared with the ticker and the bill page's impact
+// block — a "program" caveat that reads differently on different surfaces is a claim that drifted.
+import { ATTRIBUTION_NOTE, outcomeMetricText } from '@/lib/outcomeMetric';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/components/auth/AuthContext';
 import type { BillOutcome } from '@/lib/types';
@@ -31,26 +34,10 @@ const DIRECTION_STYLES: Record<string, { dot: string; label: string; chip: strin
   },
 };
 
-// How tightly the figure ties to the statute — surfaced so a "program" number isn't read as
-// "the law did this single-handedly".
-const ATTRIBUTION_NOTE: Record<string, string> = {
-  direct: 'Directly produced by the law',
-  program: 'Produced by a program the law funds or incentivizes',
-  associated: 'Associated with the law (correlation)',
-};
-
-function metricText(o: BillOutcome): string | null {
-  if (o.metric_display) return o.metric_display;
-  if (o.metric_value != null) {
-    const v = o.metric_value.toLocaleString();
-    return o.metric_unit ? `${v} ${o.metric_unit}` : v;
-  }
-  return null;
-}
 
 function OutcomeCard({ outcome }: { outcome: BillOutcome }) {
   const dir = DIRECTION_STYLES[outcome.direction] ?? DIRECTION_STYLES.mixed;
-  const metric = metricText(outcome);
+  const metric = outcomeMetricText(outcome);
   const lawLabel = [outcome.state, outcome.bill_number].filter(Boolean).join(' ');
 
   return (

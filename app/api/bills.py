@@ -641,6 +641,36 @@ async def get_laws_in_force(
     return [LawsInForcePoint(year=row.year, region=row.region, count=row.count) for row in rows]
 
 
+@router.get("/outcomes/by-bill", response_model=dict[str, list[BillOutcomeSummary]])
+async def bill_outcomes_by_bill(
+    db: AsyncSession = Depends(get_db),
+):
+    """Reviewed outcomes keyed by bill_id — the index the static bill pages are built from.
+
+    UNGATED, and by the same rule that leaves compliance_details ungated on GET /bills/{id}: the gate
+    is on BREADTH, not depth. What a reader gets here is one law's documented effect on that law's own
+    page, which is the thing a shared headline promised them. The cross-bill view — every outcome in
+    one table, with the summaries and the attribution knob to sort by — is the Insights "Real-World
+    Impact" surface and stays behind CAP_INSIGHTS_IMPACT.
+
+    An index rather than 2,500 per-bill calls: the site is a static export, so the alternative is one
+    request per generated page at build time. Same reasoning as the compliance-pathway index above.
+
+    `reviewed` only, with no teaser cap — the cap on /outcomes exists to hold back the full curated
+    TABLE, and applying it here would silently pick 6 arbitrary bills to be the ones whose page tells
+    the truth. Unreviewed candidates stay invisible, as everywhere outside the admin console.
+    """
+    q = (
+        select(BillOutcome)
+        .where(BillOutcome.reviewed.is_(True), BillOutcome.bill_id.isnot(None))
+        .order_by(BillOutcome.as_of_date.desc().nullslast(), BillOutcome.id.desc())
+    )
+    index: dict[str, list[BillOutcomeSummary]] = {}
+    for row in (await db.execute(q)).scalars().all():
+        index.setdefault(str(row.bill_id), []).append(BillOutcomeSummary.model_validate(row))
+    return index
+
+
 @router.get("/outcomes", response_model=list[BillOutcomeSummary])
 async def list_bill_outcomes(
     direction: str | None = None,

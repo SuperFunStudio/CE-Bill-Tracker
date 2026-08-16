@@ -28,6 +28,7 @@ import {
   type OutcomeEdit,
 } from '@/lib/admin';
 import { GeographyPanels } from '@/components/insights/GeographyPanels';
+import { outcomeMetricText } from '@/lib/outcomeMetric';
 
 type GetToken = () => Promise<string | null>;
 
@@ -822,12 +823,15 @@ const DIRECTION_TONE: Record<string, 'green' | 'red' | 'amber'> = {
   mixed: 'amber',
 };
 
+// What the ticker's caption box holds on a narrow phone: four lines at text-xs, ~30 characters a
+// line, minus slack for the wrap. Measured against the widest caption in the set rather than
+// derived — if the ticker's type or clamp changes, this moves with it.
+const METRIC_LABEL_MOBILE_BUDGET = 120;
+
+// The reviewer should see the figure EXACTLY as the public surfaces render it — that is most of what
+// review is for — so this is the shared formatter, with an em dash for "no figure yet".
 function figureText(o: AdminOutcome | OutcomeEdit): string {
-  if (o.metric_display) return o.metric_display;
-  if (o.metric_value !== null && o.metric_value !== undefined) {
-    return `${o.metric_value}${o.metric_unit ? ` ${o.metric_unit}` : ''}`;
-  }
-  return '—';
+  return outcomeMetricText(o) ?? '—';
 }
 
 function OutcomesPanel({ getToken, reloadKey }: { getToken: GetToken; reloadKey: number }) {
@@ -1132,6 +1136,17 @@ function OutcomeEditor({
         </EditField>
         <EditField label="Metric label">
           <TextInput value={d.metric_label ?? ''} onChange={v => set({ metric_label: v })} placeholder="of oyster reef restored" />
+          {/* The homepage ticker gives this caption a fixed box so the card doesn't resize every 14
+              seconds, and a phone fits roughly this many characters in it. Over budget the caption
+              gets clipped mid-word there — which is how "…instead of bein…" shipped. A count, not a
+              maxLength: the Insights table has room for the long form, so this is a nudge to write
+              the short one, not a hard limit. */}
+          {(d.metric_label?.length ?? 0) > METRIC_LABEL_MOBILE_BUDGET && (
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              {d.metric_label!.length}/{METRIC_LABEL_MOBILE_BUDGET} characters — the homepage ticker
+              will clip this on a phone.
+            </p>
+          )}
         </EditField>
         <EditField label="Metric display (override)">
           <TextInput value={d.metric_display ?? ''} onChange={v => set({ metric_display: v })} placeholder="157k → 231k tons (+47%)" />

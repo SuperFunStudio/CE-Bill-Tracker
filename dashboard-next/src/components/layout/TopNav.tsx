@@ -51,9 +51,9 @@ const NAV_ITEMS: NavItem[] = [
   // Packaging Studio (price-a-package walkthrough) share it. Nav points at the Design Guide tab; the
   // in-page GuidesTabs switches between them, so both /design-guide and /studio light this item up.
   { href: '/design-guide', label: 'Guides', Icon: CompassIcon, altPaths: ['/studio'] },
-  // Prototype — dogfooding in prod, admin-only; graduates to Pro alongside /ask (drop adminOnly, the
-  // page + endpoint already gate on isPro / require_pro).
-  { href: '/evaluate', label: 'Evaluate a Bill', Icon: ScaleIcon, adminOnly: true, secondary: true },
+  // Graduated from the admin-only prototype: the page + endpoint gate on isPro / require_pro, so the
+  // nav entry does the discovering and the page does the selling.
+  { href: '/evaluate', label: 'Evaluate a Bill', Icon: ScaleIcon, secondary: true },
   // Regulation Facts is admin-only for now — still being validated, so it's kept off the public nav
   // (and its route guarded) until it graduates. See the /label page guard.
   { href: '/label', label: 'Regulation Facts', Icon: LabelIcon, adminOnly: true, secondary: true },

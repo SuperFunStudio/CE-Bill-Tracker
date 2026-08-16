@@ -61,7 +61,9 @@ export async function removeWatch(token: string | null, billId: number): Promise
 }
 
 // Notification prefs for watched bills (which events to email about). Pro-gated server-side.
-export type WatchlistAlertEvent = 'status_change' | 'text_update' | 'deadline';
+// 'deadline' (reminder emails) and 'weekly_digest' (weekly instead of monthly roundup) are opt-in
+// extras — never in the default, so checking them is always the user's own choice.
+export type WatchlistAlertEvent = 'status_change' | 'text_update' | 'deadline' | 'weekly_digest';
 
 export interface WatchlistPrefs {
   alert_on: WatchlistAlertEvent[];
@@ -69,7 +71,7 @@ export interface WatchlistPrefs {
 }
 
 const DEFAULT_WATCHLIST_PREFS: WatchlistPrefs = {
-  alert_on: ['status_change', 'deadline'],
+  alert_on: ['status_change'],
   active: true,
 };
 

@@ -139,15 +139,11 @@ async def fee_schedule():
 # ---------------------------------------------------------------------------
 
 
-# include_in_schema=False: /docs and /openapi.json are public, so a listed route is a published one.
-# Producer attribution is the wedge this product is being built around and it has no frontend caller
-# yet — keeping it out of the public schema lets it ship with everything else without announcing it.
-# Drop this flag when the UI is ready to use it; add Depends(require_admin) instead if it should be
-# genuinely closed rather than merely unlisted.
+# Listed in the public schema since the "Who is the producer?" panel on /compliance became its
+# first frontend caller (it was shipped unlisted while no UI consumed it).
 @router.get(
     "/producer-attribution",
     response_model=ProducerAttributionResponse,
-    include_in_schema=False,
 )
 async def producer_attribution(
     jurisdiction: str | None = Query(

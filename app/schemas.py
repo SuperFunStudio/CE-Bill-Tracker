@@ -700,7 +700,9 @@ class SubscriptionCreate(BaseModel):
     material_categories: list[str] = ["ALL"]
     instrument_types: list[str] = ["ALL"]
     min_confidence: float = 0.7
-    alert_on: list[str] = ["status_change", "new_bill", "deadline"]
+    # "deadline" and "weekly_digest" are opt-in extras, deliberately absent from the default —
+    # see AlertSubscription.alert_on in app/models.py.
+    alert_on: list[str] = ["status_change", "new_bill"]
 
 
 class SubscriptionResponse(SubscriptionCreate):

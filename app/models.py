@@ -476,8 +476,13 @@ class AlertSubscription(Base):
         JSONB, default=lambda: ["ALL"]
     )  # policy topics: ["epr", "right_to_repair", ...] or ["ALL"]
     min_confidence: Mapped[float] = mapped_column(Float, default=0.7)
+    # Which emails this subscriber has asked for. "deadline" (approaching-deadline reminders) and
+    # "weekly_digest" (weekly instead of monthly roundup) are OPT-IN: they are never in the default,
+    # and migration 051 stripped "deadline" from pre-existing rows (it was in the old default, so its
+    # presence never recorded a choice — and the deadline cycle had never sent in prod). Presence of
+    # either key therefore always means the user explicitly turned it on in the prefs UI.
     alert_on: Mapped[list] = mapped_column(
-        JSONB, default=lambda: ["status_change", "new_bill", "deadline"]
+        JSONB, default=lambda: ["status_change", "new_bill"]
     )
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -390,14 +390,29 @@ def _merge_subs_by_email(subs: list[AlertSubscription]) -> list[AlertSubscriptio
     return merged
 
 
+def filter_by_cadence(
+    subs: list[AlertSubscription], cadence: str
+) -> list[AlertSubscription]:
+    """Split the digest audience so nobody gets both roundups: "weekly" keeps only subscribers who
+    opted in ("weekly_digest" in alert_on — never a default, always an explicit pref); anything else
+    keeps everyone else. The weekly digest REPLACES the monthly one for its opt-ins."""
+    if cadence == "weekly":
+        return [s for s in subs if "weekly_digest" in (s.alert_on or [])]
+    return [s for s in subs if "weekly_digest" not in (s.alert_on or [])]
+
+
 async def build_digests(
-    db: AsyncSession, since: datetime
+    db: AsyncSession, since: datetime, cadence: str = "monthly"
 ) -> list[tuple[AlertSubscription, DigestContent]]:
     """Build a digest for every active subscriber that has matching movement since `since`.
 
     Subscribers are deduped by email (union of scopes). Subscribers with no email or no matching
     items are omitted (no empty emails). Each section is capped at MAX_PER_SECTION; the overflow
     count is recorded so the email can say "+N more".
+
+    `cadence` splits the audience so nobody gets both roundups: "weekly" builds only for subscribers
+    who opted in ("weekly_digest" in alert_on — never a default, always an explicit pref); "monthly"
+    builds for everyone else. The weekly digest REPLACES the monthly one for its opt-ins.
     """
     status_changes, new_bills, federal_actions = await _load_candidates(db, since)
 
@@ -416,7 +431,7 @@ async def build_digests(
 
     new_bills = sorted(new_bills, key=_bill_sort_key)
 
-    merged_subs = _merge_subs_by_email(subs)
+    merged_subs = filter_by_cadence(_merge_subs_by_email(subs), cadence)
     watchlists = await load_watchlists(
         db, {s.firebase_uid for s in merged_subs if s.firebase_uid}
     )

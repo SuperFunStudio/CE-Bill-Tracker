@@ -9,6 +9,9 @@ and Gazette email styling. Each deadline carries a single `reminder_sent` boolea
 consolidated reminder per deadline once it comes within the lead window
 (max of settings.deadline_reminder_days). Staged 30-then-7-day reminders would need a per-threshold
 column on compliance_deadlines — left to Phase B.
+
+Strictly opt-in: only subscriptions whose alert_on contains "deadline" get these emails at all, and
+that key is never in a default (migration 051) — see build_deadline_alerts.
 """
 from __future__ import annotations
 
@@ -109,6 +112,14 @@ def _deadline_matches(
     return _matches_scope(sub.region_scope, d.region, d.state)
 
 
+def wants_deadline_alerts(sub: AlertSubscription) -> bool:
+    """Opt-in only: "deadline" is never in the alert_on default and was stripped from pre-existing
+    rows by migration 051 (its presence there recorded the old default, not a choice), so a sub
+    without it gets NO deadline mail of any kind — watchlist- or filter-matched. Presence means
+    the user turned the pref on themselves."""
+    return "deadline" in (sub.alert_on or [])
+
+
 async def build_deadline_alerts(
     db: AsyncSession, today: date, lead_days: int
 ) -> list[tuple[AlertSubscription, DeadlineAlertContent]]:
@@ -145,12 +156,9 @@ async def build_deadline_alerts(
 
     results: list[tuple[AlertSubscription, DeadlineAlertContent]] = []
     for sub in merged_subs:
-        # Resolve the owner's watch list only when their "deadline" pref is on, so turning it off
-        # suppresses watched-bill deadlines while a combined subscriber still gets filter-matched
-        # deadlines (the matcher falls back to filters when wl is None).
-        wl = None
-        if sub.firebase_uid and "deadline" in (sub.alert_on or []):
-            wl = watchlists.get(sub.firebase_uid)
+        if not wants_deadline_alerts(sub):
+            continue
+        wl = watchlists.get(sub.firebase_uid) if sub.firebase_uid else None
         matched = [it for it in items if _deadline_matches(sub, it, federal_by_id, wl)]
         if matched:
             results.append((sub, DeadlineAlertContent(items=matched)))

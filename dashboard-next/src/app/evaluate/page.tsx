@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/components/auth/AuthContext';
+import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { evaluateBill, fetchMaterialMap } from '@/lib/api';
 import { dimensionMap, dimensionStatus, DIMENSION_LABELS } from '@/lib/dimensions';
 import { MaterialPositionMap } from '@/components/insights/MaterialPositionMap';
@@ -256,7 +256,9 @@ function Result({ data, mapPoints }: { data: EvaluateResponse; mapPoints: Materi
 }
 
 export default function EvaluatePage() {
-  const { isAdmin, getToken, openAuth, loading: authLoading } = useAuth();
+  const { isPro, isAdmin, getToken, loading: authLoading } = useAuth();
+  const gatePro = useProGate();
+  const canEvaluate = isPro || isAdmin;
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
   const [jurisdiction, setJurisdiction] = useState('');
@@ -270,7 +272,8 @@ export default function EvaluatePage() {
 
   async function run() {
     if (text.trim().length < 200 || busy) return;
-    if (!isAdmin) { openAuth(); return; }
+    // The Pro gate routes anonymous → sign-in and Free → checkout; a subscriber falls through.
+    if (!canEvaluate) { gatePro(() => {}, 'evaluate_bill'); return; }
     setBusy(true); setError(null); setResult(null);
     try {
       const token = await getToken();
@@ -289,14 +292,33 @@ export default function EvaluatePage() {
     setTitle(SAMPLE_TITLE); setJurisdiction('CA'); setText(SAMPLE_TEXT);
   }
 
-  // Hidden internal tool: gated to admins while we watch for demand before folding it into Ask.
-  // A signed-in non-admin gets a plain not-available message, not a hint that this exists.
-  if (authLoading || !isAdmin) {
+  // Graduated from the admin-only prototype: Pro members use it, everyone else sees what it is and
+  // the way in (require_pro guards the endpoint server-side regardless).
+  if (authLoading) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
-        <p className="mt-20 text-center text-text-muted text-sm italic">
-          {authLoading ? 'Checking access…' : 'This page is not available.'}
-        </p>
+        <p className="mt-20 text-center text-text-muted text-sm italic">Checking access…</p>
+      </div>
+    );
+  }
+  if (!canEvaluate) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <div className="mt-16 text-center space-y-3">
+          <p className="text-[rgb(var(--green-accent))] text-xs font-semibold uppercase tracking-wider">Evaluate a Bill</p>
+          <h1 className="font-serif text-2xl text-text-primary">How would this bill land?</h1>
+          <p className="text-text-secondary text-body max-w-xl mx-auto">
+            Paste a draft or enacted measure and we score it against the intervention regime its
+            target material demands — the same dimensions every tracked bill is read into. Available
+            on the Pro plan.
+          </p>
+          <button
+            onClick={() => gatePro(() => {}, 'evaluate_bill')}
+            className="inline-block rounded-lg bg-green-accent px-4 py-2 text-sm font-semibold text-bg-primary hover:opacity-90"
+          >
+            Unlock with Pro →
+          </button>
+        </div>
       </div>
     );
   }
@@ -311,7 +333,8 @@ export default function EvaluatePage() {
           bill, figure out which <span className="text-text-primary">intervention regime</span> its target
           material demands — a lean fee fix for high-value materials that already circulate, or engineered
           critical mass for dispersed low-value ones — and score whether the bill carries the mechanisms that
-          regime needs. Strength is a <em>fit</em>, not a checklist.
+          regime needs. Strength is a <em>fit</em>, not a checklist.{' '}
+          <a href="/methodology/" className="text-green-accent hover:underline">How the scoring works →</a>
         </p>
       </div>
 

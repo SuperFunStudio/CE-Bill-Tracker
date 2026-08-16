@@ -80,9 +80,20 @@ export function WatchListSection() {
   );
 }
 
+// The last two are opt-in extras: off unless the user checks them, and the backend never defaults
+// them on — so unchecked here really means "no extra email".
 const ALERT_OPTIONS: { event: WatchlistAlertEvent; label: string; hint: string }[] = [
   { event: 'status_change', label: 'Status changes', hint: 'introduced, passed, signed, vetoed…' },
-  { event: 'deadline', label: 'Compliance deadlines', hint: 'when a deadline is approaching' },
+  {
+    event: 'deadline',
+    label: 'Deadline reminders',
+    hint: 'an extra email when a compliance deadline you follow is approaching',
+  },
+  {
+    event: 'weekly_digest',
+    label: 'Weekly digest',
+    hint: 'get the roundup weekly instead of monthly',
+  },
 ];
 
 /** Pro per-account control for which events email the user about their watched bills. */
@@ -128,7 +139,10 @@ function NotifyPrefs() {
     <div className="rounded-xl border border-border-default bg-bg-secondary p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="text-text-primary text-sm font-medium">Email me about these bills</p>
-        <p className="text-text-muted text-xs">We&apos;ll send a note when a bill you follow moves.</p>
+        <p className="text-text-muted text-xs">
+          We&apos;ll send a note when a bill you follow moves. Deadline reminders and the weekly
+          digest are optional extras — you&apos;ll only get them if you turn them on here.
+        </p>
       </div>
       <div className="flex flex-wrap gap-4">
         {ALERT_OPTIONS.map(({ event, label, hint }) => (

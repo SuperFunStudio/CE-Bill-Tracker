@@ -757,7 +757,9 @@ async def run_digest_cycle(
     async with AsyncSessionLocal() as db:
         now = (await db.execute(select(func.now()))).scalar_one()
         since = now - timedelta(days=days)
-        digests = await build_digests(db, since)
+        # period_label doubles as the audience split: weekly goes only to weekly_digest opt-ins,
+        # monthly to everyone else, so enabling the weekly cycle never double-mails anyone.
+        digests = await build_digests(db, since, cadence=period_label)
 
     sent = 0
     for sub, content in digests:
@@ -1571,6 +1573,19 @@ async def run_bill_text_refresh_cycle() -> None:
         "source = excluded.source, indexed_change_hash = excluded.indexed_change_hash, "
         "fetched_at = excluded.fetched_at"
     )
+    # The refresh is the ONE moment both text versions coexist (the old row is still stored when the
+    # new text arrives), so the "what changed" diff for the text_update alert is computed here and
+    # stamped onto the pending change row — the dispatcher only renders what it finds there. Scheduled
+    # order does the sequencing: ingest (02:00) creates the change, this job (06:30) attaches the
+    # diff, the first dispatch window (08:00) emails it. See app/alerts/text_diff.py.
+    select_old = text("select text from bill_texts where bill_id = :id")
+    attach_diff = text(
+        "update bill_changes set new_value = coalesce(new_value, '{}'::jsonb) "
+        "|| jsonb_build_object('diff', cast(:diff as jsonb)) "
+        "where id = (select id from bill_changes where bill_id = :id "
+        "and change_type = 'text_update' and alert_sent = false "
+        "order by detected_at desc limit 1)"
+    )
 
     wrote = no_text = 0
     by_source: dict[str, int] = {}
@@ -1593,8 +1608,24 @@ async def run_bill_text_refresh_cycle() -> None:
                     no_text += 1
                     continue
                 try:
+                    # Diff BEFORE the upsert overwrites the old version. Best-effort: a diff failure
+                    # must never block the index refresh (the alert then just says "text updated").
+                    diff_payload = None
+                    try:
+                        old_text = (await db.execute(select_old, {"id": b.id})).scalar_one_or_none()
+                        if old_text and old_text != full_text:
+                            from app.alerts.text_diff import compute_text_diff
+                            diff_payload = compute_text_diff(old_text, full_text)
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("bill_text_diff_failed", bill_id=b.id, error=str(e))
                     await db.execute(upsert, {"id": b.id, "text": full_text, "clen": len(full_text),
                                               "src": src, "hash": b.change_hash})
+                    if diff_payload is not None:
+                        import json
+
+                        await db.execute(
+                            attach_diff, {"id": b.id, "diff": json.dumps(diff_payload)}
+                        )
                     await db.commit()
                     by_source[src] = by_source.get(src, 0) + 1
                     wrote += 1

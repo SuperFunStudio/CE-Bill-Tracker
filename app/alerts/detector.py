@@ -98,6 +98,12 @@ class ChangeDetector:
                     return False
             return True
         if change.change_type == "text_update":
+            # A diff computed by the text refresh (app/alerts/text_diff.py) that came back empty
+            # means the "change" was a formatting re-render — same words, new whitespace. Not news.
+            # No diff at all fails open: the text may simply not be indexable for this bill.
+            diff = (change.new_value or {}).get("diff")
+            if isinstance(diff, dict) and diff.get("empty"):
+                return False
             # Only alert on text changes for high-confidence bills
             return (bill.confidence_score or 0) >= 0.7
         if change.change_type == "impact_score_change":

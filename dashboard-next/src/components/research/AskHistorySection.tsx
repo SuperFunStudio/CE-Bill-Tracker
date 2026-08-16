@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CAP, useAuth } from '@/components/auth/AuthContext';
 import { fetchMyResearchSessions, type ResearchSessionListItem } from '@/lib/api';
+import { shareSession, unshareSession } from '@/lib/research-admin';
+import { track } from '@/lib/analytics';
 
 /**
  * "My research" — the signed-in member's own Ask-the-Atlas history, shown in My Library. Private by
- * design: these threads are the caller's own (visibility=private) and never enter the public atlas
- * unless an admin drafts one into an article. Self-gates: signed-out shows a sign-in nudge, a free
+ * default; each thread can be shared by its owner as an unlisted /r/?token= link (revocable — unshare
+ * drops the token, so a leaked link dies). Self-gates: signed-out shows a sign-in nudge, a free
  * account (no `ask` capability) shows an upgrade nudge, a member sees their threads.
  */
 export function AskHistorySection() {
@@ -15,6 +17,8 @@ export function AskHistorySection() {
   const canAsk = hasCapability(CAP.ASK);
   const [sessions, setSessions] = useState<ResearchSessionListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -30,12 +34,49 @@ export function AskHistorySection() {
     return () => { cancelled = true; };
   }, [user, canAsk, getToken]);
 
+  const markShared = (id: string, shared: boolean) =>
+    setSessions(prev => prev?.map(s => (s.session_id === id ? { ...s, shared } : s)) ?? prev);
+
+  // Share is copy-link in one motion: the backend mints-or-reuses the token, so calling it on an
+  // already-shared thread is a safe way to get the URL back onto the clipboard.
+  async function handleShare(id: string) {
+    setBusyId(id); setError(null);
+    try {
+      const r = await shareSession(getToken, id);
+      markShared(id, true);
+      if (r.share_url) {
+        await navigator.clipboard.writeText(r.share_url);
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(prev => (prev === id ? null : prev)), 2500);
+      }
+      track('research_share', { action: 'share' });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not share the thread.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleUnshare(id: string) {
+    setBusyId(id); setError(null);
+    try {
+      await unshareSession(getToken, id);
+      markShared(id, false);
+      track('research_share', { action: 'unshare' });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not turn the link off.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div>
         <h2 className="font-serif text-2xl text-text-primary">My research</h2>
         <p className="text-text-secondary text-body max-w-3xl">
-          Your Ask the Atlas history — private to you. Nothing here is published to the atlas.
+          Your Ask the Atlas history — private to you unless you share a thread. Sharing makes an
+          unlisted link anyone can read; turn it off any time and the link stops working.
         </p>
       </div>
 
@@ -66,10 +107,13 @@ export function AskHistorySection() {
       {user && canAsk && sessions && sessions.length > 0 && (
         <ul className="space-y-2">
           {sessions.map(s => (
-            <li key={s.session_id}>
+            <li
+              key={s.session_id}
+              className="flex items-start gap-3 border-l-2 border-green-accent/40 pl-3 py-1 rounded-sm hover:bg-bg-secondary transition-colors group"
+            >
               <Link
                 href={`/ask/?session=${s.session_id}`}
-                className="block border-l-2 border-green-accent/40 pl-3 py-1 rounded-sm hover:bg-bg-secondary focus:outline-none focus:bg-bg-secondary transition-colors group"
+                className="block flex-1 min-w-0 focus:outline-none"
               >
                 <div className="flex items-center gap-2">
                   <span className="text-body text-text-primary font-medium group-hover:text-green-accent transition-colors">{s.title}</span>
@@ -86,6 +130,26 @@ export function AskHistorySection() {
                   <span className="text-green-accent ml-2 opacity-0 group-hover:opacity-100 transition-opacity">Open →</span>
                 </p>
               </Link>
+              <div className="flex shrink-0 items-center gap-3 pt-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleShare(s.session_id)}
+                  disabled={busyId === s.session_id}
+                  className="text-green-accent hover:underline disabled:opacity-50"
+                >
+                  {copiedId === s.session_id ? 'Link copied ✓' : s.shared ? 'Copy link' : 'Share'}
+                </button>
+                {s.shared && (
+                  <button
+                    type="button"
+                    onClick={() => handleUnshare(s.session_id)}
+                    disabled={busyId === s.session_id}
+                    className="text-text-muted hover:text-text-primary hover:underline disabled:opacity-50"
+                  >
+                    Unshare
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>

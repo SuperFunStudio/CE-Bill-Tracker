@@ -15,6 +15,7 @@ The differences that actually matter, and where each lives:
   - The From display name is one string on Postmark and a split {email, name} on SendGrid, so
     `_from_parts` is the shared truth and `_from_header` is the Postmark rendering of it."""
 
+import html as html_lib
 import re
 from datetime import date
 from typing import Any
@@ -360,6 +361,40 @@ def html_to_text(html: str) -> str:
     return text.strip()
 
 
+def _diff_html(diff: dict) -> str:
+    """Render a trimmed text diff (app/alerts/text_diff.py payload) as a monospace redline block.
+    Bill text is untrusted content in an HTML email — every line is escaped before styling."""
+    line_html = ""
+    for hunk in diff.get("hunks", []):
+        for line in str(hunk).splitlines():
+            esc = html_lib.escape(line)
+            if line.startswith("@@"):
+                color, weight = _MUTED, "normal"
+            elif line.startswith("+"):
+                color, weight = "#166534", "bold"
+            elif line.startswith("-"):
+                color, weight = "#b91c1c", "normal"
+            else:
+                color, weight = _INK_SOFT, "normal"
+            line_html += (
+                f'<div style="color:{color};font-weight:{weight};">{esc}</div>'
+            )
+        line_html += '<div style="height:8px;"></div>'
+    if not line_html:
+        return ""
+    truncated_note = (
+        f'<p style="font:italic 12px {_SERIF};color:{_MUTED};margin:6px 0 0;">'
+        "Showing the first changes only — open the bill for the full text.</p>"
+        if diff.get("truncated") else ""
+    )
+    return (
+        '<div style="font:12px/1.5 Consolas,Menlo,monospace;background:#f8f8f5;'
+        f"border:1px solid {_RULE};border-radius:4px;padding:10px 14px;margin:10px 0 0;"
+        'overflow-x:auto;">'
+        f"{line_html}</div>{truncated_note}"
+    )
+
+
 # One (bill, its changes) tuple in a consolidated alert. `litigation_context` is the pre-rendered
 # per-bill litigation block (may be empty).
 AlertItem = tuple[Bill, list[BillChange], str]
@@ -376,13 +411,26 @@ def _bill_block(bill: Bill, changes: list[BillChange], litigation_context: str =
     title = bill.title or "Untitled"
 
     change_lines = ""
+    diff_blocks = ""
     for c in changes:
         if c.change_type == "status_change":
             old = (c.old_value or {}).get("status", "unknown")
             new = (c.new_value or {}).get("status", "unknown")
             change_lines += f"<li><strong>Status changed:</strong> {old} → <strong>{new}</strong></li>"
         elif c.change_type == "text_update":
-            change_lines += "<li><strong>Bill text updated</strong></li>"
+            # The text refresh stamps a trimmed diff onto the change row (app/alerts/text_diff.py);
+            # when it's there, show WHAT changed — that's the difference between an alert someone
+            # forwards to counsel and one they archive. No diff (older rows, unindexable text) falls
+            # back to the bare line.
+            diff = (c.new_value or {}).get("diff")
+            if isinstance(diff, dict) and diff.get("hunks"):
+                change_lines += (
+                    f"<li><strong>Bill text amended</strong> "
+                    f"(+{diff.get('added', 0)} / −{diff.get('removed', 0)} lines)</li>"
+                )
+                diff_blocks += _diff_html(diff)
+            else:
+                change_lines += "<li><strong>Bill text updated</strong></li>"
 
     categories = ", ".join(bill.material_categories or []) or "Not classified"
     confidence_pct = f"{int((bill.confidence_score or 0) * 100)}%"
@@ -410,6 +458,7 @@ def _bill_block(bill: Bill, changes: list[BillChange], litigation_context: str =
     <ul style="font:15px {_SERIF};color:{_INK};line-height:1.7;margin:0 0 4px;padding-left:20px;">
       {change_lines}
     </ul>
+    {diff_blocks}
     <table style="width:100%;border-collapse:collapse;font:13px {_SERIF};color:{_MUTED};margin-top:10px;
         border-top:1px solid {_RULE};padding-top:8px;">
       <tr>

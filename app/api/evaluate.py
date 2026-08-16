@@ -12,7 +12,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import AuthedUser, require_admin
+from app.api.auth import AuthedUser, require_pro
 from app.classification.sonnet_extractor import SonnetExtractor
 from app.database import get_db
 from app.evaluation.axis_estimator import estimate_positioning
@@ -37,7 +37,7 @@ MAX_CHARS = 200_000    # hard cap before the extractor's own keyword-windowing; 
 async def evaluate_bill(
     request: Request,
     body: EvaluateRequest,
-    _user: AuthedUser = Depends(require_admin),
+    _user: AuthedUser = Depends(require_pro),
     db: AsyncSession = Depends(get_db),
 ) -> EvaluateResponse:
     text = (body.text or "").strip()

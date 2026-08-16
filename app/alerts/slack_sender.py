@@ -26,7 +26,13 @@ def _bill_blocks(bill: Bill, changes: list[BillChange], litigation_context: str 
             new = (c.new_value or {}).get("status", "?")
             change_text += f"• Status: *{old}* → *{new}*\n"
         elif c.change_type == "text_update":
-            change_text += "• Bill text updated\n"
+            diff = (c.new_value or {}).get("diff")
+            if isinstance(diff, dict) and diff.get("hunks"):
+                change_text += (
+                    f"• Bill text amended (+{diff.get('added', 0)} / −{diff.get('removed', 0)} lines)\n"
+                )
+            else:
+                change_text += "• Bill text updated\n"
 
     blocks = [
         {

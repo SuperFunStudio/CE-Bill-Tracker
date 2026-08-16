@@ -31,9 +31,11 @@ router = APIRouter(prefix="/me", tags=["me"])
 
 # Events a watch-list follower can be notified about (the "global per-user" notification prefs).
 # A subset of AlertSubscription.alert_on: a watch list tracks specific bills, so "new_bill" (which is
-# about bills you haven't seen yet) doesn't apply.
-WATCHLIST_ALERT_EVENTS = {"status_change", "text_update", "deadline"}
-DEFAULT_WATCHLIST_ALERT_ON = ["status_change", "deadline"]
+# about bills you haven't seen yet) doesn't apply. "deadline" (reminder emails) and "weekly_digest"
+# (weekly instead of monthly roundup) are allowed but OPT-IN — never in the default, so setting them
+# is always an explicit choice (see AlertSubscription.alert_on in app/models.py).
+WATCHLIST_ALERT_EVENTS = {"status_change", "text_update", "deadline", "weekly_digest"}
+DEFAULT_WATCHLIST_ALERT_ON = ["status_change"]
 
 
 async def _get_watchlist_subscription(

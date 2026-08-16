@@ -11,6 +11,7 @@ import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { UpcomingDeadlinesLock } from '@/components/compliance/UpcomingDeadlinesLock';
 import { DeadlinesTabs } from '@/components/compliance/DeadlinesTabs';
 import { ComplianceChecker } from '@/components/compliance/ComplianceChecker';
+import { ProducerAttributionPanel } from '@/components/compliance/ProducerAttributionPanel';
 import { RegionFilter } from '@/components/insights/RegionFilter';
 import { LockIcon } from '@/components/ui/icons';
 import { deadlineInScope, scopeJurisdictionCodes, isEmptyScope } from '@/lib/scope';
@@ -430,6 +431,10 @@ export default function CompliancePage() {
 
       {/* Free visitors: the unlock card sits below the teaser rows. */}
       {!loading && !proView && <UpcomingDeadlinesLock lockedCount={lockedRemaining} />}
+
+      {/* "Who owes the obligation" — the attribution question that precedes every deadline above.
+          Open (not a disclosure) on purpose: it's the answer this product is built around. */}
+      <ProducerAttributionPanel />
 
       {/* Self-serve "which laws apply to my products?" — a different job from the calendar, so it's
           tucked into a disclosure rather than competing with the deadline agenda above. */}

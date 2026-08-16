@@ -2407,15 +2407,24 @@ def _share_url(token: str) -> str:
     return f"{DASHBOARD_URL}/r/?token={token}"
 
 
+def _require_session_owner(sess, user: AuthedUser) -> None:
+    """Sharing is the OWNER's call (admins keep it for the editorial pipeline). 404, not 403, for
+    everyone else — same as the session read: a non-owner shouldn't learn the thread exists."""
+    if sess.owner_uid != user.uid and not is_admin(user):
+        raise HTTPException(status_code=404, detail="No such session.")
+
+
 @router.post("/session/{session_id}/share", response_model=ShareOut)
 async def share_session(
     session_id: str,
-    _user: AuthedUser = Depends(require_admin),
+    user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ShareOut:
     """Mint (or reuse) an unguessable share link for a research thread and flip it to link-visible. The
-    token is only ever handed out here; the public read at /research/shared/{token} matches on it."""
+    token is only ever handed out here; the public read at /research/shared/{token} matches on it.
+    Owner-or-admin: every member can share their own threads (it used to be admin-only)."""
     sess = await _get_session_or_404(db, session_id)
+    _require_session_owner(sess, user)
     if not sess.share_token:
         sess.share_token = secrets.token_urlsafe(16)
     sess.visibility = "link"
@@ -2427,12 +2436,13 @@ async def share_session(
 @router.post("/session/{session_id}/unshare", response_model=ShareOut)
 async def unshare_session(
     session_id: str,
-    _user: AuthedUser = Depends(require_admin),
+    user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ShareOut:
     """Revoke sharing: back to private AND drop the token, so a link that already leaked stops working
-    (re-sharing mints a fresh one)."""
+    (re-sharing mints a fresh one). Owner-or-admin, same as share."""
     sess = await _get_session_or_404(db, session_id)
+    _require_session_owner(sess, user)
     sess.visibility = "private"
     sess.share_token = None
     await db.commit()

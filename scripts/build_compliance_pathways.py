@@ -172,6 +172,16 @@ EU_ENTITIES = [
          jurisdiction_scope="multistate", materials=["plastic_packaging", "plastics"],
          description="The Single-Use Plastics Directive is transposed nationally: market restrictions, "
                      "EPR for certain items, labelling and recycled-content rules for bottles."),
+    dict(slug="eu-textile-registers", region="EU",
+         name="National Textile & Footwear Producer Registers (EU)", entity_type="agency",
+         url="https://environment.ec.europa.eu/topics/waste-and-recycling/textiles_en",
+         registration_url="https://environment.ec.europa.eu/topics/waste-and-recycling/textiles_en",
+         jurisdiction_scope="multistate", materials=["textiles"],
+         description="Under the Waste Framework Directive as amended by Directive (EU) 2025/1892, "
+                     "producers of textile, textile-related and FOOTWEAR products (Annex IVc, CN 4203 "
+                     "and 6401-6405) register in each member state's national register and join a "
+                     "producer responsibility organisation. Fees are eco-modulated on ESPR ecodesign "
+                     "criteria. Schemes must be operational by 17 April 2028."),
     dict(slug="eu-espr", region="EU",
          name="EU Ecodesign for Sustainable Products (ESPR)", entity_type="agency",
          url="https://commission.europa.eu/energy-climate-change-environment/standards-tools-and-labels/products-labelling-rules-and-requirements/ecodesign-sustainable-products-regulation_en",
@@ -193,6 +203,10 @@ EU_MATERIAL_TO_SLUG = {
     "packaging": "eu-packaging-registers", "glass": "eu-packaging-registers",
     "metals": "eu-packaging-registers", "electronics": "eu-weee-registers",
     "batteries": "eu-batteries", "plastics": "eu-sup",
+    # Textiles must precede nothing in particular (dict lookup is per-material), but WITHOUT this key
+    # Directive 2025/1892 — a textiles/footwear EPR act that also carries packaging materials from the
+    # parent WFD — routed to the PPWR packaging register. See _eu_material_slug.
+    "textiles": "eu-textile-registers",
 }
 
 # --- Foreign national directory (region != US/EU). Foreign acts carry no US-style management_model,
@@ -603,6 +617,11 @@ def apply_override(state, bn, mats, p, entities_by_slug):
         p["action_type"] = ov["action_type"]
     if ov.get("action_summary"):
         p["action_summary"] = ov["action_summary"]
+    if ov.get("has_fee") is not None:
+        # has_fee is otherwise derived from compliance_details, which is silent for acts that delegate
+        # the fee scale to a cahier des charges (the whole French TLC filière) — so it read False on
+        # laws whose single obligation is to pay. A curated override states the fee exists.
+        p["has_fee"] = ov["has_fee"]
     p["basis"] = "manual"
     return p
 
@@ -675,6 +694,20 @@ EU_OVERRIDES = {
         action_summary="The Waste Framework Directive sets the EPR minimum requirements transposed into "
                        "national law; monitor your member-state EPR schemes for the streams you place "
                        "on the market."),
+    _norm_bn("32025L1892"): dict(  # WFD textile + FOOTWEAR EPR amendment
+        entity_slug="eu-textile-registers", action_type="register_with_state", has_fee=True,
+        action_summary="Register as a producer of textile, textile-related or footwear products "
+                       "(Annex IVc: CN 4203 and 6401-6405) in every member state where you first make "
+                       "them available, appoint an authorised representative where you sell "
+                       "cross-border, and join the national PRO. Fees are eco-modulated on ESPR "
+                       "ecodesign criteria, and may be modulated further for fast-fashion practices. "
+                       "Transposition 17 June 2027; schemes operational 17 April 2028."),
+    _norm_bn("32026R0296"): dict(  # ESPR delegated reg — unsold consumer products (Annex VII)
+        entity_slug="eu-textile-registers", action_type="monitor",
+        action_summary="Supplements the ESPR ban on destroying unsold consumer products. Annex VII "
+                       "covers apparel, clothing accessories and FOOTWEAR: the prohibition binds large "
+                       "enterprises from 19 July 2026 and medium-sized ones from 19 July 2030. Track "
+                       "the disclosure and derogation conditions for your unsold stock."),
     _norm_bn("32000L0053"): dict(  # ELV
         entity_slug="eu-commission-env", action_type="register_with_state",
         action_summary="Vehicle producers must meet the End-of-Life Vehicles rules transposed in each "
@@ -688,6 +721,28 @@ EU_OVERRIDES = {
 FOREIGN_OVERRIDES = {
     # ("FR", _norm_bn("...")): dict(entity_slug="fr-refashion", url="...",
     #     action_type="join_pro", action_summary="..."),
+
+    # France TLC (textiles d'habillement, CHAUSSURES, linge de maison). These are not "monitor" acts:
+    # R.543-223 makes it an offence to place a pair of shoes on the market without having paid the
+    # contribution to an approved éco-organisme, so the action is join-and-pay, today.
+    ("FR", _norm_bn("JORFTEXT000019074839")): dict(  # Décret 2008-602 — created the TLC filière
+        entity_slug="fr-refashion", action_type="join_pro", has_fee=True,
+        action_summary="Join Refashion (or run an approved individual system) and pay the eco-modulated "
+                       "TLC contribution before placing apparel, FOOTWEAR or household linen on the "
+                       "French market — R.543-223 penalises placing a pair of shoes on the market "
+                       "without it. The bonus/malus scale is set in Refashion's cahier des charges."),
+    ("FR", _norm_bn("JORFTEXT000031739877")): dict(  # Décret 2015-1826 — TLC filière commission
+        entity_slug="fr-refashion", action_type="join_pro", has_fee=True,
+        action_summary="Covered by the French TLC filière (textiles, footwear, household linen): join "
+                       "Refashion or an approved individual system and pay the eco-modulated contribution."),
+    ("FR", _norm_bn("JORFTEXT000050749111")): dict(  # Décret 2024-1166
+        entity_slug="fr-refashion", action_type="join_pro", has_fee=True,
+        action_summary="Covered by the French TLC filière (textiles, footwear, household linen): join "
+                       "Refashion or an approved individual system and pay the eco-modulated contribution."),
+    ("FR", _norm_bn("JORFTEXT000046005259")): dict(  # Décret 2022-975 — textile decor extension
+        entity_slug="fr-refashion", action_type="join_pro", has_fee=True,
+        action_summary="Extends the French TLC filière to textile decoration items: join Refashion or "
+                       "an approved individual system and pay the eco-modulated contribution."),
 }
 
 
@@ -707,6 +762,11 @@ def apply_foreign_override(region, bn, p, entities_by_slug):
         p["action_type"] = ov["action_type"]
     if ov.get("action_summary"):
         p["action_summary"] = ov["action_summary"]
+    if ov.get("has_fee") is not None:
+        # has_fee is otherwise derived from compliance_details, which is silent for acts that delegate
+        # the fee scale to a cahier des charges (the whole French TLC filière) — so it read False on
+        # laws whose single obligation is to pay. A curated override states the fee exists.
+        p["has_fee"] = ov["has_fee"]
     p["basis"] = "manual"
     return p
 
@@ -732,6 +792,12 @@ def build_pathway_foreign(law, entities_by_slug, region):
 
 
 def _eu_material_slug(mats):
+    # NOTE: this is a weak heuristic — it returns whichever material happens to come first in the
+    # classifier's output. It cannot tell a stream-specific act from a HORIZONTAL waste act that
+    # merely enumerates twenty materials (the European Waste Catalogue decisions, the landfill
+    # directive, Reg. 1013/2006 all list "textiles" without being textile law). Reordering it by
+    # stream specificity was tried and swept those horizontal acts into the textile register — so
+    # landmark stream-specific acts get a curated EU_OVERRIDES entry instead, which is exact.
     for m in (mats or []):
         if m in EU_MATERIAL_TO_SLUG:
             return EU_MATERIAL_TO_SLUG[m]
@@ -750,7 +816,8 @@ def build_pathway_eu(law, entities_by_slug):
         return dict(entity_slug=(entity["slug"] if entity else None),
                     action_type=ov.get("action_type", "register_with_state"),
                     action_summary=ov["action_summary"], registration_url=reg,
-                    management_model=None, next_deadline_date=next_dl, has_fee=has_fee,
+                    management_model=None, next_deadline_date=next_dl,
+                    has_fee=(has_fee if ov.get("has_fee") is None else ov["has_fee"]),
                     confidence=conf, basis="manual")
     slug = _eu_material_slug(mats)
     entity = entities_by_slug.get(slug)

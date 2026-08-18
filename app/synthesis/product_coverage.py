@@ -271,7 +271,10 @@ class ProductCoverageExtractor:
         resp = await self._client.messages.create(
             model=self.model,
             max_tokens=2500,
-            temperature=0,
+            # No temperature: non-default sampling params are rejected with a 400 on Sonnet 5 /
+            # Opus 5 / Fable 5, so pinning temperature=0 here would break the extractor the moment
+            # SONNET_MODEL is bumped. It never guaranteed identical outputs anyway; the forced
+            # tool_choice + provenance check in validate_coverages() are what constrain the result.
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
             tools=[COVERAGE_TOOL],

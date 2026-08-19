@@ -32,7 +32,10 @@ const DEFAULT_SHARE = {
   text: 'Track EPR, packaging, and right-to-repair law across the globe. Join me on Atlas Circular:',
 };
 
-export function useReferralShare(source: string): ReferralShare {
+/** `enabled: false` keeps the hook mounted (rules of hooks) but skips the network: for surfaces that
+ *  render the referral offer conditionally and are currently hiding it. */
+export function useReferralShare(source: string, opts?: { enabled?: boolean }): ReferralShare {
+  const enabled = opts?.enabled ?? true;
   const { user, isPro, getToken, refreshEntitlement } = useAuth();
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -41,7 +44,7 @@ export function useReferralShare(source: string): ReferralShare {
 
   // Load the signed-in user's share link.
   useEffect(() => {
-    if (!user) {
+    if (!user || !enabled) {
       setLink(null);
       return;
     }
@@ -57,7 +60,7 @@ export function useReferralShare(source: string): ReferralShare {
     return () => {
       active = false;
     };
-  }, [user, getToken]);
+  }, [user, enabled, getToken]);
 
   // Once they've shared, poll for the grant so access opens the moment the colleague signs up.
   useEffect(() => {

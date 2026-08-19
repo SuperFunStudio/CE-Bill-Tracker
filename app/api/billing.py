@@ -35,7 +35,7 @@ from app.api.auth import (
 )
 from app.config import settings
 from app.database import get_db
-from app.models import AccessRequest, Entitlement
+from app.models import Entitlement
 from app.ratelimit import limiter
 
 log = structlog.get_logger()
@@ -300,31 +300,14 @@ async def _student_checkout(payload: CheckoutRequest, user: AuthedUser, db: Asyn
     return {"url": session.url}
 
 
-async def _research_is_approved(db: AsyncSession, email: str) -> bool:
-    """True once an admin has approved a Researcher access request for this email (migration 042).
-    Matched case-insensitively since the request email is entered free-form in the modal."""
-    res = await db.execute(
-        select(AccessRequest.id).where(
-            func.lower(AccessRequest.email) == (email or "").lower(),
-            AccessRequest.plan_interest == "research",
-            AccessRequest.status == "approved",
-        ).limit(1)
-    )
-    return res.scalar_one_or_none() is not None
-
-
 async def _research_checkout(user: AuthedUser, db: AsyncSession, period: str) -> dict:
     """Research (Founding Supporter) tier — monthly or annual subscription, no founding coupon/trial.
 
-    Approval-gated: the UI routes Researcher through the request-access modal, not this endpoint, and
-    the team invoices approved members by hand. This 403 is the belt-and-suspenders that keeps a
-    direct API call from self-serving a Researcher seat before a human has approved the request.
+    Self-serve (2026-08): the manual-approval gate that used to 403 this endpoint is gone, along with
+    the request-access modal in front of it. Approval was an approval step in front of a $20/mo
+    decision, and it cost more sign-ups than it filtered. Eligibility (edu / registered non-profit) is
+    checked at signup instead, so it never sits between a willing buyer and a card.
     """
-    if not await _research_is_approved(db, user.email):
-        raise HTTPException(
-            status_code=403,
-            detail="Researcher access is approved manually — submit a request and we'll be in touch.",
-        )
     price_id = _research_price_for_period(period)
     if not settings.stripe_secret_key or not price_id:
         raise HTTPException(status_code=503, detail="billing not configured")

@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useReferralShare } from '@/hooks/useReferralShare';
 import { track } from '@/lib/analytics';
@@ -12,10 +13,20 @@ import { SITE_NAME, SITE_TAGLINE } from '@/lib/brand';
  * the standing end-of-funnel CTA: share your link, and when a colleague creates a free account through
  * it you earn a month of Pro (granted server-side; the hook polls entitlement to flip access open). See
  * useReferralShare + app/api/referrals.py. Below the CTA sits the standard link/brand rail.
+ *
+ * Exception: /pricing suppresses the referral band. That page closes on one mechanism — the founding
+ * seat counter — and a "get a free month" offer sitting under the price argues the opposite way, reading
+ * as a discount stacked on a discount. The referral offer belongs post-signup, where it converts.
  */
+const REFERRAL_HIDDEN = ['/pricing'];
+
 export function SiteFooter() {
+  const pathname = usePathname();
   const { user, isPro, openAuth } = useAuth();
-  const { link, copied, shared, copyError, copy, share, refresh } = useReferralShare('footer');
+  const showReferral = !REFERRAL_HIDDEN.some(p => pathname === p || pathname?.startsWith(`${p}/`));
+  const { link, copied, shared, copyError, copy, share, refresh } = useReferralShare('footer', {
+    enabled: showReferral,
+  });
 
   // Pro members still benefit — a referral extends their membership by a month — but the copy shifts
   // from "get" to "give / extend" so it reads honestly to someone who already subscribes.
@@ -29,6 +40,7 @@ export function SiteFooter() {
       {/* Referral CTA band — the central end of the funnel. The id is the deep-link target for the
           referral note in the email footer (app/alerts/email_shell.py), so a recipient lands on the
           offer rather than the top of the page. Renaming it breaks those links silently. */}
+      {showReferral && (
       <section id="refer" className="scroll-mt-24 border-b border-border-default px-4 py-12">
         <div className="mx-auto max-w-2xl text-center space-y-5">
           <div className="inline-flex items-center gap-2 rounded-full border border-green-accent/40 bg-green-dark/30 px-3 py-1 text-meta uppercase tracking-wider text-green-accent">
@@ -95,6 +107,7 @@ export function SiteFooter() {
           )}
         </div>
       </section>
+      )}
 
       {/* Link + brand rail. */}
       <div className="mx-auto flex max-w-5xl flex-col items-center gap-4 px-4 py-8 text-center sm:flex-row sm:justify-between sm:text-left">

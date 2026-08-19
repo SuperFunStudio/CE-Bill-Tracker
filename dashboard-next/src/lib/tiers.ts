@@ -12,6 +12,13 @@
 // now presented as 50 seats rather than a date; see FOUNDING for the caveat that carries.
 export type BillingPeriod = 'monthly' | 'annual';
 
+/** A feature bullet. Usually a plain string; the object form marks the one bullet in a list that is the
+ *  reason to buy the tier, and renders at full text weight against its muted neighbours. Exactly one
+ *  emphasised bullet per list — two is none. */
+export type Feature = string | { text: string; emphasis: true };
+export const featureText = (f: Feature) => (typeof f === 'string' ? f : f.text);
+export const featureEmphasis = (f: Feature) => typeof f !== 'string';
+
 // Header — value anchoring above the tier grid. Every number on this page is passed in from live
 // corpus data rather than written here: they have been wrong before (they only move when the corpus
 // grows, which is exactly when nobody thinks to edit the pricing page). The FALLBACKs cover the first
@@ -69,13 +76,16 @@ export const SCALE = {
 // consume a redemption — plus a 2027-12-31 backstop redeem_by in case the seats never sell out. So the
 // counter running to 0/50 and checkout stopping at the founding price happen together. If the comp count
 // changes, Stripe's cap has to be re-cut: max_redemptions is immutable, so that means a new coupon.
+// Seat scarcity is the only close mechanism on this page, so it carries the whole sentence: what the
+// window is, what happens after it, and what it costs you to leave. The seat total is interpolated
+// rather than typed into the sentence — the counter below it is live, and a hardcoded "50" in the prose
+// would contradict the live figure the day the window is re-cut.
 export const FOUNDING = {
   total: 50,
   claimed: 0,
-  headline: 'Founding rate. Locked for as long as you stay.',
-  seatsLine: (total: number) => `${total} founding seats at this rate`,
-  // "N/50 seats available" rather than "N remaining" — same number, but it reads as a stock level.
-  remainingLine: (remaining: number, total: number) => `${remaining}/${total} seats available`,
+  headline: (total: number) =>
+    `Founding rate — ${total} seats, then list price. Locked for as long as you stay.`,
+  remainingLine: (remaining: number, total: number) => `${remaining} of ${total} remaining`,
 };
 
 // Student — verified-edu, free. The return to us is distribution, not revenue: students carry Atlas
@@ -85,7 +95,7 @@ export const STUDENT = {
   label: 'Student',
   headline: 'Free',
   sub: 'Verified .edu or .ac.uk email',
-  who: 'Full research access for coursework, theses, and studio projects.',
+  who: 'For coursework, theses, and studio projects.',
   features: [
     'Ask the Atlas — the full search',
     'Bill explorer and jurisdiction data',
@@ -94,24 +104,28 @@ export const STUDENT = {
   ],
 };
 
-// Researchers — monthly or annual (annual discounted). Mirrors PRO's two-period shape so the pricing
-// toggle drives both cards.
+// Researchers — monthly or annual (annual discounted), now self-serve like Pro rather than gated behind
+// a written request: the tier needs a legible upgrade over Student more than it needs an approval step,
+// and the request form was a stall in front of a $20/mo decision. Verification happens at signup.
+// Mirrors PRO's two-period shape so the pricing toggle drives both cards.
 export const RESEARCH = {
   label: 'Researcher',
   monthly: { price: '$30', cadence: '/mo', sub: '1 seat' },
   annual: {
     price: '$240',
     cadence: '/yr',
-    sub: '$20/mo, billed annually · 1 seat',
+    sub: '$20/mo billed annually · 1 seat',
     save: 'Save $120/yr vs monthly',
   },
-  who: 'Academics, non-profits, and institutions doing published work.',
-  // No deadline calendar here on purpose: CAP_DEADLINES is Pro-only (app/api/auth.py), so promising it
-  // at this tier would sell a locked page.
+  who: 'For published and institutional work — academics, non-profits, think tanks.',
+  // Nothing here that the capability model doesn't already grant `research` (app/api/auth.py):
+  // no deadline calendar (CAP_DEADLINES) and no alerts (CAP_ALERTS) — both are Pro-only and stay that
+  // way, so naming either at this tier would sell a locked page. Exports are described as clean rather
+  // than un-watermarked because nothing in the codebase watermarks an export at any tier.
   features: [
     'Everything in Student',
-    'Track how a measure moved, and when',
-    'Cite and export with sources attached',
+    'Full legislative history: how every measure moved, and when',
+    'Clean exports with citations attached',
   ],
 };
 
@@ -133,21 +147,31 @@ export const PRO = {
   // The FAQ quotes it too, and a page that has to parse a display string to find a price is one
   // rewording away from quoting the wrong number — which is exactly how that page drifted before.
   extraSeat: { monthly: '$50/mo', annual: '$600/yr' },
-  who: 'Consultancies, ESG and legal services, and in-house sustainability teams answering to clients.',
+  // The benefit headline leads the card, above the arithmetic: the price only means something once the
+  // reader knows what it buys them, and "before your client asks" is the fear the tier actually sells to.
+  promise: 'Know your exposure before your client asks.',
+  who: 'For consultancies, ESG and legal services, and in-house sustainability teams answering to clients.',
   // Used on in-app upgrade gates too (UpcomingDeadlinesLock, WatchListSection), so it has to read as a
   // whole sentence on its own — the pricing card pairs it with the seat counter (see FOUNDING).
   foundingNote: 'Founding rate, locked for as long as you stay — 50 seats at this price.',
-  // Each bullet names something a Pro seat can actually do today. "Check which laws hit your products"
-  // is the ComplianceChecker on /compliance (materials + jurisdictions in, applicable laws out) — the
-  // earlier "know which products fall out of compliance, and where" implied a product-portfolio monitor
-  // we don't ship; that's Company Impact, still gated and post-launch.
+  // "Which laws hit your products" is the ComplianceChecker on /compliance (materials + jurisdictions
+  // in, applicable laws out) — deliberately not "know which products fall out of compliance", which
+  // would imply a product-portfolio monitor we don't ship (that's Company Impact, gated and post-launch).
+  //
+  // The fee-exposure bullet — "Fee exposure estimated across enacted EPR schemes — a number your CFO
+  // recognizes" — is held back deliberately, not forgotten. It is the must-purchase hook for this tier
+  // and it goes in as the emphasised bullet (see Feature) the day a surface actually estimates exposure
+  // across schemes. Fee schedules are already in compliance_details; the surface is what's missing.
   features: [
-    'Everything in Researcher',
-    'Check which laws hit your products, by material and jurisdiction',
-    'Get told before a deadline, not after',
+    'Which laws hit your products, by material and jurisdiction',
+    'Deadline calendar and alerts: told before, not after',
     'Turn a jurisdiction scan into a client-ready brief',
     'Packaging studio and federal actions',
-  ],
+  ] as Feature[],
+  // Trial length as product logic, not generosity: ninety days is one legislative cycle, which is the
+  // only honest reason to give away three months next to a half-price founding rate.
+  trialNote:
+    "No card. Ninety days because legislation doesn't move in fourteen — you'll watch a real cycle before you pay.",
 };
 
 // Enterprise — invoiced inquiry (lead capture), not a checkout plan.
@@ -164,6 +188,19 @@ export const ENTERPRISE = {
     'Modelling built around your material streams',
     'Seats for the whole team, plus onboarding',
   ],
+};
+
+// Data — the corpus itself, licensed as a feed. A different buyer from every tier above (a platform,
+// not a practitioner), so it sits in its own strip below the grid and sells the corpus rather than the
+// interface. Framed as a licensing conversation instead of a link to the API docs: the self-serve
+// developer tier is a way in, but the deal that matters here is negotiated.
+export const DATA = {
+  title: 'Data — build on the Atlas.',
+  blurb:
+    'The full corpus as a licensed feed: bills, statuses, deadlines, fee schedules, and CE ' +
+    'classifications across every tracked jurisdiction, kept current daily. For compliance platforms, ' +
+    'ESG tools, LCA software, and research teams that need the data inside their own systems.',
+  cta: 'Talk to us about licensing →',
 };
 
 // "Fair questions" — the four objections that actually stop a card going in, answered before they're

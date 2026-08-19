@@ -7,8 +7,8 @@ import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { useAuth } from '@/components/auth/AuthContext';
 import { startCheckout } from '@/lib/billing';
 import {
-  PRO, RESEARCH, STUDENT, ENTERPRISE, PRICING_HEADER, LEDGER, SCALE, FOUNDING,
-  REGION_COUNT_FALLBACK, type BillingPeriod,
+  PRO, RESEARCH, STUDENT, ENTERPRISE, DATA, PRICING_HEADER, LEDGER, SCALE, FOUNDING,
+  REGION_COUNT_FALLBACK, featureText, featureEmphasis, type BillingPeriod, type Feature,
 } from '@/lib/tiers';
 import { useLawsInForce, useBillTimeline } from '@/hooks/useBills';
 import { useFoundingSeats } from '@/hooks/useFoundingSeats';
@@ -112,11 +112,21 @@ export default function PricingPage() {
   const secondaryBtn = 'block w-full text-center rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-serif font-medium text-green-accent transition-opacity hover:opacity-90';
   const chip = 'text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5';
   const eyebrow = 'block font-mono text-meta uppercase tracking-widest text-green-accent';
-  const feat = (f: string) => (
-    <li key={f} className="flex items-start gap-2 text-sm text-text-secondary">
-      <CheckIcon className="text-green-accent text-xs mt-1 shrink-0" /><span>{f}</span>
-    </li>
-  );
+  // One bullet per list may be marked emphasis (see Feature in lib/tiers): it drops the muted secondary
+  // colour and takes medium weight, so the reason-to-buy is the line the eye lands on first.
+  const feat = (f: Feature) => {
+    const text = featureText(f);
+    return (
+      <li
+        key={text}
+        className={`flex items-start gap-2 text-sm ${
+          featureEmphasis(f) ? 'text-text-primary font-medium' : 'text-text-secondary'
+        }`}
+      >
+        <CheckIcon className="text-green-accent text-xs mt-1 shrink-0" /><span>{text}</span>
+      </li>
+    );
+  };
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
@@ -206,7 +216,7 @@ export default function PricingPage() {
           ) : (
             <div className="space-y-2">
               <button onClick={() => startStudent('Students — free')} disabled={busy === 'student'} className={primaryBtn}>
-                {busy === 'student' ? 'Starting…' : 'Verify and start →'}
+                {busy === 'student' ? 'Starting…' : 'Start free →'}
               </button>
               <p className="text-meta text-text-muted text-center">
                 Teaching a course?{' '}
@@ -218,7 +228,7 @@ export default function PricingPage() {
           )}
         </div>
 
-        {/* ── Researchers — approval-gated (see the note on the CTA below) ── */}
+        {/* ── Researchers — self-serve, same Stripe checkout as Pro ── */}
         <div className={`${card} border-border-default bg-bg-secondary`}>
           <span className={`self-start mb-2 ${chip}`}>{RESEARCH.label}</span>
           <div className="mt-1 mb-3">
@@ -238,16 +248,15 @@ export default function PricingPage() {
           {plan === 'research' ? (
             <Link href="/account" className={secondaryBtn}>Manage membership</Link>
           ) : (
-            // Researcher access is approval-gated: capture a written request (email + org + message)
-            // via the modal rather than self-serving Stripe checkout. The team reviews the request in
-            // /admin and sends a Stripe invoice / payment link on approval. (The `research` checkout
-            // path in billing.py still exists but is intentionally no longer reachable from the UI.)
+            // Self-serve again: this goes straight to the `research` Stripe checkout in billing.py
+            // rather than the written-request modal. Eligibility (edu / non-profit) is checked at
+            // signup instead of gating the purchase behind a human approval step.
             <div className="space-y-2">
-              <button onClick={() => openPlan('research', 'Researcher')} className={primaryBtn}>
-                Request access →
+              <button onClick={() => startPlan('research', 'Researcher')} disabled={busy === 'research'} className={primaryBtn}>
+                {busy === 'research' ? 'Starting…' : 'Start now →'}
               </button>
-              <p className="text-meta text-text-muted text-center">
-                Verification is quick for .edu, .ac.uk, and registered non-profits.
+              <p className="text-meta text-text-muted text-center leading-relaxed">
+                Verification happens at signup — instant for .edu, .ac.uk, and registered non-profits.
               </p>
             </div>
           )}
@@ -261,7 +270,9 @@ export default function PricingPage() {
             <span className={chip}>{PRO.label}</span>
             <span className="text-meta font-medium text-green-accent">{PRO.badge}</span>
           </div>
-          <div className="mt-1 mb-3">
+          {/* Benefit before arithmetic — the price is only legible once you know what it buys. */}
+          <p className="font-serif text-lg leading-snug text-text-primary mt-1">{PRO.promise}</p>
+          <div className="mt-2 mb-3">
             {(() => {
               const pr = period === 'annual' ? PRO.annual : PRO.monthly;
               return (
@@ -275,10 +286,9 @@ export default function PricingPage() {
             })()}
           </div>
           <div className="mb-3 rounded-lg border border-green-accent/40 bg-green-dark/30 px-3 py-2">
-            <p className="text-meta leading-relaxed text-text-primary">{FOUNDING.headline}</p>
-            <p className="text-meta text-text-secondary mt-1.5">{FOUNDING.seatsLine(seatsTotal)}</p>
+            <p className="text-meta leading-relaxed text-text-primary">{FOUNDING.headline(seatsTotal)}</p>
             {/* The counter carries the urgency, so it gets the size the sentence above it doesn't. */}
-            <p className="font-mono text-base font-medium tracking-tight text-green-accent mt-0.5">
+            <p className="font-mono text-base font-medium tracking-tight text-green-accent mt-1">
               {FOUNDING.remainingLine(seatsRemaining, seatsTotal)}
             </p>
           </div>
@@ -291,12 +301,15 @@ export default function PricingPage() {
           ) : (
             <div className="space-y-2">
               <button onClick={() => startPlan('pro', 'Professionals')} disabled={busy === 'pro'} className={primaryBtn}>
-                {busy === 'pro' ? 'Starting…' : 'Start 90-day trial →'}
+                {busy === 'pro' ? 'Starting…' : 'Start your 90-day trial →'}
               </button>
+              {/* The trial length is argued rather than offered — see PRO.trialNote. Stacked next to a
+                  half-price founding rate, "90 days free" alone reads as a discount on a discount. */}
+              <p className="text-meta text-text-muted text-center leading-relaxed">{PRO.trialNote}</p>
               {/* The walkthrough sits here rather than in its own band: by this point the reader is
                   either buying or wants to talk to someone first. Enterprise gets its own CTA below. */}
               <p className="text-meta text-text-muted text-center leading-relaxed">
-                No card required. Talk to us first?{' '}
+                Prefer to talk first?{' '}
                 <button
                   onClick={() => openPlan('bespoke', 'a walkthrough', 'Book a walkthrough', 'pricing_walkthrough')}
                   className="text-green-accent hover:underline"
@@ -336,23 +349,20 @@ export default function PricingPage() {
       {/* The "fair questions" objection grid that used to sit here now lives on /methodology as its FAQ
           section — same FAIR_QUESTIONS source, one copy of the answers. */}
 
-      {/* Developers strip — its own section below the grid (different buyer, usage-based metric) */}
+      {/* Data strip — its own section below the grid: a different buyer (a platform, not a
+          practitioner) buying the corpus rather than the interface, so it ends in a licensing
+          conversation instead of the self-serve API docs. */}
       <section className="border-t border-border-default pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="max-w-2xl">
-          <h3 className="font-serif text-lg text-text-primary mb-1">Developers — build on the data.</h3>
-          <p className="text-text-secondary text-sm leading-relaxed">
-            Tap the circular-economy legislation dataset directly: bills, statuses, deadlines, and
-            classifications across every tracked jurisdiction, kept current. Free developer tier
-            (rate-limited) · paid plans by usage.
-          </p>
+          <h3 className="font-serif text-lg text-text-primary mb-1">{DATA.title}</h3>
+          <p className="text-text-secondary text-sm leading-relaxed">{DATA.blurb}</p>
         </div>
-        <Link
-          href="/developers"
-          onClick={() => track('cta_click', { plan: 'api', entry_source: 'pricing_developers' })}
+        <button
+          onClick={() => openPlan('api', 'Data licensing', 'Licence the Atlas corpus', 'pricing_data')}
           className="shrink-0 rounded-lg border border-green-accent bg-green-dark px-5 py-2.5 font-serif text-green-accent font-medium hover:opacity-90 transition-opacity"
         >
-          View API docs →
-        </Link>
+          {DATA.cta}
+        </button>
       </section>
 
       <p className="border-t border-border-default pt-5 text-meta text-text-muted">

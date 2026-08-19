@@ -197,6 +197,52 @@ def _grounded(excerpt: str, corpus_norm: str) -> bool:
     return e[:40] in corpus_norm
 
 
+# --- Blanket-scope gate -------------------------------------------------------------------------
+# _grounded() proves a blanket clause is REAL; it says nothing about whether the clause is a class
+# DEFINITION. Without this gate the expander swept the whole catalog off a bill title ("Waste
+# Electrical and Electronic Equipment (WEEE)"), a summary blurb, a reporting provision, and — worst —
+# a CLOSED enumerated list: OR HB-3220 defines "covered electronic device" as an (A)-(H) list and the
+# expander added cameras, game consoles, e-readers and wearables, none of which appear in it.
+#
+# Enumeration markers alone can't separate the two cases: a real blanket definition also uses (a)(b)(c),
+# but for its conjunctive TESTS ("(a) Depends on digital electronics; (b) Is tangible personal
+# property"), not for device names. The discriminator is what the sub-clauses contain — statutory
+# device nouns mean the legislature already told you the scope, so trust the model's explicit rows
+# instead of expanding past them.
+_BLANKET_MIN_CHARS = 90      # below this a clause is a title/fragment, not a definition of a class
+_BLANKET_WEAK_CONFIDENCE = 0.35   # expand, but mark the evidence thin (vs 0.7 for a real definition)
+_ENUM_MARKER = re.compile(r"\(\s*(?:[a-hA-H]|[1-9])\s*\)")
+# Statutory device nouns, singular stems. English-only by construction: a non-English enumerated
+# list won't be caught here and falls back to the length rule.
+_DEVICE_NOUNS = (
+    "monitor", "television", "computer", "laptop", "tablet", "printer", "peripheral",
+    "camera", "phone", "console", "e-reader", "facsimile", "videocassette", "music player",
+    "appliance", "battery", "batteries",
+)
+
+
+def classify_blanket_scope(excerpt: str) -> tuple[bool, float, str]:
+    """Decide whether a blanket scope_excerpt may expand the catalog.
+
+    Returns (may_expand, confidence, reason). Three outcomes:
+      • closed enumerated list  -> (False, 0.0, "enumerated") — do NOT expand; the statute already
+        named its products, so expanding past them fabricates coverage.
+      • thin fragment/title     -> (True, 0.35, "thin_excerpt") — expand, but flag the evidence as
+        weak rather than delete it: an absent row is indistinguishable from "never extracted", which
+        is the failure that hid CA SB-707's footwear coverage for a year.
+      • real class definition   -> (True, 0.7, "class_definition")
+    """
+    text = (excerpt or "").strip()
+    lowered = text.lower()
+    # A closed list: several enumeration markers AND several distinct device nouns among them.
+    if len(_ENUM_MARKER.findall(text)) >= 3:
+        if sum(1 for n in _DEVICE_NOUNS if n in lowered) >= 3:
+            return False, 0.0, "enumerated"
+    if len(text) < _BLANKET_MIN_CHARS:
+        return True, _BLANKET_WEAK_CONFIDENCE, "thin_excerpt"
+    return True, 0.7, "class_definition"
+
+
 def build_corpus(full_text: str, details: dict | None) -> str:
     """Bill text plus any compliance prose, as one quotable block the excerpt must come from."""
     parts: list[str] = []
@@ -325,7 +371,8 @@ class ProductCoverageExtractor:
         blanket = data.get("blanket") or {}
         if blanket.get("is_blanket"):
             excerpt = str(blanket.get("scope_excerpt", "")).strip()
-            if _grounded(excerpt, _norm(corpus)):
+            may_expand, blanket_conf, _reason = classify_blanket_scope(excerpt)
+            if may_expand and _grounded(excerpt, _norm(corpus)):
                 seen = {c.product_slug for c in coverages}
                 for cat in cats:
                     for p in products_for(cat):
@@ -338,6 +385,6 @@ class ProductCoverageExtractor:
                                 product_slug=p.slug, relationship_type=relationship,
                                 status="covered", defined_by_reference=True,
                                 source_excerpt=excerpt[:400], threshold_value=None,
-                                threshold_unit=None, confidence=0.7,
+                                threshold_unit=None, confidence=blanket_conf,
                             ))
         return coverages, dropped

@@ -13,7 +13,8 @@ be overridden with --key or GA4_KEY_FILE.
 Reports:
   events    event_name x eventCount/totalUsers      (default -- what fired, how much)
   pages     pageTitle/pagePath x screenPageViews
-  funnel    the gate_hit -> pricing_cta -> purchase conversion spine
+  funnel    the gate_shown -> gate_hit -> pricing_cta -> purchase conversion spine. The gate_hit
+            step counts WALLS ONLY (outcome != 'allowed'); see GATE_HIT_WALLED_FILTER.
   raw       whatever you pass to --dimensions/--metrics
 
 Usage:
@@ -56,6 +57,31 @@ FUNNEL_STEPS = [
     "purchase",
 ]
 
+# gate_hit does NOT mean "hit a wall". useProGate/useCapabilityGate also fire it with outcome='allowed'
+# when an ENTITLED user sails through a gate (AuthContext.tsx) -- that's a feature-usage event, not a
+# conversion step, and counting it here would inflate intent with people who were never walled. Harmless
+# while there are no subscribers; wrong the moment there are. So the funnel re-queries gate_hit with
+# 'allowed' filtered out server-side rather than summing a breakdown: totalUsers can't be added across
+# rows (the same person appears under several outcomes), so only the API can dedupe it.
+#
+# NOT-filters keep `(not set)` rows, which is what we want -- gate_hit events that predate the Aug 2026
+# registration of the `outcome` custom dimension have no value to test and are almost all real walls.
+# GA4 dimensions are not retroactive, so those stay `(not set)` forever.
+GATE_HIT_STEP = "gate_hit"
+GATE_HIT_LABEL = "gate_hit (walled)"
+GATE_HIT_WALLED_FILTER = {
+    "andGroup": {
+        "expressions": [
+            {"filter": {"fieldName": "eventName",
+                        "stringFilter": {"matchType": "EXACT", "value": GATE_HIT_STEP}}},
+            {"notExpression": {
+                "filter": {"fieldName": "customEvent:outcome",
+                           "stringFilter": {"matchType": "EXACT", "value": "allowed"}}
+            }},
+        ]
+    }
+}
+
 REPORTS = {
     "events": (["eventName"], ["eventCount", "totalUsers"]),
     "pages": (["pageTitle", "pagePath"], ["screenPageViews", "totalUsers"]),
@@ -78,14 +104,17 @@ def credentials(key_path: Path):
     return creds
 
 
-def run_report(creds, dimensions, metrics, start, end, limit, event=None):
+def run_report(creds, dimensions, metrics, start, end, limit, event=None, dim_filter=None):
     body = {
         "dateRanges": [{"startDate": start, "endDate": end}],
         "dimensions": [{"name": d} for d in dimensions],
         "metrics": [{"name": m} for m in metrics],
         "limit": limit,
     }
-    if event:
+    if dim_filter:
+        # A caller-supplied FilterExpression, for anything the plain --event eventName match can't say.
+        body["dimensionFilter"] = dim_filter
+    elif event:
         # Server-side filter, not a post-filter -- custom dimension breakdowns explode the row count
         # fast, and the API's `limit` applies before we'd ever see the rows we wanted.
         body["dimensionFilter"] = {
@@ -173,7 +202,15 @@ def main():
         # Reorder into funnel order and surface the steps that never fired at all, which is the
         # interesting case -- a missing step reads as "instrumented but dead", not "no data".
         counts = {r[0]: r[1:] for r in rows}
-        rows = [[step, *counts.get(step, ["0", "0"])] for step in FUNNEL_STEPS]
+        # Replace the raw gate_hit count with walls-only -- see GATE_HIT_WALLED_FILTER.
+        walled = to_rows(run_report(creds, ["eventName"], metrics, start, args.end, 10,
+                                    dim_filter=GATE_HIT_WALLED_FILTER))
+        counts[GATE_HIT_STEP] = walled[0][1:] if walled else ["0"] * len(metrics)
+        rows = [
+            [GATE_HIT_LABEL if step == GATE_HIT_STEP else step,
+             *counts.get(step, ["0"] * len(metrics))]
+            for step in FUNNEL_STEPS
+        ]
     elif args.filter:
         rows = [r for r in rows if args.filter in r[0]]
 

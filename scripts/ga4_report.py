@@ -29,6 +29,14 @@ Usage:
       --dimensions customEvent:gate,customEvent:outcome,customEvent:feature --metrics eventCount
   venv/Scripts/python scripts/ga4_report.py --start 2026-06-01 --end 2026-06-30
   venv/Scripts/python scripts/ga4_report.py --json                     # machine-readable
+  venv/Scripts/python scripts/ga4_report.py --exclude-bots --days 7    # drop datacenter traffic
+  venv/Scripts/python scripts/ga4_report.py --bots-only --days 7       # audit what that drops
+
+Bot traffic: GA4's built-in known-bot list is UA-based and misses headless Chrome, which shows up here
+as real sessions with ~0 engagement. --exclude-bots applies a read-time segment (see BOT_FILTER) rather
+than a GA4 Data Filter, because data filters can only test debug_mode or IP-derived traffic_type -- not
+screen resolution -- and an Active one would drop rows permanently and only going forward. Any rate you
+quote (engagement, see-to-act, conversion) is wrong during a crawl unless you pass --exclude-bots.
 """
 import argparse
 import json
@@ -69,18 +77,57 @@ FUNNEL_STEPS = [
 # GA4 dimensions are not retroactive, so those stay `(not set)` forever.
 GATE_HIT_STEP = "gate_hit"
 GATE_HIT_LABEL = "gate_hit (walled)"
-GATE_HIT_WALLED_FILTER = {
-    "andGroup": {
-        "expressions": [
-            {"filter": {"fieldName": "eventName",
-                        "stringFilter": {"matchType": "EXACT", "value": GATE_HIT_STEP}}},
-            {"notExpression": {
-                "filter": {"fieldName": "customEvent:outcome",
-                           "stringFilter": {"matchType": "EXACT", "value": "allowed"}}
-            }},
-        ]
-    }
-}
+
+
+def eq(field, value):
+    """A FilterExpression matching one exact dimension value."""
+    return {"filter": {"fieldName": field,
+                       "stringFilter": {"matchType": "EXACT", "value": value}}}
+
+
+def not_(expr):
+    return {"notExpression": expr}
+
+
+def and_(*exprs):
+    """AND non-empty FilterExpressions together. Filters must COMPOSE, not overwrite -- the request
+    carries a single `dimensionFilter`, so --event, the gate_hit walls-only rule and --exclude-bots
+    would silently clobber each other if each just assigned it."""
+    exprs = [e for e in exprs if e]
+    if not exprs:
+        return None
+    if len(exprs) == 1:
+        return exprs[0]
+    return {"andGroup": {"expressions": exprs}}
+
+
+GATE_HIT_WALLED_FILTER = and_(eq("eventName", GATE_HIT_STEP),
+                              not_(eq("customEvent:outcome", "allowed")))
+
+# --- The datacenter/bot segment -------------------------------------------------------------------
+#
+# Automated traffic that GA4's built-in known-bot exclusion does NOT catch (that list is UA-based and
+# headless Chrome isn't on it). The discriminator is the viewport: 800x600 is headless Chrome's default
+# window size, and almost nothing else lands there.
+#
+# Measured over 90 days before adopting it: ~294 sessions at 800x600 with 6 engaged (2%), against a
+# site-wide engagement rate near 50%. It is bot-dominated across EVERY browser version present, not just
+# the Chrome 125.0.0.0 / "Intel 10.15" cluster that spiked 2026-08-19..22, so filtering the resolution
+# alone beats pinning the fingerprint -- one dimension, and it survives the next crawler's UA.
+#
+# Cost of being wrong: it discards ~6 real-looking sessions per quarter. Re-validate with --bots-only,
+# which is the same segment inverted; if its engagement rate ever climbs toward the site average, the
+# signature has drifted and this needs revisiting.
+#
+# Why this is read-time and not a GA4 Data Filter: GA4 data filters only come in two flavors, Developer
+# traffic (debug_mode) and Internal traffic (a `traffic_type` param populated from IP ranges you declare
+# on the stream). Neither can test screen resolution, and GA4 never exposes visitor IP, so the bot ranges
+# can't be derived from our own data. A read-time segment is also strictly better here: an Active data
+# filter is forward-only and permanently drops the rows, whereas this applies retroactively to the whole
+# corpus and can be turned off.
+BOT_SCREEN_RESOLUTION = "800x600"
+BOT_FILTER = eq("screenResolution", BOT_SCREEN_RESOLUTION)
+NOT_BOT_FILTER = not_(BOT_FILTER)
 
 REPORTS = {
     "events": (["eventName"], ["eventCount", "totalUsers"]),
@@ -111,18 +158,12 @@ def run_report(creds, dimensions, metrics, start, end, limit, event=None, dim_fi
         "metrics": [{"name": m} for m in metrics],
         "limit": limit,
     }
-    if dim_filter:
-        # A caller-supplied FilterExpression, for anything the plain --event eventName match can't say.
-        body["dimensionFilter"] = dim_filter
-    elif event:
-        # Server-side filter, not a post-filter -- custom dimension breakdowns explode the row count
-        # fast, and the API's `limit` applies before we'd ever see the rows we wanted.
-        body["dimensionFilter"] = {
-            "filter": {
-                "fieldName": "eventName",
-                "stringFilter": {"matchType": "EXACT", "value": event},
-            }
-        }
+    # Server-side filters, not post-filters -- custom dimension breakdowns explode the row count fast,
+    # and the API's `limit` applies before we'd ever see the rows we wanted. dim_filter (a composed
+    # FilterExpression) and the plain --event match are ANDed, never substituted for one another.
+    combined = and_(eq("eventName", event) if event else None, dim_filter)
+    if combined:
+        body["dimensionFilter"] = combined
     resp = requests.post(
         API.format(prop=PROPERTY_ID),
         headers={"Authorization": f"Bearer {creds.token}"},
@@ -182,7 +223,15 @@ def main():
     ap.add_argument("--metrics", help="comma-separated, for --report raw")
     ap.add_argument("--key", type=Path, default=Path(os.environ.get("GA4_KEY_FILE", DEFAULT_KEY)))
     ap.add_argument("--json", action="store_true", help="emit JSON instead of a table")
+    ap.add_argument("--exclude-bots", action="store_true",
+                    help=f"drop the datacenter/headless segment (screenResolution={BOT_SCREEN_RESOLUTION})")
+    ap.add_argument("--bots-only", action="store_true",
+                    help="the inverse -- inspect what --exclude-bots would drop, to re-validate the signature")
     args = ap.parse_args()
+
+    if args.exclude_bots and args.bots_only:
+        sys.exit("--exclude-bots and --bots-only are opposites; pass at most one")
+    segment = BOT_FILTER if args.bots_only else NOT_BOT_FILTER if args.exclude_bots else None
 
     start = args.start or f"{args.days}daysAgo"
 
@@ -195,7 +244,8 @@ def main():
         dimensions, metrics = REPORTS[args.report]
 
     creds = credentials(args.key)
-    payload = run_report(creds, dimensions, metrics, start, args.end, args.limit, args.event)
+    payload = run_report(creds, dimensions, metrics, start, args.end, args.limit, args.event,
+                         dim_filter=segment)
     rows = to_rows(payload)
 
     if args.report == "funnel":
@@ -204,7 +254,7 @@ def main():
         counts = {r[0]: r[1:] for r in rows}
         # Replace the raw gate_hit count with walls-only -- see GATE_HIT_WALLED_FILTER.
         walled = to_rows(run_report(creds, ["eventName"], metrics, start, args.end, 10,
-                                    dim_filter=GATE_HIT_WALLED_FILTER))
+                                    dim_filter=and_(GATE_HIT_WALLED_FILTER, segment)))
         counts[GATE_HIT_STEP] = walled[0][1:] if walled else ["0"] * len(metrics)
         rows = [
             [GATE_HIT_LABEL if step == GATE_HIT_STEP else step,
@@ -219,12 +269,17 @@ def main():
     if args.json:
         print(json.dumps(
             {"property": PROPERTY_ID, "start": start, "end": args.end,
+             "segment": "bots_only" if args.bots_only else "exclude_bots" if args.exclude_bots else "all",
              "headers": headers, "rows": rows},
             indent=2,
         ))
         return
 
-    print(f"GA4 property {PROPERTY_ID} | {start} to {args.end} | report={args.report}")
+    # Always stamp the segment: a bot-filtered number that looks unlabelled is how you end up quoting
+    # two different denominators a week apart and not knowing which was which.
+    seg_label = (" | SEGMENT: bots only" if args.bots_only
+                 else f" | SEGMENT: excl. bots ({BOT_SCREEN_RESOLUTION})" if args.exclude_bots else "")
+    print(f"GA4 property {PROPERTY_ID} | {start} to {args.end} | report={args.report}{seg_label}")
     print()
     totals = None
     for t in payload.get("totals", []):

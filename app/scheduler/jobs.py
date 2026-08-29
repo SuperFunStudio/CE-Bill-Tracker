@@ -397,11 +397,87 @@ async def run_openstates_full_sync(state_filter: str | None = None) -> None:
             log.info("classification_complete", bill_count=len(unclassified))
 
 
+# US-federal jurisdiction code. `state` carries the within-region jurisdiction: "CA"/"OR" for
+# states, "US" for Congress (see Bill.state).
+FEDERAL_STATE = "US"
+
+
+async def _ensure_federal_text(db, bills: list) -> int:
+    """Fetch and store full bill text for US-federal bills that have none. Returns rows written.
+
+    Federal bills MUST be classified on their text, not their title. LegiScan's federal `title`
+    is a concatenation of every short title in the vehicle, so an omnibus arrives looking like
+    unrelated noise — HR 1768 reaches us as "Nationwide Consumer and Fuel Retailer Choice Act
+    Recycling and Composting Accountability Act ... American Music Tourism Act Deploying American
+    Blockchains Act" over the description "To provide for lower costs for everyday Americans".
+    Judged on that, Haiku correctly reports it cannot establish scope and defaults to
+    not-relevant, hiding an entire Division A of recycling provisions. Given the text, the same
+    bill classifies as organics_diversion at 0.75.
+
+    Federal text is reliably reachable — 195/195 of the 119th Congress bills resolved via
+    LegiScan — so this is a cheap gate, not a best-effort. Bills whose text cannot be fetched are
+    left alone and fall back to the title/description path plus the keyword rescue net.
+    """
+    from app.ingestion.bill_text import SOURCE_NONE, fetch_clean_text
+    from app.ingestion.legiscan import LegiScanClient
+    from app.ingestion.openstates import OpenStatesClient
+    from app.models import BillText
+    from sqlalchemy import select as _select, text as _sqltext
+
+    federal = [b for b in bills if b.state == FEDERAL_STATE and b.legiscan_bill_id]
+    if not federal:
+        return 0
+    have = set((await db.execute(
+        _select(BillText.bill_id).where(BillText.bill_id.in_([b.id for b in federal]))
+    )).scalars().all())
+    missing = [b for b in federal if b.id not in have]
+    if not missing:
+        return 0
+
+    written = 0
+    async with LegiScanClient() as ls_client, OpenStatesClient() as os_client:
+        for b in missing:
+            try:
+                full_text, src = await fetch_clean_text(ls_client, os_client, b)
+            except Exception as e:  # noqa: BLE001
+                log.warning("federal_text_fetch_failed", bill_number=b.bill_number,
+                            error=str(e), error_type=type(e).__name__)
+                continue
+            if not full_text or src == SOURCE_NONE:
+                log.info("federal_text_unavailable", bill_number=b.bill_number)
+                continue
+            await db.execute(_sqltext(
+                "insert into bill_texts (bill_id, text, char_len, source, indexed_change_hash,"
+                " fetched_at) values (:b,:t,:c,:s,:h, now()) on conflict (bill_id) do update set"
+                " text=excluded.text, char_len=excluded.char_len, source=excluded.source,"
+                " indexed_change_hash=excluded.indexed_change_hash, fetched_at=excluded.fetched_at"),
+                {"b": b.id, "t": full_text, "c": len(full_text), "s": src, "h": b.change_hash})
+            written += 1
+    if written:
+        await db.commit()
+    log.info("federal_text_ensured", candidates=len(missing), written=written)
+    return written
+
+
 async def run_classification_cycle() -> None:
     """Classify all unclassified bills already in the database.
 
     Processes in batches of 500 until none remain.
-    Safe to call independently — makes no LegiScan API calls.
+
+    Federal bills take a different route through the batch, for two reasons that both come from
+    the corpus keyword set (data/seed/epr_keywords.json) being tuned to STATE bill language:
+
+      1. They are classified with skip_keyword_filter=True. The pipeline's Stage 1 filter is all
+         multi-word phrases, which need a long description to land; against a one-line federal
+         summary it drops ~75% of genuinely in-scope federal bills (the COMPOST Act, the CIRCLE
+         Act and the Recycling Infrastructure and Accessibility Act all score 0.00). Federal
+         bills are already gated at ingest by coordinator.FEDERAL_PREFILTER, which is the
+         equivalent stage for them — running both means gating twice with the wrong ruler.
+      2. Their full text is fetched first (_ensure_federal_text), because a federal title is a
+         concatenation of every short title in the vehicle and is not classifiable alone.
+
+    NB: this makes LegiScan API calls for federal bills only — it is no longer strictly
+    API-free, though it stays free for a batch with no unclassified federal rows.
     """
     from app.classification.pipeline import ClassificationPipeline
     from app.database import AsyncSessionLocal
@@ -450,7 +526,15 @@ async def run_classification_cycle() -> None:
                 stall_count = 0
             last_ids = current_ids
 
-            await pipeline.run(db, unclassified)
+            # Federal bills need their text fetched and Stage 1 skipped; see the docstring.
+            federal = [b for b in unclassified if b.state == FEDERAL_STATE]
+            others = [b for b in unclassified if b.state != FEDERAL_STATE]
+            if federal:
+                await _ensure_federal_text(db, federal)
+                await pipeline.run(db, federal, skip_keyword_filter=True,
+                                   source="classify_federal")
+            if others:
+                await pipeline.run(db, others)
             total_classified += len(unclassified)
             log.info("classification_batch_complete", batch=len(unclassified), total=total_classified)
 

@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime, timezone
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import DateTime, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,6 +92,64 @@ def _build_openstates_queries() -> list[str]:
 
 OPENSTATES_EPR_QUERIES = _build_openstates_queries()
 
+
+# US Congress master-list prefilter.
+#
+# Every other jurisdiction in ALL_STATES is a state legislature whose current-session master list
+# runs a few hundred bills, so the loop below fetches them all and lets HaikuClassifier judge.
+# Congress does not fit that shape: the 119th Congress master list is ~18,500 bills, and at one
+# getBill call each a single federal run would blow max_legiscan_calls_per_run (5000) nearly 4x
+# over and starve every state behind it. So federal bills are gated on the master-list summary —
+# which already carries title + description — before any call is spent.
+#
+# This net is deliberately NOT classification.keywords.KeywordFilter. That filter is tuned for
+# state bills, where a long description gives multi-word phrases ("battery recycling", "recycling
+# infrastructure") room to land; its vocabulary contains no bare "recycling"/"compost"/"battery"
+# on purpose, because single words would swamp a rich state corpus. Against a one-line federal
+# summary those phrases almost never hit: KeywordFilter passes only 165 of 18,470 and drops the
+# Recycling Infrastructure and Accessibility Act, the COMPOST Act and the CIRCLE Act at score 0.00.
+#
+# The gate is therefore broad and single-word by design — it is a CHEAP recall net, not a
+# precision layer. HaikuClassifier still judges everything that passes, so a false positive costs
+# one classification while a false negative costs a bill we never learn about. Exclusion terms are
+# deliberately not applied here for the same reason (they reject e.g. the USA Batteries Act on a
+# passing "Superfund" mention). Measured on the 119th Congress: 195 of 18,470 pass (1.1%), with no
+# bill carrying obvious circular-economy vocabulary left behind.
+#
+# The leading \b is load-bearing. Terms match as PREFIXES so that "recycl" catches
+# recycling/recyclable, but without a word boundary "tire" also matches reTIREd and
+# reTIREes, "litter" matches glitter, and "scrap" matches scrapbook. Unanchored, the net
+# passed 426 bills including the Equal COLA Act and the Retired Pay Restoration Act;
+# anchored the same terms pass 182 — 244 false positives dropped, zero real ones — and the
+# repair phrases below add the 13 that bring the total to 195.
+FEDERAL_PREFILTER = re.compile(
+    r"\b(?:"
+    r"recycl|compost|circular econom|extended producer|product stewardship|e-waste"
+    r"|electronic waste|single.use|plastic|packaging|batter|right to repair|repairab"
+    r"|refurbish|remanufactur|landfill|deposit return|bottle bill|textile|food waste"
+    r"|organic waste|scrap|salvage|reuse|re-use|refill|take.back|takeback|pfas"
+    r"|microplastic|critical mineral|solid waste|municipal waste|litter|marine debris"
+    r"|biodegradab|compostab|end.of.life|second.hand|secondhand|tire|mattress|carpet"
+    r"|solar panel|waste diversion|waste reduction|zero waste|recovered material"
+    r"|recycled content|producer responsib"
+    # Right-to-repair arrives titled as an ACT rather than as the phrase the state
+    # vocabulary expects, so "repairab" alone misses the Fair Repair Act, the REPAIR Act
+    # and the Farm Freedom to Repair Act. Bare "repair" would catch them but drags in 46
+    # bridge/ship/levee/credit-repair bills; these phrase forms cost 13 and miss none.
+    r"|fair repair|repair act|repair of consumer|repairing consumer"
+    r")",
+    re.IGNORECASE,
+)
+
+# Jurisdictions whose master list is prefiltered before spending a getBill call. Only US Congress
+# today — state lists are small enough to ingest wholesale.
+PREFILTERED_STATES = {"US"}
+
+
+def _passes_federal_prefilter(summary: dict) -> bool:
+    blob = f"{summary.get('title') or ''} {summary.get('description') or ''}"
+    return bool(FEDERAL_PREFILTER.search(blob))
+
 _STATE_NAME_TO_CODE = {
     "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR",
     "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE",
@@ -118,6 +176,22 @@ def _normalize_bill_number(identifier: str) -> str:
     if len(parts) == 2:
         return f"{parts[0].upper()}-{parts[1].strip()}"
     return identifier.strip().upper()
+
+
+def _normalize_legiscan_number(number: str) -> str:
+    """LegiScan writes bill numbers UNSPACED ("HB4001"); OpenStates writes them spaced
+    ("HB 4001"), which _normalize_bill_number turns into the dashed "HB-4001" the corpus
+    stores. Split the alpha prefix off the digits so both sources land on ONE form —
+    without this the two feeds can never recognize each other's rows and every overlapping
+    bill is stored twice.
+    """
+    if not number:
+        return ""
+    n = number.strip().upper().replace(" ", "")
+    m = re.match(r"^([A-Z]+)[-\s]?(\d.*)$", n)
+    if not m:
+        return n
+    return f"{m.group(1)}-{m.group(2)}"
 
 
 def _jurisdiction_to_state_code(jurisdiction: dict) -> str | None:
@@ -209,7 +283,7 @@ class IngestionCoordinator:
         stopped_at_state: str | None = None
 
         states = [state_filter.upper()] if state_filter else ALL_STATES
-        total_new = total_updated = total_unchanged = 0
+        total_new = total_updated = total_unchanged = total_filtered = 0
 
         async with LegiScanClient() as legiscan:
             for state in states:
@@ -256,12 +330,24 @@ class IngestionCoordinator:
                     for row in result.all()
                 }
 
-                for bill_id_str, summary in master.items():
-                    if not bill_id_str.isdigit():
+                for summary in master.values():
+                    # LegiScan keys getMasterList by a 0-based INDEX, not by bill_id — the
+                    # real id lives in summary["bill_id"]. Using the key fed getBill(0),
+                    # getBill(1), ... which every time failed "Unknown bill id", so no
+                    # master-list bill was ever actually ingested.
+                    if not isinstance(summary, dict):
                         continue
-                    bill_id = int(bill_id_str)
-                    if bill_id == 0:
+                    bill_id = summary.get("bill_id")
+                    if not bill_id:
                         continue
+                    bill_id = int(bill_id)
+
+                    # Congress is too large to fetch wholesale — gate on the master-list
+                    # summary before spending a getBill call. See FEDERAL_PREFILTER.
+                    if state in PREFILTERED_STATES and not _passes_federal_prefilter(summary):
+                        total_filtered += 1
+                        continue
+
                     incoming_hash = summary.get("change_hash", "")
 
                     if stored_hashes.get(bill_id) == incoming_hash:
@@ -318,6 +404,7 @@ class IngestionCoordinator:
 
                 await db.commit()
                 log.info("state_ingested", state=state, new=total_new, updated=total_updated,
+                         filtered=total_filtered,
                          api_calls=api_calls, quota_remaining=call_limit - api_calls)
 
                 if quota_exhausted:
@@ -327,6 +414,7 @@ class IngestionCoordinator:
             "new": total_new,
             "updated": total_updated,
             "unchanged": total_unchanged,
+            "filtered": total_filtered,
             "api_calls": api_calls,
             "quota_exhausted": quota_exhausted,
             "stopped_at_state": stopped_at_state,
@@ -341,6 +429,7 @@ class IngestionCoordinator:
 
         status_id = bill_data.get("status", 0)
         status_str = _legiscan_status_map(status_id)
+        bill_number = _normalize_legiscan_number(bill_data.get("bill_number") or "")
 
         # Build URLs from texts list
         source_url: str | None = None
@@ -348,10 +437,49 @@ class IngestionCoordinator:
         if texts:
             source_url = texts[-1].get("state_link") or texts[-1].get("url")
 
+        # Dedup (mirror of the cross-reference in _upsert_openstates_bill): an Open States or
+        # historical-seed row may already describe this bill with legiscan_bill_id NULL. The
+        # ON CONFLICT below keys on legiscan_bill_id, so that row would NOT conflict and we
+        # would insert a second copy. Adopt the existing row instead.
+        #
+        # The match MUST be session-scoped: states reuse bill numbers every session, so
+        # (state, bill_number) is not unique — MD SB-901 legitimately names 7 different bills
+        # across 2020-2026. Restrict to rows whose reference date falls in this bill's session
+        # year range, the same guard scripts/refresh_status_legiscan.py uses.
+        adopted = False
+        session = bill_data.get("session") or {}
+        year_start = session.get("year_start")
+        year_end = session.get("year_end") or year_start
+        if bill_number and year_start:
+            ref_date = func.coalesce(Bill.status_date, Bill.last_action_date)
+            existing = (await db.execute(
+                select(Bill).where(
+                    Bill.state == state,
+                    Bill.bill_number == bill_number,
+                    Bill.legiscan_bill_id.is_(None),
+                    ref_date.isnot(None),
+                    func.extract("year", ref_date).between(int(year_start), int(year_end)),
+                ).order_by(ref_date.desc()).limit(1)
+            )).scalar_one_or_none()
+            if existing is not None:
+                existing.legiscan_bill_id = bill_id
+                existing.change_hash = bill_data.get("change_hash")
+                existing.last_fetched_at = datetime.now(timezone.utc)
+                # Only fill gaps — do not clobber an enriched row with thinner LegiScan data.
+                if not existing.source_url:
+                    existing.source_url = source_url
+                if not existing.description:
+                    existing.description = bill_data.get("description")
+                adopted = True
+                log.debug("legiscan_cross_referenced", state=state, bill_number=bill_number,
+                          legiscan_bill_id=bill_id, bill_row_id=existing.id)
+        if adopted:
+            return
+
         stmt = insert(Bill).values(
             legiscan_bill_id=bill_id,
             state=state,
-            bill_number=bill_data.get("bill_number"),
+            bill_number=bill_number,
             title=bill_data.get("title"),
             description=bill_data.get("description"),
             status=status_str,
@@ -392,15 +520,32 @@ class IngestionCoordinator:
                 log.warning("openstates_bill_missing_identifier", openstates_id=openstates_id)
                 return "skipped"
 
-            # Dedup: if LegiScan already owns this (state, bill_number), cross-reference only
-            result = await db.execute(
-                select(Bill).where(
-                    Bill.state == state,
-                    Bill.bill_number == bill_number,
-                    Bill.legiscan_bill_id.isnot(None),
+            # Dedup: if LegiScan already owns this (state, bill_number), cross-reference only.
+            #
+            # Session-scoped, for two reasons. (1) States reuse bill numbers every session, so
+            # (state, bill_number) names several DIFFERENT bills — matching on the pair alone
+            # would staple this bill's openstates_id onto an unrelated row from another year.
+            # (2) scalar_one_or_none() RAISES on multiple matches, so the unscoped query becomes
+            # a hard error the moment LegiScan holds two sessions of the same number.
+            # Pick the single closest row by reference date, within a 1-year window (sessions
+            # commonly span two calendar years, e.g. a 2025-2026 regular session).
+            ref_year = _parse_date(bill_data.get("latest_action_date"))
+            existing = None
+            if ref_year is not None:
+                cand_ref = func.coalesce(Bill.status_date, Bill.last_action_date)
+                distance = func.abs(
+                    func.extract("epoch", func.cast(cand_ref, DateTime))
+                    - func.extract("epoch", func.cast(ref_year, DateTime))
                 )
-            )
-            existing = result.scalar_one_or_none()
+                existing = (await db.execute(
+                    select(Bill).where(
+                        Bill.state == state,
+                        Bill.bill_number == bill_number,
+                        Bill.legiscan_bill_id.isnot(None),
+                        cand_ref.isnot(None),
+                        distance <= 366 * 24 * 3600,
+                    ).order_by(distance.asc()).limit(1)
+                )).scalar_one_or_none()
             if existing is not None:
                 if existing.openstates_id == openstates_id:
                     return "cross_referenced"

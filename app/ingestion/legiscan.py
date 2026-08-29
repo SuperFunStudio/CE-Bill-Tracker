@@ -27,6 +27,13 @@ BASE_URL = "https://api.legiscan.com/"
 ALL_STATES = [
     # Tier 1 — demo target + highest EPR legislative activity
     "OR",                                    # Oregon NAW trial — highest priority
+    # US Congress. LegiScan serves it as the "US" dataset, so federal bills ride the same
+    # path as the states — this is the only source in the pipeline that carries PENDING
+    # federal legislation (Federal Register covers agency actions only, and the curated
+    # federal seed covers enacted enablers only). Its master list is ~18,500 bills, far
+    # too many to fetch wholesale, so coordinator.FEDERAL_PREFILTER gates it down to ~180
+    # before any getBill call is spent.
+    "US",
     "WA", "NY", "ME", "CO", "CT",           # most active EPR states
     "MA", "MD", "NJ", "VT", "RI", "MN",    # strong EPR pipeline
     "NV", "UT", "NC", "PA", "IL", "MI",    # growing EPR interest

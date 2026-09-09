@@ -42,6 +42,15 @@ EPR_SEARCH_TERMS = [
     "soil health",
     "compostable packaging",
     "photovoltaic module",
+    # Waste-shipment / secondary-materials trade (mirrors the bill classifier's "waste_shipment"
+    # instrument). Export controls and allocation orders on scrap, black mass, and other recovered
+    # feedstock are circular-economy actions that the EPR vocabulary above misses. Deliberately
+    # tight phrases: "critical minerals" (180 hits since 2021) and "transboundary" (150) were tested
+    # and dropped as mining/air-pollution noise; these four total ~90 docs over the same window.
+    "black mass",
+    "waste and scrap",
+    "scrap metal",
+    "secondary materials",
 ]
 
 

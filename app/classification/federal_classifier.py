@@ -29,6 +29,13 @@ log = structlog.get_logger()
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 _VALID_RISK = ("none", "low", "medium", "high")
+# friction_type was the one axis with no validation, so a model that echoed an instrument name
+# into it (waste_shipment did exactly this) wrote a value straight through to the federal page's
+# badge and the API's friction_type filter. Validated now, like risk and instrument.
+_VALID_FRICTION = (
+    "preemption", "federal_mandate", "compliance_burden", "comment_opportunity",
+    "funding", "study", "none",
+)
 
 # Mirror the state-bill relevance floor (pipeline.py uses hr.confidence >= 0.4).
 # The federal feed is noisier, so the floor is a touch higher.
@@ -39,7 +46,7 @@ RELEVANCE_CONFIDENCE_FLOOR = 0.5
 _VALID_INSTRUMENTS = (
     "epr", "right_to_repair", "recycled_content", "deposit_return",
     "labeling", "chemical_restriction", "preemption", "disposal_ban",
-    "organics_diversion", "budget", "other",
+    "organics_diversion", "waste_shipment", "budget", "other",
 )
 
 SYSTEM_PROMPT = """\
@@ -64,7 +71,7 @@ Return this exact JSON structure:
   "confidence": <float 0.0-1.0>,
   "preemption_risk": <one of: "none","low","medium","high">,
   "friction_type": <one of: "preemption","federal_mandate","compliance_burden","comment_opportunity","funding","study","none">,
-  "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","labeling","chemical_restriction","preemption","disposal_ban","organics_diversion","budget","other">,
+  "instrument_type": <one of: "epr","right_to_repair","recycled_content","deposit_return","labeling","chemical_restriction","preemption","disposal_ban","organics_diversion","waste_shipment","budget","other">,
   "material_categories": <list from: ["plastic_packaging","paper_packaging","glass","metals","electronics","batteries","paint","carpet","mattresses","tires","vehicles","construction","furniture","used_oil","pharmaceuticals","solar_panels","textiles","organics","biobased","agriculture","hazardous_materials","water","biodiversity","other"]>,
   "summary": "<1-2 sentence plain-English summary for a compliance professional: what the action is and why it matters>"
 }}
@@ -86,6 +93,11 @@ state-bill tracking. Pick the single closest match and AVOID "other" unless noth
     diversion (e.g. an e-waste, battery, or food-waste landfill ban).
   - "organics_diversion": a positive mandate to divert organic/food waste from disposal —
     mandatory composting/source-separation, anaerobic digestion, or food-donation requirements.
+  - "waste_shipment": the cross-border movement or trade of WASTE, SCRAP, or RECOVERED /
+    SECONDARY material — import/export controls, licensing, allocation or set-aside orders,
+    notification-and-consent regimes, and tariff/trade measures whose SUBJECT is such a stream
+    (e.g. black mass, battery scrap, e-scrap, scrap metal, recovered fiber, waste and scrap of a
+    critical mineral). See the waste-shipment rule below.
   - "preemption": federal action whose main effect is to override/preempt state programs.
   - "budget": funding / appropriations / grants where funding is the primary instrument.
   - "other": only when none of the above genuinely fit.
@@ -93,17 +105,41 @@ If is_relevant is false, use "other".
 
 Relevance: mark is_relevant=false for antidumping/countervailing-duty notices, antitrust
 judgments, trade determinations, tariff actions, and anything not touching the policy areas above —
-these dominate the raw feed and are noise. ALSO mark is_relevant=false for vehicle emissions /
+these dominate the raw feed and are noise. The ONE exception is the waste-shipment rule below: a
+trade / export-control / allocation action is IN scope when the material it governs is itself
+waste, scrap, or recovered secondary feedstock. ALSO mark is_relevant=false for vehicle emissions /
 fuel-economy / greenhouse-gas / energy-conservation standards, and for any rule that merely
 mentions "recycling", "circular economy", or "sustainability" in passing without itself imposing a
 producer-responsibility, recycled-content, take-back/collection, eco-labeling, right-to-repair, or
 deposit obligation. The action's OWN substance must be about the policy area — a passing mention is
 not enough. Set a low confidence (<0.5) when you are unsure rather than guessing is_relevant=true.
 
+DO count as relevant (instrument_type="waste_shipment"): federal action governing the CROSS-BORDER
+movement or trade of WASTE, SCRAP, END-OF-LIFE, or RECOVERED / SECONDARY material for recovery,
+recycling, reuse, or disposal — export licensing or bans, Defense-Production-Act allocation or
+set-aside orders, Basel-family and hazardous-waste export-import rules, Section 232/301 and tariff
+actions, and CBP/BIS classification or reporting rules, when the SUBJECT stream is recovered
+material (black mass, battery scrap, e-scrap and used electronics, scrap metal, "waste and scrap"
+of a metal or critical mineral, recovered paper/fiber, recovered plastic). These directly set the
+economics of domestic recycling feedstock, so they are relevant even though they are framed as
+trade or national-security measures and impose no producer-responsibility duty. IN SCOPE ONLY when
+the thing moved is waste / scrap / end-of-life / recyclable / secondary material — ordinary trade in
+NEW goods, ore or virgin mined material, food, fuel, or agricultural commodities stays out
+regardless of any import/export wording. Nuclear/radioactive and medical waste stay out unless the
+measure also carries a recycling / recovery / reuse mechanism. Tag the material (e.g. "batteries",
+"electronics", "metals", "hazardous_materials"); preemption_risk is usually "low" (or "medium" when
+it imposes significant new producer compliance obligations), since the friction is on material
+markets rather than on state EPR programs.
+
 DO count as relevant (instrument_type="chemical_restriction"): restrictions, bans, phase-outs, or
 reporting requirements targeting specific substances IN consumer products, packaging, or tires —
 e.g. PFAS in food packaging, 6PPD in tires, heavy metals in packaging. These bear directly on
 producer compliance and product stewardship even though they are framed as chemical rules.
+
+friction_type = how the action reaches producers/states — pick ONLY from the list in the JSON
+schema above; never reuse an instrument_type value here. An export licence, allocation order, or
+reporting duty is "compliance_burden"; a binding federal standard is "federal_mandate"; an open
+comment period on a proposed rule is "comment_opportunity".
 
 preemption_risk = how much this federal action adds friction to STATE EPR programs:
   - "high": preempts/overrides state EPR or packaging laws, or imposes a binding federal mandate
@@ -188,9 +224,15 @@ class FederalClassifier:
         if risk not in _VALID_RISK:
             risk = "none"
         is_relevant = bool(data.get("is_relevant", False))
+        friction = str(data.get("friction_type", "none")).lower()
+        if friction not in _VALID_FRICTION:
+            # Don't silently drop the signal on a relevant action — "compliance_burden" is the
+            # generic federal-obligation bucket. An irrelevant action has no friction by definition.
+            friction = "compliance_burden" if is_relevant else "none"
         # Enforce the invariant the prompt asks for: irrelevant => no friction.
         if not is_relevant:
             risk = "none"
+            friction = "none"
         instrument = str(data.get("instrument_type", "other")).lower()
         if instrument not in _VALID_INSTRUMENTS:
             instrument = "other"
@@ -198,7 +240,7 @@ class FederalClassifier:
             is_relevant=is_relevant,
             confidence=float(data.get("confidence", 0.0)),
             preemption_risk=risk,
-            friction_type=str(data.get("friction_type", "none")),
+            friction_type=friction,
             instrument_type=instrument,
             material_categories=data.get("material_categories", []) or [],
             summary=data.get("summary", ""),

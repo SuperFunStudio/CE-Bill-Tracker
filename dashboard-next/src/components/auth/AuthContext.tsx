@@ -100,6 +100,9 @@ interface AuthState {
 
 const AuthCtx = createContext<AuthState | null>(null);
 
+/** How long the entitlement lookup may hold the UI before we render as un-entitled. */
+const ENTITLEMENT_TIMEOUT_MS = 8000;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,11 +131,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       const token = await u.getIdToken();
+      // Bounded: `loading` now waits on this call (see onIdTokenChanged), so a hung request would
+      // otherwise pin every gated page on its skeleton. On abort we fall through to the catch and
+      // resolve as un-entitled — the old behaviour — rather than freezing.
+      const signal = AbortSignal.timeout(ENTITLEMENT_TIMEOUT_MS);
       const [entRes, adminRes] = await Promise.all([
-        fetch(`${API}/billing/me`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/billing/me`, { headers: { Authorization: `Bearer ${token}` }, signal }),
         // Returns 200 {is_admin: bool} for any signed-in user (no 403 console noise); the flag reveals
         // the hidden console. See admin_me().
-        fetch(`${API}/admin/me`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/admin/me`, { headers: { Authorization: `Bearer ${token}` }, signal }),
       ]);
       setEntitlement(entRes.ok ? await entRes.json() : null);
       const adminData = adminRes.ok ? await adminRes.json().catch(() => null) : null;
@@ -204,8 +211,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsub = onIdTokenChanged(auth, async u => {
       setUser(u);
-      setLoading(false);
-      await fetchEntitlement(u);
+      // `loading` drops only once the TIER is known, not merely the identity. It used to flip the
+      // moment Firebase resolved the user, while entitlement and isAdmin were still two fetches
+      // away — so every gated surface (/federal, /label, /beta, /compliance, /evaluate, /library,
+      // /admin) rendered its locked answer first and swapped it for the real one a beat later. A
+      // paying member saw the paywall flash; a reader arriving on a litigation alert's ?case= link
+      // saw the case appear and vanish. `finally` so a failed lookup still releases the UI.
+      try {
+        await fetchEntitlement(u);
+      } finally {
+        setLoading(false);
+      }
       if (u && u.emailVerified) await provisionOnce(u.uid);
     });
     return unsub;

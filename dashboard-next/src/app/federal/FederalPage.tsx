@@ -176,7 +176,7 @@ function LitigationCaseDetail({ caseId }: { caseId: number }) {
 }
 
 export default function FederalPage() {
-  const { isPro, isAdmin, user, openAuth } = useAuth();
+  const { isPro, isAdmin, user, openAuth, loading: authLoading } = useAuth();
   const [instrumentFilter, setInstrumentFilter] = useState('');
   const [materialFilter, setMaterialFilter] = useState('');
   const [riskFilter, setRiskFilter] = useState('');
@@ -191,7 +191,11 @@ export default function FederalPage() {
   // ce_relevant defaults true server-side; pass it explicitly so the page only ever shows
   // classified-relevant federal actions (the API still supports ce_relevant=false to inspect noise).
   const { data: actions = [], isLoading: actionsLoading } = useFederalActions({ limit: 100, ce_relevant: true, days_back: 3650 });
-  const { data: cases = [], isLoading: casesLoading } = useLitigationCases();
+  // `casesSettled`, not `!casesLoading`: while the reader is unentitled this query is disabled, and
+  // a disabled react-query reports isLoading false with an empty array — indistinguishable from
+  // "loaded, and the case isn't there". The deep-link effect below believed that and burned the
+  // pending scroll before the real list ever arrived.
+  const { data: cases = [], isLoading: casesLoading, isSuccess: casesSettled } = useLitigationCases();
 
   // ?case=<id> deep link — litigation alert emails land here rather than sending the reader straight
   // to CourtListener, so the linked case has to open by itself and scroll into view (it sits below
@@ -208,7 +212,7 @@ export default function FederalPage() {
     }
   }, []);
   useEffect(() => {
-    if (pendingCaseScroll == null || casesLoading) return;
+    if (pendingCaseScroll == null || !casesSettled) return;
     // Only scroll once the case is actually in the loaded list — a stale or unknown id in an old
     // email should leave the reader at the top of a working page, not scrolled at nothing.
     if (!cases.some(c => c.id === pendingCaseScroll)) {
@@ -223,7 +227,7 @@ export default function FederalPage() {
       .getElementById(`case-${pendingCaseScroll}`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setPendingCaseScroll(null);
-  }, [pendingCaseScroll, casesLoading, cases]);
+  }, [pendingCaseScroll, casesSettled, cases]);
 
   const filteredActions = useMemo(() => {
     let filtered = actions;
@@ -245,6 +249,19 @@ export default function FederalPage() {
   // Only surface facet options actually present in the data, so empty dropdowns don't appear.
   const instrumentOptions = Array.from(new Set(actions.map(a => a.instrument_type).filter((t): t is string => !!t && t !== 'other'))).sort();
   const materialOptions = MATERIAL_CATEGORIES.filter(m => m !== 'other' && actions.some(a => a.material_categories?.includes(m)));
+
+  // Nothing is decided until we know who's reading. Firebase resolves the session a beat after
+  // mount, so branching on isPro/isAdmin before then rendered the signed-out answer first and
+  // swapped it out once auth landed — the case appeared for a flash and vanished.
+  if (authLoading) {
+    return (
+      <div className="p-6 max-w-5xl mx-auto space-y-6">
+        <DeadlinesTabs />
+        <GazetteHeader title="Federal Actions" subtitle="Federal Register actions, preemption risk, and EPR litigation" />
+        <SkeletonList rows={4} height="h-28" />
+      </div>
+    );
+  }
 
   // Arrived from a litigation alert without a membership: show them the case. The alert emails go
   // to every active subscription regardless of tier and get forwarded onward, so the one thing this

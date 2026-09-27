@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useFederalActions, useLitigationCases, useLitigationCase } from '@/hooks/useFederal';
+import { LitigationCaseSpotlight } from '@/components/federal/LitigationCaseSpotlight';
 import { MetricCard } from '@/components/ui/MetricCard';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { SectionHeader } from '@/components/ui/SectionHeader';
@@ -181,6 +182,11 @@ export default function FederalPage() {
   const [riskFilter, setRiskFilter] = useState('');
   const [expandedCaseId, setExpandedCaseId] = useState<number | null>(null);
   const [pendingCaseScroll, setPendingCaseScroll] = useState<number | null>(null);
+  // Kept separately from `expandedCaseId`, which the reader can collapse: this records that they
+  // ARRIVED for a specific case (from a litigation alert email), which the lock card below and the
+  // not-in-list notice both need to know after the scroll has been consumed.
+  const [deepLinkedCaseId, setDeepLinkedCaseId] = useState<number | null>(null);
+  const [deepLinkMissing, setDeepLinkMissing] = useState(false);
 
   // ce_relevant defaults true server-side; pass it explicitly so the page only ever shows
   // classified-relevant federal actions (the API still supports ce_relevant=false to inspect noise).
@@ -196,6 +202,7 @@ export default function FederalPage() {
     const raw = new URLSearchParams(window.location.search).get('case');
     const id = raw ? Number(raw) : NaN;
     if (Number.isFinite(id)) {
+      setDeepLinkedCaseId(id);
       setExpandedCaseId(id);
       setPendingCaseScroll(id);
     }
@@ -205,9 +212,13 @@ export default function FederalPage() {
     // Only scroll once the case is actually in the loaded list — a stale or unknown id in an old
     // email should leave the reader at the top of a working page, not scrolled at nothing.
     if (!cases.some(c => c.id === pendingCaseScroll)) {
+      // Say so rather than failing silently — an email CTA that lands on an ordinary-looking page
+      // reads as a broken link, which is precisely how this surfaced.
+      setDeepLinkMissing(true);
       setPendingCaseScroll(null);
       return;
     }
+    setDeepLinkMissing(false);
     document
       .getElementById(`case-${pendingCaseScroll}`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -234,6 +245,19 @@ export default function FederalPage() {
   // Only surface facet options actually present in the data, so empty dropdowns don't appear.
   const instrumentOptions = Array.from(new Set(actions.map(a => a.instrument_type).filter((t): t is string => !!t && t !== 'other'))).sort();
   const materialOptions = MATERIAL_CATEGORIES.filter(m => m !== 'other' && actions.some(a => a.material_categories?.includes(m)));
+
+  // Arrived from a litigation alert without a membership: show them the case. The alert emails go
+  // to every active subscription regardless of tier and get forwarded onward, so the one thing this
+  // page must not do is answer that link with a bare wall. One case is public; the tracker is not.
+  if (!isPro && !isAdmin && deepLinkedCaseId !== null) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto space-y-6">
+        <DeadlinesTabs />
+        <GazetteHeader title="EPR Litigation" subtitle="Judicial challenges to state EPR laws, tracked via CourtListener" />
+        <LitigationCaseSpotlight caseId={deepLinkedCaseId} />
+      </div>
+    );
+  }
 
   // Federal Actions is a Pro feature (US-only via the nav's usOnly flag). Non-members get a lock.
   if (!isPro && !isAdmin) {
@@ -355,6 +379,12 @@ export default function FederalPage() {
           title={`EPR Litigation Cases (${cases.length})`}
           subtitle="Judicial challenges to state EPR laws, tracked via CourtListener"
         />
+        {deepLinkMissing && (
+          <div className="surface-card p-3 mb-2 text-sm text-text-secondary">
+            The case linked from your alert is no longer listed here — it may have been removed from
+            the tracker. Every case we currently track is below.
+          </div>
+        )}
         {casesLoading ? (
           <SkeletonList rows={3} height="h-20" />
         ) : cases.length === 0 ? (

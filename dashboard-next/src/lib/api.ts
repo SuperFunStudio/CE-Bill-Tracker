@@ -423,11 +423,16 @@ export async function fetchPreemptionRisk(): Promise<Record<string, unknown>> {
 
 /** The bulk litigation feed — CAP_FEDERAL, 403 without a qualifying token. */
 export async function fetchLitigationCases(token?: string | null): Promise<LitigationCaseSummary[]> {
-  return apiFetch<LitigationCaseSummary[]>(buildUrl('/litigation-cases'), token);
+  // Explicit limit: the server defaults to 50 ordered by preemption risk, so a mid-risk case that an
+  // alert email deep-links to can fall off the end of the list and silently fail to open.
+  return apiFetch<LitigationCaseSummary[]>(buildUrl('/litigation-cases', { limit: 200 }), token);
 }
 
-export async function fetchLitigationCase(id: number): Promise<LitigationCaseDetail> {
-  return apiFetch<LitigationCaseDetail>(buildUrl(`/litigation-cases/${id}`));
+export async function fetchLitigationCase(id: number, token?: string | null): Promise<LitigationCaseDetail> {
+  // Takes a token: /litigation-cases/{id} sits under the same CAP_FEDERAL router as the list, so an
+  // anonymous call 401s and the case timeline renders as "No events recorded." — which is exactly
+  // what a Pro reader arriving from a litigation alert's ?case= deep link used to see.
+  return apiFetch<LitigationCaseDetail>(buildUrl(`/litigation-cases/${id}`), token);
 }
 
 export async function fetchBillLitigationCases(billId: number): Promise<LitigationCaseSummary[]> {

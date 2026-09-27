@@ -31,6 +31,11 @@ from app.schemas import (
 #   GET /litigation-cases         CAP_FEDERAL, hard 403 — it has no free consumer. Per-BILL litigation
 #                                 (/bills/{id}/litigation-cases) stays free, matching the standing rule
 #                                 that a single record is free and the corpus-wide view is the product.
+#   GET /litigation-cases/{id}    free, by that same rule. It used to sit inside the gated router,
+#                                 which broke the litigation alert emails: they go to every active
+#                                 subscription regardless of tier, and their whole job is to land the
+#                                 reader on one case. A shareable alert whose link 401s isn't shareable.
+#                                 One case is the unit people forward; the tracker is the product.
 #
 # The snapshot now bakes the summary instead of the list, so the CDN carries only free data.
 FEDERAL_TEASER_LIMIT = 5
@@ -175,12 +180,19 @@ async def list_litigation_cases(
     return summaries
 
 
-@litigation_router.get("/{case_id}", response_model=LitigationCaseDetail)
+# Single cases are public — see the note at the top of this module. Declared on its own router so it
+# doesn't inherit litigation_router's CAP_FEDERAL dependency, and mounted at the same path prefix so
+# the URL already in sent alert emails keeps working.
+public_litigation_router = APIRouter(prefix="/litigation-cases", tags=["litigation"])
+
+
+@public_litigation_router.get("/{case_id}", response_model=LitigationCaseDetail)
 async def get_litigation_case(
     case_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a litigation case with all events (timeline)."""
+    """Get a litigation case with all events (timeline). Public: this is the page a litigation alert
+    links to, and those alerts reach free subscribers and get forwarded."""
     result = await db.execute(
         select(LitigationCase)
         .options(selectinload(LitigationCase.events))

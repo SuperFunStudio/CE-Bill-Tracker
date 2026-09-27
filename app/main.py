@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.api import access, admin, auth_email, bills, alerts, pipeline, health, federal, companies, webhooks, billing, design, user, compliance, referrals, insights, research, evaluate, scope
-from app.api.federal import litigation_router
+from app.api.federal import litigation_router, public_litigation_router
 from app.ratelimit import limiter
 from app.utils.logging_config import configure_logging
 from app.utils.request_logging import RequestLoggingMiddleware
@@ -106,6 +106,9 @@ app.include_router(companies.router)
 app.include_router(companies.bills_exposure_router)
 app.include_router(companies.queue_router)
 app.include_router(webhooks.router)
+# Same /litigation-cases prefix, two routers: the single-case GET is public (it's what litigation
+# alert emails link to, and those reach free subscribers), the bulk feed stays CAP_FEDERAL.
+app.include_router(public_litigation_router)
 app.include_router(litigation_router)
 app.include_router(billing.router)
 app.include_router(referrals.router)

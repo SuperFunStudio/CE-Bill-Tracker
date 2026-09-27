@@ -482,12 +482,18 @@ def build_text_alert_html(
     preheader: str | None = None,
     unsubscribe_url: str | None = None,
     subscribe_url: str | None = None,
+    referral_is_pro: bool = False,
 ) -> str:
     """The HTML body for a non-bill alert (litigation events). Module-level so the sample/preview
     script and tests can render it without going near a transport.
 
     No tagline: the kicker already classifies the message, and "Tracking the circular economy" under
     a wordmark the reader has just read is a third label for the same thing.
+
+    `referral=True`: a litigation alert is the most forwarded thing we send — one case, one docket, a
+    colleague who needs to see it — and the case page it lands on is public for exactly that reason.
+    So the footer offers the reader a month of Pro for making the forward a referral instead. This is
+    engagement mail, which is precisely where render_shell says the note belongs.
     """
     cta = f'<p style="margin:20px 0 0;">{cta_button(cta_url, cta_label)}</p>' if cta_url else ""
     body = (
@@ -502,6 +508,8 @@ def build_text_alert_html(
         colophon="You're receiving this because you subscribed to Atlas Circular litigation alerts.",
         unsubscribe_url=unsubscribe_url,
         subscribe_url=subscribe_url,
+        referral=True,
+        referral_is_pro=referral_is_pro,
     )
 
 
@@ -608,6 +616,7 @@ class EmailSender:
         preheader: str | None = None,
         unsubscribe_url: str | None = None,
         subscribe_url: str | None = None,
+        referral_is_pro: bool = False,
         from_email: str | None = None,
     ) -> bool:
         """Send a plain-text/HTML alert not tied to a Bill object (e.g., litigation events).
@@ -617,7 +626,8 @@ class EmailSender:
         in-app button; litigation alerts pass the case's Atlas Circular page so the reader lands on
         our analysis and follows the CourtListener link from there, rather than being handed straight
         to an external docket. `kicker`/`preheader`/`unsubscribe_url`/`subscribe_url` pass through to
-        the shell — see render_shell.
+        the shell — see render_shell. `referral_is_pro` only picks the wording of the footer's
+        referral note (which is always on here); it doesn't decide whether to show it.
         """
         html = build_text_alert_html(
             body_text,
@@ -627,6 +637,7 @@ class EmailSender:
             preheader=preheader,
             unsubscribe_url=unsubscribe_url,
             subscribe_url=subscribe_url,
+            referral_is_pro=referral_is_pro,
         )
         # The plain-text part keeps the bare URL so the CTA isn't lost on a text-only client.
         text_part = f"{body_text}\n\n{cta_label.rstrip(' →')}: {cta_url}" if cta_url else body_text

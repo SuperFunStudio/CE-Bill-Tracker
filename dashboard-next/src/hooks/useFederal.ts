@@ -69,10 +69,16 @@ export function useLitigationCases() {
   });
 }
 
+/** One case, with its event timeline. PUBLIC — a litigation alert links here and those alerts reach
+ *  free subscribers and get forwarded, so a single case has to open for anyone (see the note on
+ *  public_litigation_router). The token is still sent when we have one, because it costs nothing and
+ *  keeps the call attributable; the route itself doesn't require it. The bulk feed above stays
+ *  gated: one case is shareable, the tracker is the product. */
 export function useLitigationCase(id: number | null) {
+  const { getToken } = useAuth();
   return useQuery({
     queryKey: ['litigationCase', id],
-    queryFn: () => fetchLitigationCase(id!),
+    queryFn: async () => fetchLitigationCase(id!, await getToken()),
     enabled: id !== null,
     staleTime: STALE,
   });

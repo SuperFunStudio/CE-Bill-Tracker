@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useAuth } from '@/components/auth/AuthContext';
 import { startProCheckout } from '@/lib/billing';
 import { PRO, upgradeLabel } from '@/lib/tiers';
-import { useReferralShare } from '@/hooks/useReferralShare';
+import { ReferralUnlock } from '@/components/ui/ReferralUnlock';
 import { track, trackGateShown, trackGateHit } from '@/lib/analytics';
 import { LockIcon } from '@/components/ui/icons';
 
@@ -18,9 +18,7 @@ const FEATURE = 'upcoming_deadlines';
  * sharer earns a month of Pro (granted server-side; we poll to flip the gate open).
  */
 export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number }) {
-  const { user, openAuth, getToken, refreshEntitlement } = useAuth();
-  // Shared share-to-unlock flow (link load, copy/share, grant polling) — see useReferralShare.
-  const { link, copied, shared, copyError, copy, share } = useReferralShare('deadlines_lock');
+  const { user, openAuth, getToken } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [trialBusy, setTrialBusy] = useState(false);
   const [trialError, setTrialError] = useState<string | null>(null);
@@ -53,16 +51,6 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
       setTrialBusy(false);
     }
   }, [user, getToken, openAuth]);
-
-  // The lock card seeds the native share sheet with deadline-specific copy.
-  const shareDeadlines = useCallback(
-    () =>
-      share({
-        title: 'Atlas Circular — Upcoming EPR Deadlines',
-        text: 'Track every EPR compliance deadline across all 50 states.',
-      }),
-    [share],
-  );
 
   return (
     <div
@@ -100,67 +88,13 @@ export function UpcomingDeadlinesLock({ lockedCount }: { lockedCount?: number })
           <span className="h-px flex-1 bg-border-default" /> or <span className="h-px flex-1 bg-border-default" />
         </div>
 
-        {/* Referral path */}
-        <div className="space-y-2">
-          <p className="text-sm text-text-primary font-medium">Unlock 1 month free</p>
-          <p className="text-xs text-text-muted leading-relaxed">
-            Share this with a colleague. When they create a free account through your link, you get a
-            month of Pro — on us.
-          </p>
-          {!user ? (
-            <button
-              onClick={() => {
-                // The referral escape hatch is its own gate — a separate feature label keeps it from
-                // blending into the trial CTA when comparing which way out of the wall people take.
-                trackGateHit('pro', 'sign_in', 'deadlines_referral_link');
-                openAuth();
-              }}
-              className="w-full rounded-lg border border-green-accent bg-green-dark px-4 py-2 text-sm font-medium text-green-accent hover:opacity-90 transition-opacity"
-            >
-              Sign in to get your link →
-            </button>
-          ) : shared ? (
-            <div className="rounded-lg border border-green-accent/40 bg-green-dark/30 px-3 py-2.5 space-y-1.5">
-              <p className="text-xs text-green-accent leading-relaxed">
-                {copied ? 'Link copied! ' : 'Shared! '}Your month of Pro unlocks the moment a colleague
-                creates their account through your link.
-              </p>
-              <button onClick={() => refreshEntitlement()} className="text-meta text-green-accent underline">
-                Check access now
-              </button>
-            </div>
-          ) : link ? (
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={link}
-                  onFocus={e => e.currentTarget.select()}
-                  className="flex-1 min-w-0 rounded-lg border border-border-default bg-bg-primary px-2 py-2 text-xs text-text-secondary"
-                />
-                <button
-                  onClick={copy}
-                  className="shrink-0 rounded-lg bg-green-accent text-bg-primary px-3 py-2 text-xs font-medium hover:opacity-90 transition-opacity"
-                >
-                  Copy
-                </button>
-              </div>
-              <button
-                onClick={shareDeadlines}
-                className="w-full rounded-lg border border-green-accent bg-green-dark px-4 py-2 text-sm font-medium text-green-accent hover:opacity-90 transition-opacity"
-              >
-                Share to a colleague →
-              </button>
-              {copyError && (
-                <p className="text-meta text-text-muted">
-                  Couldn&rsquo;t copy automatically — tap the link above to select it, then copy.
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-text-muted">Loading your link…</p>
-          )}
-        </div>
+        {/* Referral path — shared with the litigation case spotlight; see ReferralUnlock. */}
+        <ReferralUnlock
+          source="deadlines_lock"
+          gateFeature="deadlines_referral_link"
+          shareTitle="Atlas Circular — Upcoming EPR Deadlines"
+          shareText="Track every EPR compliance deadline across all 50 states."
+        />
 
         <Link
           href="/"

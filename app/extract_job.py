@@ -25,11 +25,12 @@ import os
 from datetime import date
 
 
-async def _run(regions: list[str] | None, include_us: bool, refresh: bool, max_bills: int | None) -> None:
+async def _run(regions: list[str] | None, include_us: bool, refresh: bool, max_bills: int | None,
+               bill_ids: list[int] | None = None, anchor: str | None = None) -> None:
     import structlog
     from sqlalchemy import select
 
-    from app.classification.sonnet_extractor import SonnetExtractor
+    from app.classification.sonnet_extractor import SonnetExtractor, select_text_window
     from app.database import AsyncSessionLocal
     from app.models import Bill, BillText, ComplianceDeadline
 
@@ -42,12 +43,17 @@ async def _run(regions: list[str] | None, include_us: bool, refresh: bool, max_b
             .join(BillText, BillText.bill_id == Bill.id)  # only bills with persisted text
             .where(Bill.ce_relevant.is_(True))
         )
-        if not refresh:
-            q = q.where(Bill.compliance_details.is_(None))
-        if regions:
-            q = q.where(Bill.region.in_(regions))
-        elif not include_us:
-            q = q.where(Bill.region != "US")
+        if bill_ids:
+            # Targeted re-extraction (e.g. after a curated reclassification): exact ids, any region,
+            # existing compliance_details replaced.
+            q = q.where(Bill.id.in_(bill_ids))
+        else:
+            if not refresh:
+                q = q.where(Bill.compliance_details.is_(None))
+            if regions:
+                q = q.where(Bill.region.in_(regions))
+            elif not include_us:
+                q = q.where(Bill.region != "US")
         ids = [r[0] for r in (await db.execute(q.order_by(Bill.id))).all()]
 
     if max_bills:
@@ -67,6 +73,10 @@ async def _run(regions: list[str] | None, include_us: bool, refresh: bool, max_b
             ).scalar_one_or_none() or ""
             if not text.strip():
                 continue
+            if anchor:
+                # Pre-window on the caller's anchor; the result fits max_chars, so the extractor's own
+                # windowing passes it through whole.
+                text = select_text_window(text, region=bill.region, anchor=anchor)
             try:
                 extraction = await sonnet.extract(
                     state=bill.state,
@@ -134,6 +144,10 @@ def main() -> None:
     ap.add_argument("--refresh", action="store_true",
                     help="Re-extract bills that already have compliance_details (default: skip them).")
     ap.add_argument("--max", type=int, default=None, help="Cap bills processed (testing).")
+    ap.add_argument("--bill-id", type=int, action="append", default=None,
+                    help="Re-extract exactly this bill (repeatable; any region, implies --refresh).")
+    ap.add_argument("--anchor", default=None,
+                    help="Regex to window large texts on instead of the EPR anchors (use with --bill-id).")
     ap.add_argument("--dsn", default=None, help="Target DSN (defaults to env DATABASE_URL).")
     args = ap.parse_args()
 
@@ -141,7 +155,8 @@ def main() -> None:
         os.environ["DATABASE_URL"] = args.dsn
 
     regions = [args.region.upper()] if args.region else None
-    asyncio.run(_run(regions, include_us=args.include_us, refresh=args.refresh, max_bills=args.max))
+    asyncio.run(_run(regions, include_us=args.include_us, refresh=args.refresh, max_bills=args.max,
+                     bill_ids=args.bill_id, anchor=args.anchor))
 
 
 if __name__ == "__main__":

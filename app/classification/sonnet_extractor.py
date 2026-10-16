@@ -107,7 +107,8 @@ def _anchor_re(region: str | None) -> re.Pattern:
 
 
 def select_text_window(
-    full_text: str, region: str | None = None, max_chars: int = 40000, head_chars: int = 4000
+    full_text: str, region: str | None = None, max_chars: int = 40000, head_chars: int = 4000,
+    anchor: str | None = None,
 ) -> str:
     """Pick the slice of bill text to send to the extractor.
 
@@ -117,12 +118,17 @@ def select_text_window(
     language-aware (see _anchor_re) so native-language law windows on its obligations, not preamble.
     If no anchor is found, fall back to the leading max_chars (pure EPR laws front-load obligations —
     e.g. German VerpackG extracted fully from its first 12K).
+
+    `anchor` (a regex) overrides the EPR anchors for a targeted re-extraction: an omnibus law whose
+    first EPR term opens an unrelated chapter (FR Climat et Resilience windows on repairability, not
+    the demolition diagnostic it was reclassified for).
     """
     if len(full_text) <= max_chars:
         return full_text
     head = full_text[:head_chars]
     budget = max_chars - head_chars
-    m = _anchor_re(region).search(full_text, head_chars)
+    pat = re.compile(anchor, re.IGNORECASE) if anchor else _anchor_re(region)
+    m = pat.search(full_text, head_chars)
     if not m:
         return full_text[:max_chars]
     start = max(head_chars, m.start() - 1000)

@@ -29,7 +29,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-async def _run(bulk: bool, in_force_only: bool, only_new: bool, classify: bool, max_acts: int | None) -> None:
+async def _run(bulk: bool, in_force_only: bool, only_new: bool, classify: bool, max_acts: int | None,
+               celex: list[str] | None = None) -> None:
     # Imports happen AFTER --dsn is applied to the environment so the engine binds to the right DB.
     from app.ingestion.eurlex import sync_eurlex
 
@@ -44,7 +45,8 @@ async def _run(bulk: bool, in_force_only: bool, only_new: bool, classify: bool, 
 
         async with EurLexClient() as client, AsyncSessionLocal() as db:
             ids = []
-            for a in SEED_ACTS:
+            # --celex narrows seed mode to named acts, so adding one seed act doesn't re-classify the rest.
+            for a in [a for a in SEED_ACTS if not celex or a["celex"] in celex]:
                 act = await client.fetch_act(a["celex"], fallback_name=a["name"])
                 if not act:
                     print(f"  -- {a['celex']} skipped")
@@ -91,6 +93,8 @@ def main() -> None:
     ap.add_argument("--only-new", action="store_true", help="Skip CELEX already in the DB (weekly-refresh mode).")
     ap.add_argument("--no-classify", action="store_true", help="Ingest only; skip LLM classification.")
     ap.add_argument("--max", type=int, default=None, help="Cap acts processed this run.")
+    ap.add_argument("--celex", action="append", default=None,
+                    help="Seed mode only: ingest just this SEED_ACTS CELEX (repeatable).")
     args = ap.parse_args()
 
     if args.dsn:
@@ -106,6 +110,7 @@ def main() -> None:
             only_new=args.only_new,
             classify=not args.no_classify,
             max_acts=args.max,
+            celex=args.celex,
         )
     )
 

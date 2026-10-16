@@ -36,7 +36,11 @@ EURLEX_PAGE = "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:{celex}
 EURLEX_HTML = "https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:{celex}"
 # PDF original — fallback for acts EUR-Lex has no HTML rendering for (mostly older or annex-heavy acts).
 EURLEX_PDF = "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:{celex}"
-# Below this many chars the HTML body is treated as missing → try the PDF.
+# CELLAR content negotiation for the same act — the fallback when EUR-Lex answers its bot challenge (HTTP
+# 202, empty body) instead of the rendering. Same XHTML, served by the Publications Office directly.
+CELLAR_RESOURCE = "http://publications.europa.eu/resource/celex/{celex}"
+_CELLAR_HEADERS = {"Accept": "application/xhtml+xml, text/html;q=0.9", "Accept-Language": "eng"}
+# Below this many chars the HTML body is treated as missing → try CELLAR, then the PDF.
 _MIN_BODY_CHARS = 400
 
 _BROWSER_HEADERS = {
@@ -205,6 +209,18 @@ class EurLexClient:
             full_text = _strip_html(resp.text)
         except httpx.HTTPError as e:
             log.warning("eurlex_html_failed", celex=celex, error=str(e))
+
+        if len(full_text) < _MIN_BODY_CHARS:
+            # EUR-Lex's WAF returns 202 + empty body (raise_for_status passes it); CELLAR serves the
+            # same XHTML without the challenge.
+            try:
+                resp = await self._client.get(CELLAR_RESOURCE.format(celex=celex), headers=_CELLAR_HEADERS)
+                resp.raise_for_status()
+                cellar_text = _strip_html(resp.text)
+                if len(cellar_text) > len(full_text):
+                    full_text = cellar_text
+            except httpx.HTTPError as e:
+                log.warning("cellar_html_failed", celex=celex, error=str(e))
 
         if len(full_text) < _MIN_BODY_CHARS:
             # No (or thin) HTML rendering — try the PDF original.

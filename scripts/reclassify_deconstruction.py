@@ -38,6 +38,19 @@ FLIPS = {
                 "separation of biowaste, landfill reduction of 30%/50% by 2020/2025, and the "
                 "single-use plastic bag ban."),
 }
+# Keyed by CELEX for acts ingested after this script was written (no stable bill id across DBs).
+#  - EU Construction Products Regulation 2024/3110: Haiku reads its market-access opening and rules it
+#    out, but the body carries the circular provisions (digital product passport, design for separation
+#    at deconstruction, used/remanufactured products).
+FLIPS_BY_CELEX = {
+    "32024R3110": dict(
+        conf=0.85, materials=["construction"], instruments=["labeling", "other"], urgency="medium",
+        summary="Replaces the 2011 CPR with harmonised rules for construction products that add "
+                "environmental-sustainability obligations: a digital product passport, product design "
+                "that facilitates separation of components and materials at deinstallation, "
+                "deconstruction and demolition for reuse, remanufacturing and recycling, and a path to "
+                "harmonised specifications for used and remanufactured construction products."),
+}
 ADD_CONSTRUCTION = [83413, 81674]
 
 
@@ -58,19 +71,30 @@ async def main() -> None:
     args = ap.parse_args()
 
     c = await asyncpg.connect(args.dsn, ssl=False)
-    ids = list(FLIPS) + ADD_CONSTRUCTION
+    flips = dict(FLIPS)
+    for celex, f in FLIPS_BY_CELEX.items():
+        bid = await c.fetchval("SELECT id FROM bills WHERE celex_id = $1", celex)
+        if bid is None:
+            print(f"(skip {celex}: not ingested in this DB yet)")
+        else:
+            flips[bid] = f
+    ids = list(flips) + ADD_CONSTRUCTION
     rows = {r["id"]: r for r in await c.fetch(
         "SELECT id, state, bill_number, ce_relevant, confidence_score, instrument_type, instrument_types,"
         " material_categories, needs_review FROM bills WHERE id = ANY($1::int[])", ids)}
 
     plan = []
-    for bid, f in FLIPS.items():
-        r = rows[bid]
+    for bid, f in flips.items():
+        r = rows.get(bid)
+        if r is None or r["ce_relevant"]:
+            continue  # already flipped (re-run) or classified in scope since — leave it
         new = {"ce_relevant": True, "confidence_score": f["conf"], "instrument_type": f["instruments"][0],
                "instrument_types": f["instruments"], "material_categories": f["materials"], "needs_review": True}
         plan.append((bid, r, new, f))
     for bid in ADD_CONSTRUCTION:
-        r = rows[bid]
+        r = rows.get(bid)
+        if r is None:
+            continue  # bill ids are prod's; absent in other DBs
         old = _snap(r)
         mats = old["material_categories"] or []
         if "construction" in mats:

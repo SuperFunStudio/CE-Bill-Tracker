@@ -1,0 +1,8 @@
+[
+  {
+    "key": "milwaukee-wi-deconstruction",
+    "state": "WI", "city": "MILWAUKEE",
+    "title": "Milwaukee Deconstruction Ordinance",
+    "reason": "Status unverified. Passed 2017-11-07, effective 2018-01-01 (houses/duplexes built 1929 or earlier, or historic). Enforcement suspended by the Common Council in January 2019 (reported suspension to March 2020); current status after that not confirmed — city DNS history page (city.milwaukee.gov/DNS/Inspections_Sections/Decon/DeconHistory) returned 403. Move into municipal_ordinances.json once the current status and an official source URL are confirmed."
+  }
+]

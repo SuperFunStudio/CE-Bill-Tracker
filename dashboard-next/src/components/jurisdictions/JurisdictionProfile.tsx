@@ -9,7 +9,7 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillFilters, DEFAULT_FILTERS, applyBillFilters, type BillFilterState } from '@/components/bills/BillFilters';
 import { formatInstrumentType, formatDate, daysUntil } from '@/lib/utils';
-import { jurisdictionDisplayName, unitNoun } from '@/lib/jurisdictions';
+import { US_CITY_NAMES, isCityOf, jurisdictionDisplayName, unitNoun } from '@/lib/jurisdictions';
 import { programsForState, PROGRAM_KIND_LABEL } from '@/lib/stateProfiles';
 import type { BillSummary } from '@/lib/types';
 
@@ -90,6 +90,23 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
 
   const match = useMemo(() => billMatcher(region, code), [region, code]);
   const jxBills = useMemo(() => bills.filter(match), [bills, match]);
+
+  // City ordinances in this state (state = "<ST>-<CITY>"). Kept out of jxBills so the counters,
+  // momentum, and policy mix stay a read on the state legislature; listed in their own section.
+  const cityBills = useMemo(
+    () =>
+      isUS
+        ? bills
+            .filter(b => b.region === 'US' && isCityOf(b.state, code))
+            .sort((a, b) => a.state.localeCompare(b.state) || (b.status_date ?? '').localeCompare(a.status_date ?? ''))
+        : [],
+    [bills, code, isUS],
+  );
+  const cityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    cityBills.forEach(b => { counts[b.state] = (counts[b.state] ?? 0) + 1; });
+    return Object.entries(counts);
+  }, [cityBills]);
 
   const stats = useMemo(() => {
     const blank = () => ({ introduced: 0, committee: 0, advancing: 0, enacted: 0 } as Record<StageKey, number>);
@@ -354,6 +371,28 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
           </p>
         )}
       </section>
+
+      {/* City ordinances — curated municipal law (deconstruction, C&D diversion, reuse/foodware, bags),
+          separate from the state-legislature counts above. */}
+      {cityBills.length > 0 && (
+        <section className="space-y-2">
+          <div>
+            <h2 className="font-serif text-lg text-text-primary">City ordinances</h2>
+            <p className="text-text-muted text-xs">
+              Local law in {name}&rsquo;s cities — curated, and not counted in the statewide totals above.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {cityCounts.map(([st, n]) => (
+              <span key={st} className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-secondary px-3 py-1 text-xs">
+                <span className="text-text-primary">{US_CITY_NAMES[st] ?? st}</span>
+                <span className="font-serif tabular-nums text-text-muted">{n}</span>
+              </span>
+            ))}
+          </div>
+          <BillTable bills={cityBills} autoPageSize={8} />
+        </section>
+      )}
     </div>
   );
 }

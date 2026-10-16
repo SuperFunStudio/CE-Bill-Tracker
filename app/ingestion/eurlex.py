@@ -73,6 +73,7 @@ SEED_ACTS: list[dict] = [
     {"celex": "32000L0053", "name": "End-of-Life Vehicles Directive (ELV)", "material": "vehicles"},
     {"celex": "32008L0098", "name": "Waste Framework Directive", "material": "waste"},
     {"celex": "32024R1781", "name": "Ecodesign for Sustainable Products Regulation (ESPR)", "material": "multi"},
+    {"celex": "32024R3110", "name": "Construction Products Regulation (CPR)", "material": "construction"},
 ]
 
 

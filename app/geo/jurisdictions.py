@@ -9,7 +9,7 @@ even when the word never appears in a bill's title or (foreign-language) body te
 Levels: world -> bloc (EU) | country (US, FR, …) -> state (US-CA, provinces) -> municipality (future).
 Codes are hierarchical + globally unique so the flat-column `CA` collision is resolved:
   US California = "US-CA"  vs  Canada = "CA".
-Municipalities are NOT seeded here (Pillar D) — the schema/codes just leave room for "US-CA-SF".
+US municipalities are seeded only where curated ordinances exist (US_MUNICIPALITIES), e.g. "US-CA-SF".
 
 Backfill + resolver both import from here so the tree and the mapping never drift.
 """
@@ -83,6 +83,30 @@ US_STATES: dict[str, str] = {
 }
 
 
+# US municipalities with curated ordinances (data/seed/municipal_ordinances.json). A city ordinance's
+# bill row carries state = "<ST>-<CITY>" (e.g. "OR-PORTLAND"), so jurisdiction_code() yields
+# "US-OR-PORTLAND" with no special case, and the exact-match state filters behind the leaderboard and
+# state profiles keep city ordinances out of state-legislature counts. Aliases are city names only —
+# never a bare abbreviation like "LA" (Louisiana) or a name shared with another state's city.
+US_MUNICIPALITIES: dict[str, tuple[str, list[str]]] = {
+    "OR-PORTLAND": ("Portland", ["Portland, Oregon", "Portland OR", "City of Portland"]),
+    "TX-SANANTONIO": ("San Antonio", ["San Antonio"]),
+    "TX-AUSTIN": ("Austin", ["Austin, Texas", "Austin TX", "City of Austin"]),
+    "CA-PALOALTO": ("Palo Alto", ["Palo Alto"]),
+    "CA-SF": ("San Francisco", ["San Francisco", "City of San Francisco"]),
+    "CA-BERKELEY": ("Berkeley", ["Berkeley"]),
+    "CA-LA": ("Los Angeles", ["Los Angeles", "City of Los Angeles"]),
+    "CO-BOULDER": ("Boulder", ["Boulder, Colorado", "Boulder CO", "City of Boulder"]),
+    "CO-DENVER": ("Denver", ["Denver"]),
+    "PA-PITTSBURGH": ("Pittsburgh", ["Pittsburgh"]),
+    "PA-PHILADELPHIA": ("Philadelphia", ["Philadelphia", "Philly"]),
+    "WA-SEATTLE": ("Seattle", ["Seattle"]),
+    "IL-CHICAGO": ("Chicago", ["Chicago"]),
+    "NY-NYC": ("New York City", ["New York City", "NYC"]),
+    "MA-BOSTON": ("Boston", ["Boston"]),
+}
+
+
 def jurisdiction_code(region: str, state: str) -> str:
     """Map a bill's (region, state) to its jurisdiction code. The one place this logic lives."""
     region = (region or "").strip().upper()
@@ -112,5 +136,12 @@ def seed_nodes() -> list[dict]:
         nodes.append({
             "code": code, "name": name, "level": "state", "parent_code": "US",
             "aliases": [st, name], "path": f"{label(ROOT_CODE)}.us.{label(code)}",
+        })
+    for sub, (name, aliases) in US_MUNICIPALITIES.items():
+        st = sub.split("-", 1)[0]
+        parent, code = f"US-{st}", f"US-{sub}"
+        nodes.append({
+            "code": code, "name": name, "level": "municipality", "parent_code": parent,
+            "aliases": aliases, "path": f"{label(ROOT_CODE)}.us.{label(parent)}.{label(code)}",
         })
     return nodes

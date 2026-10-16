@@ -44,10 +44,34 @@ export function jurisdictionName(region: string, code: string | null | undefined
  * alone (state codes collide with country codes, e.g. US "DE" Delaware vs "DE" Germany). Used by the
  * unified /jurisdictions/[region]/[code] profile route.
  */
+// US cities with curated ordinances (mirror of US_MUNICIPALITIES in app/geo/jurisdictions.py). A city
+// ordinance's `state` is "<ST>-<CITY>" (e.g. "OR-PORTLAND"), so exact state matches never count it
+// toward the state; profiles list it under "City ordinances" by the "<ST>-" prefix.
+export const US_CITY_NAMES: Record<string, string> = {
+  'OR-PORTLAND': 'Portland', 'TX-SANANTONIO': 'San Antonio', 'TX-AUSTIN': 'Austin',
+  'CA-PALOALTO': 'Palo Alto', 'CA-SF': 'San Francisco', 'CA-BERKELEY': 'Berkeley', 'CA-LA': 'Los Angeles',
+  'CO-BOULDER': 'Boulder', 'CO-DENVER': 'Denver', 'PA-PITTSBURGH': 'Pittsburgh',
+  'PA-PHILADELPHIA': 'Philadelphia', 'WA-SEATTLE': 'Seattle', 'IL-CHICAGO': 'Chicago',
+  'NY-NYC': 'New York City', 'MA-BOSTON': 'Boston',
+};
+
+/** True when a US bill's `state` is a city code under `stateAbbr` (e.g. "OR-PORTLAND" under "OR"). */
+export function isCityOf(state: string, stateAbbr: string): boolean {
+  return state.startsWith(`${stateAbbr.toUpperCase()}-`);
+}
+
+/** "Portland, Oregon" for a city code; null for anything that isn't one. */
+export function cityDisplayName(code: string): string | null {
+  const city = US_CITY_NAMES[code.toUpperCase()];
+  if (!city) return null;
+  const st = code.split('-')[0].toUpperCase();
+  return `${city}, ${STATE_NAMES[st] ?? st}`;
+}
+
 export function jurisdictionDisplayName(region: string, code: string): string {
   const r = region.toUpperCase();
   const c = code.toUpperCase();
-  if (r === 'US') return c === 'US' ? 'Federal' : STATE_NAMES[c] ?? c;
+  if (r === 'US') return c === 'US' ? 'Federal' : STATE_NAMES[c] ?? cityDisplayName(c) ?? c;
   if (r === 'EU') return c === 'EU' ? 'European Union' : EU_MEMBERS[c] ?? c;
   // Foreign national law: region == country code (== state).
   return EU_MEMBERS[c] ?? FOREIGN_COUNTRY_NAMES[c] ?? c;

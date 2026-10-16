@@ -47,6 +47,18 @@ COUNTRIES: dict[str, tuple[str, str, list[str]]] = {
     "LV": ("Latvia", "country", ["LV", "Latvia", "Latvian", "Latvija"]),
     "SI": ("Slovenia", "country", ["SI", "Slovenia", "Slovenian", "Slovenija"]),
     "SK": ("Slovakia", "country", ["SK", "Slovakia", "Slovak", "Slovensko"]),
+    # The rest of the EU-27, so _BLOC_MEMBERS expansion ("European Union") reaches every member instead
+    # of silently skipping the ones with no node. Name-only aliases: the bare codes collide with US state
+    # aliases (MT = Montana), bill prefixes (HR = House Resolution), or words ("be").
+    "BE": ("Belgium", "country", ["Belgium", "Belgian", "België", "Belgique"]),
+    "BG": ("Bulgaria", "country", ["Bulgaria", "Bulgarian", "България"]),
+    "HR": ("Croatia", "country", ["Croatia", "Croatian", "Hrvatska"]),
+    "CY": ("Cyprus", "country", ["Cyprus", "Cypriot"]),
+    "GR": ("Greece", "country", ["Greece", "Greek", "Hellas", "Ελλάδα"]),
+    "HU": ("Hungary", "country", ["Hungary", "Hungarian", "Magyarország"]),
+    "MT": ("Malta", "country", ["Malta", "Maltese"]),
+    "PT": ("Portugal", "country", ["Portugal", "Portuguese"]),
+    "RO": ("Romania", "country", ["Romania", "Romanian", "România"]),
     # Non-US/EU regions from the foreign-expansion backlog (were ingested + on the globe but had no
     # jurisdiction node, so place-scoped Ask-the-Bills questions silently dropped them — e.g. "compare
     # Kenya with Chile and Japan" scoped to Chile+Japan only). Resolve by NAME, not the bare 2-letter

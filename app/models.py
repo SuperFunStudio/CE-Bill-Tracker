@@ -1367,3 +1367,18 @@ class ContentDraft(Base):
     )
 
     __table_args__ = (Index("idx_content_drafts_status", "status", "created_at"),)
+
+
+class IngestionCursor(Base):
+    """Where a rate-limited ingestion source stopped, so the next scheduled run resumes there instead
+    of starting over. One row per source; `cursor` is source-defined JSON (for "openstates" see
+    app/ingestion/openstates_cursor.py). See migration 052.
+    """
+
+    __tablename__ = "ingestion_cursors"
+
+    source: Mapped[str] = mapped_column(String(40), primary_key=True)
+    cursor: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

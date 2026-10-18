@@ -252,10 +252,14 @@ async def run_ingestion_cycle(state_filter: str | None = None) -> None:
         )
         async with AsyncSessionLocal() as db:
             coordinator = IngestionCoordinator()
+            # resume: the free tier allows ~250 calls/day against ~16k for a full sweep, so the
+            # nightly run continues the persisted rotation instead of restarting at query 1.
+            # updated_since only applies to state-filtered runs, which skip the rotation.
             os_summary = await coordinator.run_openstates_cycle(
                 db,
                 state_filter=state_filter,
                 updated_since=updated_since,
+                resume=True,
             )
             log.info("openstates_cycle_complete", **os_summary)
 

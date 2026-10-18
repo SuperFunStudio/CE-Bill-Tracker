@@ -654,8 +654,19 @@ class IngestionCoordinator:
         state_filter: str | None = None,
         updated_since: datetime | None = None,
         max_api_calls: int | None = None,
+        resume: bool = False,
     ) -> dict:
+        """Search OpenStates for every EPR query x state.
+
+        resume=True (the nightly cycle) walks the queries as a rotation persisted in
+        ingestion_cursors, starting where the last run stopped and searching each query from its own
+        last sweep — see app/ingestion/openstates_cursor.py. `updated_since` is ignored in that mode.
+        Without it (manual and state-filtered runs) every query runs from the top with
+        `updated_since`, and the cursor is neither read nor written.
+        """
         from app.config import settings as _settings
+        from app.ingestion.openstates_cursor import SOURCE, Step, SweepCursor
+        from app.models import IngestionCursor
 
         call_limit = (
             max_api_calls if max_api_calls is not None
@@ -663,9 +674,38 @@ class IngestionCoordinator:
         )
         delay = _settings.openstates_request_delay_seconds
 
+        resume = resume and not state_filter
         states = [state_filter.upper()] if state_filter else ALL_STATES
+        queries = OPENSTATES_EPR_QUERIES
+        now = datetime.now(timezone.utc)
+
+        cursor_row: IngestionCursor | None = None
+        cursor: SweepCursor | None = None
+        if resume:
+            cursor_row = await db.get(IngestionCursor, SOURCE)
+            if cursor_row is None:
+                cursor_row = IngestionCursor(source=SOURCE, cursor={})
+                db.add(cursor_row)
+            cursor = SweepCursor.load(cursor_row.cursor)
+            steps = cursor.steps(queries, states, now,
+                                 window_days=_settings.openstates_recent_window_days,
+                                 fallback_days=_settings.openstates_resume_fallback_days)
+            log.info("openstates_resume", position=cursor.position,
+                     queries_swept=len(cursor.swept_at), queries_total=len(queries))
+        else:
+            steps = (
+                Step(query, state, 1, updated_since, now, si == len(states) - 1)
+                for query in queries for si, state in enumerate(states)
+            )
+
+        def save_cursor() -> None:
+            if cursor_row is not None:
+                # Reassign (not mutate) so SQLAlchemy sees the JSONB change.
+                cursor_row.cursor = cursor.dump()
+
         new = cross_referenced = skipped = errors = 0
         api_calls = 0
+        queries_completed = 0
         quota_exhausted = False
         throttled = False
         consecutive_429 = 0
@@ -676,13 +716,14 @@ class IngestionCoordinator:
         stopped_at: dict | None = None
 
         async with OpenStatesClient() as client:
-            for query in OPENSTATES_EPR_QUERIES:
-                if quota_exhausted:
-                    break
-                for state in states:
+            for step in steps:
+                query, state = step.query, step.state
+                page = step.start_page
+                step_finished = False
+                while True:
                     if api_calls >= call_limit:
                         quota_exhausted = True
-                        stopped_at = {"query": query, "state": state, "page": 1}
+                        stopped_at = {"query": query, "state": state, "page": page}
                         log.warning(
                             "openstates_quota_exhausted",
                             calls_made=api_calls,
@@ -690,81 +731,86 @@ class IngestionCoordinator:
                             stopped_at=stopped_at,
                         )
                         break
-
-                    page = 1
-                    while True:
-                        if api_calls >= call_limit:
-                            quota_exhausted = True
-                            stopped_at = {"query": query, "state": state, "page": page}
-                            log.warning(
-                                "openstates_quota_exhausted",
-                                calls_made=api_calls,
-                                limit=call_limit,
-                                stopped_at=stopped_at,
-                            )
-                            break
-                        try:
-                            response = await client.search_bills(
-                                query=query,
-                                jurisdiction=state.lower(),
-                                updated_since=updated_since,
-                                page=page,
-                                per_page=20,
-                            )
-                            api_calls += 1
-                            consecutive_429 = 0
-                        except Exception as e:
-                            errors += 1
-                            status = getattr(getattr(e, "response", None), "status_code", None)
-                            if status == 429:
-                                consecutive_429 += 1
-                                log.warning("openstates_throttled_429",
-                                            query=query, state=state, page=page,
-                                            consecutive=consecutive_429)
-                                if consecutive_429 >= THROTTLE_STOP:
-                                    quota_exhausted = True
-                                    throttled = True
-                                    stopped_at = {"query": query, "state": state,
-                                                  "page": page, "reason": "rate_limited"}
-                                    log.error("openstates_stopped_rate_limited",
-                                              consecutive=consecutive_429,
-                                              calls_made=api_calls, stopped_at=stopped_at)
-                            else:
-                                log.error("openstates_search_failed",
-                                          query=query, state=state, page=page, error=str(e))
-                            break
-
-                        results = response.get("results", [])
-                        pagination = response.get("pagination", {})
-
-                        if not results:
-                            break
-
-                        for bill_summary in results:
-                            outcome = await self._upsert_openstates_bill(db, bill_summary, state)
-                            if outcome == "upserted":
-                                new += 1
-                            elif outcome == "cross_referenced":
-                                cross_referenced += 1
-                            else:
-                                skipped += 1
-
-                        current_page = pagination.get("page", page)
-                        max_page = pagination.get("max_page", 1)
-                        if current_page >= max_page:
-                            break
-                        page += 1
-                        # Inter-page pacing: pages within a query were previously fetched
-                        # back-to-back with no delay, which burst past the rate limit.
-                        await asyncio.sleep(delay)
-
-                    await db.commit()
-                    log.debug("openstates_query_state_done",
-                              query=query, state=state,
-                              new=new, cross_referenced=cross_referenced)
-                    if quota_exhausted:
+                    try:
+                        response = await client.search_bills(
+                            query=query,
+                            jurisdiction=state.lower(),
+                            updated_since=step.since,
+                            page=page,
+                            per_page=20,
+                        )
+                        api_calls += 1
+                        consecutive_429 = 0
+                    except Exception as e:
+                        errors += 1
+                        status = getattr(getattr(e, "response", None), "status_code", None)
+                        if status == 429:
+                            consecutive_429 += 1
+                            log.warning("openstates_throttled_429",
+                                        query=query, state=state, page=page,
+                                        consecutive=consecutive_429)
+                            if consecutive_429 >= THROTTLE_STOP:
+                                quota_exhausted = True
+                                throttled = True
+                                stopped_at = {"query": query, "state": state,
+                                              "page": page, "reason": "rate_limited"}
+                                log.error("openstates_stopped_rate_limited",
+                                          consecutive=consecutive_429,
+                                          calls_made=api_calls, stopped_at=stopped_at)
+                                # Retried from this page next run.
+                                break
+                            # Below the stop threshold: retry this page rather than skipping the
+                            # state, which would mark it swept without ever searching it.
+                            await asyncio.sleep(delay)
+                            continue
+                        log.error("openstates_search_failed",
+                                  query=query, state=state, page=page, error=str(e))
+                        # Any other failure moves on, as before, so one bad query can't wedge
+                        # the rotation.
+                        step_finished = True
                         break
+
+                    results = response.get("results", [])
+                    pagination = response.get("pagination", {})
+
+                    if not results:
+                        step_finished = True
+                        break
+
+                    for bill_summary in results:
+                        outcome = await self._upsert_openstates_bill(db, bill_summary, state)
+                        if outcome == "upserted":
+                            new += 1
+                        elif outcome == "cross_referenced":
+                            cross_referenced += 1
+                        else:
+                            skipped += 1
+
+                    current_page = pagination.get("page", page)
+                    max_page = pagination.get("max_page", 1)
+                    if current_page >= max_page:
+                        step_finished = True
+                        break
+                    page += 1
+                    # Inter-page pacing: pages within a query were previously fetched
+                    # back-to-back with no delay, which burst past the rate limit.
                     await asyncio.sleep(delay)
+
+                if cursor:
+                    if step_finished:
+                        cursor.mark_done(step, queries, states)
+                        if step.last_state_of_query:
+                            queries_completed += 1
+                    else:
+                        cursor.mark_stopped(step, page)
+                    save_cursor()
+                await db.commit()
+                log.debug("openstates_query_state_done",
+                          query=query, state=state,
+                          new=new, cross_referenced=cross_referenced)
+                if quota_exhausted:
+                    break
+                await asyncio.sleep(delay)
 
         return {
             "openstates_new": new,
@@ -775,6 +821,8 @@ class IngestionCoordinator:
             "openstates_quota_exhausted": quota_exhausted,
             "openstates_throttled": throttled,
             "openstates_stopped_at": stopped_at,
+            "openstates_queries_completed": queries_completed,
+            "openstates_queries_swept_total": len(cursor.swept_at) if cursor else None,
         }
 
     async def run_federal_cycle(self, db: AsyncSession) -> dict:

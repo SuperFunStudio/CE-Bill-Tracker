@@ -229,6 +229,9 @@ class Settings(BaseSettings):
     # Free tier throttles aggressively — 1s spacing returns HTTP 429; ~6s ran clean in testing.
     openstates_request_delay_seconds: float = 6.0
     openstates_recent_window_days: int = 2
+    # How far back the nightly rotation searches a query it has never swept before (see
+    # app/ingestion/openstates_cursor.py). After its first sweep a query searches from its last one.
+    openstates_resume_fallback_days: int = 90
 
     # EUR-Lex / CELLAR — EU-central circular-economy law (region="EU"). When on, run_eurlex_cycle
     # weekly re-runs the SPARQL discovery and ingests newly-published in-force acts (only_new mode),

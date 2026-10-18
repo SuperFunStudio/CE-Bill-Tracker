@@ -378,8 +378,9 @@ function WorldStandings() {
     };
     for (const b of bills) {
       if (b.region === 'US') {
-        if (b.state && b.state !== 'US') tallyStage((stStage[b.state] ??= blankStage()), b.status);
-        else tallyStage(natStage.US, b.status); // state == "US" → federal law
+        if (b.state && b.state in STATE_NAMES) tallyStage((stStage[b.state] ??= blankStage()), b.status);
+        else if (!b.state || b.state === 'US') tallyStage(natStage.US, b.status); // state == "US" → federal law
+        // City ordinances (state "<ST>-<CITY>") are neither state nor federal law — they rank nowhere.
         continue;
       }
       // Foreign / EU: region is the country/bloc bucket (region == state for foreign national law).

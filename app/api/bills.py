@@ -628,6 +628,11 @@ async def get_laws_in_force(
         select(yr, Bill.region, func.count().label("count"))
         .where(Bill.ce_relevant == True)
         .where(Bill.status == "enacted")
+        # Municipal ordinances (scripts/import_municipal_ordinances.py, id "muni:<hash>") are city law,
+        # not national or state law — keep them out of the per-region totals that rank countries. Key
+        # on the id prefix, not a hyphenated state: non-US provinces ("AU-NSW") will be hyphenated too.
+        # openstates_id is nullable, and NOT LIKE on NULL is NULL, hence the explicit is_(None).
+        .where(or_(Bill.openstates_id.is_(None), Bill.openstates_id.not_like("muni:%")))
         .group_by("year", Bill.region)
         .having(yr.isnot(None))
         .order_by("year")

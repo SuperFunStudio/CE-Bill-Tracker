@@ -165,7 +165,8 @@ export default function HomePage() {
     }
     if (selectedRegions.includes('US')) {
       return { mode: 'us-states' as const, label: 'Top States',
-        data: tally(b => (b.region === 'US' && b.state ? b.state : null)) };
+        // STATE_NAMES keys only: city ordinances ("OR-PORTLAND") must not rank as states.
+        data: tally(b => (b.region === 'US' && b.state && b.state in STATE_NAMES ? b.state : null)) };
     }
     if (selectedRegions.includes('EU') || selectedRegions.some(r => r in EU_MEMBERS)) {
       return { mode: 'eu-members' as const, label: 'Top Member States',

@@ -4186,6 +4186,9 @@ async def sync_foreign(
 
     async with client_cls() as client:
         candidates = await client.discover()
+        # Before the only_new filter: zero here means discovery itself came back empty (source down
+        # or changed shape), which a quiet week with nothing new can't be told apart from otherwise.
+        found = len(candidates)
         if only_new:
             async with AsyncSessionLocal() as db:
                 existing = set(
@@ -4250,7 +4253,7 @@ async def sync_foreign(
                              fetched=fetched, skipped=skipped)
             await db.commit()
 
-    summary = {"region": region, "discovered": len(candidates), "fetched": fetched,
+    summary = {"region": region, "found": found, "discovered": len(candidates), "fetched": fetched,
                "skipped": skipped, "ingested": len(ingested), "classified": 0, "relevant": 0}
 
     if classify and ingested:

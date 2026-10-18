@@ -235,6 +235,19 @@ def setup_scheduler() -> AsyncIOScheduler:
             replace_existing=True,
         )
 
+    # Foreign national law refresh — checked daily 5:45am UTC; each region actually re-syncs only
+    # once it is foreign_refresh_interval_days stale (see run_foreign_cycle), so a missed day delays
+    # a region rather than skipping its week.
+    if settings.enable_foreign_ingestion:
+        scheduler.add_job(
+            run_foreign_cycle,
+            "cron",
+            hour=5,
+            minute=45,
+            id="foreign_refresh",
+            replace_existing=True,
+        )
+
     return scheduler
 
 
@@ -1750,3 +1763,79 @@ async def run_eurlex_cycle() -> None:
         max_acts=settings.max_eurlex_acts_per_run,
     )
     log.info("eurlex_cycle_complete", **summary)
+
+
+FOREIGN_CURSOR_SOURCE = "foreign"
+
+
+async def run_foreign_cycle() -> None:
+    """Keep foreign national law current: re-run discovery for each configured region that is due
+    and ingest only laws not yet in the DB, classified with the region-aware pipeline.
+
+    Due-ness is per region: last successful refresh (ingestion_cursors row "foreign",
+    {"last_refreshed": {region: iso}}) older than foreign_refresh_interval_days. A region that
+    raises is logged and left unstamped, so it is retried the next day; one region's source being
+    down never stops the rest. Compliance pathways for newly-ingested laws are still built by
+    scripts/build_compliance_pathways.py, as for EUR-Lex.
+    """
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+
+    from app.database import AsyncSessionLocal
+    from app.ingestion.foreign import sync_foreign
+    from app.models import IngestionCursor
+
+    if not settings.enable_foreign_ingestion:
+        log.info("foreign_cycle_skipped", reason="enable_foreign_ingestion=false")
+        return
+
+    now = datetime.now(timezone.utc)
+    stale_before = now - timedelta(days=settings.foreign_refresh_interval_days)
+    async with AsyncSessionLocal() as db:
+        row = await db.get(IngestionCursor, FOREIGN_CURSOR_SOURCE)
+        last_refreshed = dict((row.cursor if row else {}).get("last_refreshed") or {})
+    due = [
+        r for r in settings.foreign_ingestion_regions
+        if r not in last_refreshed or datetime.fromisoformat(last_refreshed[r]) < stale_before
+    ]
+    log.info("foreign_cycle_start", due=due, regions=len(settings.foreign_ingestion_regions))
+
+    refreshed, failed, empty = [], [], []
+    ingested = 0
+    for i, region in enumerate(due):
+        if i:
+            await asyncio.sleep(5)
+        try:
+            summary = await sync_foreign(
+                region, classify=True, only_new=True, max_laws=settings.max_foreign_laws_per_run
+            )
+        except Exception as e:
+            failed.append(region)
+            log.error("foreign_region_failed", region=region, error=f"{type(e).__name__}: {e}")
+            continue
+        ingested += summary.get("ingested", 0)
+        if summary.get("found") == 0:
+            # Discovery found nothing at all — the source is down or changed shape. Not stamped,
+            # so it is retried tomorrow, and logged loudly so a silently broken adapter shows up.
+            empty.append(region)
+            log.error("foreign_discovery_empty", region=region)
+            continue
+        if summary.get("discovered", 0) and not summary.get("fetched"):
+            # New laws were found but every fetch failed — typically the site refusing downloads
+            # (e.g. ZambiaLII 403s). Same treatment: unstamped, retried, loud.
+            failed.append(region)
+            log.error("foreign_fetch_all_failed", region=region,
+                      discovered=summary.get("discovered"))
+            continue
+        refreshed.append(region)
+        last_refreshed[region] = datetime.now(timezone.utc).isoformat()
+        async with AsyncSessionLocal() as db:
+            row = await db.get(IngestionCursor, FOREIGN_CURSOR_SOURCE)
+            if row is None:
+                row = IngestionCursor(source=FOREIGN_CURSOR_SOURCE, cursor={})
+                db.add(row)
+            row.cursor = {**(row.cursor or {}), "last_refreshed": dict(last_refreshed)}
+            await db.commit()
+
+    log.info("foreign_cycle_complete", due=len(due), refreshed=refreshed, failed=failed,
+             empty=empty, ingested=ingested)

@@ -239,6 +239,24 @@ class Settings(BaseSettings):
     # is scripts/ingest_eurlex.py --bulk. Member-state national law (Spain RD 1055/2022, etc.) is a
     # separate per-country source — NOT covered here (CELLAR is EU-central only). See eu-integration.
     enable_eurlex_ingestion: bool = False
+    # Foreign national/sub-national law (app/ingestion/foreign.py adapters). When on,
+    # run_foreign_cycle checks daily and refreshes each listed region whose last successful refresh
+    # is older than foreign_refresh_interval_days, ingesting only laws not yet in the DB (only_new).
+    # Only adapters whose discover() queries the live source are listed: a seed-list adapter would
+    # rediscover the same fixed ids and add nothing. Missed runs just delay a region a day, since
+    # due-ness is tracked per region in ingestion_cursors (source "foreign").
+    # Registry keys (FOREIGN_CLIENTS), probed live and keyless 2026-10-18. Left out: AU (federal
+    # register searches time out, discover() returns 0), FR/FR_CODE (PISTE OAuth creds not in prod),
+    # KR (needs a law.go.kr key), ZA/KE_LAWSAFRICA (return nothing), ZM/MW (ZambiaLII/MalawiLII
+    # discover fine but 403 every document fetch), and every seed-list adapter.
+    enable_foreign_ingestion: bool = False
+    foreign_ingestion_regions: list[str] = [
+        "JP", "JP_ORD", "UK", "DE", "NL", "SE", "PL", "CN", "CN_GOV", "CA", "CA_BC",
+        "BR_CAMARA", "RW", "SL",
+    ]
+    foreign_refresh_interval_days: int = 7
+    # Per region per run; bounds LLM spend (Haiku per law, Sonnet for the relevant ones).
+    max_foreign_laws_per_run: int = 100
     # Restrict discovery to currently-valid acts (compliance focus). False = include repealed/historical.
     eurlex_in_force_only: bool = True
     # Bound the weekly cycle (only_new mode finds few, but cap a first/backfill run via the script's --max).

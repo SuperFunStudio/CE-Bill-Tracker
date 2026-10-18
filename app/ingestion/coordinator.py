@@ -830,6 +830,7 @@ class IngestionCoordinator:
         new_actions: list[FederalAction] = []
         async with FederalRegisterClient() as fr:
             docs = await fr.search_all_epr_terms()
+            search_stats = fr.last_search_stats
 
         for doc in docs:
             doc_num = doc.get("document_number")
@@ -870,7 +871,8 @@ class IngestionCoordinator:
             classified = await self._classify_federal_actions(new_actions)
 
         await db.commit()
-        return {"new_federal_actions": new_count, "classified_federal_actions": classified}
+        return {"new_federal_actions": new_count, "classified_federal_actions": classified,
+                **search_stats}
 
     async def _classify_federal_actions(self, actions: list[FederalAction]) -> int:
         """Populate ce_relevant / preemption_risk / friction_type / instrument_type /

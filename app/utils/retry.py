@@ -23,6 +23,10 @@ def _is_retryable(exc: BaseException) -> bool:
     """Return False for permanent API errors that should not be retried."""
     if isinstance(exc, _ANTHROPIC_PERMANENT):
         return False
+    # Imported here: federal_register imports this module.
+    from app.ingestion.federal_register import FederalRegisterBlocked
+    if isinstance(exc, FederalRegisterBlocked):
+        return False
     msg = str(exc)
     return not any(p in msg for p in _LEGISCAN_PERMANENT)
 

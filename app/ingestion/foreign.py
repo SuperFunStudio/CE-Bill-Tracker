@@ -21,6 +21,7 @@ sub-national tier. Driver: scripts/ingest_foreign.py. Not wired into the US Inge
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
 import html
 import io
@@ -3527,6 +3528,41 @@ class CanadaAlbertaClient(ForeignSourceClient):
 AU_FED_API = "https://api.prod.legislation.gov.au/v1/titles"
 AU_FED_TEXT = "https://www.legislation.gov.au/{id}/latest/text"
 AU_FED_TERMS = ["Recycling and Waste Reduction", "Product Stewardship", "Packaging", "Hazardous Waste"]
+# The OData API normally answers in ~2s but has stretches where requests hang past any sane timeout
+# (2026-10-18: all four searches timed out at 45s, then answered in 2s minutes later). Retry with a
+# pause so a slow spell costs a term a minute, not the week.
+AU_FED_TIMEOUT = 90.0
+AU_FED_RETRY_DELAYS = (10.0, 30.0)
+AU_FED_MAX_PAGES = 20
+
+
+def _describe_error(e: Exception) -> str:
+    """httpx timeouts stringify to "" — keep the exception type so the log says what happened."""
+    return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+
+
+async def _get_retrying(http: httpx.AsyncClient, url: str, *, params: dict | None = None,
+                        timeout: float = AU_FED_TIMEOUT,
+                        delays: tuple[float, ...] = AU_FED_RETRY_DELAYS) -> httpx.Response:
+    """GET that retries transport errors (timeouts, resets) and 5xx; 4xx raise at once."""
+    for attempt in range(len(delays) + 1):
+        try:
+            r = await http.get(url, params=params, timeout=timeout)
+            if r.status_code < 500:
+                r.raise_for_status()
+                return r
+            r.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code < 500 or attempt == len(delays):
+                raise
+            err = e
+        except httpx.TransportError as e:
+            if attempt == len(delays):
+                raise
+            err = e
+        log.info("au_fed_retry", url=url, attempt=attempt + 1, error=_describe_error(err))
+        await asyncio.sleep(delays[attempt])
+    raise AssertionError("unreachable")
 
 
 class AustraliaFederalClient(ForeignSourceClient):
@@ -3537,33 +3573,40 @@ class AustraliaFederalClient(ForeignSourceClient):
 
     async def discover(self) -> list[tuple[str, str]]:
         out: dict[str, str] = {}
+        failed_terms = 0
         for term in AU_FED_TERMS:
-            params = {"$filter": f"contains(name,'{term}')",
-                      "$select": "id,name,collection,status,isInForce"}
-            try:
-                r = await self.http.get(AU_FED_API, params=params)
-                r.raise_for_status()
-                data = r.json()
-            except (httpx.HTTPError, ValueError) as e:
-                log.warning("au_fed_search_failed", term=term, error=str(e))
-                continue
-            for row in data.get("value", []):
-                if row.get("collection") not in ("Act", "LegislativeInstrument"):
-                    continue  # skip Gazette notices / other collections
-                if row.get("isInForce") is False:
-                    continue
-                rid = row.get("id")
-                if rid:
-                    out.setdefault(rid, row.get("name", ""))
-        log.info("au_fed_discovered", total=len(out))
+            url: str | None = AU_FED_API
+            params: dict | None = {"$filter": f"contains(name,'{term}')",
+                                   "$select": "id,name,collection,status,isInForce"}
+            pages = 0
+            while url and pages < AU_FED_MAX_PAGES:
+                try:
+                    r = await _get_retrying(self.http, url, params=params)
+                    data = r.json()
+                except (httpx.HTTPError, ValueError) as e:
+                    failed_terms += 1
+                    log.warning("au_fed_search_failed", term=term, page=pages + 1,
+                                error=_describe_error(e))
+                    break
+                pages += 1
+                for row in data.get("value", []):
+                    if row.get("collection") not in ("Act", "LegislativeInstrument"):
+                        continue  # skip Gazette notices / other collections
+                    if row.get("isInForce") is False:
+                        continue
+                    rid = row.get("id")
+                    if rid:
+                        out.setdefault(rid, row.get("name", ""))
+                # OData server-side paging: the next link already carries the query.
+                url, params = data.get("@odata.nextLink"), None
+        log.info("au_fed_discovered", total=len(out), failed_terms=failed_terms)
         return list(out.items())
 
     async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
         try:
-            r = await self.http.get(AU_FED_TEXT.format(id=source_id))
-            r.raise_for_status()
+            r = await _get_retrying(self.http, AU_FED_TEXT.format(id=source_id))
         except httpx.HTTPError as e:
-            log.warning("au_fed_fetch_failed", id=source_id, error=str(e))
+            log.warning("au_fed_fetch_failed", id=source_id, error=_describe_error(e))
             return None
         full_text = _strip_tags(r.text)
         if len(full_text) < 100:

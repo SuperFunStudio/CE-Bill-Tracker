@@ -7,7 +7,14 @@ log = structlog.get_logger()
 
 
 def setup_scheduler() -> AsyncIOScheduler:
-    scheduler = AsyncIOScheduler(timezone="UTC")
+    # APScheduler's default misfire_grace_time is 1s: a job whose wake-up lands even a second late
+    # (event loop busy, or Cloud Run throttling CPU between requests) is skipped outright. Prod logged
+    # ~500 such skips in 30 days, among them EUR-Lex, the nightly ingestion and alert emails. Let a
+    # late job still run within the hour, and coalesce a backlog into one run.
+    scheduler = AsyncIOScheduler(
+        timezone="UTC",
+        job_defaults={"misfire_grace_time": 3600, "coalesce": True},
+    )
 
     # Main ingestion + classification — daily at 2am UTC
     scheduler.add_job(

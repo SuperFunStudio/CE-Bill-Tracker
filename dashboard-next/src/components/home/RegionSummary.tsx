@@ -4,8 +4,8 @@ import type { BillSummary } from '@/lib/types';
 import { billHref, fixEncoding, formatDate } from '@/lib/utils';
 import { fmtCount } from '@/lib/mapScale';
 
-// Status buckets for the summary strip. "In progress" folds the US funnel stages together — the
-// summary is a glance, the table carries the detail.
+// Status buckets for the summary strip. "In progress" folds the US funnel stages together and
+// "Stopped" covers failed + vetoed — the summary is a glance, the table carries the detail.
 const BUCKETS: { key: string; label: string; match: (s: string) => boolean; tone: string }[] = [
   { key: 'enacted', label: 'Enacted', match: s => s === 'enacted', tone: 'var(--status-enacted)' },
   {
@@ -13,7 +13,7 @@ const BUCKETS: { key: string; label: string; match: (s: string) => boolean; tone
     match: s => ['introduced', 'in_committee', 'passed_chamber', 'passed'].includes(s),
     tone: 'var(--status-introduced)',
   },
-  { key: 'stopped', label: 'Failed / vetoed', match: s => s === 'failed' || s === 'vetoed', tone: 'var(--status-dormant)' },
+  { key: 'stopped', label: 'Stopped', match: s => s === 'failed' || s === 'vetoed', tone: 'var(--status-dormant)' },
 ];
 
 /**
@@ -52,23 +52,23 @@ export function RegionSummary({
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           <h2 className="font-serif text-xl leading-tight text-text-primary">{name}</h2>
-          <p className="mt-0.5 text-xs text-text-muted">
-            {kind} · {fmtCount(bills.length)} tracked {bills.length === 1 ? 'measure' : 'measures'}
-          </p>
-          <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
-            {BUCKETS.map(b => (
-              <div key={b.key} className="min-w-0">
-                <dt className="flex items-center gap-1.5 text-xs text-text-muted">
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: b.tone }} aria-hidden />
-                  {b.label}
-                </dt>
-                <dd className="text-lg font-semibold text-text-primary tabular-nums">{fmtCount(counts[b.key] ?? 0)}</dd>
-              </div>
-            ))}
-          </dl>
+          {/* The count lives in the page title line ("50 circular economy laws and bills"); this just says what
+              kind of jurisdiction it is. */}
+          <p className="mt-0.5 text-xs text-text-muted">{kind}</p>
         </div>
-        {locator && <div className="w-32 shrink-0 sm:w-40">{locator}</div>}
+        {locator && <div className="w-28 shrink-0 sm:w-36">{locator}</div>}
       </div>
+      <dl className="mt-3 grid grid-cols-3 gap-x-4">
+        {BUCKETS.map(b => (
+          <div key={b.key} className="min-w-0">
+            <dt className="flex items-center gap-1.5 truncate text-xs text-text-muted">
+              <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: b.tone }} aria-hidden />
+              {b.label}
+            </dt>
+            <dd className="text-lg font-semibold text-text-primary tabular-nums">{fmtCount(counts[b.key] ?? 0)}</dd>
+          </div>
+        ))}
+      </dl>
       {latest && (
         <p className="mt-3 border-t border-border-default pt-2.5 text-xs text-text-muted">
           <span className="field-label mr-1.5">Latest action</span>

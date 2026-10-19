@@ -526,6 +526,10 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
               <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
                 {secondaryFields}
               </div>
+              {/* On a phone the toolbar is just Regions · Filters; the trailing actions live here. */}
+              {trailing && (
+                <div className="mt-4 flex items-center gap-4 border-t border-border-default pt-3 sm:hidden">{trailing}</div>
+              )}
             </div>
           )}
         </div>
@@ -539,7 +543,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
             Reset ({activeCount + (regions.length > 0 ? 1 : 0)})
           </button>
         )}
-        {trailing && <div className="ml-auto flex items-center gap-3">{trailing}</div>}
+        {trailing && <div className="ml-auto hidden items-center gap-3 sm:flex">{trailing}</div>}
       </div>
     );
   }

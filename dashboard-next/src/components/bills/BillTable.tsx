@@ -111,31 +111,27 @@ export function BillTable({
           it's a badge beside the status, shown only when a case exists. */}
       <div className="hidden sm:block overflow-x-auto rounded-lg border border-border-default">
         <table className="w-full text-sm table-fixed min-w-[40rem]">
-          {/* Bill number rides under the jurisdiction (one column, two lines) rather than taking its own
-              column, and Type drops out below xl — so the title keeps a readable measure in the 62%
-              split column even on a 1280px laptop. */}
+          {/* Three columns: where · what · how far along. Bill number rides under the jurisdiction and the
+              last-action date under the status, so each row reads as two lines in three places. The
+              instrument type stays a filter (and in the bill view) rather than a column. */}
           <colgroup>
             <col className="w-[10rem]" />
             <col />
-            <col className="hidden xl:table-column w-[6.5rem]" />
-            <col className="w-[8.75rem]" />
-            <col className="w-[7.5rem]" />
+            <col className="w-[9.5rem]" />
             <col className="w-10" />
           </colgroup>
           <thead>
             <tr className="bg-bg-secondary border-b border-border-default h-10">
               <th scope="col" className="field-label px-3 text-left whitespace-nowrap">Jurisdiction</th>
               <th scope="col" className="field-label px-3 text-left">Title</th>
-              <th scope="col" className="field-label px-3 text-left hidden xl:table-cell">Type</th>
               <th scope="col" className="field-label px-3 text-left">Status</th>
-              <th scope="col" className="field-label px-3 text-left whitespace-nowrap">Last action</th>
               <th scope="col" className="px-2"><span className="sr-only">Watch</span></th>
             </tr>
           </thead>
           <tbody onMouseLeave={() => onRowHover?.(null)}>
             {displayBills.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-text-muted">
+                <td colSpan={4} className="px-3 py-6 text-center text-text-muted">
                   No bills match the current filters.
                 </td>
               </tr>
@@ -190,17 +186,16 @@ export function BillTable({
                     {fixEncoding(bill.title) || 'Untitled'}
                   </a>
                 </td>
-                <td className="px-3 py-2 text-text-secondary text-xs truncate hidden xl:table-cell">
-                  {formatInstrumentType(bill.instrument_type)}
-                </td>
                 <td className="px-3 py-2">
                   <span className="flex items-center gap-1.5">
                     <StatusBadge status={bill.status} weakening={isWeakening(bill)} />
                     <LitigationBadge bill={bill} />
                   </span>
-                </td>
-                <td className="px-3 py-2 text-text-muted text-xs whitespace-nowrap">
-                  {formatDate(bill.last_action_date)}
+                  {bill.last_action_date && (
+                    <span className="mt-0.5 block text-xs text-text-muted whitespace-nowrap" title={`${formatInstrumentType(bill.instrument_type)} · last action`}>
+                      {formatDate(bill.last_action_date)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 py-2 text-center whitespace-nowrap">
                   <WatchStar billId={bill.id} />

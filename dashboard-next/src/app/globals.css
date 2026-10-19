@@ -204,6 +204,16 @@ body {
   .list-card:hover { border-color: var(--text-muted); }
 }
 
+/* ── Explore title: the "| Poland" half settles in when the jurisdiction changes ── */
+@keyframes region-title-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+.region-title-in { display: inline-block; animation: region-title-in 280ms cubic-bezier(0.22, 1, 0.36, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .region-title-in { animation: none; }
+}
+
 /* ── Region-map "zoom-settle" ──
    Played each time the selected region changes (drill in/out). A gentle scale-down + fade eases the
    new crop into place. Applied to a wrapper that's React-keyed by selection so it replays on change. */

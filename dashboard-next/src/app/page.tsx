@@ -3,11 +3,9 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useBills, useBillTextSearch, useLawsInForce } from '@/hooks/useBills';
-import { useFederalSummary } from '@/hooks/useFederal';
 import { SubscribeSection } from '@/components/about/SubscribeSection';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { FreshnessNote } from '@/components/ui/FreshnessNote';
-import { FederalWatchBanner } from '@/components/ui/FederalWatchBanner';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillFilters, DEFAULT_FILTERS, applyBillFilters, matchesKeywordText, resinOptionsFromBills, type BillFilterState } from '@/components/bills/BillFilters';
 import { SkeletonList } from '@/components/ui/SkeletonList';
@@ -33,7 +31,6 @@ import { CorpusJsonLd } from '@/components/seo/CorpusJsonLd';
 import { HeadlinesDeadlines } from '@/components/home/HeadlinesDeadlines';
 import { JurisdictionTopList } from '@/components/home/JurisdictionTopList';
 import { RegionSummary } from '@/components/home/RegionSummary';
-import { RegionHeadline } from '@/components/home/RegionHeadline';
 import { usePathwaysScoped } from '@/hooks/useCompliancePathways';
 import { fmtCount } from '@/lib/mapScale';
 import type { BillSummary } from '@/lib/types';
@@ -86,9 +83,6 @@ export default function HomePage() {
   // payload), so it rides the fetch params rather than the client-side applyBillFilters below.
   const dimensionsCsv = billFilters.dimensions.length ? billFilters.dimensions.join(',') : undefined;
   const { data: bills = [], isLoading: billsLoading, error: billsError } = useBills({ ce_relevant: true, limit: 5000, regions: regionsParam ?? 'all', dimensions: dimensionsCsv });
-  // Counts, not rows: the banner below only ever needed the high-preemption tally, and the rows are
-  // CAP_FEDERAL now. /federal-actions/summary stays public precisely so this surface keeps working.
-  const { data: federalStats } = useFederalSummary();
   // Enacted laws in force by region — the SAME source the globe shades from, so the "Top Regions"
   // ticker ranks identically to the map (combined national + sub-national enacted).
   const { data: lawsInForce = [] } = useLawsInForce();
@@ -187,7 +181,6 @@ export default function HomePage() {
     }
   }, [billFilters.state]);
 
-  const highPreemption = federalStats?.high_preemption ?? 0;
 
   // Resin filter options come from the full bill set, so the choices are stable regardless of the
   // active scope/filters. Empty (and the filter stays hidden) until the polymer scan tags bills.
@@ -355,10 +348,6 @@ export default function HomePage() {
   // Profile page for the jurisdiction in focus — the title's region name links there, and the stat
   // card's figures deep-link into its tabs.
   const profileHref = soleRegion ? jurisdictionHref(soleRegion, focusState) : undefined;
-  const headlineFocus = useMemo(
-    () => ({ region: soleRegion, state: focusState, name: focusTitle }),
-    [soleRegion, focusState, focusTitle],
-  );
   // Pathways only when one jurisdiction is in focus — they feed the card's next step + deadline.
   const { data: focusPathways = [] } = usePathwaysScoped(
     focusState ? { state: focusState } : { region: soleRegion ?? '' },
@@ -461,9 +450,6 @@ export default function HomePage() {
       {/* ── Top of page: capped at ~25% of the viewport. One line of title + scoped count beside the
           search field, then ONE toolbar row (region · state · filters · scope · export). Nothing else
           stacks above the table. ── */}
-      {/* The gazette line: one figure, one sentence, for wherever the page is focused. */}
-      <RegionHeadline focus={headlineFocus} bills={bills} className="mb-3" />
-
       <header>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
           <div className="min-w-0">
@@ -706,11 +692,10 @@ export default function HomePage() {
 
       <div className="mt-12 space-y-10">
         {/* Headlines & Deadlines — the signals that aren't bills, below the table (out of the way of
-            the bills, which are what visitors came for). The Oregon court-case wildcard is US-only. */}
-        <HeadlinesDeadlines>
-          <ScopedDeadlineBanner />
-          {isUsView && <FederalWatchBanner highRiskCount={highPreemption} />}
-        </HeadlinesDeadlines>
+            the bills, which are what visitors came for). */}
+        <HeadlinesDeadlines
+          deadlines={<ScopedDeadlineBanner />}
+        />
 
         {/* Guided-tour CTA — a standing home for the demo-led motion (the highest-converting path for
             the considered compliance buyer). Ink, not accent: the accent is reserved for data and the

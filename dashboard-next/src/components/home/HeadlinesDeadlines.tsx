@@ -6,10 +6,10 @@ import { fetchBill, fetchBillOutcomes } from '@/lib/api';
 import { track } from '@/lib/analytics';
 import { formatDate, STATE_NAMES, billHref } from '@/lib/utils';
 import { EU_MEMBERS, FOREIGN_COUNTRY_NAMES, REGION_LABELS } from '@/lib/jurisdictions';
-import { scaleComparison } from '@/lib/outcomeScale';
 import { outcomeMetricText } from '@/lib/outcomeMetric';
 import { CheckIcon } from '@/components/ui/icons';
 import type { BillOutcome } from '@/lib/types';
+import { FeatureCard, Kicker, BigFigure } from './FeatureCard';
 
 // How long a touch holds the rotation still. Long enough to read a card that a thumb landed on,
 // short enough that scrolling past the block doesn't silently retire the ticker for the session —
@@ -34,6 +34,26 @@ function jurisdiction(code: string | null | undefined): string {
   const c = code.toUpperCase();
   return STATE_NAMES[c] ?? EU_MEMBERS[c] ?? FOREIGN_COUNTRY_NAMES[c] ?? REGION_LABELS[c] ?? c;
 }
+
+// What a law's figure is ABOUT, for the kicker ("Vermont's impact on e-waste"). Instrument first where
+// it names the stream better than the material tags do (a deposit law is about bottles & cans whatever
+// its containers are made of), then the first material we have a plain word for.
+const TOPIC_BY_INSTRUMENT: Record<string, string> = { deposit_return: 'bottles & cans', right_to_repair: 'repair' };
+const TOPIC_BY_MATERIAL: Record<string, string> = {
+  electronics: 'e-waste', batteries: 'batteries', mattresses: 'mattresses', paint: 'paint', carpet: 'carpet',
+  tires: 'tires', textiles: 'textiles', plastic_packaging: 'packaging', paper_packaging: 'packaging',
+  packaging: 'packaging', glass: 'packaging', metals: 'packaging', pharmaceuticals: 'medicines',
+  solar_panels: 'solar panels', organics: 'food waste', construction: 'construction waste',
+  thermostats: 'mercury thermostats', lighting: 'lamps', vehicles: 'vehicles', furniture: 'furniture',
+};
+function topicOf(o: BillOutcome): string {
+  if (o.instrument_type && TOPIC_BY_INSTRUMENT[o.instrument_type]) return TOPIC_BY_INSTRUMENT[o.instrument_type];
+  for (const m of o.material_categories ?? []) if (TOPIC_BY_MATERIAL[m]) return TOPIC_BY_MATERIAL[m];
+  return 'waste';
+}
+const possessive = (place: string) => (place.endsWith('s') ? `${place}’` : `${place}’s`);
+
+const ACCENT = 'rgb(var(--green-accent))';
 
 /**
  * A slow rotation through the documented POSITIVE outcomes of enacted law — the answer to "so does
@@ -114,9 +134,6 @@ function OutcomeTicker() {
   const o = current;
   const metric = outcomeMetricText(o)!;
   const place = jurisdiction(o.state);
-  // Something a reader can picture. Pure unit arithmetic — see lib/outcomeScale for why this stops at
-  // physical equivalence and doesn't attempt "harm avoided".
-  const scale = scaleComparison(o.metric_value, o.metric_unit);
   // The law itself, on the Atlas. bill_id is a soft link: famous laws we haven't ingested as rows
   // carry the denormalized number only, and those stay plain text rather than linking nowhere — as
   // does a bill whose row hasn't loaded yet, or one outside the ce_relevant set the pages are built
@@ -176,132 +193,82 @@ function OutcomeTicker() {
   }
 
   return (
-    <div
-      className="flex h-full flex-col rounded-lg border border-green-accent/30 bg-green-dark/20 px-4 py-3"
+    <FeatureCard
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
       onTouchStart={holdForTouch}
     >
-      {items.length > 1 && (
-        <div className="flex justify-end">
-          <span className="tabular-nums text-meta text-text-muted">{(idx % items.length) + 1}/{items.length}</span>
-        </div>
-      )}
-
-      {/* aria-live so the rotation is announced rather than silently swapping under a screen reader. */}
-      {/* The figure gets its OWN line, at a fixed line-height, with the label under it. Sharing a line
-          meant the layout was hostage to the widest entry — a short figure next to a long label wrapped
-          to two lines while the next entry fit on one, so the whole card jumped every 8 seconds. Fixed
-          rows for the figure and the label mean the card is the same height for every entry in the
-          rotation, whatever the string lengths; min-h on the label reserves its second line rather
-          than growing into it. */}
-      <div aria-live="polite" className="mt-1.5 flex flex-1 flex-col justify-center py-2">
-        <p className="min-h-[2.5rem] font-serif text-3xl leading-tight text-green-accent tabular-nums">{metric}</p>
-        {/* Clamped AND floored: the clamp stops a long metric_label from growing the card, the
-            min-height stops a short one from shrinking it. Both are needed — either alone still lets
-            the card change size between entries, which is the jump.
-            The MOBILE budget is separate and larger, because the line is narrower there: two lines
-            hold ~90 characters on a phone and the longest curated caption runs to 128, so a
-            desktop-shaped clamp cut Maine's mid-word at "instead of bein…". Four lines of headroom
-            with three reserved: every caption in the set lands inside three, so the card holds still
-            through the whole rotation, and a longer one grows by a line instead of losing its end. */}
-        <p
-          className="mt-2 line-clamp-4 min-h-[3.7rem] text-sm leading-snug text-text-secondary sm:line-clamp-2 sm:min-h-[2.5rem]"
-          title={o.metric_label ?? undefined}
-        >
-          {o.metric_label}
-        </p>
-        {/* The figure, made picturable. Sits with the figure rather than in its own block — it's a
-            restatement of the same number, not a second fact. Clamped and floored at two lines for
-            the same reason the label above is: the card must be the same height whether the entry
-            has an equivalence (the "…% of the way around the Earth" ones run to two lines) or none
-            at all — money and bare rates convert to nothing and this line renders empty. */}
-        <p
-          className="mt-1.5 line-clamp-2 min-h-[2rem] text-xs leading-snug text-text-primary/80"
-          title={scale?.basis}
-        >
-          {scale && (
-            <>
-              <span className="text-text-muted">That&apos;s </span>
-              <span className="border-b border-dotted border-text-muted/50">{scale.text}</span>
-            </>
-          )}
-        </p>
-        <p className="mt-1 text-xs text-text-muted">
-          {place}
-          {place && o.bill_number && ' · '}
-          {/* The law is the point of the figure, so it links to the law — this card used to name a
-              bill number with nothing behind it. */}
-          {o.bill_number &&
-            (billPath ? (
+      <Kicker tone={ACCENT}>
+        {place ? `${possessive(place)} impact on ${topicOf(o)}` : `Impact on ${topicOf(o)}`}
+        {o.bill_number && (
+          <>
+            {': '}
+            {/* The law is the point of the figure, so it links to the law. */}
+            {billPath ? (
               <Link
                 href={billPath}
                 onClick={() => track('cta_click', { entry_source: 'home_outcome_bill', slug: o.slug })}
-                className="text-green-accent hover:underline"
+                className="text-text-primary underline decoration-1 underline-offset-4 hover:decoration-2"
               >
                 {o.bill_number}
               </Link>
             ) : (
-              o.bill_number
-            ))}
-          {o.as_of_date ? ` · as of ${formatDate(o.as_of_date)}` : ''}
+              <span className="text-text-primary">{o.bill_number}</span>
+            )}
+          </>
+        )}
+      </Kicker>
+
+      {/* aria-live so the rotation is announced rather than silently swapping under a screen reader.
+          Fixed rows (figure at a set size, the sentence clamped AND floored) keep the card the same
+          height for every entry, so the rotation never makes the page jump. */}
+      <div aria-live="polite" className="mt-5 flex flex-1 flex-col">
+        <BigFigure text={metric} tone={ACCENT} />
+        <p
+          className="mt-4 line-clamp-3 min-h-[4.6rem] text-lg leading-snug text-text-secondary"
+          title={o.metric_label ?? undefined}
+        >
+          {o.metric_label}
         </p>
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <Link
-            href="/insights"
-            onClick={() => track('cta_click', { entry_source: 'home_outcome_ticker', slug: o.slug })}
-            className="link-arrow"
-          >
-            Discover more insights
-          </Link>
-          {/* Sharing sits next to the read-more, because they're the same impulse: this figure landed,
-              now what. One channel: the tagged link, which every target expands into a preview card
-              of its own. (There was a "Save image" here too, rendering the card as a PNG. It went:
-              two ways to share one figure is a decision to make, and the link is the one that carries
-              the tagging, the citation, and a way back to the law.) */}
-          <button
-            type="button"
-            onClick={share}
-            aria-label="Copy a shareable link to this outcome"
-            className={`inline-flex items-center gap-1 text-xs transition-colors ${
-              shared ? 'text-green-accent' : 'text-text-muted hover:text-text-primary'
-            }`}
-          >
-            {shared ? <CheckIcon /> : <LinkGlyph />}
-            {shared ? 'Copied' : 'Share'}
-          </button>
-        </div>
-        {/* Both directions. Forward-only meant a reader who let a card rotate past — or who looked up
-            mid-sentence — had to sit through the whole loop to get back to it, and on a phone, where
-            hover can't pause anything, that was the only way back. Stepping stops the auto-advance
-            (see `manual`), so the card they came back to stays put. */}
-        {items.length > 1 && (
-          <div className="flex shrink-0 items-center gap-1 text-text-muted">
+      <div className="mt-5 border-t border-border-default pt-4">
+        <p className="min-h-[1.25rem] text-sm text-text-muted">
+          {o.as_of_date ? `As of ${formatDate(o.as_of_date)}` : ''}
+        </p>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-5">
+            <Link
+              href="/insights"
+              onClick={() => track('cta_click', { entry_source: 'home_outcome_ticker', slug: o.slug })}
+              className="text-base font-medium text-text-primary underline-offset-4 hover:underline"
+            >
+              More insights <span aria-hidden>→</span>
+            </Link>
+            {/* One share channel: the tagged link, which every target expands into a preview card. */}
             <button
               type="button"
-              onClick={() => step(-1)}
-              aria-label="Previous outcome"
-              className="px-1 transition-colors hover:text-text-primary"
+              onClick={share}
+              aria-label={shared ? 'Link copied' : 'Copy a shareable link to this outcome'}
+              title={shared ? 'Copied' : 'Share'}
+              className={`inline-flex items-center text-lg transition-colors ${shared ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'}`}
             >
-              ‹
-            </button>
-            <button
-              type="button"
-              onClick={() => step(1)}
-              aria-label="Next outcome"
-              className="px-1 transition-colors hover:text-text-primary"
-            >
-              ›
+              {shared ? <CheckIcon /> : <LinkGlyph />}
             </button>
           </div>
-        )}
+          {/* Both directions; stepping stops the auto-advance (see `manual`). */}
+          {items.length > 1 && (
+            <div className="flex shrink-0 items-center gap-3 text-text-muted">
+              <button type="button" onClick={() => step(-1)} aria-label="Previous outcome" className="px-1 text-xl transition-colors hover:text-text-primary">‹</button>
+              <span className="tabular-nums text-sm">{(idx % items.length) + 1} / {items.length}</span>
+              <button type="button" onClick={() => step(1)} aria-label="Next outcome" className="px-1 text-xl transition-colors hover:text-text-primary">›</button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </FeatureCard>
   );
 }
 
@@ -309,7 +276,7 @@ function OutcomeTicker() {
 function LinkGlyph() {
   return (
     <svg
-      width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden
     >
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
@@ -319,22 +286,26 @@ function LinkGlyph() {
 }
 
 /**
- * "Headlines & Deadlines" — the date-relevant material that isn't a bill: what enacted law has been
- * documented to produce, above the deadline banners passed as `children`.
+ * "Headlines & Deadlines" — the front-page spread at the foot of Explore: what enacted law has been
+ * documented to produce (the outcome card) beside what's coming due (the deadlines card), with any
+ * standing notices beneath. Built from FeatureCard so the two cards read as one design.
  *
- * There used to be a second block beside the ticker — the next five dated obligations, linking to
- * /compliance. It was cut (2026-08-13) as a duplicate: the ScopedDeadlineBanner immediately below it
- * already counts the reader's upcoming deadlines and links to the same calendar, so the section said
- * "deadlines →" twice in a row with the second one adding only five rows the calendar shows anyway.
- * The ticker degrades to nothing rather than to an empty shell, so the section only appears when it
- * has something to say.
+ * The outcome card degrades to nothing rather than an empty shell; with only one card the grid
+ * collapses to a single column.
  */
-export function HeadlinesDeadlines({ children }: { children?: React.ReactNode }) {
+export function HeadlinesDeadlines({ deadlines, notices }: { deadlines?: React.ReactNode; notices?: React.ReactNode }) {
   return (
-    <section>
-      <h2 className="font-serif text-lg text-text-primary mb-3">Headlines &amp; Deadlines</h2>
-      <OutcomeTicker />
-      {children && <div className="mt-3 space-y-3">{children}</div>}
+    <section aria-labelledby="hd-title">
+      <h2 id="hd-title" className="font-serif text-4xl leading-tight text-text-primary sm:text-5xl">
+        Headlines <span className="italic" style={{ color: ACCENT }}>&amp;</span> Deadlines
+      </h2>
+      <p className="mt-1 text-lg text-text-muted">What moved, and what&rsquo;s due.</p>
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <OutcomeTicker />
+        {deadlines}
+      </div>
+      {notices && <div className="mt-5 space-y-3">{notices}</div>}
     </section>
   );
 }
+

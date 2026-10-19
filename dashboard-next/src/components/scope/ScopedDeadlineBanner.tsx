@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useDeadlineStats } from '@/hooks/useDeadlines';
 import { isEmptyScope, scopeJurisdictionCodes } from '@/lib/scope';
 import { formatDate } from '@/lib/utils';
-import { CalendarIcon, AlertIcon } from '@/components/ui/icons';
+import { FeatureCard, Kicker, BigFigure } from '@/components/home/FeatureCard';
 import { useScope, useScopeActive } from './ScopeContext';
 import { formatMaterial } from './ScopeOnboarding';
 
@@ -37,44 +37,20 @@ export function ScopedDeadlineBanner() {
     const count = stats.within_30 > 0 ? stats.within_30 : stats.within_90;
     if (count === 0) return null;
     const urgent = stats.within_30 > 0;
-    const horizon = urgent ? 'within 30 days' : 'in the next 90 days';
     const matPhrase =
-      scope.materials.length > 0
-        ? ` affecting your products & materials (${scope.materials.map(formatMaterial).join(', ')})`
-        : '';
+      scope.materials.length > 0 ? ` affecting ${scope.materials.map(formatMaterial).join(', ')}` : '';
     const statePhrase = stats.states.length > 0 ? ` in ${stats.states.join(', ')}` : '';
-
     return (
-      <Link
-        href="/compliance"
-        className={`block rounded-lg border px-4 py-3 transition-colors ${
-          urgent
-            ? 'border-urgency-high/50 bg-red-50 dark:bg-red-950/30 hover:border-urgency-high'
-            : 'border-green-accent/40 bg-green-dark/30 hover:border-green-accent'
-        }`}
-      >
-        <div className="flex items-center gap-3">
-          {urgent ? (
-            <AlertIcon className="text-urgency-high text-xl shrink-0" />
-          ) : (
-            <CalendarIcon className="text-green-accent text-xl shrink-0" />
-          )}
-          <p className="text-sm sm:text-base text-text-primary">
-            <span className={`font-serif font-semibold ${urgent ? 'text-urgency-high' : 'text-green-accent'}`}>
-              {count}
-            </span>{' '}
-            {count === 1 ? 'deadline' : 'deadlines'}
-            {matPhrase}
-            {statePhrase} {horizon}.{' '}
-            {stats.next_date && (
-              <span className="text-text-secondary">Nearest: {formatDate(stats.next_date)}.</span>
-            )}{' '}
-            <span className={urgent ? 'text-urgency-high' : 'text-green-accent'}>
-              See what&apos;s required →
-            </span>
-          </p>
-        </div>
-      </Link>
+      <DeadlineCard
+        tone={urgent ? 'var(--status-weakens)' : 'var(--status-committee)'}
+        horizon={urgent ? 'Next 30 days' : 'Next 90 days'}
+        label="Your deadlines"
+        count={count}
+        unit={count === 1 ? 'deadline for you' : 'deadlines for you'}
+        sentence={`Upcoming obligations${matPhrase}${statePhrase}.`}
+        nextDate={stats.next_date}
+        cta="See what’s required"
+      />
     );
   }
 
@@ -83,20 +59,45 @@ export function ScopedDeadlineBanner() {
   // state); only a genuinely unscoped reader (never set one, or skipped) sees the hook.
   if (!isEmptyScope(scope)) return null;
   if (stats.total_upcoming === 0) return null;
-
   return (
-    <Link
-      href="/compliance"
-      className="block w-full text-left rounded-lg border border-border-default bg-bg-secondary/60 px-4 py-3 hover:border-green-accent/40 transition-colors"
-    >
-      <div className="flex items-center gap-3">
-        <CalendarIcon className="text-text-muted text-xl shrink-0" />
-        <p className="text-sm sm:text-base text-text-secondary">
-          <span className="font-serif font-semibold text-text-primary">{stats.total_upcoming}</span>{' '}
-          compliance deadlines worldwide over the next 3 years.{' '}
-          <span className="text-green-accent">See the full calendar →</span>
-        </p>
+    <DeadlineCard
+      tone="var(--status-committee)"
+      horizon="Next 3 years"
+      label="Deadlines"
+      count={stats.total_upcoming}
+      unit="compliance deadlines"
+      sentence="Registrations, reports and fees coming due under enacted law, worldwide."
+      nextDate={stats.next_date}
+      cta="See the full calendar"
+    />
+  );
+}
+
+/** The deadlines half of the Headlines & Deadlines spread — same card language as the outcome card. */
+function DeadlineCard({
+  tone, horizon, label, count, unit, sentence, nextDate, cta,
+}: {
+  tone: string; horizon: string; label: string; count: number; unit: string;
+  sentence: string; nextDate: string | null | undefined; cta: string;
+}) {
+  return (
+    <FeatureCard>
+      <Kicker tone={tone}>
+        {label}
+        <span className="text-text-muted">{' · '}{horizon}</span>
+      </Kicker>
+      <div className="mt-5 flex flex-1 flex-col">
+        <BigFigure text={`${count.toLocaleString('en-US')} ${unit}`} tone={tone} />
+        <p className="mt-4 line-clamp-3 min-h-[4.6rem] text-lg leading-snug text-text-secondary">{sentence}</p>
       </div>
-    </Link>
+      <div className="mt-5 border-t border-border-default pt-4">
+        <p className="min-h-[1.25rem] text-sm text-text-muted">{nextDate ? `Nearest: ${formatDate(nextDate)}` : ''}</p>
+        <div className="mt-3">
+          <Link href="/compliance" className="text-base font-medium text-text-primary underline-offset-4 hover:underline">
+            {cta} <span aria-hidden>→</span>
+          </Link>
+        </div>
+      </div>
+    </FeatureCard>
   );
 }

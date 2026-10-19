@@ -68,9 +68,13 @@ export const REGION_CODES = [...ANCHORS, ...REST];
 export function RegionFilter({
   selected,
   onChange,
+  variant = 'field',
 }: {
   selected: string[];
   onChange: (codes: string[]) => void;
+  /** 'field' = label + underline control (Insights, forms); 'toolbar' = a compact pill for the Explore
+   *  toolbar row, labelled for assistive tech only. */
+  variant?: 'field' | 'toolbar';
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -103,20 +107,23 @@ export function RegionFilter({
 
   return (
     <div className="flex flex-row items-center gap-2" ref={ref}>
-      <label className="font-serif text-text-muted text-meta uppercase tracking-wider shrink-0">Regions</label>
+      {variant === 'field' && <label className="field-label shrink-0">Regions</label>}
       <div className="relative">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className="w-full min-w-[10rem] flex items-center cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-left focus:border-green-accent"
+          aria-label={variant === 'toolbar' ? `Regions: ${summary}` : undefined}
+          className={variant === 'toolbar'
+            ? 'inline-flex h-8 min-w-[9rem] items-center rounded-md border border-border-default bg-bg-secondary pl-2.5 pr-7 text-sm text-left text-text-primary transition-colors hover:border-text-muted'
+            : 'w-full min-w-[10rem] flex items-center cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-left focus:border-text-primary'}
         >
-          <span className={`truncate ${selected.length ? 'text-text-primary' : 'text-text-muted'}`}>
+          <span className={`truncate ${selected.length || variant === 'toolbar' ? 'text-text-primary' : 'text-text-muted'}`}>
             {summary}
           </span>
         </button>
-        <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-text-muted text-sm" />
+        <ChevronDownIcon className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-text-muted text-sm ${variant === 'toolbar' ? 'right-2' : 'right-0'}`} />
         {open && (
           <div className="absolute left-0 z-30 mt-1 w-max min-w-full max-h-72 overflow-y-auto rounded-md border border-border-default bg-bg-secondary shadow-lg p-1">
             {/* "All regions" reset row — clears the selection (= aggregate everything). */}
@@ -124,12 +131,12 @@ export function RegionFilter({
               type="button"
               onClick={() => onChange([])}
               className={`w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-left whitespace-nowrap hover:bg-bg-primary ${
-                selected.length === 0 ? 'text-green-accent' : 'text-text-secondary'
+                selected.length === 0 ? 'text-text-primary font-medium' : 'text-text-secondary'
               }`}
             >
               <span
                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px] ${
-                  selected.length === 0 ? 'border-green-accent bg-green-dark text-white' : 'border-border-default'
+                  selected.length === 0 ? 'border-text-primary bg-text-primary text-bg-primary' : 'border-border-default'
                 }`}
               >
                 {selected.length === 0 ? '✓' : ''}
@@ -145,12 +152,12 @@ export function RegionFilter({
                   type="button"
                   onClick={() => toggle(code)}
                   className={`w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-left whitespace-nowrap hover:bg-bg-primary ${
-                    on ? 'text-green-accent' : 'text-text-secondary'
+                    on ? 'text-text-primary font-medium' : 'text-text-secondary'
                   }`}
                 >
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ${
-                      on ? 'border-green-accent bg-green-dark text-white' : 'border-border-default'
+                      on ? 'border-text-primary bg-text-primary text-bg-primary' : 'border-border-default'
                     }`}
                   >
                     {on ? '✓' : ''}

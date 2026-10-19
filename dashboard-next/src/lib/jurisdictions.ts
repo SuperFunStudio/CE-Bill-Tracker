@@ -77,6 +77,25 @@ export function jurisdictionDisplayName(region: string, code: string): string {
   return EU_MEMBERS[c] ?? FOREIGN_COUNTRY_NAMES[c] ?? c;
 }
 
+/**
+ * Label for a bill's jurisdiction in a list: the full name, plus a short parent tag for sub-national
+ * units. Bare two-letter codes collided across families in a mixed-region table — "CA" was Canada and
+ * California, "CO" Colombia and Colorado — so national law shows the country name alone and a state or
+ * province carries its country ("California" · US, "ON" · Canada).
+ */
+export function jurisdictionCell(region: string | null | undefined, code: string | null | undefined): { name: string; parent: string | null } {
+  const r = (region || 'US').toUpperCase();
+  const c = (code || r).toUpperCase();
+  if (r === 'US') {
+    if (c === 'US') return { name: 'United States', parent: 'Federal' };
+    return { name: STATE_NAMES[c] ?? cityDisplayName(c) ?? c, parent: 'US' };
+  }
+  if (r === 'EU') return c === 'EU' ? { name: 'European Union', parent: null } : { name: EU_MEMBERS[c] ?? c, parent: 'EU' };
+  const country = EU_MEMBERS[r] ?? FOREIGN_COUNTRY_NAMES[r] ?? r;
+  if (c === r) return { name: country, parent: null };
+  return { name: c, parent: country };
+}
+
 /** The sub-jurisdiction noun for a region, for copy ("state" / "member state" / "country"). */
 export function unitNoun(region: string): string {
   const r = region.toUpperCase();

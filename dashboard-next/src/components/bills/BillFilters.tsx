@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
 import { CheckIcon, CloseIcon, CalendarIcon, ChevronDownIcon } from '@/components/ui/icons';
 import { useRegion } from '@/components/layout/RegionContext';
@@ -164,6 +164,8 @@ interface BillFiltersProps {
    *  toggle + Ask hidden, the facets are the only thing left to do there, so collapsing them just
    *  buries the controls. Honored on sm+ only: see the effect in the component. */
   expandFiltersByDefault?: boolean;
+  /** `showRegion` toolbar only: controls rendered at the right end of the same row (scope, export). */
+  trailing?: ReactNode;
 }
 
 function Select({
@@ -177,12 +179,12 @@ function Select({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="font-serif text-text-muted text-meta uppercase tracking-wider">{label}</label>
+      <label className="field-label">{label}</label>
       <div className="relative">
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-text-primary focus:outline-none focus:border-green-accent [&>option]:bg-bg-secondary [&>option]:text-text-primary"
+          className="w-full appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-text-primary focus:outline-none focus:border-text-primary [&>option]:bg-bg-secondary [&>option]:text-text-primary"
         >
           <option value="">{placeholder}</option>
           {options.map(o => (
@@ -239,14 +241,14 @@ export function MultiSelect({
 
   return (
     <div className="flex flex-col gap-1" ref={ref}>
-      <label className="font-serif text-text-muted text-meta uppercase tracking-wider">{label}</label>
+      <label className="field-label">{label}</label>
       <div className="relative">
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className="w-full flex items-center cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-left focus:border-green-accent"
+          className="w-full flex items-center cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent pl-0 pr-5 py-1 text-sm text-left focus:border-text-primary"
         >
           <span className={`truncate ${values.length ? 'text-text-primary' : 'text-text-muted'}`}>{summary}</span>
         </button>
@@ -261,12 +263,12 @@ export function MultiSelect({
                   type="button"
                   onClick={() => toggle(o.value)}
                   className={`w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm text-left whitespace-nowrap hover:bg-bg-primary ${
-                    on ? 'text-green-accent' : 'text-text-secondary'
+                    on ? 'text-text-primary font-medium' : 'text-text-secondary'
                   }`}
                 >
                   <span
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                      on ? 'border-green-accent bg-green-dark' : 'border-border-default'
+                      on ? 'border-text-primary bg-text-primary text-bg-primary' : 'border-border-default'
                     }`}
                   >
                     {on && <CheckIcon className="text-meta" />}
@@ -299,20 +301,20 @@ function DateInput({
   };
   return (
     <div className="flex flex-col gap-1">
-      <label className="font-serif text-text-muted text-meta uppercase tracking-wider">{label}</label>
+      <label className="field-label">{label}</label>
       <div className="relative">
         <input
           ref={ref}
           type="date"
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 pr-6 text-sm text-text-primary focus:outline-none focus:border-green-accent [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden"
+          className="w-full appearance-none cursor-pointer rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 pr-6 text-sm text-text-primary focus:outline-none focus:border-text-primary [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:hidden"
         />
         <button
           type="button"
           aria-label={`Open ${label.toLowerCase()} date picker`}
           onClick={openPicker}
-          className="absolute inset-y-0 right-0 flex items-center pl-2 text-text-muted transition-colors hover:text-green-accent"
+          className="absolute inset-y-0 right-0 flex items-center pl-2 text-text-muted transition-colors hover:text-text-primary"
         >
           <CalendarIcon className="text-base" />
         </button>
@@ -358,7 +360,7 @@ function DateFilter({
   );
 }
 
-export function BillFilters({ filters, onChange, hideState, hideSearch, showRegion, resinOptions, expandFiltersByDefault }: BillFiltersProps) {
+export function BillFilters({ filters, onChange, hideState, hideSearch, showRegion, resinOptions, expandFiltersByDefault, trailing }: BillFiltersProps) {
   const set = (partial: Partial<BillFilterState>) => onChange({ ...filters, ...partial });
 
   // EU-central law is EU-wide (no sub-jurisdiction yet), so the State select is hidden in EU mode —
@@ -375,9 +377,9 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     return () => clearInterval(id);
   }, []);
 
-  // Home-explorer (showRegion) layout keeps Region + State up front and folds the rest behind a
-  // "Filters" toggle. Start expanded if one of those secondary filters is already active (so a
-  // filtered arrival isn't hidden) or if the host surface asked for it (expandFiltersByDefault).
+  // Home-explorer (showRegion) toolbar: Region + State up front, everything else in a "Filters"
+  // popover so the whole set fits ONE row. The popover opens on demand; a filtered arrival shows its
+  // count on the button instead of auto-expanding a second row of controls above the table.
   const secondaryActiveCount = [
     filters.status,
     filters.instrumentType,
@@ -386,15 +388,22 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     filters.polymers.length > 0,
     filters.dateType,
   ].filter(Boolean).length;
-  const [showMore, setShowMore] = useState(secondaryActiveCount > 0);
-  // `expandFiltersByDefault` only applies where there's room for it. On a phone the secondary panel is
-  // six stacked controls — auto-expanding it fills the screen with dropdowns before the reader has
-  // seen a single bill, so mobile starts collapsed and desktop keeps the open-by-default behaviour.
-  // An already-active secondary filter still wins on both (handled by the initial state above).
+  const [showMore, setShowMore] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!expandFiltersByDefault) return;
-    if (window.matchMedia?.('(min-width: 640px)').matches) setShowMore(true);
-  }, [expandFiltersByDefault]);
+    if (!showMore) return;
+    const onDoc = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setShowMore(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowMore(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [showMore]);
+  void expandFiltersByDefault; // kept for API compatibility; the toolbar popover never auto-expands
   // On a fixed-state context, reset preserves the locked state instead of clearing it.
   const reset = () => onChange(hideState ? { ...DEFAULT_FILTERS, state: filters.state } : DEFAULT_FILTERS);
 
@@ -428,17 +437,17 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
         value={filters.status}
         onChange={v => set({ status: v })}
         options={STATUSES}
-        placeholder="All Statuses"
+        placeholder="All statuses"
       />
       <Select
         label="Instrument"
         value={filters.instrumentType}
         onChange={v => set({ instrumentType: v })}
         options={INSTRUMENT_TYPES.map(t => ({ value: t, label: formatInstrumentType(t) }))}
-        placeholder="All Types"
+        placeholder="All types"
       />
       <MultiSelect
-        label="Materials & Products"
+        label="Materials & products"
         values={filters.materialCategories}
         onChange={v => set({ materialCategories: v })}
         options={MATERIAL_CATEGORIES.map(m => ({
@@ -456,7 +465,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
       />
       {showResin && (
         <MultiSelect
-          label="Resin / Polymer"
+          label="Resin / polymer"
           values={filters.polymers}
           onChange={v => set({ polymers: v })}
           options={resinOptions!.map(code => ({ value: code, label: RESIN_NAMES[code] ?? code }))}
@@ -472,59 +481,65 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
     </>
   );
 
-  // Home-explorer layout: Region + State (US) always visible; the rest fold behind "Filters" so
-  // the bar stays calm above the ask box.
+  // Home-explorer toolbar: one 48px row — Regions · State (only when the US is the selected region) ·
+  // Filters popover · Reset, with the host's trailing controls (scope, export) at the right end.
   if (showRegion) {
+    const showToolbarState = !hideState && regions.includes('US');
+    const pill = 'inline-flex h-8 items-center gap-1.5 rounded-md border border-border-default bg-bg-secondary px-2.5 text-sm text-text-primary transition-colors hover:border-text-muted';
     return (
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-          <RegionFilter selected={regions} onChange={setRegions} />
-          {showState && (
-            <div className="min-w-[9rem] max-w-[11rem]">
-              <Select
-                label="State"
-                value={filters.state}
-                onChange={v => set({ state: v })}
-                options={stateOptions}
-                placeholder="All States"
-              />
-            </div>
-          )}
+      <div className="flex min-h-12 flex-wrap items-center gap-2 py-2">
+        <RegionFilter selected={regions} onChange={setRegions} variant="toolbar" />
+        {showToolbarState && (
+          <div className="relative">
+            <select
+              value={filters.state}
+              onChange={e => set({ state: e.target.value })}
+              aria-label="State"
+              className={`${pill} appearance-none cursor-pointer pr-7 focus:outline-none [&>option]:bg-bg-secondary`}
+            >
+              <option value="">All states</option>
+              {stateOptions.map(o => <option key={o.value} value={o.value}>{STATE_NAMES[o.value]}</option>)}
+            </select>
+            <ChevronDownIcon className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-muted text-sm" />
+          </div>
+        )}
+        <div className="relative" ref={moreRef}>
           <button
             type="button"
             onClick={() => setShowMore(v => !v)}
             aria-expanded={showMore}
-            className="flex items-center gap-1.5 pb-1 text-left transition-colors group"
+            aria-haspopup="dialog"
+            className={pill}
           >
-            <span className="font-serif text-text-muted group-hover:text-text-primary text-meta uppercase tracking-wider">Filters</span>
+            Filters
             {secondaryActiveCount > 0 && (
-              <span className="rounded-full bg-green-dark/40 text-green-accent text-[10px] leading-none px-1.5 py-0.5">{secondaryActiveCount}</span>
+              <span className="rounded-full bg-text-primary text-bg-primary text-[11px] leading-none px-1.5 py-0.5 tabular-nums">{secondaryActiveCount}</span>
             )}
             <ChevronDownIcon className={`text-text-muted text-sm transition-transform ${showMore ? 'rotate-180' : ''}`} />
           </button>
-          {(activeCount > 0 || regions.length > 0) && (
-            <button
-              // Reset clears the facets AND the region selection — the region lives here now, so its
-              // reset belongs on this bar too (there's no global region bar on the home page).
-              onClick={() => { reset(); if (regions.length) setRegions([]); }}
-              className="ml-auto self-end rounded-full border border-border-default px-3 py-1 text-meta text-text-secondary transition-colors hover:border-text-primary/40 hover:text-text-primary"
+          {showMore && (
+            <div
+              role="dialog"
+              aria-label="Filters"
+              className="surface-panel absolute left-0 top-full z-30 mt-1.5 w-[min(40rem,calc(100vw-2rem))] p-4"
             >
-              Reset ({activeCount + (regions.length > 0 ? 1 : 0)})
-            </button>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
+                {secondaryFields}
+              </div>
+            </div>
           )}
         </div>
-
-        {/* Secondary controls. On a phone: a hard two-column grid. auto-fill with a 9rem floor was
-            meant to pack two tracks there, but the floor plus the gap exceeds the usable width on a
-            360px screen, so it silently fell back to ONE full-bleed column per row — the stretched
-            control that reads as a text field waiting for input rather than a dropdown. Two equal
-            columns are narrower than the old cap and always fit. From sm up, auto-fill takes over and
-            packs as many 11rem-capped tracks as the (much wider) rail allows. */}
-        {showMore && (
-          <div className="grid grid-cols-2 gap-x-3 gap-y-3 pt-1 sm:gap-x-4 sm:[grid-template-columns:repeat(auto-fill,minmax(9rem,11rem))]">
-            {secondaryFields}
-          </div>
+        {(activeCount > 0 || regions.length > 0) && (
+          <button
+            // Reset clears the facets AND the region selection — the region lives here now, so its
+            // reset belongs on this bar too (there's no global region bar on the home page).
+            onClick={() => { reset(); if (regions.length) setRegions([]); }}
+            className="h-8 px-2 text-sm text-text-muted underline-offset-2 transition-colors hover:text-text-primary hover:underline"
+          >
+            Reset ({activeCount + (regions.length > 0 ? 1 : 0)})
+          </button>
         )}
+        {trailing && <div className="ml-auto flex items-center gap-3">{trailing}</div>}
       </div>
     );
   }
@@ -534,14 +549,14 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
       {/* Search — omitted on the unified Explore surface, which hosts the adaptive search/ask bar. */}
       {!hideSearch && (
         <div className="flex flex-col gap-1">
-          <label className="font-serif text-text-muted text-meta uppercase tracking-wider">Search</label>
+          <label className="field-label">Search</label>
           <div className="relative">
             <input
               type="text"
               value={filters.search}
               onChange={e => set({ search: e.target.value })}
               placeholder={`Search e.g. ${SEARCH_EXAMPLES[exampleIdx]}`}
-              className="w-full rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-green-accent pr-8"
+              className="w-full rounded-none border-0 border-b border-text-primary/30 bg-transparent px-0 py-1 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-text-primary pr-8"
             />
             {filters.search && (
               <button
@@ -569,7 +584,7 @@ export function BillFilters({ filters, onChange, hideState, hideSearch, showRegi
             value={filters.state}
             onChange={v => set({ state: v })}
             options={stateOptions}
-            placeholder="All States"
+            placeholder="All states"
           />
         )}
         {secondaryFields}

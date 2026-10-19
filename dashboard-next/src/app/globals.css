@@ -120,6 +120,41 @@ body {
     text-transform: uppercase;
   }
 
+  /* THE label style — every field label and every table column header, one treatment (sans caps,
+     muted). Field labels used to be serif caps while table headers were sans caps; two systems for
+     the same job read as two products. */
+  .field-label {
+    font-family: var(--font-sans), Roboto, system-ui, sans-serif;
+    font-size: var(--fs-meta);
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* THE "go somewhere" link — "View all →", "See what we track →", etc. Ink, not accent: the accent is
+     reserved for data and the one primary action. The arrow is drawn by ::after so call sites can't
+     drift between →, &rarr; and "->". */
+  .link-arrow {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    white-space: nowrap;
+    text-underline-offset: 3px;
+    transition: color 0.15s ease;
+  }
+  .link-arrow::after { content: ' \2192'; }
+  .link-arrow:hover { color: var(--text-primary); text-decoration: underline; }
+
+  /* Inline text link inside running copy — underlined ink, accent-free. */
+  .link-quiet {
+    color: var(--text-primary);
+    text-decoration: underline;
+    text-decoration-color: var(--border-default);
+    text-underline-offset: 3px;
+  }
+  .link-quiet:hover { text-decoration-color: currentColor; }
+
   /* Surface primitives — elevation that maps to hierarchy (page < card < panel). */
   .surface-card {
     background: var(--bg-secondary);
@@ -166,22 +201,7 @@ body {
     cursor: pointer;
     transition: border-color 0.15s ease, background-color 0.15s ease;
   }
-  .list-card:hover { border-color: rgb(var(--green-accent) / 0.4); }
-}
-
-/* ── Auto-scrolling "ticker" marquee (Top States line) ──
-   The track duplicates its content, so translating by -50% loops seamlessly.
-   Duration is set per-instance via the `animation-duration` inline style. */
-@keyframes marquee {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-.animate-marquee {
-  animation: marquee linear infinite;
-  will-change: transform;
-}
-@media (prefers-reduced-motion: reduce) {
-  .animate-marquee { animation: none; }
+  .list-card:hover { border-color: var(--text-muted); }
 }
 
 /* ── Region-map "zoom-settle" ──

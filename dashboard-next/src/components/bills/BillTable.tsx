@@ -8,6 +8,7 @@ import { WatchStar } from '@/components/watchlist/WatchStar';
 import { track } from '@/lib/analytics';
 import { useSelectedBill } from '@/hooks/useSelectedBill';
 import { useBill } from '@/hooks/useBills';
+import { jurisdictionCell } from '@/lib/jurisdictions';
 
 interface BillTableProps {
   bills: BillSummary[];
@@ -21,9 +22,29 @@ interface BillTableProps {
    * own bill modal. See useSelectedBill.
    */
   urlSync?: boolean;
+  /** With autoPageSize: the page sizes offered in the table footer ("Rows per page"). The host owns the
+   *  value (autoPageSize) and hears changes through onPageSizeChange. Omitted → no size control. */
+  pageSizeOptions?: number[];
+  onPageSizeChange?: (n: number) => void;
+  /** Row hover/focus → the bill under the pointer (null on leave). Lets a host map outline the row's
+   *  jurisdiction. */
+  onRowHover?: (bill: BillSummary | null) => void;
 }
 
-export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: BillTableProps) {
+/** "California · US" — the jurisdiction's full name with its parent tag for sub-national units. */
+function JurisdictionLabel({ bill, className = '' }: { bill: BillSummary; className?: string }) {
+  const { name, parent } = jurisdictionCell(bill.region, bill.state);
+  return (
+    <span className={className}>
+      <span className="text-text-primary font-medium">{name}</span>
+      {parent && <span className="text-text-muted text-meta"> · {parent}</span>}
+    </span>
+  );
+}
+
+export function BillTable({
+  bills, maxRows, autoPageSize, urlSync = false, pageSizeOptions, onPageSizeChange, onRowHover,
+}: BillTableProps) {
   const [localSelectedId, setLocalSelectedId] = useState<number | null>(null);
   const urlSel = useSelectedBill();
   const selectedId = urlSync ? urlSel.selectedId : localSelectedId;
@@ -70,34 +91,51 @@ export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: Bil
       : risk >= 40
         ? 'bg-amber-100 dark:bg-amber-950/50 border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-300'
         : 'bg-bg-primary border-border-default text-text-muted';
+    const n = bill.litigation_case_count;
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${cls}`}>
-        ⚖ {bill.litigation_case_count}
+      <span
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-meta font-medium border whitespace-nowrap ${cls}`}
+        title={`${n} court case${n === 1 ? '' : 's'}`}
+      >
+        <span aria-hidden>⚖</span> {n}
+        <span className="sr-only">{n === 1 ? 'court case' : 'court cases'}</span>
       </span>
     );
   }
 
   return (
     <div className="space-y-3">
-      {/* ── Desktop table (hidden below sm) ── */}
+      {/* ── Desktop table (hidden below sm) ──
+          64px rows with titles allowed two lines (Carbon's "tall" row, reserved for data expected to
+          run to two lines). Type/Status are narrow; litigation is no longer a mostly-empty column —
+          it's a badge beside the status, shown only when a case exists. */}
       <div className="hidden sm:block overflow-x-auto rounded-lg border border-border-default">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm table-fixed min-w-[40rem]">
+          {/* Bill number rides under the jurisdiction (one column, two lines) rather than taking its own
+              column, and Type drops out below xl — so the title keeps a readable measure in the 62%
+              split column even on a 1280px laptop. */}
+          <colgroup>
+            <col className="w-[10rem]" />
+            <col />
+            <col className="hidden xl:table-column w-[6.5rem]" />
+            <col className="w-[8.75rem]" />
+            <col className="w-[7.5rem]" />
+            <col className="w-10" />
+          </colgroup>
           <thead>
-            <tr className="bg-bg-secondary border-b border-border-default text-text-secondary text-xs uppercase">
-              <th className="px-3 py-2 text-left w-10">State</th>
-              <th className="px-3 py-2 text-left w-24">Bill #</th>
-              <th className="px-3 py-2 text-left">Title</th>
-              <th className="px-3 py-2 text-left w-24">Type</th>
-              <th className="px-3 py-2 text-left w-32">Status</th>
-              <th className="px-3 py-2 text-left w-28">Last Action</th>
-              <th className="px-3 py-2 text-left w-20">Litigation</th>
-              <th className="px-2 py-2 w-6" />
+            <tr className="bg-bg-secondary border-b border-border-default h-10">
+              <th scope="col" className="field-label px-3 text-left whitespace-nowrap">Jurisdiction</th>
+              <th scope="col" className="field-label px-3 text-left">Title</th>
+              <th scope="col" className="field-label px-3 text-left hidden xl:table-cell">Type</th>
+              <th scope="col" className="field-label px-3 text-left">Status</th>
+              <th scope="col" className="field-label px-3 text-left whitespace-nowrap">Last action</th>
+              <th scope="col" className="px-2"><span className="sr-only">Watch</span></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody onMouseLeave={() => onRowHover?.(null)}>
             {displayBills.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-text-muted">
+                <td colSpan={6} className="px-3 py-6 text-center text-text-muted">
                   No bills match the current filters.
                 </td>
               </tr>
@@ -112,26 +150,29 @@ export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: Bil
                     openBill(bill);
                   }
                 }}
+                onMouseEnter={() => onRowHover?.(bill)}
+                onFocus={() => onRowHover?.(bill)}
                 tabIndex={0}
                 role="button"
                 aria-label={`Open ${bill.state} ${bill.bill_number ?? 'bill'} details`}
-                className="list-row"
+                className="list-row h-16 align-middle"
               >
                 <td className="px-3 py-2">
-                  <span className="text-green-accent font-mono font-bold">{bill.state}</span>
-                </td>
-                <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
-                  <span className="text-text-muted">{bill.bill_number ?? '—'}</span>
-                  {bill.last_action_date && (
-                    <span className="text-text-muted/60 ml-1" title={`${bill.last_action_date} session`}>
-                      &rsquo;{bill.last_action_date.slice(2, 4)}
-                    </span>
-                  )}
+                  <JurisdictionLabel bill={bill} className="block truncate" />
+                  <span className="mt-0.5 block truncate font-mono text-xs text-text-muted">
+                    {bill.bill_number ?? '—'}
+                    {bill.last_action_date && (
+                      <span className="text-text-muted/60 ml-1" title={`${bill.last_action_date} session`}>
+                        &rsquo;{bill.last_action_date.slice(2, 4)}
+                      </span>
+                    )}
+                  </span>
                 </td>
                 <td className="px-3 py-2">
                   {/* Real crawlable link to the bill's page. A plain left-click keeps the fast in-app
                       modal; ⌘/ctrl/shift/middle-click follows the URL into a new tab. stopPropagation
-                      keeps the row's own openBill handler from double-firing. */}
+                      keeps the row's own openBill handler from double-firing. Materials ride in the
+                      tooltip now that the title may use both lines. */}
                   <a
                     href={billHref(bill)}
                     onClick={e => {
@@ -140,32 +181,29 @@ export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: Bil
                       e.stopPropagation();
                       openBill(bill);
                     }}
-                    className="block text-text-primary truncate max-w-xs hover:text-green-accent hover:underline"
-                    title={fixEncoding(bill.title) ?? ''}
+                    className="line-clamp-2 leading-snug text-text-primary hover:underline"
+                    title={[
+                      fixEncoding(bill.title),
+                      bill.material_categories?.length ? bill.material_categories.map(c => c.replace(/_/g, ' ')).join(', ') : '',
+                    ].filter(Boolean).join(' — ')}
                   >
                     {fixEncoding(bill.title) || 'Untitled'}
                   </a>
-                  {bill.material_categories && bill.material_categories.length > 0 && (
-                    <div className="text-text-muted text-xs mt-0.5 truncate">
-                      {bill.material_categories.slice(0, 3).map(c => c.replace(/_/g, ' ')).join(', ')}
-                    </div>
-                  )}
                 </td>
-                <td className="px-3 py-2 text-text-secondary text-xs">
+                <td className="px-3 py-2 text-text-secondary text-xs truncate hidden xl:table-cell">
                   {formatInstrumentType(bill.instrument_type)}
                 </td>
                 <td className="px-3 py-2">
-                  <StatusBadge status={bill.status} weakening={isWeakening(bill)} />
+                  <span className="flex items-center gap-1.5">
+                    <StatusBadge status={bill.status} weakening={isWeakening(bill)} />
+                    <LitigationBadge bill={bill} />
+                  </span>
                 </td>
-                <td className="px-3 py-2 text-text-muted text-xs">
+                <td className="px-3 py-2 text-text-muted text-xs whitespace-nowrap">
                   {formatDate(bill.last_action_date)}
-                </td>
-                <td className="px-3 py-2">
-                  <LitigationBadge bill={bill} />
                 </td>
                 <td className="px-2 py-2 text-center whitespace-nowrap">
                   <WatchStar billId={bill.id} />
-                  <span className="text-text-muted text-xs ml-0.5">›</span>
                 </td>
               </tr>
             ))}
@@ -193,11 +231,11 @@ export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: Bil
             tabIndex={0}
             role="button"
             aria-label={`Open ${bill.state} ${bill.bill_number ?? 'bill'} details`}
-            className="list-card p-3 space-y-1.5 active:bg-green-dark/20"
+            className="list-card p-3 space-y-1.5 active:bg-bg-tertiary"
           >
-            {/* Row 1: state / bill# / litigation */}
+            {/* Row 1: jurisdiction / bill# / litigation */}
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-green-accent font-mono font-bold text-sm">{bill.state}</span>
+              <JurisdictionLabel bill={bill} className="text-sm" />
               {bill.bill_number && (
                 <span className="text-text-muted font-mono text-xs">
                   {bill.bill_number}
@@ -216,7 +254,7 @@ export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: Bil
                 e.stopPropagation();
                 openBill(bill);
               }}
-              className="block text-text-primary text-sm line-clamp-2 hover:text-green-accent"
+              className="block text-text-primary text-sm line-clamp-2 hover:underline"
             >
               {fixEncoding(bill.title) || 'Untitled'}
             </a>
@@ -238,34 +276,52 @@ export function BillTable({ bills, maxRows, autoPageSize, urlSync = false }: Bil
         ))}
       </div>
 
-      {autoPageSize && pageCount > 1 ? (
-        <div className="flex items-center justify-between text-xs text-text-muted">
-          <span className="tabular-nums">
-            {safePage * autoPageSize + 1}&ndash;{Math.min((safePage + 1) * autoPageSize, bills.length)} of {bills.length}
-          </span>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={safePage === 0}
-              className="hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Previous"
-            >
-              &lsaquo; Prev
-            </button>
-            <span className="tabular-nums">Page {safePage + 1} / {pageCount}</span>
-            <button
-              onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
-              disabled={safePage >= pageCount - 1}
-              className="hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
-              aria-label="Next"
-            >
-              Next &rsaquo;
-            </button>
+      {/* Footer: rows-per-page on the left (moved down from the toolbar — it's a property of this
+          table, not of the filters), range + pager on the right. */}
+      {autoPageSize && (pageCount > 1 || pageSizeOptions) ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-text-muted">
+          <div className="flex items-center gap-4">
+            {pageSizeOptions && onPageSizeChange && (
+              <label className="flex items-center gap-1.5">
+                Rows per page
+                <select
+                  value={autoPageSize}
+                  onChange={e => onPageSizeChange(Number(e.target.value))}
+                  className="rounded border border-border-default bg-bg-secondary px-1.5 py-0.5 text-xs text-text-primary focus:border-text-primary focus:outline-none"
+                >
+                  {pageSizeOptions.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            )}
+            <span className="tabular-nums">
+              {bills.length === 0 ? 0 : (safePage * autoPageSize + 1).toLocaleString('en-US')}&ndash;{Math.min((safePage + 1) * autoPageSize, bills.length).toLocaleString('en-US')} of {bills.length.toLocaleString('en-US')}
+            </span>
           </div>
+          {pageCount > 1 && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={safePage === 0}
+                className="hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Previous page"
+              >
+                &lsaquo; Prev
+              </button>
+              <span className="tabular-nums">Page {safePage + 1} / {pageCount.toLocaleString('en-US')}</span>
+              <button
+                onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))}
+                disabled={safePage >= pageCount - 1}
+                className="hover:text-text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                aria-label="Next page"
+              >
+                Next &rsaquo;
+              </button>
+            </div>
+          )}
         </div>
       ) : bills.length > (maxRows ?? Infinity) ? (
         <div className="text-text-muted text-xs text-right">
-          Showing {maxRows} of {bills.length} bills
+          Showing {maxRows} of {bills.length.toLocaleString('en-US')} bills
         </div>
       ) : null}
 

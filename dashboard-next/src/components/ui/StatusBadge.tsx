@@ -32,7 +32,7 @@ export function StatusBadge({
   return (
     <span className="inline-flex flex-col gap-0.5">
       <span
-        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-meta font-medium border ${cls}`}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-meta font-medium border whitespace-nowrap ${cls}`}
         title={label || undefined}
       >
         {formatStatusLabel(status)}

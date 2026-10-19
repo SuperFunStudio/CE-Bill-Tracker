@@ -8,7 +8,6 @@ import { SubscribeSection } from '@/components/about/SubscribeSection';
 import { AlertBanner } from '@/components/ui/AlertBanner';
 import { FreshnessNote } from '@/components/ui/FreshnessNote';
 import { FederalWatchBanner } from '@/components/ui/FederalWatchBanner';
-import { StatesTicker } from '@/components/ui/StatesTicker';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillFilters, DEFAULT_FILTERS, applyBillFilters, matchesKeywordText, resinOptionsFromBills, type BillFilterState } from '@/components/bills/BillFilters';
 import { SkeletonList } from '@/components/ui/SkeletonList';
@@ -17,7 +16,7 @@ import { ScopeBar } from '@/components/scope/ScopeBar';
 import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useRegion } from '@/components/layout/RegionContext';
 import { regionLabel, REGION_CODES } from '@/components/insights/RegionFilter';
-import { highlightIdsFor } from '@/components/map/RegionInsetMap';
+import { highlightIdsFor, enactedCountsByIso } from '@/components/map/RegionInsetMap';
 import { EU_MEMBERS } from '@/lib/jurisdictions';
 import { inScope } from '@/lib/scope';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
@@ -32,33 +31,44 @@ import { HomeVariantVote } from '@/components/experiment/HomeVariantVote';
 import { BillDotExplorer } from '@/components/explore/BillDotExplorer';
 import { CorpusJsonLd } from '@/components/seo/CorpusJsonLd';
 import { HeadlinesDeadlines } from '@/components/home/HeadlinesDeadlines';
+import { JurisdictionTopList } from '@/components/home/JurisdictionTopList';
+import { RegionSummary } from '@/components/home/RegionSummary';
+import { fmtCount } from '@/lib/mapScale';
+import type { BillSummary } from '@/lib/types';
 import Link from 'next/link';
 
 const StateMap = dynamic(
   () => import('@/components/map/StateMap').then(m => ({ default: m.StateMap })),
-  { ssr: false, loading: () => <div className="h-80 bg-bg-secondary rounded-lg animate-pulse" /> }
+  { ssr: false, loading: () => <div className="h-[300px] bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
 const RegionInsetMap = dynamic(
   () => import('@/components/map/RegionInsetMap').then(m => ({ default: m.RegionInsetMap })),
-  { ssr: false, loading: () => <div className="h-80 bg-bg-secondary rounded-lg animate-pulse" /> }
+  { ssr: false, loading: () => <div className="h-[120px] bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
 // A slowly-rotating d3-geo globe of laws-in-force by jurisdiction — the "all regions" overview. Canvas
 // + window APIs, so client-only (ssr:false).
 const CoverageGlobe = dynamic(
   () => import('@/components/map/CoverageGlobe').then(m => ({ default: m.CoverageGlobe })),
-  { ssr: false, loading: () => <div className="h-[320px] bg-bg-secondary rounded-lg animate-pulse" /> }
+  { ssr: false, loading: () => <div className="h-[340px] bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
-// Rows the results table shows per page. Five is the default — the table is a browse surface, not a
-// spreadsheet, and the page has content below it — but a reader scanning a filtered set shouldn't
-// have to page through it five at a time.
-const ROWS_PER_PAGE_OPTIONS = [5, 10, 20, 50, 100];
+// Rows per page. 25 by default: the table is the page's subject now (it sits at the top of the right
+// column, beside the map), so a screenful of laws is the point. The size control lives in the table
+// footer.
+const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
+const DEFAULT_ROWS = 25;
+
+/** ISO numeric ids a bill's jurisdiction occupies on the globe (EU-central law → every member). */
+function globeIdsForBill(b: BillSummary): string[] {
+  if (b.region === 'US') return ['840'];
+  return b.region ? highlightIdsFor(b.region) : [];
+}
 
 export default function HomePage() {
   const [billFilters, setBillFilters] = useState<BillFilterState>(DEFAULT_FILTERS);
-  const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE_OPTIONS[0]);
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS);
   const { region, regionsParam, regions: selectedRegions, setRegions, isUsView } = useRegion();
   const router = useRouter();
 
@@ -96,20 +106,42 @@ export default function HomePage() {
   // compliance buyer). Opens the shared request-access form, tagged source="home_walkthrough".
   const [walkthroughOpen, setWalkthroughOpen] = useState(false);
 
-  // The Explore bar does ONE thing: typing filters the table live. It used to carry an "AI Analysis"
-  // toggle that flipped the same box into a question box, plus an Ask button — removed 2026-08-13,
-  // which is the A/B concluding in favour of its "hidden" arm (see git history for
-  // useAiSurfaceVariant). The hypothesis held: a mode toggle at the top of the page is a fork in the
-  // road, and a reader who has to choose a mode before typing hasn't started yet. Questions were
-  // never answered here anyway — /ask owns the conversation, because state that lives only on this
-  // page dies on a nav, a reload, or a discarded tab. The line under the bar is now the single route
-  // there. See docs/ASK_SURFACE_SPEC.md.
+  // The Explore bar carries both modes INSIDE the field: a Filter | Ask segmented toggle at its left
+  // edge. Filter (the default) narrows the table live on every keystroke; Ask sends the question to
+  // /ask on Enter, where the thread lives (state that lives only on this page dies on a nav, a reload,
+  // or a discarded tab — see docs/ASK_SURFACE_SPEC.md). History: a mode toggle sat ABOVE the bar until
+  // 2026-08-13, when an A/B removed it in favour of a helper line under the bar linking to /ask. The
+  // helper line is gone now and the mode lives in the field itself, defaulting to Filter, so a reader
+  // who never touches it gets exactly the keyword box that won that test.
   const [query, setQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<'filter' | 'ask'>('filter');
   const freeAskUsed = useFreeAskUsed();
   const onSearchChange = (v: string) => {
     setQuery(v);
-    setBillFilters(prev => ({ ...prev, search: v }));
+    if (searchMode === 'filter') setBillFilters(prev => ({ ...prev, search: v }));
   };
+  function switchSearchMode(mode: 'filter' | 'ask') {
+    if (mode === searchMode) return;
+    track('explore_search_mode', { mode });
+    setSearchMode(mode);
+    // The table follows the box only in Filter mode: entering Ask releases the keyword filter, and
+    // coming back applies whatever is typed.
+    setBillFilters(prev => ({ ...prev, search: mode === 'filter' ? query : '' }));
+  }
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = query.trim();
+    if (searchMode !== 'ask' || q.length < 3) return;
+    track('cta_click', { entry_source: 'explore_ask_mode' });
+    router.push(`/ask/?q=${encodeURIComponent(q)}`);
+  }
+
+  // The table row (or top-list entry) under the pointer — its jurisdiction is outlined on the map.
+  const [hoverBill, setHoverBill] = useState<BillSummary | null>(null);
+  const [hoverCode, setHoverCode] = useState<string | null>(null);
+
+  // Below lg the map and the table can't sit side by side; the table leads and the map is one tap away.
+  const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
 
   const highPreemption = federalStats?.high_preemption ?? 0;
 
@@ -129,13 +161,21 @@ export default function HomePage() {
     [bills, scopeActive, scope],
   );
 
-  // Map honors every active filter EXCEPT state, so all states stay visible/clickable.
+  // The state map shades ENACTED laws per state — the one map metric site-wide (lib/mapScale), so it
+  // reads on the same scale as the globe. Honors every active filter EXCEPT state, so all states stay
+  // visible/clickable. City ordinances ("OR-PORTLAND") don't count toward their state.
   const mapData = useMemo(() => {
-    const filtered = applyBillFilters(mapSource, { ...billFilters, state: '' });
+    const filtered = applyBillFilters(mapSource, { ...billFilters, state: '', enactedOnly: true });
     const counts: Record<string, number> = {};
-    filtered.forEach(b => { counts[b.state] = (counts[b.state] ?? 0) + 1; });
+    filtered.forEach(b => {
+      if (b.region === 'US' && b.state in STATE_NAMES) counts[b.state] = (counts[b.state] ?? 0) + 1;
+    });
     return counts;
   }, [mapSource, billFilters]);
+
+  // Per-country enacted counts for the regional inset maps (EU bloc, lone-country locator) — the same
+  // numbers the globe shades from.
+  const countsByIso = useMemo(() => enactedCountsByIso(lawsInForce), [lawsInForce]);
 
   // Region-aware, ENACTED-ONLY leaderboard under the masthead. Enacted is the fair common
   // denominator across jurisdictions (the US introduced→enacted funnel has no EU analog). Mode
@@ -161,28 +201,19 @@ export default function HomePage() {
         if (!KNOWN.has(k)) continue;
         data[k] = (data[k] ?? 0) + p.count;
       }
-      return { mode: 'regions' as const, label: 'Top Regions', data };
+      return { mode: 'regions' as const, label: 'Top regions', data };
     }
     if (selectedRegions.includes('US')) {
-      return { mode: 'us-states' as const, label: 'Top States',
+      return { mode: 'us-states' as const, label: 'Top states',
         // STATE_NAMES keys only: city ordinances ("OR-PORTLAND") must not rank as states.
         data: tally(b => (b.region === 'US' && b.state && b.state in STATE_NAMES ? b.state : null)) };
     }
     if (selectedRegions.includes('EU') || selectedRegions.some(r => r in EU_MEMBERS)) {
-      return { mode: 'eu-members' as const, label: 'Top Member States',
+      return { mode: 'eu-members' as const, label: 'Top member states',
         data: tally(b => (b.region && b.region in EU_MEMBERS ? b.region : null)) };
     }
     return { mode: 'none' as const, label: '', data: {} as Record<string, number> };
   }, [mapSource, billFilters, selectedRegions, lawsInForce]);
-
-  // Region-level counts for the world switcher bubbles. Reflects the currently-loaded set, so it's
-  // complete on the default "all regions" landing (the moment the overview matters most); a single
-  // active region filter narrows the fetch, which is fine since that region is the one in focus.
-  const regionCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    mapSource.forEach(b => { if (b.region) counts[b.region] = (counts[b.region] ?? 0) + 1; });
-    return counts;
-  }, [mapSource]);
 
   // The map now *shows the selected region* rather than being a control. Exactly one region selected
   // → its cropped map (US states, the EU bloc, or a single-country locator). "All regions" (=[]) or a
@@ -265,333 +296,376 @@ export default function HomePage() {
     }))), 'csv_export_bills');
   }
 
+  // ── Focus + copy ────────────────────────────────────────────────────────────────────────────────
+  // The jurisdiction the page is filtered to, if exactly one: a US state, else the sole region.
+  const focusState = soleRegion === 'US' && billFilters.state ? billFilters.state : null;
+  const placeName = (code: string) =>
+    ['US', 'EU', 'UK', 'NL'].includes(code) ? `the ${regionLabel(code)}` : regionLabel(code);
+  // Scoped header count: "1,672 tracked measures in the United States".
+  const scopePhrase = focusState
+    ? `in ${STATE_NAMES[focusState] ?? focusState}`
+    : soleRegion
+      ? `in ${placeName(soleRegion)}`
+      : selectedRegions.length > 1
+        ? `in ${selectedRegions.length} regions`
+        : 'across all regions';
+
+  // Map ↔ table sync: the row (or top-list entry) under the pointer is outlined on whichever map shows.
+  const hoverGlobeIds = useMemo(() => {
+    if (hoverBill) return globeIdsForBill(hoverBill);
+    if (hoverCode && leaderboard.mode === 'regions') return hoverCode === 'US' ? ['840'] : highlightIdsFor(hoverCode);
+    return [];
+  }, [hoverBill, hoverCode, leaderboard.mode]);
+  const hoverStateAbbr = hoverBill
+    ? (hoverBill.region === 'US' && hoverBill.state in STATE_NAMES ? hoverBill.state : null)
+    : leaderboard.mode === 'us-states' ? hoverCode : null;
+  const hoverEuIds = useMemo(() => {
+    const code = hoverBill?.region ?? (leaderboard.mode === 'eu-members' ? hoverCode : null);
+    return code && (code === 'EU' || code in EU_MEMBERS) ? highlightIdsFor(code) : [];
+  }, [hoverBill, hoverCode, leaderboard.mode]);
+
+  const topListName = (code: string) =>
+    leaderboard.mode === 'us-states' ? STATE_NAMES[code] ?? code : regionLabel(code);
+
+  const crumbSep = <span aria-hidden className="text-text-muted/60">/</span>;
+  const crumbBtn = 'link-quiet text-text-secondary';
+
   return (
-    <div className="p-6 space-y-8 max-w-6xl mx-auto">
+    <div className="mx-auto max-w-[1600px] px-4 pb-8 pt-4 sm:px-6">
       {/* schema.org Dataset for the corpus. The bills on this page are fetched client-side, so a
           crawler that doesn't run JS sees an empty frame — this is the machine-readable description
           it gets instead. Pre-rendered into the static HTML at build despite living in a client
           component. See components/seo/CorpusJsonLd. */}
       <CorpusJsonLd />
+
       {/* Value prop + primary CTA — held back until a signed-out visitor has spent their one free
-          question and is reaching for a second (useFreeAskUsed reads the marker /ask writes). A fresh
-          visitor gets the clean Explore surface first; the "start free" pitch only lands once they've
-          engaged and hit the limit. Never shown to users who've already converted. */}
+          question and is reaching for a second (useFreeAskUsed reads the marker /ask writes). One slim
+          band, not a hero: the title, search and the first laws still land above the fold beneath it. */}
       {!user && freeAskUsed && (
-        <section className="rounded-xl border border-green-accent/30 bg-green-hero p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-          <div className="max-w-2xl">
-            <h1 className="font-serif text-2xl sm:text-3xl text-text-primary leading-tight text-balance">
-              Never miss a compliance deadline.
-            </h1>
-            <p className="mt-2 text-text-secondary text-body leading-relaxed">
-              We track every circular-economy bill and EPR obligation, then pull out the dates and
-              requirements so you don&apos;t have to. Start free — no card required.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 shrink-0 sm:w-48">
+        <section className="mb-4 flex flex-col gap-3 rounded-lg border border-border-default bg-bg-secondary px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-text-secondary">
+            <span className="font-serif text-base text-text-primary">Never miss a compliance deadline.</span>{' '}
+            We pull the dates and requirements out of every circular-economy law. Start free — no card required.
+          </p>
+          <div className="flex shrink-0 items-center gap-4">
+            <Link href="/pricing" className="link-arrow text-xs">Plans</Link>
             <button
               onClick={openAuth}
-              className="rounded-lg bg-green-accent text-bg-primary font-semibold px-5 py-2.5 hover:opacity-90 transition-opacity"
+              className="rounded-md bg-text-primary px-4 py-1.5 text-sm font-semibold text-bg-primary transition-opacity hover:opacity-90"
             >
-              Start free →
+              Start free
             </button>
-            <Link
-              href="/pricing"
-              className="text-center text-meta text-text-secondary hover:text-text-primary transition-colors"
-            >
-              See plans &amp; pricing
-            </Link>
           </div>
         </section>
       )}
 
-      {/* Page masthead: "Explore · N circular economy bills". The count says what the corpus IS —
-          that phrase is the tagline this line used to carry — and "See what we track" answers the
-          question it provokes by sending readers to the methodology. CSV export moved down to the
-          table it exports (see the action row above the results). */}
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-3 flex-wrap">
-          <h1 className="font-serif text-2xl sm:text-3xl text-text-primary">Explore</h1>
-          <span className="text-text-muted text-sm">{tableBills.length} circular economy bills</span>
-          <FreshnessNote />
-        </div>
-        <Link
-          href="/methodology"
-          onClick={() => track('cta_click', { entry_source: 'explore_methodology' })}
-          className="shrink-0 text-sm text-text-secondary hover:text-green-accent transition-colors"
-        >
-          See what we track <span aria-hidden>→</span>
-        </Link>
-      </div>
+      {/* ── Top of page: capped at ~25% of the viewport. One line of title + scoped count beside the
+          search field, then ONE toolbar row (region · state · filters · scope · export). Nothing else
+          stacks above the table. ── */}
+      <header>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="font-serif text-2xl leading-none text-text-primary sm:text-[1.75rem]">Explore</h1>
+            <p className="text-sm text-text-secondary">
+              <span className="font-semibold text-text-primary tabular-nums">{fmtCount(tableBills.length)}</span>
+              {' '}tracked {tableBills.length === 1 ? 'measure' : 'measures'} {scopePhrase}
+            </p>
+            <Link
+              href="/methodology"
+              onClick={() => track('cta_click', { entry_source: 'explore_methodology' })}
+              className="link-arrow text-xs"
+            >
+              See what we track
+            </Link>
+            <FreshnessNote />
+          </div>
 
-      {/* Ranked leaderboard line, right under the nav. Region-aware + enacted-only: umbrella regions
-          on "All regions", US states under a US selection, EU member states under an EU/member one
-          (France defers here); hidden for a lone non-EU country with no sub-jurisdictions. */}
-      {leaderboard.mode !== 'none' && (
-        <StatesTicker
-          label={leaderboard.label}
-          data={leaderboard.data}
-          // Always link through to the full Standings board (/states adapts to the selection: the US
-          // momentum board, the EU board, or the two-column States|Nations leaderboard by default).
-          restHref="/states"
-          restLabel={leaderboard.mode === 'us-states' ? 'The rest' : 'View all'}
-          onSelect={code =>
-            leaderboard.mode === 'us-states'
-              ? setBillFilters(prev => ({ ...prev, state: prev.state === code ? '' : code }))
-              : setRegions([code])
-          }
-        />
-      )}
-
-      {/* Compact desktop masthead: the globe drops out of the full-width band and into a fixed 380px
-          right rail (≈ the width it gets on a phone, so the same proportions), with the search bar and
-          facets taking the left column beside it. Below lg the two stack in DOM order — globe first,
-          then the bar — exactly as before. Explicit col/row placement (rather than reordering the DOM)
-          keeps the mobile source order intact. */}
-      <div className="space-y-8 lg:space-y-0 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8 lg:items-start">
-
-      {/* Map/globe — moved up to sit right below the ticker. The Regions selector that drives it lives
-          in the Explore facets just below. */}
-      <section className="lg:col-start-2 lg:row-start-1">
-          {soleRegion && (
-            <div className="mb-2 flex items-center gap-1.5 text-sm text-text-muted">
-              <button onClick={() => setRegions([])} className="text-green-accent hover:underline">← Back to the globe</button>
-              {drilledEuMember && (
-                <>
-                  <span className="mx-0.5">/</span>
-                  <button onClick={() => setRegions(['EU'])} className="text-green-accent hover:underline">European Union</button>
-                  <span className="mx-0.5">/</span>
-                  <span className="text-text-secondary">{regionLabel(soleRegion!)}</span>
-                </>
+          {/* Search, with the mode inside the field: Filter (live keyword filter, the default) | Ask
+              (Enter hands the question to /ask). Never narrower than ~27 characters of input. Still a
+              <form> so Enter is a submit, not a page navigation. */}
+          <form onSubmit={submitSearch} className="w-full lg:max-w-xl" style={{ viewTransitionName: 'ask-bar' }}>
+            <div className="flex h-11 items-center gap-2 rounded-lg border border-border-default bg-bg-secondary pl-1.5 pr-1.5 transition-colors focus-within:border-text-primary">
+              <div role="radiogroup" aria-label="Search mode" className="flex shrink-0 rounded-md bg-bg-tertiary p-0.5 text-xs font-medium">
+                {(['filter', 'ask'] as const).map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={searchMode === m}
+                    onClick={() => switchSearchMode(m)}
+                    className={`rounded px-2.5 py-1 transition-colors ${
+                      searchMode === m ? 'bg-bg-secondary text-text-primary shadow-sm' : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    {m === 'filter' ? 'Filter' : 'Ask'}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={query}
+                onChange={e => onSearchChange(e.target.value)}
+                placeholder={searchMode === 'filter' ? 'Keyword, bill number or material…' : 'Ask a question about circular-economy law…'}
+                aria-label={searchMode === 'filter' ? 'Filter laws by keyword' : 'Ask the Atlas a question'}
+                enterKeyHint={searchMode === 'ask' ? 'send' : 'search'}
+                className="min-w-[27ch] flex-1 bg-transparent text-body text-text-primary placeholder-text-muted focus:outline-none"
+              />
+              {searchMode === 'ask' ? (
+                <button
+                  type="submit"
+                  disabled={query.trim().length < 3}
+                  className="shrink-0 rounded-md bg-green-accent px-3 py-1.5 text-sm font-semibold text-bg-primary transition-opacity hover:opacity-90 disabled:opacity-40"
+                >
+                  Ask
+                </button>
+              ) : query && (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange('')}
+                  aria-label="Clear search"
+                  className="shrink-0 px-2 text-text-muted hover:text-text-primary"
+                >
+                  ×
+                </button>
               )}
             </div>
-          )}
-          {/* Keyed by selection so the zoom-settle animation replays on every drill in/out. */}
-          <div key={soleRegion ?? 'all'} className="region-map-in">
-          {!soleRegion ? (
-            <CoverageGlobe onSelect={code => setRegions([code])} />
-          ) : soleRegion === 'US' ? (
-            <StateMap
-              data={mapData}
-              selectedState={billFilters.state || null}
-              onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
-              height={320}
-            />
-          ) : insetHighlightIds.length ? (
-            <RegionInsetMap
-              highlightIds={insetHighlightIds}
-              caption={soleRegion === 'EU' ? 'European Union · 27 member states — click a country to drill in' : `${regionLabel(soleRegion)} · national law`}
-              count={regionCounts[soleRegion]}
-              onCountrySelect={insetHighlightIds.length > 1 ? code => setRegions([code]) : undefined}
-              height={320}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-default bg-bg-secondary/40 text-center px-6 py-10">
-              <div className="text-meta uppercase tracking-wider text-text-muted">
-                {regionLabel(soleRegion)} · national law
-              </div>
-              <p className="mt-2 max-w-md text-sm text-text-secondary">
-                The laws below are the view. A map lights up once we ingest this jurisdiction&apos;s geography.
-              </p>
-            </div>
-          )}
-          </div>
-      </section>
-
-      {/* Explore: one adaptive search/ask bar + facets. The "Explore · N bills" title + Export live at
-          the top of the page now; this section is just the bar and its controls. */}
-      <section className="lg:col-start-1 lg:row-start-1">
-        {/* The search box leads — it sits directly under the globe as the page's primary action, with
-            the one-line explainer beneath it. Still a <form> so Enter is a no-op submit rather than a
-            page navigation; filtering is already live on every keystroke. */}
-        <form onSubmit={e => e.preventDefault()} style={{ viewTransitionName: 'ask-bar' }}>
-          <div className="flex items-center gap-2 rounded-xl border-2 border-green-accent/60 bg-bg-secondary px-3 py-2 focus-within:border-green-accent transition-colors">
-            <span aria-hidden className="text-text-muted text-lg leading-none">⌕</span>
-            <input
-              value={query}
-              onChange={e => onSearchChange(e.target.value)}
-              placeholder="Search bills by keyword…"
-              aria-label="Search bills by keyword"
-              className="flex-1 min-w-0 bg-transparent text-body text-text-primary placeholder-text-muted focus:outline-none"
-            />
-          </div>
-        </form>
-
-        {/* One line, under the bar: what the box does, and where questions go. With the toggle gone
-            this link is the ONLY route to the AI surface from Explore, so it stays. */}
-        <p className="mt-2 text-xs text-text-muted truncate">
-          <b className="text-text-secondary font-medium">Keywords</b> filter instantly ·{' '}
-          <Link
-            href="/ask"
-            onClick={() => track('cta_click', { entry_source: 'explore_search_hint' })}
-            className="text-green-accent hover:underline"
-          >
-            Ask the Atlas
-          </Link>{' '}
-          for AI analysis
-        </p>
-
-        {/* Control row UNDER the bar — now just the facets. Kept OUT of the <form> so a facet dropdown
-            can never accidentally submit. They open by default on sm+: they're the only controls on
-            that row, so hiding them behind a second click buys nothing. On a phone they stay collapsed
-            — six stacked dropdowns above the fold is the whole screen before any bill is visible. */}
-        <div className="mt-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-text-primary/15 pb-4">
-          <div className="w-full min-w-0">
-            <BillFilters
-              filters={billFilters}
-              onChange={setBillFilters}
-              hideSearch
-              showRegion
-              resinOptions={resinOptions}
-              expandFiltersByDefault
-            />
-          </div>
+          </form>
         </div>
 
-        {/* Facet-bridge notice: what the term matched beyond the literal words, and an offer to make
-            it a real filter. Only shown when the bridge actually pulled bills in (facetOnlyCount > 0),
-            so it explains a visible difference rather than adding noise. */}
-        {searchFacets && facetOnlyCount > 0 && (
-          <div className="mb-3 text-sm text-text-muted">
-            <span className="text-text-secondary">&ldquo;{billFilters.search.trim()}&rdquo;</span>
-            {' also matches the '}
-            <span className="text-text-secondary">{searchFacets.labels.join(' / ')}</span>
-            {' tag — including '}
-            <span className="text-green-accent">{facetOnlyCount}</span>
-            {facetOnlyCount === 1 ? ' law that never uses' : ' laws that never use'}
-            {' the word (non-English statutes, and framework laws that cover it without naming it).'}
-            {' '}
-            <button type="button" onClick={applyFacetFilter} className="underline hover:text-text-secondary">
-              Filter by {searchFacets.labels.join(' / ')} instead
-            </button>
-          </div>
-        )}
+        <div className="mt-2 border-b border-border-default">
+          <BillFilters
+            filters={billFilters}
+            onChange={setBillFilters}
+            hideSearch
+            showRegion
+            resinOptions={resinOptions}
+            trailing={
+              <>
+                <button
+                  onClick={() => { track('cta_click', { entry_source: 'explore_scope' }); openScopeEditor(); }}
+                  className="h-8 text-sm text-text-secondary transition-colors hover:text-text-primary hover:underline underline-offset-2"
+                >
+                  Set scope
+                </button>
+                <button
+                  onClick={handleExport}
+                  disabled={tableBills.length === 0}
+                  title={isPro ? undefined : 'CSV export is a Pro feature'}
+                  className="inline-flex h-8 items-center gap-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary disabled:text-text-muted"
+                >
+                  {!isPro && <LockIcon className="text-xs" />}
+                  Export CSV
+                  {!isPro && (
+                    <span className="rounded-full border border-border-default px-1.5 py-px text-[11px] uppercase tracking-wider text-text-muted">
+                      Pro
+                    </span>
+                  )}
+                </button>
+              </>
+            }
+          />
+        </div>
+      </header>
 
-        {region === 'US' && billFilters.state && (
-          <div className="mb-3 text-sm text-text-muted">
-            Showing <span className="text-green-accent font-medium">{STATE_NAMES[billFilters.state] ?? billFilters.state}</span>
-            {' — '}
-            <Link href={`/jurisdictions/us/${billFilters.state.toLowerCase()}/`} className="underline hover:text-text-secondary">view {STATE_NAMES[billFilters.state] ?? billFilters.state} profile</Link>
-            {' · '}
-            <button type="button" onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className="underline hover:text-text-secondary">clear</button>
-          </div>
-        )}
+      {/* Active-scope strip (renders only when a personalization scope is set). */}
+      <ScopeBar />
 
-      </section>
-      </div>
-
-      {/* Bill results table. The personalize-scope bar (state/material/product) sits here, just above
-          the table, instead of globally under the nav. */}
-      <section>
-        <div className="mb-3"><ScopeBar /></div>
-
-        {/* Action row — between the filters and the results it acts on. Left: set a scope (the
-            invitation that used to be buried in the deadline banner's tail, now a real button on the
-            filter/results seam) + how many rows to show. Right: CSV export, which used to float up in
-            the masthead where it read as page furniture rather than "download this table". */}
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border-default pb-2">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <button
-              onClick={() => { track('cta_click', { entry_source: 'explore_scope' }); openScopeEditor(); }}
-              className="text-sm text-green-accent hover:underline"
-            >
-              Set your regional &amp; material scope →
-            </button>
-            <label className="flex items-center gap-1.5 text-xs text-text-muted">
-              Show
-              <select
-                value={rowsPerPage}
-                onChange={e => setRowsPerPage(Number(e.target.value))}
-                aria-label="Rows per page"
-                className="rounded border border-border-default bg-bg-secondary px-1.5 py-0.5 text-xs text-text-primary focus:border-green-accent focus:outline-none"
-              >
-                {ROWS_PER_PAGE_OPTIONS.map(n => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-              per page
-            </label>
-          </div>
-          <button
-            onClick={handleExport}
-            disabled={tableBills.length === 0}
-            title={isPro ? undefined : 'CSV export is a Pro feature'}
-            className="text-sm text-green-accent hover:underline disabled:text-text-muted disabled:no-underline shrink-0 inline-flex items-center gap-1.5"
-          >
-            {!isPro && <LockIcon className="text-xs" />}
-            ↓ Export CSV
-            {!isPro && (
-              <span className="text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-1.5 py-px no-underline">
-                Pro
-              </span>
-            )}
+      {/* Facet-bridge notice: what the term matched beyond the literal words, and an offer to make
+          it a real filter. Only shown when the bridge actually pulled bills in (facetOnlyCount > 0),
+          so it explains a visible difference rather than adding noise. */}
+      {searchFacets && facetOnlyCount > 0 && (
+        <div className="mt-3 text-sm text-text-muted">
+          <span className="text-text-secondary">&ldquo;{billFilters.search.trim()}&rdquo;</span>
+          {' also matches the '}
+          <span className="text-text-secondary">{searchFacets.labels.join(' / ')}</span>
+          {' tag — including '}
+          <span className="font-semibold text-text-primary">{fmtCount(facetOnlyCount)}</span>
+          {facetOnlyCount === 1 ? ' law that never uses' : ' laws that never use'}
+          {' the word (non-English statutes, and framework laws that cover it without naming it).'}
+          {' '}
+          <button type="button" onClick={applyFacetFilter} className="link-quiet">
+            Filter by {searchFacets.labels.join(' / ')} instead
           </button>
         </div>
-
-        {/* Only fires when live AND snapshot/localStorage all came up empty — otherwise
-            last-known data shows with a quiet FreshnessNote instead of a scary banner. */}
-        {billsError && <AlertBanner variant="red" message="We're having trouble loading bill data right now — please refresh in a moment." className="mb-3" />}
-        {billsLoading ? (
-          <SkeletonList rows={5} />
-        ) : variant === 'b' ? (
-          <BillDotExplorer bills={tableBills} />
-        ) : (
-          <BillTable bills={tableBills} autoPageSize={rowsPerPage} urlSync />
-        )}
-      </section>
-
-      {/* Headlines & Deadlines — the signals that aren't bills, bundled below the table (out of the
-          way of the bills, which are what visitors came for) and now under a heading that says what
-          they are. Two loose notices reading as stray banners is what the section header fixes. The
-          deadline count is here rather than at the top so it informs without leading with stress; the
-          Oregon court-case wildcard is US-only — irrelevant to a non-US filter.
-          The section leads with two date-relevant blocks (documented outcomes / next deadlines) and
-          keeps the banners beneath them. Still to come: consortium formations and notes from the
-          pulse script, which have no feed to read from yet. */}
-      <HeadlinesDeadlines>
-        <ScopedDeadlineBanner />
-        {isUsView && <FederalWatchBanner highRiskCount={highPreemption} />}
-      </HeadlinesDeadlines>
-
-      {/* Guided-tour CTA — a standing home for the demo-led motion, distinct from the free-signup and
-          referral CTAs. A 15-min walkthrough is the highest-converting path for the considered
-          compliance buyer, so it gets its own band above the newsletter signup. */}
-      <section className="border-t border-border-default pt-8">
-        <div className="rounded-xl border border-green-accent/30 bg-green-hero px-5 py-4 sm:px-6 sm:py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="max-w-2xl">
-            <h3 className="font-serif text-lg text-text-primary">Unlock the full power of the Atlas.</h3>
-            <p className="text-text-secondary text-sm mt-0.5 leading-relaxed">
-              Book a 15-minute walkthrough — we&apos;ll map the tracker to the materials and
-              jurisdictions your team actually reports on.
-            </p>
-          </div>
-          <button
-            onClick={() => { track('cta_click', { entry_source: 'home_walkthrough' }); setWalkthroughOpen(true); }}
-            className="shrink-0 rounded-lg bg-green-accent text-bg-primary font-semibold px-5 py-2.5 hover:opacity-90 transition-opacity"
-          >
-            Book a walkthrough →
-          </button>
-        </div>
-      </section>
-
-      {/* Get free updates */}
-      <SubscribeSection className="border-t border-border-default pt-8" />
-
-      {walkthroughOpen && (
-        <RequestAccessModal
-          plan="bespoke"
-          planLabel="a walkthrough"
-          heading="Book a walkthrough"
-          source="home_walkthrough"
-          onClose={() => setWalkthroughOpen(false)}
-        />
       )}
 
-      {/* Footer */}
-      <footer className="border-t border-border-default pt-6 pb-2 text-center">
-        <Link href="/about" className="text-sm text-green-accent hover:underline">
-          Learn more about the project &rarr;
-        </Link>
-      </footer>
+      {/* Below lg: the table leads; the map is one tap away. */}
+      <div role="tablist" aria-label="View" className="mt-3 inline-flex rounded-md border border-border-default p-0.5 text-sm lg:hidden">
+        {(['list', 'map'] as const).map(v => (
+          <button
+            key={v}
+            role="tab"
+            aria-selected={mobileView === v}
+            onClick={() => setMobileView(v)}
+            className={`rounded px-4 py-1 transition-colors ${mobileView === v ? 'bg-text-primary text-bg-primary' : 'text-text-secondary'}`}
+          >
+            {v === 'list' ? 'List' : 'Map'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Split view: map column (38%) | table (62%). The table starts at the top of the content
+          area; the map column holds the overview, the focus summary and the top-10. DOM order puts the
+          table first (it's the subject), grid placement puts the map on the left at lg. ── */}
+      <div className="mt-3 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,38fr)_minmax(0,62fr)] lg:items-start lg:gap-6">
+        <section
+          aria-label="Laws"
+          className={`${mobileView === 'list' ? 'block' : 'hidden'} min-w-0 lg:col-start-2 lg:row-start-1 lg:block`}
+        >
+          {/* Only fires when live AND snapshot/localStorage all came up empty — otherwise
+              last-known data shows with a quiet FreshnessNote instead of a scary banner. */}
+          {billsError && <AlertBanner variant="red" message="We're having trouble loading bill data right now — please refresh in a moment." className="mb-3" />}
+          {billsLoading ? (
+            <SkeletonList rows={8} />
+          ) : variant === 'b' ? (
+            <BillDotExplorer bills={tableBills} />
+          ) : (
+            <BillTable
+              bills={tableBills}
+              autoPageSize={rowsPerPage}
+              pageSizeOptions={ROWS_PER_PAGE_OPTIONS}
+              onPageSizeChange={setRowsPerPage}
+              onRowHover={setHoverBill}
+              urlSync
+            />
+          )}
+        </section>
+
+        <aside
+          aria-label="Map"
+          className={`${mobileView === 'map' ? 'block' : 'hidden'} space-y-5 lg:sticky lg:top-4 lg:col-start-1 lg:row-start-1 lg:block`}
+        >
+          {/* Keyed by selection so the zoom-settle animation replays on every drill in/out. */}
+          <div key={soleRegion ?? 'all'} className="region-map-in space-y-4">
+            {!soleRegion ? (
+              <CoverageGlobe onSelect={code => setRegions([code])} highlightIds={hoverGlobeIds} height={340} />
+            ) : (
+              <>
+                {/* Filtering is in place: the table beside this is already narrowed. The summary says
+                    where you are and what's there, instead of a full-height map of one country. */}
+                <RegionSummary
+                  name={focusState ? STATE_NAMES[focusState] ?? focusState : regionLabel(soleRegion)}
+                  kind={
+                    focusState ? 'US state'
+                      : soleRegion === 'US' ? 'Federal and state law'
+                        : soleRegion === 'EU' ? 'EU-wide law'
+                          : drilledEuMember ? 'National law · EU member state'
+                            : 'National law'
+                  }
+                  bills={tableBills}
+                  crumbs={
+                    <>
+                      <button onClick={() => setRegions([])} className={crumbBtn}>All regions</button>
+                      {drilledEuMember && (
+                        <>{crumbSep}<button onClick={() => setRegions(['EU'])} className={crumbBtn}>European Union</button></>
+                      )}
+                      {focusState && (
+                        <>{crumbSep}<button onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className={crumbBtn}>United States</button></>
+                      )}
+                      {focusState && (
+                        <Link href={`/jurisdictions/us/${focusState.toLowerCase()}/`} className="link-arrow ml-auto text-xs">
+                          {STATE_NAMES[focusState] ?? focusState} profile
+                        </Link>
+                      )}
+                    </>
+                  }
+                  locator={
+                    soleRegion !== 'US' && soleRegion !== 'EU' && insetHighlightIds.length ? (
+                      <RegionInsetMap
+                        highlightIds={insetHighlightIds}
+                        countsByIso={countsByIso}
+                        selectedIds={insetHighlightIds}
+                        height={110}
+                      />
+                    ) : undefined
+                  }
+                />
+                {soleRegion === 'US' ? (
+                  <StateMap
+                    data={mapData}
+                    selectedState={billFilters.state || null}
+                    highlightState={hoverStateAbbr}
+                    onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
+                    height={300}
+                  />
+                ) : soleRegion === 'EU' ? (
+                  <RegionInsetMap
+                    highlightIds={insetHighlightIds}
+                    countsByIso={countsByIso}
+                    previewIds={hoverEuIds}
+                    onCountrySelect={code => setRegions([code])}
+                    height={300}
+                  />
+                ) : null}
+              </>
+            )}
+          </div>
+
+          {leaderboard.mode !== 'none' && (
+            <JurisdictionTopList
+              label={leaderboard.label}
+              data={leaderboard.data}
+              nameOf={topListName}
+              selected={leaderboard.mode === 'us-states' ? billFilters.state || null : soleRegion}
+              onHover={setHoverCode}
+              // The full Standings board (/states adapts to the selection: the US momentum board, the
+              // EU board, or the two-column States|Nations leaderboard by default).
+              restHref="/states"
+              onSelect={code =>
+                leaderboard.mode === 'us-states'
+                  ? setBillFilters(prev => ({ ...prev, state: prev.state === code ? '' : code }))
+                  : setRegions([code])
+              }
+            />
+          )}
+        </aside>
+      </div>
+
+      <div className="mt-12 space-y-10">
+        {/* Headlines & Deadlines — the signals that aren't bills, below the table (out of the way of
+            the bills, which are what visitors came for). The Oregon court-case wildcard is US-only. */}
+        <HeadlinesDeadlines>
+          <ScopedDeadlineBanner />
+          {isUsView && <FederalWatchBanner highRiskCount={highPreemption} />}
+        </HeadlinesDeadlines>
+
+        {/* Guided-tour CTA — a standing home for the demo-led motion (the highest-converting path for
+            the considered compliance buyer). Ink, not accent: the accent is reserved for data and the
+            page's one primary action. */}
+        <section className="border-t border-border-default pt-8">
+          <div className="flex flex-col justify-between gap-4 rounded-lg border border-border-default bg-bg-secondary px-5 py-4 sm:flex-row sm:items-center sm:px-6 sm:py-5">
+            <div className="max-w-2xl">
+              <h3 className="font-serif text-lg text-text-primary">Unlock the full power of the Atlas.</h3>
+              <p className="mt-0.5 text-sm leading-relaxed text-text-secondary">
+                Book a 15-minute walkthrough — we&apos;ll map the tracker to the materials and
+                jurisdictions your team actually reports on.
+              </p>
+            </div>
+            <button
+              onClick={() => { track('cta_click', { entry_source: 'home_walkthrough' }); setWalkthroughOpen(true); }}
+              className="shrink-0 rounded-md border border-text-primary px-5 py-2 text-sm font-semibold text-text-primary transition-colors hover:bg-text-primary hover:text-bg-primary"
+            >
+              Book a walkthrough
+            </button>
+          </div>
+        </section>
+
+        {/* Get free updates */}
+        <SubscribeSection className="border-t border-border-default pt-8" />
+
+        {walkthroughOpen && (
+          <RequestAccessModal
+            plan="bespoke"
+            planLabel="a walkthrough"
+            heading="Book a walkthrough"
+            source="home_walkthrough"
+            onClose={() => setWalkthroughOpen(false)}
+          />
+        )}
+
+        <footer className="border-t border-border-default pt-6 pb-2 text-center">
+          <Link href="/about" className="link-arrow">Learn more about the project</Link>
+        </footer>
+      </div>
 
       {/* A/B: ask Homepage-B visitors what they think of the new look (self-dismissing, once per device). */}
       {ready && variant === 'b' && <HomeVariantVote />}

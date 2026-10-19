@@ -255,9 +255,9 @@ function OutcomeTicker() {
           <Link
             href="/insights"
             onClick={() => track('cta_click', { entry_source: 'home_outcome_ticker', slug: o.slug })}
-            className="text-sm text-green-accent hover:underline"
+            className="link-arrow"
           >
-            Discover more insights →
+            Discover more insights
           </Link>
           {/* Sharing sits next to the read-more, because they're the same impulse: this figure landed,
               now what. One channel: the tagged link, which every target expands into a preview card

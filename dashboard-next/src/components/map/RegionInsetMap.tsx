@@ -5,6 +5,9 @@ import { geoEqualEarth, geoArea, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
 import type { Feature, FeatureCollection, Polygon, MultiPolygon } from 'geojson';
 import { useTheme } from '@/components/layout/ThemeContext';
+import { regionLabel } from '@/components/insights/RegionFilter';
+import { MAP_METRIC, fillFor, fmtCount, mapPalette } from '@/lib/mapScale';
+import { useTapOrClick } from '@/hooks/useTapOrClick';
 
 // A cropped, auto-framed regional map. Instead of a global overview, the map now *shows the selected
 // region*: the region's countries are highlighted and the view is fit to them (fitExtent), so US /
@@ -66,6 +69,22 @@ export function codeForIso(id: string): string | undefined {
   return ISO_TO_CODE[id];
 }
 
+/** Enacted-law count per ISO numeric id from laws-in-force points — national law (sub-national rolled
+ *  in) plus the EU-central body for every member, exactly as the globe counts it. */
+export function enactedCountsByIso(points: { region: string; count: number }[]): Record<string, number> {
+  const byRegion: Record<string, number> = {};
+  for (const p of points) {
+    const nat = p.region.split('-')[0];
+    byRegion[nat] = (byRegion[nat] ?? 0) + p.count;
+  }
+  const out: Record<string, number> = {};
+  for (const [code, iso] of Object.entries(CODE_TO_ISO)) if (byRegion[code]) out[iso] = byRegion[code];
+  if (byRegion.US) out['840'] = byRegion.US;
+  const eu = byRegion.EU ?? 0;
+  for (const iso of EU_MEMBER_IDS) out[iso] = (out[iso] ?? 0) + eu;
+  return out;
+}
+
 /** ISO numeric ids to highlight for a region code. EU = the whole bloc; else the single country. */
 export function highlightIdsFor(code: string): string[] {
   if (code === 'EU') return EU_MEMBER_IDS;
@@ -89,22 +108,36 @@ function primaryLandmass(feat: Feature): Feature {
 }
 
 interface RegionInsetMapProps {
-  /** ISO numeric ids to highlight + frame the view around. */
+  /** ISO numeric ids that are the subject of the view — framed, and shaded by count. */
   highlightIds: string[];
+  /** Enacted-law count per ISO id (see enactedCountsByIso) — subject countries shade on the site-wide
+   *  scale. Omitted → subjects take the middle bin, as a plain locator. */
+  countsByIso?: Record<string, number>;
+  /** Subject ids drawn with the selection outline (a lone country in focus). */
+  selectedIds?: string[];
+  /** Ids outlined from outside — the jurisdiction of the table row under the pointer. */
+  previewIds?: string[];
   caption?: string;
-  count?: number;
   /** When set, highlighted countries become clickable and drill into that region (re-crop + filter).
    *  Only fires for countries we track (codeForIso resolves). */
   onCountrySelect?: (code: string) => void;
   height?: number;
 }
 
-export function RegionInsetMap({ highlightIds, caption, count, onCountrySelect, height = 380 }: RegionInsetMapProps) {
+export function RegionInsetMap({
+  highlightIds, countsByIso, selectedIds, previewIds, caption, onCountrySelect, height = 380,
+}: RegionInsetMapProps) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const accent = isDark ? '#f3bcc3' : '#1e6ae9'; // matches StateMap
-  const stroke = isDark ? '#111827' : '#f8f9fa'; // page bg, so borders read as gaps
-  const land = isDark ? '#1f2937' : '#e5e7eb';   // muted backdrop landmass
+  const palette = useMemo(() => mapPalette(isDark), [isDark]);
+  // Context countries outside the subject sit back as a flat, faint landmass.
+  const backdrop = isDark ? '#1c2533' : '#e9edf2';
+  const verb = useTapOrClick();
+  const [hover, setHover] = useState<string | null>(null);
+  const outlineSet = useMemo(
+    () => new Set([...(selectedIds ?? []), ...(previewIds ?? [])].map(String)),
+    [selectedIds, previewIds],
+  );
 
   // Seed from the shared cache so a drill-in (keyed remount) paints instantly — no re-fetch flash.
   const [topo, setTopo] = useState<any>(TOPO_CACHE);
@@ -155,35 +188,44 @@ export function RegionInsetMap({ highlightIds, caption, count, onCountrySelect, 
     return <div className="bg-bg-secondary rounded-lg animate-pulse" style={{ height }} />;
   }
 
+  const countOf = (id: string) => countsByIso ? (countsByIso[id] ?? 0) : 20;
+  const hoverCode = hover ? codeForIso(hover) : undefined;
+
   return (
     <div>
-      <div style={{ height }}>
+      <div className="relative rounded-lg border border-border-default" style={{ height, background: palette.ocean }}>
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         <ComposableMap width={VB_W} height={VB_H} projection={projection as any} style={{ width: '100%', height: '100%' }}>
           <Geographies geography={topo}>
             {({ geographies }) =>
               geographies
                 .filter(geo => inView(geo, String(geo.id)))
+                // Outlined countries last, so neighbours' hairlines never paint over the outline.
+                .sort((a, b) => Number(outlineSet.has(String(a.id)) || hover === String(a.id)) - Number(outlineSet.has(String(b.id)) || hover === String(b.id)))
                 .map(geo => {
-                const on = hiSet.has(String(geo.id));
-                const code = on ? codeForIso(String(geo.id)) : undefined;
+                const id = String(geo.id);
+                const on = hiSet.has(id);
+                const code = on ? codeForIso(id) : undefined;
                 const clickable = !!onCountrySelect && !!code;
                 const name = (geo.properties?.name as string) ?? code ?? '';
                 const select = () => code && onCountrySelect?.(code);
+                const fill = on ? fillFor(countOf(id), palette) : backdrop;
+                const outlined = outlineSet.has(id) || (clickable && hover === id);
 
                 return (
                   <Geography
                     key={geo.rsmKey}
                     geography={geo}
-                    fill={on ? accent : land}
-                    fillOpacity={on ? 0.9 : 1}
-                    stroke={stroke}
-                    strokeWidth={0.5}
+                    fill={fill}
+                    stroke={outlined ? palette.outline : palette.stroke}
+                    strokeWidth={outlined ? 1.75 : 0.5}
                     onClick={clickable ? select : undefined}
+                    onMouseEnter={on ? () => setHover(id) : undefined}
+                    onMouseLeave={on ? () => setHover(h => (h === id ? null : h)) : undefined}
                     // Keyboard parity with the click handler (WCAG 2.1.1): focusable + Enter/Space.
                     tabIndex={clickable ? 0 : -1}
                     role={clickable ? 'button' : undefined}
-                    aria-label={clickable ? `${name} — explore` : undefined}
+                    aria-label={clickable ? `${name}: ${countOf(id)} ${MAP_METRIC} — filter` : undefined}
                     onKeyDown={
                       clickable
                         ? (e: React.KeyboardEvent) => {
@@ -195,14 +237,10 @@ export function RegionInsetMap({ highlightIds, caption, count, onCountrySelect, 
                         : undefined
                     }
                     style={{
-                      // Clickable members brighten on hover; the muted backdrop stays put.
-                      default: { outline: 'none', cursor: clickable ? 'pointer' : 'default' },
-                      hover: {
-                        outline: 'none',
-                        fill: on ? accent : land,
-                        fillOpacity: clickable ? 1 : on ? 0.9 : 1,
-                      },
-                      pressed: { outline: 'none' },
+                      // Fill never changes on hover — the outline is the hover signal.
+                      default: { fill, outline: 'none', cursor: clickable ? 'pointer' : 'default' },
+                      hover: { fill, outline: 'none' },
+                      pressed: { fill, outline: 'none' },
                     }}
                   />
                 );
@@ -210,13 +248,20 @@ export function RegionInsetMap({ highlightIds, caption, count, onCountrySelect, 
             }
           </Geographies>
         </ComposableMap>
+        {onCountrySelect && (
+          <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-bg-primary/90 px-2.5 py-1.5 text-xs shadow-sm backdrop-blur-sm">
+            {hover && hoverCode ? (
+              <span className="text-text-primary">
+                <span className="font-semibold">{regionLabel(hoverCode)}</span>
+                {' · '}{fmtCount(countOf(hover))} {countOf(hover) === 1 ? 'enacted law' : MAP_METRIC}
+              </span>
+            ) : (
+              <span className="text-text-muted">{verb === 'tap' ? 'Tap' : 'Click'} a country to filter</span>
+            )}
+          </div>
+        )}
       </div>
-      {caption && (
-        <div className="mt-1 text-center text-meta text-text-muted">
-          {caption}
-          {typeof count === 'number' ? ` · ${count} laws tracked` : ''}
-        </div>
-      )}
+      {caption && <div className="mt-1 text-center text-meta text-text-muted">{caption}</div>}
     </div>
   );
 }

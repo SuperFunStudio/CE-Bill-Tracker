@@ -5,24 +5,36 @@ import { geoOrthographic, geoPath, geoContains, geoGraticule10, geoCentroid } fr
 import { feature } from 'topojson-client';
 import { useTheme } from '@/components/layout/ThemeContext';
 import { EU_MEMBER_IDS, codeForIso } from '@/components/map/RegionInsetMap';
-import { regionLabel } from '@/components/insights/RegionFilter';
+import { regionLabel, REGION_CODES } from '@/components/insights/RegionFilter';
+import { MapLegend } from '@/components/map/MapLegend';
 import { fetchLawsInForce } from '@/lib/api';
 import { track } from '@/lib/analytics';
+import { MAP_METRIC, fillFor, fmtCount, mapPalette } from '@/lib/mapScale';
+import { useTapOrClick } from '@/hooks/useTapOrClick';
 
 /**
- * A slowly-rotating orthographic globe of circular-economy laws in force, by jurisdiction — the
- * homepage's cross-region overview (replaces the flat coverage readout). Pure d3-geo drawn to a
- * <canvas> (no Mapbox / WebGL): geoOrthographic + geoPath, animated by advancing the projection's
- * rotation each frame. Shares WorldCoverageMap's data + ISO plumbing so a country is shaded by the
- * enacted CE laws that apply there (its national laws + the EU-central body for EU members).
+ * An orthographic globe of circular-economy laws in force, by jurisdiction — the homepage's
+ * cross-region overview. Pure d3-geo drawn to a <canvas> (no Mapbox / WebGL). A country is shaded by
+ * the enacted CE laws that apply there (its national laws + the EU-central body for EU members),
+ * through the site-wide scale in lib/mapScale — the same bins the US state map uses.
  *
- * Interaction: drag to spin, hover to read a jurisdiction (auto-rotation pauses), click a tracked
- * country to filter the whole site to its region. Honors prefers-reduced-motion (no auto-spin).
+ * Opens centred on the North Atlantic so the US and Europe — most of the corpus — are both readable on
+ * load, and holds still: it used to auto-spin, which carried both off-screen within seconds. Drag to
+ * spin, hover to read a jurisdiction, click/tap a tracked country to filter the page to it.
+ *
+ * Colour = more enacted laws, only. Hover, selection and the row-hover preview (`highlightIds`) are an
+ * ink outline, never a fill change.
  */
 
 const GEO_URL = '/world-countries-50m.json';
 const ANTARCTICA = '010';
 const US_ISO = '840';
+const FRANCE_ISO = '250';
+// rotate([λ, φ]) centres the view on (-λ, -φ): 38°W, 34°N puts the Atlantic in the middle with the
+// eastern US and western Europe both well inside the visible hemisphere.
+const START_ROTATION: [number, number] = [38, -34];
+// Slightly past "whole disc": the poles carry no data, and the extra scale gives Europe room to read.
+const BASE_ZOOM = 1.15;
 
 // Module cache so the 50m topojson is fetched + parsed once and shared across mounts.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,20 +47,31 @@ function loadTopo() {
   return TOPO_PROMISE;
 }
 
+const TRACKED_CODES = new Set(REGION_CODES);
+
 /** Region code a country belongs to for click-through: its national code, else EU for members, else US. */
 function regionCodeForCountry(id: string): string | undefined {
   const nat = codeForIso(id);
-  if (nat) return nat;
+  if (nat && TRACKED_CODES.has(nat)) return nat;
   if (id === US_ISO) return 'US';
   if (EU_MEMBER_IDS.includes(id)) return 'EU';
   return undefined;
 }
 
-// 320px, not the taller hero it started as: the globe is the overview, and the bill table below it is
-// what visitors came for — keeping it short leaves the top of the table above the fold.
-export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: string) => void; height?: number }) {
+type Hover = { region: string; count: number; note?: string };
+
+export function CoverageGlobe({
+  onSelect, height = 320, highlightIds,
+}: {
+  onSelect: (region: string) => void;
+  height?: number;
+  /** ISO numeric ids to outline from outside — the jurisdiction of the table row under the pointer. */
+  highlightIds?: string[];
+}) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const palette = useMemo(() => mapPalette(isDark), [isDark]);
+  const verb = useTapOrClick();
 
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -56,15 +79,16 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [topo, setTopo] = useState<any>(TOPO_CACHE);
   const [counts, setCounts] = useState<Map<string, number> | null>(null);
-  const [hover, setHover] = useState<{ region: string; count: number } | null>(null);
+  const [hover, setHover] = useState<Hover | null>(null);
   const [width, setWidth] = useState(0);
 
-  // Mutable render state that must survive effect re-runs (resize/theme) without resetting the spin.
-  const rotationRef = useRef<[number, number]>([-12, -18]);
-  const zoomRef = useRef(1);
+  // Mutable render state that must survive effect re-runs (resize/theme) without resetting the view.
+  const rotationRef = useRef<[number, number]>([...START_ROTATION]);
+  const zoomRef = useRef(BASE_ZOOM);
   const draggingRef = useRef(false);
-  const overGlobeRef = useRef(false);
   const hoverIdRef = useRef<string | null>(null);
+  const highlightRef = useRef<Set<string>>(new Set());
+  const dirtyRef = useRef(true);
   // An in-flight "fly to" zoom; onDone hands off to the page's detailed map after the animation.
   const flyRef = useRef<null | {
     start: number; dur: number;
@@ -74,6 +98,12 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
   // Keep onSelect current without churning the render effect (inline arrow → new identity each render).
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+
+  // Row-hover preview from the table: outline only, redraw on the next frame.
+  useEffect(() => {
+    highlightRef.current = new Set(highlightIds ?? []);
+    dirtyRef.current = true;
+  }, [highlightIds]);
 
   useEffect(() => {
     if (topo) return;
@@ -105,10 +135,13 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
     return () => ro.disconnect();
   }, []);
 
-  // Drawn features + the "laws that apply here" count fn + max, shared with the shading ramp.
-  const { features, countForCountry, max, totals } = useMemo(() => {
+  // Drawn features + the "laws that apply here" count fn, plus which countries we track at all.
+  const { features, countForCountry, isTracked, totals } = useMemo(() => {
     if (!topo || !counts) {
-      return { features: [] as unknown[], countForCountry: (_: string) => 0, max: 0, totals: { jur: 0, laws: 0 } };
+      return {
+        features: [] as unknown[], countForCountry: (_: string) => 0, isTracked: (_: string) => false,
+        totals: { jur: 0, laws: 0 },
+      };
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fc: any = feature(topo, topo.objects.countries);
@@ -117,8 +150,7 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
     const euCount = counts.get('EU') ?? 0;
     // National + subnational: laws-in-force groups by the national region code (a US state law is
     // region="US", an Ontario reg is region="CA"), so counts.get(code) already rolls sub-national
-    // units in. We also add any namespaced sub-national region keys (CODE-*) defensively, in case a
-    // jurisdiction ever lands its provinces under a region rather than the state column.
+    // units in. We also add any namespaced sub-national region keys (CODE-*) defensively.
     const subOf = (code: string): number => {
       let s = 0;
       for (const [k, v] of counts) if (k.startsWith(`${code}-`)) s += v;
@@ -130,16 +162,15 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
       const euBase = EU_MEMBER_IDS.includes(id) ? euCount : 0;
       return nat + euBase;
     };
-    let mx = 0;
-    for (const f of drawn) mx = Math.max(mx, cf(String(f.id)));
-    const tracked = new Set<string>();
-    for (const [region, n] of counts) if (n > 0) tracked.add(region);
+    const tracked = (id: string) => regionCodeForCountry(id) !== undefined || cf(id) > 0;
+    const jur = new Set<string>();
+    for (const [region, n] of counts) if (n > 0) jur.add(region);
     const laws = [...counts.values()].reduce((s, n) => s + n, 0);
-    return { features: drawn as unknown[], countForCountry: cf, max: mx, totals: { jur: tracked.size, laws } };
+    return { features: drawn as unknown[], countForCountry: cf, isTracked: tracked, totals: { jur: jur.size, laws } };
   }, [topo, counts]);
 
-  // The render + animation + interaction loop. Re-runs on size/theme/data change; rotation persists
-  // via rotationRef so those re-runs don't jump the globe.
+  // The render + interaction loop. Re-runs on size/theme/data change; rotation persists via
+  // rotationRef so those re-runs don't jump the globe.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !width || features.length === 0) return;
@@ -161,25 +192,29 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
     const projection = geoOrthographic().scale(radius).translate([cx, cy]).clipAngle(90);
     const path = geoPath(projection, ctx);
 
-    // Colors: accent from the brand token (matches the Insights map); ocean/land tuned per theme.
-    const cs = getComputedStyle(document.documentElement);
-    const accentTriple = cs.getPropertyValue('--green-accent').trim() || (isDark ? '243 188 195' : '30 106 233');
-    const accent = `rgb(${accentTriple})`;
-    const ocean = isDark ? '#0b1220' : '#e9eef3';
-    const stroke = isDark ? '#0b1220' : '#cdd6e0';
-    const land = isDark ? '#273241' : '#e2e8f0';
-    // Depth: activity drives accent OPACITY over the land base — bare land at 0, full accent at the
-    // max — so more laws read as deeper colour and the busiest country never washes out to white.
-    const depth = (n: number): number => (n <= 0 || max <= 0) ? 0 : 0.16 + 0.84 * Math.sqrt(n / max);
+    // Hatch for "not tracked": a tiny diagonal tile, repeated. Distinct from every data bin by texture,
+    // not just by lightness, so it survives colour-vision differences and dark mode.
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = 6 * dpr;
+    const tctx = tile.getContext('2d')!;
+    tctx.scale(dpr, dpr);
+    tctx.fillStyle = palette.land;
+    tctx.fillRect(0, 0, 6, 6);
+    tctx.strokeStyle = palette.hatch;
+    tctx.lineWidth = 1;
+    tctx.beginPath();
+    tctx.moveTo(0, 6); tctx.lineTo(6, 0);
+    tctx.moveTo(-1, 1); tctx.lineTo(1, -1);
+    tctx.moveTo(5, 7); tctx.lineTo(7, 5);
+    tctx.stroke();
+    const hatch = ctx.createPattern(tile, 'repeat');
+    hatch?.setTransform?.(new DOMMatrix().scale(1 / dpr));
 
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    let dirty = true;
     const withinDisc = (px: number, py: number) => {
       const dx = px - cx, dy = py - cy;
-      return dx * dx + dy * dy <= radius * radius;
+      return dx * dx + dy * dy <= radius * zoomRef.current * radius * zoomRef.current;
     };
-    const idAt = (clientX: number, clientY: number): string | null => {
+    const hitAt = (clientX: number, clientY: number): { id: string; lonLat: [number, number] } | null => {
       const rect = canvas.getBoundingClientRect();
       const px = clientX - rect.left, py = clientY - rect.top;
       if (!withinDisc(px, py)) return null;
@@ -187,7 +222,7 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
       const inv = projection.invert?.([px, py]);
       if (!inv) return null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const f of features as any[]) if (geoContains(f, inv)) return String(f.id);
+      for (const f of features as any[]) if (geoContains(f, inv)) return { id: String(f.id), lonLat: inv as [number, number] };
       return null;
     };
 
@@ -197,10 +232,9 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
       projection.scale(radius * zoomRef.current);
       ctx.clearRect(0, 0, W, H);
 
-      // Ocean sphere.
       ctx.beginPath();
       path({ type: 'Sphere' });
-      ctx.fillStyle = ocean;
+      ctx.fillStyle = palette.ocean;
       ctx.fill();
 
       // Graticule — faint lat/long grid to read as a globe.
@@ -208,53 +242,47 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
       path(geoGraticule10());
       ctx.globalAlpha = isDark ? 0.16 : 0.5;
       ctx.lineWidth = 0.4;
-      ctx.strokeStyle = stroke;
+      ctx.strokeStyle = palette.stroke;
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // Countries: land base, then accent at activity-driven opacity (full on hover).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const outlined: any[] = [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const f of features as any[]) {
         const id = String(f.id);
-        const n = countForCountry(id);
         ctx.beginPath();
         path(f);
-        ctx.fillStyle = land;
+        ctx.fillStyle = isTracked(id) ? fillFor(countForCountry(id), palette) : (hatch ?? palette.land);
         ctx.fill();
-        const a = hoverIdRef.current === id && n > 0 ? 1 : depth(n);
-        if (a > 0) {
-          ctx.globalAlpha = a;
-          ctx.fillStyle = accent;
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        }
-        ctx.lineWidth = 0.4;
-        ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = palette.stroke;
         ctx.stroke();
-        ctx.globalAlpha = 1;
+        if (id === hoverIdRef.current || highlightRef.current.has(id)) outlined.push(f);
+      }
+      // Outlines last so a neighbour's hairline never paints over them.
+      for (const f of outlined) {
+        ctx.beginPath();
+        path(f);
+        ctx.lineWidth = 1.75;
+        ctx.strokeStyle = palette.outline;
+        ctx.stroke();
       }
 
-      // Atmosphere rim.
+      // Thin rim so the sphere edge reads on both themes.
       ctx.beginPath();
       path({ type: 'Sphere' });
-      ctx.globalAlpha = 0.18;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = accent;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(26,26,46,0.12)';
       ctx.stroke();
-      ctx.globalAlpha = 1;
     }
 
     // Hover hit-testing is throttled to once per frame (geoContains over ~200 features is not free).
     let probe: { x: number; y: number } | null = null;
     let raf = 0;
-    let lastT = 0;
     function frame(t: number) {
-      const dt = lastT ? t - lastT : 16;
-      lastT = t;
-
-      // A fly-to zoom takes precedence over spin + hover — ease rotation to the target + scale up,
-      // then hand off to the page's detailed map.
+      // A fly-to zoom takes precedence over hover — ease rotation to the target + scale up, then hand
+      // off to the page's detailed view.
       if (flyRef.current) {
         const f = flyRef.current;
         if (f.start < 0) f.start = t;
@@ -274,28 +302,30 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
       if (probe) {
         const { x, y } = probe;
         probe = null;
-        overGlobeRef.current = withinDisc(x - canvas!.getBoundingClientRect().left, y - canvas!.getBoundingClientRect().top);
-        const id = idAt(x, y);
-        if (id !== hoverIdRef.current) {
-          hoverIdRef.current = id;
-          dirty = true;
-          const n = id ? countForCountry(id) : 0;
-          const region = id ? regionCodeForCountry(id) : undefined;
-          setHover(id && region && n > 0 ? { region, count: n } : null);
-          canvas!.style.cursor = id && region && n > 0 ? 'pointer' : 'grab';
+        const hit = hitAt(x, y);
+        const id = hit?.id ?? null;
+        const n = id ? countForCountry(id) : 0;
+        const region = id ? regionCodeForCountry(id) : undefined;
+        // French Guiana is part of France's geometry (it's an overseas region, so French and EU law
+        // apply) — say so, or its France-coloured shape in South America reads as a data error.
+        const note = id === FRANCE_ISO && hit && hit.lonLat[0] < -20
+          ? 'French Guiana is an overseas region of France, so French and EU law apply there.'
+          : undefined;
+        if (id !== hoverIdRef.current || note !== undefined) {
+          hoverIdRef.current = id && region ? id : null;
+          dirtyRef.current = true;
+          setHover(id && region ? { region, count: n, note } : null);
+          canvas!.style.cursor = id && region ? 'pointer' : 'grab';
         }
       }
 
-      const spinning = !draggingRef.current && !overGlobeRef.current && !prefersReduced;
-      if (spinning) {
-        rotationRef.current = [rotationRef.current[0] + 0.0055 * dt, rotationRef.current[1]];
+      if (dirtyRef.current) {
         draw();
-      } else if (dirty) {
-        draw();
-        dirty = false;
+        dirtyRef.current = false;
       }
       raf = requestAnimationFrame(frame);
     }
+    dirtyRef.current = true;
     raf = requestAnimationFrame(frame);
 
     // --- Pointer interaction: drag to spin, click (no drag) to filter. ---
@@ -316,7 +346,7 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
         const k = 0.28; // degrees per pixel
         const phi = Math.max(-90, Math.min(90, dragStart.rot[1] - dy * k));
         rotationRef.current = [dragStart.rot[0] + dx * k, phi];
-        dirty = true;
+        dirtyRef.current = true;
       } else {
         probe = { x: e.clientX, y: e.clientY };
       }
@@ -327,10 +357,10 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
       draggingRef.current = false;
       canvas.style.cursor = hoverIdRef.current ? 'pointer' : 'grab';
       if (wasClick && !flyRef.current) {
-        const id = idAt(e.clientX, e.clientY);
+        const hit = hitAt(e.clientX, e.clientY);
+        const id = hit?.id;
         const region = id ? regionCodeForCountry(id) : undefined;
-        const n = id ? countForCountry(id) : 0;
-        if (id && region && n > 0) {
+        if (id && region) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const f = (features as any[]).find(ff => String(ff.id) === id);
           const [lon, lat] = f ? geoCentroid(f) : [0, 0];
@@ -343,19 +373,24 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
           setHover(null);
           flyRef.current = {
             start: -1,
-            dur: 850,
+            dur: 600,
             fromRot: [...rotationRef.current] as [number, number],
             toRot: [toLon, -lat],
             fromZoom: zoomRef.current,
-            toZoom: 2.4,
-            onDone: () => { track('home_globe_select', { region }); onSelectRef.current(region); },
+            toZoom: BASE_ZOOM * 1.6,
+            onDone: () => {
+              track('home_globe_select', { region });
+              // Settle back to the overview framing so returning to the globe isn't a zoomed crop.
+              zoomRef.current = BASE_ZOOM;
+              dirtyRef.current = true;
+              onSelectRef.current(region);
+            },
           };
         }
       }
     };
     const onLeave = () => {
-      overGlobeRef.current = false;
-      if (hoverIdRef.current !== null) { hoverIdRef.current = null; setHover(null); dirty = true; }
+      if (hoverIdRef.current !== null) { hoverIdRef.current = null; setHover(null); dirtyRef.current = true; }
       canvas.style.cursor = 'grab';
     };
 
@@ -373,57 +408,49 @@ export function CoverageGlobe({ onSelect, height = 320 }: { onSelect: (region: s
       canvas.removeEventListener('pointerleave', onLeave);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [features, countForCountry, max, isDark, width, height]);
+  }, [features, countForCountry, isTracked, palette, isDark, width, height]);
 
   const loading = !topo || !counts;
 
   return (
-    <div
-      ref={wrapRef}
-      className="relative w-full overflow-hidden rounded-lg border border-border-default"
-      style={{ height, background: isDark ? '#0b1220' : '#e9eef3' }}
-    >
-      <canvas ref={canvasRef} className="block" style={{ touchAction: 'none' }} />
+    <div>
+      <div
+        ref={wrapRef}
+        className="relative w-full overflow-hidden rounded-lg border border-border-default"
+        style={{ height, background: palette.ocean }}
+      >
+        <canvas ref={canvasRef} className="block" style={{ touchAction: 'none' }} />
 
-      {loading && (
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="h-40 w-40 animate-pulse rounded-full bg-bg-tertiary" />
+        {loading && (
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="h-40 w-40 animate-pulse rounded-full bg-bg-tertiary" />
+          </div>
+        )}
+
+        {/* Hover readout — the count preview for the country under the pointer, pinned so the canvas
+            never reflows. */}
+        <div className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-1rem)] rounded-md bg-bg-primary/90 px-2.5 py-1.5 text-xs shadow-sm backdrop-blur-sm">
+          {hover ? (
+            <>
+              <span className="text-text-primary">
+                <span className="font-semibold">{regionLabel(hover.region)}</span>
+                {' · '}{fmtCount(hover.count)} {hover.count === 1 ? 'enacted law' : MAP_METRIC}
+              </span>
+              {hover.note && <span className="mt-0.5 block text-text-muted">{hover.note}</span>}
+            </>
+          ) : (
+            <span className="text-text-muted">Drag to spin · {verb} a country to filter</span>
+          )}
         </div>
-      )}
 
-      {/* Hover / prompt readout, pinned so the canvas never reflows. */}
-      <div className="pointer-events-none absolute left-3 top-3 rounded-md bg-bg-primary/85 px-2.5 py-1.5 text-xs shadow-sm backdrop-blur-sm">
-        {hover ? (
-          <span className="text-text-primary">
-            <span className="font-semibold">{regionLabel(hover.region)}</span>
-            {' · '}{hover.count.toLocaleString()} law{hover.count === 1 ? '' : 's'} in force
-          </span>
-        ) : (
-          <span className="text-text-muted">Drag to spin · click a country to explore</span>
+        {!loading && (
+          <div className="pointer-events-none absolute right-2 bottom-2 rounded-md bg-bg-primary/90 px-2.5 py-1.5 text-xs text-text-secondary shadow-sm backdrop-blur-sm tabular-nums">
+            <span className="font-semibold text-text-primary">{fmtCount(totals.laws)}</span> {MAP_METRIC} ·{' '}
+            <span className="font-semibold text-text-primary">{totals.jur}</span> jurisdictions
+          </div>
         )}
       </div>
-
-      {/* Totals + legend, bottom strip. */}
-      {!loading && (
-        <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <span className="flex items-center gap-2 rounded-md bg-bg-primary/85 px-2.5 py-1.5 text-text-muted shadow-sm backdrop-blur-sm">
-            <span>Fewer</span>
-            <span
-              className="h-2 w-16 rounded-full"
-              style={{
-                background: `linear-gradient(to right,
-                  color-mix(in srgb, rgb(var(--green-accent)), transparent 85%),
-                  rgb(var(--green-accent)))`,
-              }}
-            />
-            <span>More laws</span>
-          </span>
-          <span className="rounded-md bg-bg-primary/85 px-2.5 py-1.5 text-text-secondary shadow-sm backdrop-blur-sm">
-            <span className="font-semibold text-text-primary">{totals.jur}</span> jurisdictions ·{' '}
-            <span className="font-semibold text-text-primary">{totals.laws.toLocaleString()}</span> laws in force
-          </span>
-        </div>
-      )}
+      <MapLegend palette={palette} className="mt-2" />
     </div>
   );
 }

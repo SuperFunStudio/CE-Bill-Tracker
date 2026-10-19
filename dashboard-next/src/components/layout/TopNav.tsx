@@ -26,6 +26,8 @@ type NavItem = {
   usOnly?: boolean;
   adminOnly?: boolean;
   secondary?: boolean;
+  /** Inline only at xl+; below that it sits under "More" so the bar never wraps at laptop widths. */
+  wideOnly?: boolean;
   altPaths?: string[];
 };
 
@@ -39,18 +41,19 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/ask', label: 'Ask the Atlas', Icon: AskIcon },
   // Leaderboard is the global two-column activity tracker (national law by country + sub-national) —
   // global, so no usOnly gate. /states adapts to the region selection (US momentum / EU / two-column).
-  { href: '/states', label: 'Leaderboard', Icon: CapitolIcon },
+  { href: '/states', label: 'Leaderboard', Icon: CapitolIcon, wideOnly: true },
   // Upcoming Deadlines is a tabbed surface — Federal Actions is folded in as a subpage tab (see
   // DeadlinesTabs), so /federal lights this item up too. Federal has no top-level nav entry anymore.
   { href: '/compliance', label: 'Upcoming Deadlines', short: 'Deadlines', Icon: CalendarIcon, altPaths: ['/federal'] },
   { href: '/library', label: 'My Library', Icon: FactoryIcon, usOnly: true, secondary: true },
   // Insights is the analytics briefing room — shown to everyone; the page itself carries the same
   // Pro membership gate as Federal Actions / Packaging Studio, so it does the selling on click.
-  { href: '/insights', label: 'Insights', Icon: ChartIcon },
-  // Guides is a tabbed surface — the Design Guide (design imperatives from enacted law) and the
-  // Packaging Studio (price-a-package walkthrough) share it. Nav points at the Design Guide tab; the
-  // in-page GuidesTabs switches between them, so both /design-guide and /studio light this item up.
-  { href: '/design-guide', label: 'Guides', Icon: CompassIcon, altPaths: ['/studio'] },
+  { href: '/insights', label: 'Insights', Icon: ChartIcon, wideOnly: true },
+  // The Design Guide (design imperatives from enacted law) and the Packaging Studio (price-a-package
+  // walkthrough) each get their own top-level entry — they used to share one "Guides" item, which hid
+  // both names from a desktop reader. The in-page GuidesTabs still links the two pages.
+  { href: '/design-guide', label: 'Design Guide', Icon: CompassIcon },
+  { href: '/studio', label: 'Packaging Studio', short: 'Studio', Icon: TagIcon },
   // Graduated from the admin-only prototype: the page + endpoint gate on isPro / require_pro, so the
   // nav entry does the discovering and the page does the selling.
   { href: '/evaluate', label: 'Evaluate a Bill', Icon: ScaleIcon, secondary: true },
@@ -116,6 +119,8 @@ export function TopNav() {
   // lg keeps showing everything — a stacked list has the room.
   const primaryItems = navItems.filter(i => !i.secondary);
   const secondaryItems = navItems.filter(i => i.secondary);
+  // wideOnly items show inline at xl+ and fold into "More" below it.
+  const wideItems = primaryItems.filter(i => i.wideOnly);
 
   const matchPath = (href: string) =>
     pathname === href || (href !== '/' && pathname.startsWith(href));
@@ -124,18 +129,20 @@ export function TopNav() {
     matchPath(href) || (altPaths?.some(matchPath) ?? false);
 
   // 'bar' = horizontal desktop section strip; 'menu' = stacked dropdown rows (mobile nav + "More").
-  const renderLinks = (variant: 'bar' | 'menu', items: NavItem[] = navItems) =>
-    items.map(({ href, label, short, Icon, altPaths }) => {
+  // Active state is ink (text + underline), not the accent — the accent is reserved for data and the
+  // page's one primary action.
+  const renderLinks = (variant: 'bar' | 'menu', items: NavItem[] = navItems, extraCls = '') =>
+    items.map(({ href, label, short, Icon, altPaths, wideOnly }) => {
       const active = isActive(href, altPaths);
       const cls = variant === 'bar'
-        ? `inline-flex items-center gap-1.5 px-2 py-1 font-serif text-sm tracking-wide border-b-2 transition-colors ${
+        ? `${wideOnly ? 'hidden xl:inline-flex' : 'inline-flex'} items-center gap-1.5 px-1.5 py-1 font-serif text-sm tracking-wide whitespace-nowrap border-b-2 transition-colors ${
             active
-              ? 'border-green-accent text-green-accent'
+              ? 'border-text-primary text-text-primary'
               : 'border-transparent text-text-secondary hover:text-text-primary'
           }`
-        : `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+        : `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${extraCls} ${
             active
-              ? 'bg-green-dark text-green-accent font-medium'
+              ? 'bg-bg-tertiary text-text-primary font-medium'
               : 'text-text-secondary hover:bg-bg-primary hover:text-text-primary'
           }`;
       return (
@@ -146,8 +153,15 @@ export function TopNav() {
           className={cls}
           title={variant === 'bar' && short ? label : undefined}
         >
-          <Icon className={variant === 'bar' ? 'text-[1rem] shrink-0 opacity-70' : 'text-[1.15rem] shrink-0 opacity-80'} />
-          <span>{variant === 'bar' ? short || label : label}</span>
+          <Icon className={variant === 'bar' ? 'hidden 2xl:inline text-[1rem] shrink-0 opacity-70' : 'text-[1.15rem] shrink-0 opacity-80'} />
+          {variant === 'bar' && short ? (
+            <>
+              <span className="2xl:hidden">{short}</span>
+              <span className="hidden 2xl:inline">{label}</span>
+            </>
+          ) : (
+            <span>{label}</span>
+          )}
         </Link>
       );
     });
@@ -168,18 +182,18 @@ export function TopNav() {
 
         {/* Desktop section links — inline only at lg+. Primary destinations only; the rest sit
             under "More" so the bar never wraps to a second row. */}
-        <nav className="hidden lg:flex flex-1 items-center justify-end gap-x-5">
+        <nav className="hidden lg:flex flex-1 items-center justify-end gap-x-1 xl:gap-x-3">
           {renderLinks('bar', primaryItems)}
 
-          {secondaryItems.length > 0 && (
+          {(secondaryItems.length > 0 || wideItems.length > 0) && (
             <div className="relative" ref={moreRef}>
               <button
                 onClick={() => setMoreOpen(o => !o)}
                 aria-expanded={moreOpen}
                 aria-haspopup="menu"
-                className={`inline-flex items-center gap-1 px-2 py-1 font-serif text-sm tracking-wide border-b-2 transition-colors ${
+                className={`inline-flex items-center gap-1 px-1.5 py-1 font-serif text-sm tracking-wide border-b-2 transition-colors ${
                   secondaryItems.some(i => isActive(i.href, i.altPaths))
-                    ? 'border-green-accent text-green-accent'
+                    ? 'border-text-primary text-text-primary'
                     : 'border-transparent text-text-secondary hover:text-text-primary'
                 }`}
               >
@@ -191,6 +205,7 @@ export function TopNav() {
                   role="menu"
                   className="absolute right-0 top-full mt-2 w-56 rounded-lg border border-border-default bg-bg-secondary shadow-lg p-2 space-y-1"
                 >
+                  {renderLinks('menu', wideItems, 'xl:hidden')}
                   {renderLinks('menu', secondaryItems)}
                 </div>
               )}

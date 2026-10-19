@@ -249,7 +249,7 @@ export function BillTable({
                 e.stopPropagation();
                 openBill(bill);
               }}
-              className="block text-text-primary text-sm line-clamp-2 hover:underline"
+              className="text-text-primary text-sm line-clamp-2 hover:underline"
             >
               {fixEncoding(bill.title) || 'Untitled'}
             </a>

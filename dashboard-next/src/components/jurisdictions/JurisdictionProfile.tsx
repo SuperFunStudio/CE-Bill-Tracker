@@ -1,11 +1,12 @@
 'use client';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useBills } from '@/hooks/useBills';
 import { useDeadlines } from '@/hooks/useDeadlines';
 import { usePathwaysScoped } from '@/hooks/useCompliancePathways';
 import { PathwayCard } from '@/components/compliance/PathwayCard';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
+import { RegionHeadline } from '@/components/home/RegionHeadline';
 import { BillTable } from '@/components/bills/BillTable';
 import { BillFilters, DEFAULT_FILTERS, applyBillFilters, type BillFilterState } from '@/components/bills/BillFilters';
 import { formatInstrumentType, formatDate, daysUntil } from '@/lib/utils';
@@ -29,6 +30,11 @@ const STAGE_OF: Record<string, StageKey> = Object.fromEntries(
 );
 
 const DEAD_STATUSES = new Set(['failed', 'vetoed', 'tabled', 'dead']);
+
+/** The profile's tabs. Each is addressable by hash (/jurisdictions/pl/pl/#comply) so the Explore stat
+ *  card can deep-link straight to the section a figure summarizes. */
+type Tab = 'comply' | 'activity' | 'bills' | 'cities';
+const TAB_LABEL: Record<Tab, string> = { comply: 'How to comply', activity: 'Activity', bills: 'Bills', cities: 'City laws' };
 
 /** Action types that impose a concrete producer obligation (vs. monitor/none). */
 const ACTIONABLE = new Set([
@@ -79,13 +85,29 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
   // Bill-explorer filters, scoped to this jurisdiction (the State select is hidden).
   const [filters, setFilters] = useState<BillFilterState>({ ...DEFAULT_FILTERS, state: isUS ? code : '' });
   const [showAllPathways, setShowAllPathways] = useState(false);
-  const billsRef = useRef<HTMLDivElement>(null);
 
-  // A headline counter sets the matching bill filter and jumps to the table.
+  // Tabs replace the long scroll. The hash picks the tab (deep links from Explore's stat card), and
+  // switching tabs rewrites it so Back / share keep the place. null = not chosen yet → default below.
+  const [tabChoice, setTabChoice] = useState<Tab | null>(null);
+  useEffect(() => {
+    const read = () => {
+      const h = window.location.hash.slice(1) as Tab;
+      if (h in TAB_LABEL) setTabChoice(h);
+    };
+    read();
+    window.addEventListener('hashchange', read);
+    return () => window.removeEventListener('hashchange', read);
+  }, []);
+  function openTab(t: Tab) {
+    setTabChoice(t);
+    window.history.replaceState(null, '', `#${t}`);
+  }
+
+  // A headline counter sets the matching bill filter and opens the Bills tab.
   const PATHWAY_PAGE = 5;
   function focusBills(partial: Partial<BillFilterState>) {
     setFilters({ ...DEFAULT_FILTERS, state: isUS ? code : '', ...partial });
-    billsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    openTab('bills');
   }
 
   const match = useMemo(() => billMatcher(region, code), [region, code]);
@@ -153,6 +175,10 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
     [deadlines, code, isUS],
   );
 
+  // Tabs that have something to show. Comply leads when there's enacted law to comply with.
+  const tabs: Tab[] = ['comply', 'activity', 'bills', ...(cityBills.length > 0 ? ['cities' as Tab] : [])];
+  const tab: Tab = tabChoice && tabs.includes(tabChoice) ? tabChoice : stats.stages.enacted > 0 ? 'comply' : 'bills';
+
   if (!name || name === code) {
     return (
       <div className="p-6 max-w-3xl mx-auto space-y-4">
@@ -170,9 +196,20 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
       <GazetteHeader title={name} subtitle="Circular-economy activity & incentives" />
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <Link href="/states/" className="text-sm text-green-accent hover:underline">&larr; All standings</Link>
-        <Link href="/" className="text-sm text-green-accent hover:underline">Front page &rarr;</Link>
+        <Link href="/states/" className="link-quiet text-sm text-text-secondary">All standings</Link>
+        <Link
+          href={isUS && code !== 'US' ? `/?regions=US&state=${code}` : `/?regions=${region}`}
+          className="link-arrow"
+        >
+          Explore {name}
+        </Link>
       </div>
+
+      {/* The same gazette line Explore leads with. */}
+      <RegionHeadline
+        focus={{ region, state: isUS && code !== 'US' ? code : null, name }}
+        bills={bills}
+      />
 
       {/* At-a-glance counters. Tracked + Enacted filter the table below and scroll to it;
           Advancing + In motion are momentum read-outs that match the Momentum bar. */}
@@ -183,11 +220,29 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
         <Stat label="In motion" value={stats.inMotion} hint="active bills, introduced through enacted" />
       </section>
 
-      {/* How to comply — the action layer: each enacted law → its next step. Region-generic: pathways
-          are built for US, EU, and every foreign jurisdiction (the empty states cover regions with no
-          enacted law yet). */}
-      {(
-        <section className="space-y-3">
+      {/* Tab bar — one section on screen at a time instead of a page-long scroll. */}
+      <nav role="tablist" aria-label={`${name} sections`} className="flex gap-1 overflow-x-auto border-b border-border-default">
+        {tabs.map(t => (
+          <button
+            key={t}
+            role="tab"
+            id={`tab-${t}`}
+            aria-selected={tab === t}
+            aria-controls={`panel-${t}`}
+            onClick={() => openTab(t)}
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${
+              tab === t ? 'border-text-primary text-text-primary font-medium' : 'border-transparent text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {TAB_LABEL[t]}
+          </button>
+        ))}
+      </nav>
+
+      {/* How to comply — the action layer: each enacted law → its next step, then upcoming deadlines.
+          Region-generic: pathways are built for US, EU, and every foreign jurisdiction. */}
+      {tab === 'comply' && (
+        <section id="panel-comply" role="tabpanel" aria-labelledby="tab-comply" className="space-y-3">
           <div>
             <h2 className="font-serif text-lg text-text-primary">How to comply</h2>
             <p className="text-text-muted text-xs">
@@ -230,7 +285,7 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
               {actionable.length > PATHWAY_PAGE && (
                 <button
                   onClick={() => setShowAllPathways(s => !s)}
-                  className="text-green-accent text-xs hover:underline"
+                  className="link-quiet text-xs text-text-secondary"
                 >
                   {showAllPathways
                     ? 'Show fewer'
@@ -245,9 +300,28 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
               )}
             </>
           )}
+
+          {upcomingDeadlines.length > 0 && (
+            <div className="space-y-2 pt-2">
+              <h3 className="field-label">Upcoming deadlines</h3>
+              <ul className="rounded-lg border border-border-default divide-y divide-border-default overflow-hidden">
+                {upcomingDeadlines.map(d => (
+                  <li key={d.id} className="px-4 py-2.5 flex items-baseline justify-between gap-3 bg-bg-secondary/40">
+                    <span className="text-sm text-text-primary min-w-0">
+                      {d.description || d.deadline_type}
+                      {d.bill_number && <span className="text-text-muted"> · {d.bill_number}</span>}
+                    </span>
+                    <span className="text-xs text-text-muted whitespace-nowrap tabular-nums">{formatDate(d.deadline_date)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 
+      {tab === 'activity' && (
+        <div id="panel-activity" role="tabpanel" aria-labelledby="tab-activity" className="space-y-6">
       {/* Momentum bar — same visual language as the leaderboard */}
       {stats.inMotion > 0 && (
         <section className="space-y-2">
@@ -328,26 +402,12 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
         </section>
       )}
 
-      {/* Upcoming deadlines in this jurisdiction (US-keyed data) */}
-      {upcomingDeadlines.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="font-serif text-lg text-text-primary">Upcoming deadlines</h2>
-          <ul className="rounded-lg border border-border-default divide-y divide-border-default overflow-hidden">
-            {upcomingDeadlines.map(d => (
-              <li key={d.id} className="px-4 py-2.5 flex items-baseline justify-between gap-3 bg-bg-secondary/40">
-                <span className="text-sm text-text-primary min-w-0">
-                  {d.description || d.deadline_type}
-                  {d.bill_number && <span className="text-text-muted"> · {d.bill_number}</span>}
-                </span>
-                <span className="text-xs text-text-muted whitespace-nowrap tabular-nums">{formatDate(d.deadline_date)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        </div>
       )}
 
       {/* Tracked bills */}
-      <section ref={billsRef} className="space-y-2 scroll-mt-6">
+      {tab === 'bills' && (
+      <section id="panel-bills" role="tabpanel" aria-labelledby="tab-bills" className="space-y-2">
         <div className="flex items-baseline gap-3">
           <h2 className="font-serif text-lg text-text-primary">Tracked bills</h2>
           {!isLoading && recentBills.length > 0 && (
@@ -360,7 +420,7 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
           <>
             <BillFilters filters={filters} onChange={setFilters} hideState />
             {filteredBills.length > 0 ? (
-              <BillTable bills={filteredBills} autoPageSize={8} />
+              <BillTable bills={filteredBills} autoPageSize={10} />
             ) : (
               <p className="text-text-secondary text-body py-2">No bills match these filters.</p>
             )}
@@ -371,11 +431,12 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
           </p>
         )}
       </section>
+      )}
 
       {/* City ordinances — curated municipal law (deconstruction, C&D diversion, reuse/foodware, bags),
           separate from the state-legislature counts above. */}
-      {cityBills.length > 0 && (
-        <section className="space-y-2">
+      {tab === 'cities' && cityBills.length > 0 && (
+        <section id="panel-cities" role="tabpanel" aria-labelledby="tab-cities" className="space-y-2">
           <div>
             <h2 className="font-serif text-lg text-text-primary">City ordinances</h2>
             <p className="text-text-muted text-xs">
@@ -390,7 +451,7 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
               </span>
             ))}
           </div>
-          <BillTable bills={cityBills} autoPageSize={8} />
+          <BillTable bills={cityBills} autoPageSize={10} />
         </section>
       )}
     </div>
@@ -413,7 +474,7 @@ function Stat({ label, value, hint, danger, onClick }: { label: string; value: n
       type="button"
       onClick={onClick}
       title={hint ? `${hint} — click to filter` : 'Click to filter the bills below'}
-      className={`${base} text-left w-full transition-colors hover:border-green-accent/60 hover:bg-bg-tertiary/40 focus:outline-none focus:border-green-accent`}
+      className={`${base} text-left w-full transition-colors hover:border-text-muted hover:bg-bg-tertiary/40 focus:outline-none focus:border-text-primary`}
     >
       {inner}
     </button>

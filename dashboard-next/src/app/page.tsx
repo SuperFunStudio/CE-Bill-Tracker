@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useBills, useBillTextSearch, useLawsInForce } from '@/hooks/useBills';
@@ -17,7 +17,7 @@ import { useScope, useScopeActive } from '@/components/scope/ScopeContext';
 import { useRegion } from '@/components/layout/RegionContext';
 import { regionLabel, REGION_CODES } from '@/components/insights/RegionFilter';
 import { highlightIdsFor, enactedCountsByIso } from '@/components/map/RegionInsetMap';
-import { EU_MEMBERS } from '@/lib/jurisdictions';
+import { EU_MEMBERS, isCityOf, jurisdictionHref } from '@/lib/jurisdictions';
 import { inScope } from '@/lib/scope';
 import { useAuth, useProGate } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
@@ -33,6 +33,8 @@ import { CorpusJsonLd } from '@/components/seo/CorpusJsonLd';
 import { HeadlinesDeadlines } from '@/components/home/HeadlinesDeadlines';
 import { JurisdictionTopList } from '@/components/home/JurisdictionTopList';
 import { RegionSummary } from '@/components/home/RegionSummary';
+import { RegionHeadline } from '@/components/home/RegionHeadline';
+import { usePathwaysScoped } from '@/hooks/useCompliancePathways';
 import { fmtCount } from '@/lib/mapScale';
 import type { BillSummary } from '@/lib/types';
 import Link from 'next/link';
@@ -54,11 +56,10 @@ const CoverageGlobe = dynamic(
   { ssr: false, loading: () => <div className="h-[340px] bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
-// Rows per page. 25 by default: the table is the page's subject now (it sits at the top of the right
-// column, beside the map), so a screenful of laws is the point. The size control lives in the table
-// footer.
-const ROWS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
-const DEFAULT_ROWS = 25;
+// Rows per page. Five by default — a calm first screen that ends on the pager rather than running on;
+// the footer control (or a filter) takes a reader to 10–100 when they're scanning a set.
+const ROWS_PER_PAGE_OPTIONS = [5, 10, 25, 50, 100];
+const DEFAULT_ROWS = 5;
 
 /** ISO numeric ids a bill's jurisdiction occupies on the globe (EU-central law → every member). */
 function globeIdsForBill(b: BillSummary): string[] {
@@ -142,6 +143,49 @@ export default function HomePage() {
 
   // Below lg the map and the table can't sit side by side; the table leads and the map is one tap away.
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
+  const lawsRef = useRef<HTMLElement>(null);
+  // Picking a place on the map / top-10 is a request to SEE its laws. Below lg the map and the list
+  // are separate views, so a pick made in Map view would otherwise filter a list the reader can't
+  // see — it looked like "selecting the EU just shows a map". Flip to the list and bring it up.
+  function showLawsAfterPick() {
+    if (window.matchMedia?.('(min-width: 1024px)').matches) return;
+    setMobileView('list');
+    requestAnimationFrame(() => lawsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+  const pickRegion = (code: string) => { setRegions([code]); showLawsAfterPick(); };
+  const pickState = (abbr: string) => {
+    setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }));
+    showLawsAfterPick();
+  };
+
+  // ?state=CA deep links (the jurisdiction profile's "Explore California" link, shared URLs) select
+  // the state inside the US view; the region half rides ?regions=US, which RegionContext already reads.
+  // The URL then follows the selection so the address bar is always shareable.
+  // A US state only means something while the US is selected; switching to the EU with California
+  // still set filtered the EU list down to nothing.
+  useEffect(() => {
+    if (billFilters.state && selectedRegions.length > 0 && !selectedRegions.includes('US')) {
+      setBillFilters(prev => ({ ...prev, state: '' }));
+    }
+  }, [selectedRegions, billFilters.state]);
+
+  const stateFromUrl = useRef(false);
+  useEffect(() => {
+    const st = new URLSearchParams(window.location.search).get('state')?.toUpperCase();
+    if (st && st in STATE_NAMES) setBillFilters(prev => ({ ...prev, state: st }));
+    stateFromUrl.current = true;
+  }, []);
+  useEffect(() => {
+    if (!stateFromUrl.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (billFilters.state) params.set('state', billFilters.state);
+    else params.delete('state');
+    const qs = params.toString();
+    const next = `${window.location.pathname}${qs ? `?${qs}` : ''}${window.location.hash}`;
+    if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(window.history.state, '', next);
+    }
+  }, [billFilters.state]);
 
   const highPreemption = federalStats?.high_preemption ?? 0;
 
@@ -308,6 +352,22 @@ export default function HomePage() {
       : selectedRegions.length > 1
         ? `${selectedRegions.length} regions`
         : 'All';
+  // Profile page for the jurisdiction in focus — the title's region name links there, and the stat
+  // card's figures deep-link into its tabs.
+  const profileHref = soleRegion ? jurisdictionHref(soleRegion, focusState) : undefined;
+  const headlineFocus = useMemo(
+    () => ({ region: soleRegion, state: focusState, name: focusTitle }),
+    [soleRegion, focusState, focusTitle],
+  );
+  // Pathways only when one jurisdiction is in focus — they feed the card's next step + deadline.
+  const { data: focusPathways = [] } = usePathwaysScoped(
+    focusState ? { state: focusState } : { region: soleRegion ?? '' },
+    { enabled: !!soleRegion },
+  );
+  const cityCount = useMemo(
+    () => (focusState ? bills.filter(b => b.region === 'US' && isCityOf(b.state, focusState)).length : 0),
+    [bills, focusState],
+  );
 
   // Map ↔ table sync: the row (or top-list entry) under the pointer is outlined on whichever map shows.
   const hoverGlobeIds = useMemo(() => {
@@ -333,6 +393,9 @@ export default function HomePage() {
   // "Poland stat card" — the first thing under the title on a phone), and atop the map column at lg.
   const regionSummary = soleRegion ? (
     <RegionSummary
+      profileHref={profileHref}
+      pathways={focusPathways}
+      cityCount={cityCount}
       name={focusState ? STATE_NAMES[focusState] ?? focusState : regionLabel(soleRegion)}
       kind={
         focusState ? 'US state'
@@ -350,11 +413,6 @@ export default function HomePage() {
           )}
           {focusState && (
             <>{crumbSep}<button onClick={() => setBillFilters(prev => ({ ...prev, state: '' }))} className={crumbBtn}>United States</button></>
-          )}
-          {focusState && (
-            <Link href={`/jurisdictions/us/${focusState.toLowerCase()}/`} className="link-arrow ml-auto text-xs">
-              {STATE_NAMES[focusState] ?? focusState} profile
-            </Link>
           )}
         </>
       }
@@ -403,13 +461,27 @@ export default function HomePage() {
       {/* ── Top of page: capped at ~25% of the viewport. One line of title + scoped count beside the
           search field, then ONE toolbar row (region · state · filters · scope · export). Nothing else
           stacks above the table. ── */}
+      {/* The gazette line: one figure, one sentence, for wherever the page is focused. */}
+      <RegionHeadline focus={headlineFocus} bills={bills} className="mb-3" />
+
       <header>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
           <div className="min-w-0">
             <h1 className="flex flex-wrap items-baseline gap-x-3 font-serif text-2xl leading-tight text-text-primary sm:text-[1.75rem]">
               <span>Explore</span>
               <span aria-hidden className="font-sans font-extralight text-text-muted/50">|</span>
-              <span key={focusTitle} className="region-title-in">{focusTitle}</span>
+              {profileHref ? (
+                <Link
+                  key={focusTitle}
+                  href={profileHref}
+                  title={`Open the ${focusTitle} profile`}
+                  className="region-title-in underline decoration-border-default decoration-1 underline-offset-[6px] transition-colors hover:decoration-text-primary"
+                >
+                  {focusTitle}
+                </Link>
+              ) : (
+                <span key={focusTitle} className="region-title-in">{focusTitle}</span>
+              )}
             </h1>
             {/* The count IS the definition: "circular economy laws and bills" links to the methodology that says
                 what counts as one (it replaced a separate "See what we track" link). */}
@@ -558,6 +630,7 @@ export default function HomePage() {
           table first (it's the subject), grid placement puts the map on the left at lg. ── */}
       <div className="mt-3 lg:mt-4 lg:grid lg:grid-cols-[minmax(0,38fr)_minmax(0,62fr)] lg:items-start lg:gap-6">
         <section
+          ref={lawsRef}
           aria-label="Laws"
           className={`${mobileView === 'list' ? 'block' : 'hidden'} min-w-0 lg:col-start-2 lg:row-start-1 lg:block`}
         >
@@ -588,7 +661,7 @@ export default function HomePage() {
           {/* Keyed by selection so the zoom-settle animation replays on every drill in/out. */}
           <div key={soleRegion ?? 'all'} className="region-map-in space-y-4">
             {!soleRegion ? (
-              <CoverageGlobe onSelect={code => setRegions([code])} highlightIds={hoverGlobeIds} height={340} />
+              <CoverageGlobe onSelect={pickRegion} highlightIds={hoverGlobeIds} height={340} />
             ) : (
               <>
                 {/* Filtering is in place: the table beside this is already narrowed. The summary says
@@ -599,7 +672,7 @@ export default function HomePage() {
                     data={mapData}
                     selectedState={billFilters.state || null}
                     highlightState={hoverStateAbbr}
-                    onStateClick={abbr => setBillFilters(prev => ({ ...prev, state: prev.state === abbr ? '' : abbr }))}
+                    onStateClick={pickState}
                     height={300}
                   />
                 ) : soleRegion === 'EU' ? (
@@ -607,7 +680,7 @@ export default function HomePage() {
                     highlightIds={insetHighlightIds}
                     countsByIso={countsByIso}
                     previewIds={hoverEuIds}
-                    onCountrySelect={code => setRegions([code])}
+                    onCountrySelect={pickRegion}
                     height={300}
                   />
                 ) : null}
@@ -625,11 +698,7 @@ export default function HomePage() {
               // The full Standings board (/states adapts to the selection: the US momentum board, the
               // EU board, or the two-column States|Nations leaderboard by default).
               restHref="/states"
-              onSelect={code =>
-                leaderboard.mode === 'us-states'
-                  ? setBillFilters(prev => ({ ...prev, state: prev.state === code ? '' : code }))
-                  : setRegions([code])
-              }
+              onSelect={code => (leaderboard.mode === 'us-states' ? pickState(code) : pickRegion(code))}
             />
           )}
         </aside>
@@ -646,6 +715,7 @@ export default function HomePage() {
         {/* Guided-tour CTA — a standing home for the demo-led motion (the highest-converting path for
             the considered compliance buyer). Ink, not accent: the accent is reserved for data and the
             page's one primary action. */}
+        {!isPro && (
         <section className="border-t border-border-default pt-8">
           <div className="flex flex-col justify-between gap-4 rounded-lg border border-border-default bg-bg-secondary px-5 py-4 sm:flex-row sm:items-center sm:px-6 sm:py-5">
             <div className="max-w-2xl">
@@ -663,9 +733,11 @@ export default function HomePage() {
             </button>
           </div>
         </section>
+        )}
 
-        {/* Get free updates */}
-        <SubscribeSection className="border-t border-border-default pt-8" />
+        {/* Get free updates — the anonymous reader's sign-up. A signed-in reader already has alerts
+            (Account → notifications), so asking them for an email again is noise. */}
+        {!user && <SubscribeSection className="border-t border-border-default pt-8" />}
 
         {walkthroughOpen && (
           <RequestAccessModal

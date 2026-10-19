@@ -96,6 +96,13 @@ export function jurisdictionCell(region: string | null | undefined, code: string
   return { name: c, parent: country };
 }
 
+/** The /jurisdictions profile URL for a region (+ optional US state). US alone → the federal view. */
+export function jurisdictionHref(region: string, state?: string | null): string {
+  const r = region.toLowerCase();
+  if (r === 'us') return `/jurisdictions/us/${(state || 'us').toLowerCase()}/`;
+  return `/jurisdictions/${r}/${r}/`;
+}
+
 /** The sub-jurisdiction noun for a region, for copy ("state" / "member state" / "country"). */
 export function unitNoun(region: string): string {
   const r = region.toUpperCase();

@@ -52,8 +52,12 @@ export function useBillPathway(billId: number | null | undefined) {
  * foreign profile passes {region: <country>}, a US state passes {state: <code>}). Pathways now exist
  * for every region, so this can reach far past the old US/EU-primary that useRegion() collapsed to.
  */
-export function usePathwaysScoped(params: { state?: string; region?: string; regions?: string }) {
+export function usePathwaysScoped(
+  params: { state?: string; region?: string; regions?: string },
+  opts: { enabled?: boolean } = {},
+) {
   return useQuery({
+    enabled: opts.enabled ?? true,
     queryKey: ['pathways-scoped', params.state ?? '', params.region ?? '', params.regions ?? ''],
     queryFn: () => fetchCompliancePathways(params),
     staleTime: 5 * 60 * 1000,

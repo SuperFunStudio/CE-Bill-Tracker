@@ -60,6 +60,45 @@ Keep `ce_relevant` as the **Layer-1 membership** flag (deeply wired: index `idx_
 | `true` | `NULL` | **core** |
 | `true` | `'toxics'` / `'transboundary'` / … | **included, tagged** (shown by default; tag is provenance/analysis, NOT a gate) |
 | `false` | `NULL` | **excluded** |
+| `false` | `'energy_recovery'` / … | **candidate bucket, off** — tagged so it can be switched on with one `UPDATE … WHERE adjacency = '<slug>'`, no re-classification |
+
+**Candidate bucket `energy_recovery` (2026-10-23).** Waste-to-energy / incineration-for-power law sits
+outside the circular-economy focus but is a sizable share of the climate-emissions challenge. Decision
+(Kenny): tag it, keep it **out of scope**, flip it on if a client asks. Seeded with Indonesia's three
+waste-to-energy Perpres (35/2018, 18/2016, 109/2025) — `reviewed=true` so refreshes never re-classify
+them; audit run_id `adjacency-energy-recovery-candidate-2026-10-23`. Not yet a corpus-wide net: the
+EU/US/other WtE rows are untagged until a deterministic pass like §5c is written for this slug.
+
+**`energy_recovery` pass — term spec (draft, 2026-10-23; run after the next deploy).** Deterministic
+keyword net like §5c: no LLM calls, one DB scan. Tags only rows already `ce_relevant=false`, and leaves
+them out of scope (`adjacency='energy_recovery'`, `reviewed=true`). Process: dry run that prints counts
+per region and per term → review → `--commit` with a `classification_changes` audit run_id.
+
+- **Strong terms (title match alone is enough):**
+  - EN: waste-to-energy, energy from waste, refuse-derived fuel, solid recovered fuel, waste incineration,
+    incinerator, mass burn, landfill gas (to energy)
+  - ES/PT: valorización energética, valorização energética, incineración / incineração de residuos,
+    coprocesamiento, combustible derivado de residuos
+  - FR: valorisation énergétique, incinération des déchets, combustibles solides de récupération
+  - DE: energetische / thermische Verwertung, Müllverbrennung, Ersatzbrennstoff
+  - IT/NL: termovalorizzatore, termovalorizzazione, afvalverbranding
+  - ID: sampah menjadi energi, PLTSa (Pembangkit Listrik Tenaga Sampah)
+  - JA/ZH: ごみ発電, 熱回収, 垃圾焚烧发电, 生活垃圾焚烧
+- **Weaker signals (full text, need repeated mentions):** energy recovery, co-incineration, cement kiln
+  co-processing; US renewable-portfolio-standard bills that make MSW / incineration an eligible
+  resource (the clearest climate-relevant case).
+- **Never tag:** composting / anaerobic digestion (organics are core CE); biofuels / renewable fuel
+  standards with no waste link (energy policy); nuclear (existing hard carve-out); pyrolysis /
+  gasification framed as chemical recycling (a contested circular topic, its own question); any row
+  already `ce_relevant=true` (an EPR law that mentions incineration stays core).
+- **Open:** medical / hazardous-waste incineration — left out of the first pass.
+
+**Water (for reference).** `water` is in scope only through a material tie: leakage into waterways
+(microplastics / microfibers, marine litter, river plastic) and recovery from water (biosolids,
+reclaimed water, nutrient recovery) — `haiku_classifier.py` water rules. General water quality,
+drinking water, water rights, dams and flooding are excluded by design (20 in-scope `water` rows on
+prod, 2026-10-23). Broader "clean rivers" pollution control could become a candidate bucket on the
+`energy_recovery` pattern, but its volume would likely exceed the current corpus — only on a client ask.
 
 **Decision (2026-07-31): no default filter.** Toxics and transboundary are **included in the default
 view** — they are *not* gated behind a toggle. But we still **store the `adjacency` tag** so the slice

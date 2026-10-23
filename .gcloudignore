@@ -41,6 +41,10 @@ node_modules/
 # webpack cache files (*.pack.gz_) can vanish mid-archive and crash `gcloud builds submit`.
 .next/
 dashboard-next/.next/
+# The static export (one HTML page per bill, ~500 MB) is a local artifact too: build-dashboard-next
+# regenerates it with `npm run build` before deploy-firebase, so uploading the local copy only made
+# the source tarball 50x bigger (505 MiB on 2026-10-23, a 22-minute build).
+dashboard-next/out/
 
 # Build artifacts
 dist/

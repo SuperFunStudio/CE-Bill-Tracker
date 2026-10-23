@@ -42,6 +42,9 @@ const NON_EU_LABELS: Record<string, string> = {
   PE: 'Peru',
   UY: 'Uruguay',
   RW: 'Rwanda',
+  EC: 'Ecuador',
+  MY: 'Malaysia',
+  ID: 'Indonesia',
 };
 
 export function regionLabel(code: string): string {
@@ -57,7 +60,7 @@ const REST = [
   'UK', 'FR', 'DE', 'IT', 'JP', 'PL', 'SE', 'NL', 'ES', 'FI', 'IE', 'DK',
   'CL', 'CH', 'SI', 'BR', 'AT', 'LU', 'LV', 'SK', 'LT', 'CZ', 'EE',
   'CN', 'CA', 'AU', 'IN', 'KE', 'NO', 'MX',
-  'TR', 'CO', 'PE', 'UY', 'RW',
+  'TR', 'CO', 'PE', 'UY', 'RW', 'EC', 'MY', 'ID',
   // KR and ZA are deliberately absent: no adapter ingests them yet, so they returned an empty
   // result — which reads as a broken filter rather than as "not covered". They also leaked into the
   // homepage Dataset markup's spatialCoverage, asserting coverage of two countries we track nothing

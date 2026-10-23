@@ -9,6 +9,45 @@ CE frameworks + 14 map-only/pipeline). The stocktake measures *policy intent*; w
 Status legend: **BUILT** (adapter live, in corpus) · **ASSESSED** (portal researched, not built) ·
 **TODO** (not yet assessed).
 
+## Update 2026-10-22 — Ecuador, Malaysia, Indonesia BUILT; Mexico upgraded to live; monthly seed refresh
+- **EC** `EcuadorFaolexClient` — FAOLEX PDF mirror (`faolex.fao.org/docs/pdf/ecu{ID}.pdf`); ambiente.gob.ec
+  times out from outside Ecuador. 7 seeds: LOECI 2021 + Reglamento DE 844/2023 (both from the UTPL legal
+  office's consolidated copy — not yet in FAOLEX), COA 2017 + Reglamento DE 752 (consolidated to 2024),
+  single-use plastics law 2020, AM 022/2013 batteries, AM 079/2015 glass REP. All classify ce=True (6× epr).
+  TODO: tyre (AM 131/098) + WEEE (AM 190 / 2022 RAEE instructivo) FAOLEX ids.
+- **MY** `MalaysiaFaolexClient` — lom.agc.gov.my signs every link server-side and returns listings as
+  **encrypted JSON** (deliberate anti-scraping; not circumvented), so FAOLEX (`mal{ID}.pdf`). 3 seeds: Act 672
+  (2007), Scheduled Wastes Regs 2005 (e-waste), EQA 1974. **No binding EPR statute yet** — packaging EPR is
+  voluntary from 2026, mandatory planned 2030; add the instrument when gazetted.
+- **ID** `IndonesiaBpkClient` — peraturan.bpk.go.id (BPK JDIH). Cloudflare TLS-fingerprint check → curl_cffi
+  (`impersonate_get_bytes`), paced + one retry (the WAF also 403s bursts). **LIVE discovery**: full-text
+  `/Search` filtered to national instrument types (UU/PP/Perpres/Permen) + a waste/packaging subject regex.
+  6 seeds incl. Permen LHK P.75/2019 (producer roadmap, epr 0.92). Real dates from `Tanggal Penetapan`.
+  Regional Perda/Perwali (city plastic-bag rules) deliberately excluded → municipal sprint.
+- **MX** now LIVE: seeds (+ **LGEC 2026-01-19**, + Reglamento LGPGIR) ∪ a scan of the LeyesBiblio laws index
+  for waste/circular titles, so a new federal law in this space appears without a code change.
+- **Monthly seed refresh**: `foreign_seed_refresh_regions` re-fetches fixed-list adapters every 30 days with
+  `sync_foreign(changed_only=True)` — only new or amended texts are re-classified, reviewed rows never.
+- **Broken sources, diagnosed 2026-10-23.** SI/LV/LT/CZ rows are all in prod with full text — only
+  refresh is affected; a failed fetch never overwrites stored text.
+  - **ZM / MW — FIXED via FAOLEX.** ZambiaLII/MalawiLII serve a Cloudflare interactive challenge. Their
+    old seeds were also the *repealed* 1990/1996 acts. Now FAOLEX: Zambia EPR Regulations 2018 (SI 65,
+    `zam228997`, epr 0.95) + EMA 2011 + 2023 amendment; Malawi EMA 2017. LII adapters dormant as ZM_LII/MW_LII.
+  - **CZ — FIXED (partly).** Query moved to the indexed version→fragment join (30s → 1s) and ordered by
+    `pořadí-fragmentu` (prod text was scrambled: § 1, § 10, § 9 …). 2020/541 + 2020/542 fragments are empty
+    on the publisher's side → skipped, stored text kept. Back on the monthly list.
+  - **SI** — uradni-list.si returns 503 site-wide; PISRS (pisrs.si/api) gates data behind a proof-of-work
+    challenge (not automated). No open-data export found. Not refreshed.
+  - **LV** — likumi.lv and vestnesis.lv refuse TCP connections (DNS resolves). Outage or IP block. Not refreshed.
+  - **LT** — e-seimas + e-tar: Cloudflare interactive challenge. Not refreshed.
+  - **AU_NSW** — Cloudflare interactive challenge (0 rows in prod). FAOLEX has only stale copies (WARR Act
+    as at 2018, `nsw43685`; CDS Regulation 2017, `nsw176327`). QLD/TAS/ACT/WA/federal unaffected;
+    VIC/SA/NT portals reachable but never built (all three have container-deposit laws).
+- **Asia next (assessed 2026-10-22):** Philippines = easiest (RA 11898 EPR Act 2022, English, LawPhil HTML
+  reachable; officialgazette/emb 403). Viet Nam = real EPR (LEP 2020 + Decree 08/2022, live 2024); vbpl.vn
+  home reachable, document pages were reCAPTCHA-gated — re-probe. Thailand = no EPR law yet (drafts only);
+  Krisdika unreachable, Royal Gazette 403 — watch, don't build.
+
 ## Update 2026-07-26 — Italy, Norway, Türkiye BUILT
 - **IT** `ItalyNormattivaClient` — normattiva.it URN permalink (`/uri-res/N2Ls?urn:nir:stato:{coord}`)
   returns consolidated full-text HTML over plain HTTP (no token/session); the OpenData API is bulk-ZIP

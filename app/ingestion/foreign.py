@@ -1548,7 +1548,9 @@ class BrazilPlanaltoClient(ForeignSourceClient):
             log.warning("br_fetch_failed", path=source_id, error=str(e))
             return None
         # Planalto is ISO-8859-1 but often mislabeled — latin-1 decode never raises and is correct here.
-        full_text = _strip_tags(r.content.decode("latin-1", "replace"))
+        # Drop <script> blocks: its F5 bot-defense script carries a per-request token, which otherwise
+        # lands in the stored text and reads as an amendment on every refresh.
+        full_text = _strip_tags(_SCRIPT_STYLE_RE.sub(" ", r.content.decode("latin-1", "replace")))
         if len(full_text) < 100:
             log.warning("br_thin_text", path=source_id, chars=len(full_text))
             return None
@@ -1800,39 +1802,89 @@ class ColombiaNormativaClient(ForeignSourceClient):
 # --------------------------------------------------------------------------------------------------
 # Mexico — Cámara de Diputados, LeyesBiblio. Open, no key. Consolidated federal law as a PDF at a
 # predictable per-law path (pdf/{ABBR}.pdf), kept current with reform dates. Mexico's producer-
-# responsibility lever is "responsabilidad compartida" + planes de manejo under the LGPGIR; there's no
-# clean bill-tracking API (SIL is HTML-only), so seed the marquee federal statutes and pypdf the text.
+# responsibility lever is "responsabilidad compartida" + planes de manejo under the LGPGIR, and since
+# 2026-01-19 the Ley General de Economía Circular (producer "gestión circular" registration). There's no
+# bill-tracking API (SIL is HTML-only), but the LeyesBiblio index lists every law in force with its first
+# DOF date and PDF link, so discovery = seeds ∪ an index scan for waste / circular-economy titles — a new
+# federal law in this space (as LGEC was) is picked up without editing the seed list.
+#   discover: GET LeyesBiblio/index.htm  (one <tr> per law: ref/{abbr}.htm, title, "DOF dd/mm/yyyy", pdf link)
 #   law text: GET diputados.gob.mx/LeyesBiblio/pdf/{ABBR}.pdf  (consolidated PDF, parsed with pypdf)
 # --------------------------------------------------------------------------------------------------
 
-MX_PDF = "https://www.diputados.gob.mx/LeyesBiblio/pdf/{abbr}.pdf"
-MX_PAGE = "https://www.diputados.gob.mx/LeyesBiblio/ref/{abbr_lower}.htm"
+MX_BASE = "https://www.diputados.gob.mx/LeyesBiblio/"
+MX_PDF = MX_BASE + "pdf/{abbr}.pdf"
+MX_PAGE = MX_BASE + "ref/{abbr_lower}.htm"
 MX_SEED_LAWS: list[dict] = [
+    {"abbr": "LGEC", "date": "2026-01-19",
+     "en": "General Law of Circular Economy (LGEC) — producer/importer circular-management registration "
+           "with SEMARNAT, sector circularity targets"},
     {"abbr": "LGPGIR", "date": "2003-10-08",
      "en": "General Law for the Prevention & Integral Management of Waste (LGPGIR) — shared "
            "responsibility & producer management plans (planes de manejo)"},
+    # Regulations aren't in the laws index; they sit under regley/ with a dated filename (last reform).
+    {"abbr": "REG_LGPGIR", "date": "2006-11-30", "pdf": "regley/Reg_LGPGIR_311014.pdf",
+     "page": MX_BASE + "regla.htm",
+     "en": "Regulation of the LGPGIR — management-plan (plan de manejo) registration and content"},
     {"abbr": "LGEEPA", "date": "1988-01-28",
      "en": "General Law of Ecological Balance & Environmental Protection (LGEEPA)"},
 ]
 # LeyesBiblio PDFs carry no machine-readable enactment date the adapter can parse cheaply, so pin the
 # DOF publication date of each seeded law (abbr -> ISO date) rather than leave it dateless on the charts.
 MX_SEED_DATES = {s["abbr"]: s["date"] for s in MX_SEED_LAWS}
+_MX_ROW_RE = re.compile(r"<tr\b.*?</tr>", re.S | re.I)
+_MX_ROW_PDF_RE = re.compile(r'href="pdf/([A-Za-z0-9_]+)\.pdf"')
+_MX_ROW_DOF_RE = re.compile(r"DOF\s+(\d{2})/(\d{2})/(\d{4})")
+# Index titles worth a classifier call. Matched accent-free: the index mixes encodings, so "Economía"
+# can arrive mangled — "econom" + "circular" survives either way.
+_MX_TITLE_RE = re.compile(r"residuo|circular|equilibrio ecol", re.I)
 
 
 class MexicoLeyesBiblioClient(ForeignSourceClient):
     """Cámara de Diputados LeyesBiblio adapter. Mexican consolidated federal law as PDF (pypdf), no
-    key. Seed-only — Mexico has no clean federal bill-tracking API (SIL is HTML-only)."""
+    key. Live: seeds ∪ a scan of the LeyesBiblio laws index for waste / circular-economy titles."""
 
     region = "MX"
     source = "leyesbiblio"
 
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self._index_dates: dict[str, datetime.date] = {}
+
     async def discover(self) -> list[tuple[str, str]]:
-        log.info("mx_discovered", total=len(MX_SEED_LAWS), seeded=len(MX_SEED_LAWS))
-        return [(s["abbr"], s["en"]) for s in MX_SEED_LAWS]
+        out = [(s["abbr"], s["en"]) for s in MX_SEED_LAWS]
+        seen = {abbr for abbr, _ in out}
+        try:
+            r = await self.http.get(MX_BASE + "index.htm")
+            r.raise_for_status()
+            page = r.content.decode("latin-1")  # served ISO-8859-1
+        except httpx.HTTPError as e:
+            log.warning("mx_index_failed", error=str(e))
+            page = ""
+        for row in _MX_ROW_RE.findall(page):
+            pdf = _MX_ROW_PDF_RE.search(row)
+            if not pdf:
+                continue
+            title = _strip_tags(row.split("DOF", 1)[0])
+            if not _MX_TITLE_RE.search(title):
+                continue
+            abbr = pdf.group(1)
+            if dof := _MX_ROW_DOF_RE.search(row):
+                d, m, y = (int(x) for x in dof.groups())
+                try:
+                    self._index_dates[abbr] = datetime.date(y, m, d)
+                except ValueError:
+                    pass
+            if abbr not in seen:
+                seen.add(abbr)
+                out.append((abbr, ""))
+        log.info("mx_discovered", total=len(out), seeded=len(MX_SEED_LAWS))
+        return out
 
     async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        seed = next((s for s in MX_SEED_LAWS if s["abbr"] == source_id), {})
+        url = MX_BASE + seed["pdf"] if seed.get("pdf") else MX_PDF.format(abbr=source_id)
         try:
-            r = await self.http.get(MX_PDF.format(abbr=source_id))
+            r = await self.http.get(url)
             r.raise_for_status()
         except httpx.HTTPError as e:
             log.warning("mx_fetch_failed", abbr=source_id, error=str(e))
@@ -1841,11 +1893,14 @@ class MexicoLeyesBiblioClient(ForeignSourceClient):
         if len(full_text) < 100:
             log.warning("mx_thin_text", abbr=source_id, chars=len(full_text))
             return None
+        # An index-discovered law has no curated label; its PDF's first line is the official name.
+        title = english_label or full_text.split("\n", 1)[0][:300] or source_id
         return ForeignLaw(
             source_id=source_id, region=self.region, source=self.source,
-            title=english_label or source_id, full_text=full_text,
-            source_url=MX_PAGE.format(abbr_lower=source_id.lower()), english_label=english_label,
-            status_date=_iso_to_date(MX_SEED_DATES.get(source_id)),
+            title=title, full_text=full_text,
+            source_url=seed.get("page") or MX_PAGE.format(abbr_lower=source_id.lower()),
+            english_label=english_label,
+            status_date=_iso_to_date(MX_SEED_DATES.get(source_id)) or self._index_dates.get(source_id),
         )
 
 
@@ -2857,16 +2912,17 @@ CZ_SEED_LAWS: list[dict] = [
     {"id": "2020/541", "en": "Waste Act (zákon o odpadech)"},
     {"id": "2020/542", "en": "End-of-Life Products Act — WEEE, batteries, ELV, tyres"},
 ]
-# Latest-consolidated full text: the version path on the fragment URLs drops the "/cz" segment that
-# the version IRI carries, so strip through "/eli/cz" to build the "/sb/{year}/{num}/{date}" prefix.
+# Latest-consolidated full text: walk version -> má-fragment-znění -> fragment -> text (an indexed join;
+# matching fragment URLs by string prefix scanned every fragment in the store and timed out / 403'd).
+# Order by pořadí-fragmentu (document order) — ordering by URL anchor sorted par_10 before par_2.
+# Known publisher gap (2026-10-23): for 2020/541 and 2020/542 every version lists its fragments but the
+# fragment resources carry no triples, so they return nothing and keep the text already stored.
 _CZ_QUERY = (
     "PREFIX s: <https://slovník.gov.cz/datový/sbírka/pojem/> "
-    "SELECT ?u ?txt WHERE {{ "
+    "SELECT ?txt WHERE {{ "
     "<https://opendata.eselpoint.gov.cz/esel-esb/eli/cz/sb/{year}/{num}> s:má-poslední-znění ?v . "
-    'BIND(REPLACE(STR(?v),"^.*/eli/cz","") AS ?vp) '
-    "?frag s:url-fragmentu-znění ?u . "
-    "?frag s:obsahuje-fragment ?obs . ?obs s:text-fragmentu ?txt . "
-    "FILTER(STRSTARTS(STR(?u), ?vp)) }} ORDER BY ?u"
+    "?v s:má-fragment-znění ?frag . ?frag s:pořadí-fragmentu-znění-právního-aktu ?ord ; "
+    "s:obsahuje-fragment ?obs . ?obs s:text-fragmentu ?txt . }} ORDER BY ?ord"
 )
 
 
@@ -3641,6 +3697,17 @@ async def impersonate_get(url: str, timeout: float = 45.0) -> str | None:
     management that fingerprints the TLS ClientHello — headers/HTTP2/host tricks don't help because the
     block is at the handshake (system curl passes, plain httpx gets a hard 403). Used by NSW; the same
     escape hatch fits any future Cloudflare-fronted portal (e.g. SA's flaky WAF). Returns text or None."""
+    r = await _impersonate_response(url, timeout)
+    return r.text if r is not None else None
+
+
+async def impersonate_get_bytes(url: str, timeout: float = 60.0) -> bytes | None:
+    """impersonate_get for binary bodies (PDFs behind the same Cloudflare TLS check — Indonesia's BPK)."""
+    r = await _impersonate_response(url, timeout)
+    return r.content if r is not None else None
+
+
+async def _impersonate_response(url: str, timeout: float):
     try:
         from curl_cffi.requests import AsyncSession
     except ImportError:
@@ -3655,7 +3722,7 @@ async def impersonate_get(url: str, timeout: float = 45.0) -> str | None:
             log.warning("impersonate_get_failed", url=url, error=str(e), attempt=attempt)
             continue
         if r.status_code == 200:
-            return r.text
+            return r
         if not (520 <= r.status_code <= 529):
             log.warning("impersonate_get_status", url=url, status=r.status_code)
             return None
@@ -3852,8 +3919,8 @@ class AustraliaWaClient(ForeignSourceClient):
 # mojibake lines — leaving clean English for both FTS and the Haiku excerpt.
 # --------------------------------------------------------------------------------------------------
 
-IN_DOC = "https://faolex.fao.org/docs/pdf/ind{id}.pdf"
-IN_PAGE = "https://www.fao.org/faolex/results/details/en/c/LEX-FAOC{id}/"
+FAOLEX_DOC = "https://faolex.fao.org/docs/pdf/{prefix}{id}.pdf"
+FAOLEX_PAGE = "https://www.fao.org/faolex/results/details/en/c/LEX-FAOC{id}/"
 
 # Marquee EPR / circular-economy rules, pinned by verified FAOLEX LEX-FAOC id (PDF existence + document
 # identity confirmed against faolex.fao.org). `date` = the gazette notification date where known (else a
@@ -3898,54 +3965,306 @@ def _india_english(text: str) -> str:
     return _BLANKLINES_RE.sub("\n\n", "\n".join(keep)).strip()
 
 
-class IndiaFaolexClient(ForeignSourceClient):
-    """FAOLEX adapter for India's gazette EPR Rules. Seed-only (deterministic ind{ID}.pdf URLs); English
-    full text via pypdf + a Hindi-mojibake line filter. No API key, no auth (FAOLEX permits crawling)."""
+class FaolexSeedClient(ForeignSourceClient):
+    """Shared FAOLEX adapter: curated seeds pinned by verified LEX-FAOC id, full text from the
+    deterministic PDF mirror faolex.fao.org/docs/pdf/{prefix}{ID}.pdf (reachable even where the national
+    portal is geo/UA-gated or encrypts its listings). No API key, no auth (FAOLEX permits crawling).
+    Seed-only: the FAOLEX search UI (www.fao.org) is bot-walled, so there's no live discovery.
 
-    region = "IN"
+    Subclass sets region, prefix (FAOLEX's 3-letter country code), seeds, and optionally text_filter.
+    Seed rows: {"id", "en", "date"?, "url"?, "page"?} — `url` pulls the PDF from a government/legal
+    mirror instead of FAOLEX (for texts FAOLEX hasn't catalogued); `page` overrides the human-facing link.
+    """
+
     source = "faolex"
+    prefix = ""
+    seeds: list[dict] = []
+    min_chars = 200
+
+    @staticmethod
+    def text_filter(text: str) -> str:
+        return text
 
     async def discover(self) -> list[tuple[str, str]]:
-        # Pure curated seed: the FAOLEX search UI (www.fao.org) is bot-walled, so no live discovery.
-        out = [(s["id"], s["en"]) for s in IN_SEED_LAWS]
-        log.info("in_discovered", total=len(out), seeded=len(out))
+        out = [(s["id"], s["en"]) for s in self.seeds]
+        log.info("faolex_discovered", region=self.region, total=len(out))
         return out
 
     async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
-        seed = next((s for s in IN_SEED_LAWS if s["id"] == source_id), None)
-        # Most rules resolve to the deterministic FAOLEX PDF; a seed may override `url` to pull from a
-        # government/SPCB mirror instead (e.g. rules FAOLEX hasn't individually catalogued yet).
-        url = (seed or {}).get("url") or IN_DOC.format(id=source_id)
+        seed = next((s for s in self.seeds if s["id"] == source_id), {})
+        url = seed.get("url") or FAOLEX_DOC.format(prefix=self.prefix, id=source_id)
         try:
             resp = await self.http.get(url)
             resp.raise_for_status()
         except httpx.HTTPError as e:
-            log.warning("in_fetch_failed", faolex_id=source_id, url=url, error=str(e))
+            log.warning("faolex_fetch_failed", region=self.region, id=source_id, url=url, error=str(e))
             return None
         # A 404 is served as an HTML stub; guard against storing it as "text" if it ever returns 200.
         if "application/pdf" not in resp.headers.get("content-type", "").lower():
-            log.warning("in_not_pdf", faolex_id=source_id,
+            log.warning("faolex_not_pdf", region=self.region, id=source_id,
                         ctype=resp.headers.get("content-type", ""))
             return None
 
-        full_text = _india_english(_pdf_to_text(resp.content))
-        if len(full_text) < 200:
-            log.warning("in_thin_text", faolex_id=source_id, chars=len(full_text))
+        full_text = self.text_filter(_pdf_to_text(resp.content))
+        if len(full_text) < self.min_chars:
+            log.warning("faolex_thin_text", region=self.region, id=source_id, chars=len(full_text))
             return None
 
-        status_date = _iso_to_date((seed or {}).get("date")) if seed else None
         # Prefer the human-facing FAOLEX record page; a mirror-only seed points source_url at its `url`.
-        source_url = (seed or {}).get("page") or (
-            url if (seed or {}).get("url") else IN_PAGE.format(id=source_id))
+        source_url = seed.get("page") or (url if seed.get("url") else FAOLEX_PAGE.format(id=source_id))
         return ForeignLaw(
             source_id=source_id,
             region=self.region,
             source=self.source,
-            title=english_label or f"India FAOLEX {source_id}",
+            title=english_label or f"{self.region} FAOLEX {source_id}",
             full_text=full_text,
             source_url=source_url,
             english_label=english_label,
-            status_date=status_date,  # gazette notification date (seed), else year-only via the label
+            status_date=_iso_to_date(seed.get("date")),  # gazette date (seed), else year via the label
+        )
+
+
+class IndiaFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for India's gazette EPR Rules; English text via a Hindi-mojibake line filter."""
+
+    region = "IN"
+    prefix = "ind"
+    seeds = IN_SEED_LAWS
+    text_filter = staticmethod(_india_english)
+
+
+# --------------------------------------------------------------------------------------------------
+# Ecuador — FAOLEX mirror of the Registro Oficial. The ministry host (ambiente.gob.ec) times out from
+# outside Ecuador and the Registro Oficial has no per-norm API, but FAOLEX holds the RO supplements as
+# text-layer PDFs. Ecuador's REP ("responsabilidad extendida del productor") is a guiding principle of
+# the 2021 Inclusive Circular Economy Law (LOECI) and is operationalised in the Environmental Code (COA)
+# regulation plus per-stream ministerial agreements (batteries, glass). LOECI + its 2023 regulation
+# aren't in FAOLEX yet, so they come from the UTPL legal office's consolidated copy (marked "Vigente").
+# --------------------------------------------------------------------------------------------------
+
+_UTPL = "https://procuraduria.utpl.edu.ec/NormativaExterna/"
+EC_SEED_LAWS: list[dict] = [
+    {"id": "loeci-2021", "date": "2021-07-06",
+     "url": _UTPL + "LEY%20ORG%C3%81NICA%20DE%20ECONOM%C3%8DA%20CIRCULAR%20INCLUSIVA.pdf",
+     "en": "Organic Law of Inclusive Circular Economy (LOECI, RO 488 Supl. 2021) — extended producer "
+           "responsibility principle, ecodesign, inclusion of informal recyclers"},
+    {"id": "de-844-2023", "date": "2023-08-22",
+     "url": _UTPL + "REGLAMENTO%20GENERAL%20A%20LA%20LEY%20ORG%C3%81NICA%20DE%20ECONOM%C3%8DA%20CIRCULAR"
+                    "%20INCLUSIVA.pdf",
+     "en": "General Regulation of the Inclusive Circular Economy Law (Executive Decree 844, 2023)"},
+    {"id": "167116", "date": "2017-04-12",
+     "en": "Organic Environmental Code (COA, RO 983 Supl. 2017) — integral waste management, REP basis"},
+    {"id": "196276", "date": "2019-06-12",
+     "en": "Regulation of the Organic Environmental Code (Decree 752, 2019) — REP obligations for "
+           "producers and importers (consolidated to 2024)"},
+    {"id": "200078", "date": "2020-12-21",
+     "en": "Organic Law for the Rationalisation, Reuse and Reduction of Single-Use Plastics (RO 354, 2020)"},
+    {"id": "139960", "date": "2013-04-29",
+     "en": "Ministerial Agreement 022 (2013) — integral management of used batteries (producer take-back)"},
+    {"id": "155601", "date": "2015-08-25",
+     "en": "Ministerial Agreement 079 (2015) — glass value chain under extended producer responsibility"},
+]
+# TODO(EC): tyre (AM 131/098) and WEEE (AM 190, 2022 RAEE instructivo) REP agreements — FAOLEX ids not
+# yet verified; add as rows once found (same pattern).
+
+
+class EcuadorFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Ecuador's circular-economy / REP framework (Spanish, single-language PDFs)."""
+
+    region = "EC"
+    prefix = "ecu"
+    seeds = EC_SEED_LAWS
+
+
+# --------------------------------------------------------------------------------------------------
+# Malaysia — FAOLEX mirror. The official Laws of Malaysia portal (lom.agc.gov.my) signs every document
+# link server-side and returns its listings as encrypted JSON, so it can't be addressed or crawled;
+# FAOLEX carries the English Acts and P.U.(A) regulations as text-layer PDFs. Malaysia has no binding EPR
+# statute yet — packaging EPR is voluntary from 2026, mandatory planned for 2030 — so this is the waste
+# framework an EPR law will hang off. English-native, so no classifier prompt change.
+# --------------------------------------------------------------------------------------------------
+
+MY_SEED_LAWS: list[dict] = [
+    {"id": "74261", "date": "2007-08-30",
+     "en": "Solid Waste and Public Cleansing Management Act 2007 (Act 672) — controlled solid waste, "
+           "take-back and deposit powers (commenced state-by-state)"},
+    {"id": "54629", "date": "2005-08-15",
+     "en": "Environmental Quality (Scheduled Wastes) Regulations 2005, P.U.(A) 294/2005 — incl. e-waste"},
+    {"id": "13278", "date": "1974-03-14",
+     "en": "Environmental Quality Act 1974 (Act 127), as amended to 2001"},
+]
+# TODO(MY): add the packaging EPR instrument once it is gazetted (watch KPKT / the National Circular
+# Economy Council); the Environmental Quality (Amendment) Act 2024 (A1712) is penalties-only.
+
+
+class MalaysiaFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Malaysia's federal waste framework (English Acts / P.U.(A) regulations)."""
+
+    region = "MY"
+    prefix = "mal"
+    seeds = MY_SEED_LAWS
+
+
+# --------------------------------------------------------------------------------------------------
+# Zambia / Malawi — FAOLEX mirror. ZambiaLII / MalawiLII document pages now serve a Cloudflare
+# interactive JS challenge to every client (2026-10-23), so the AfricanLII adapters (kept as ZM_LII /
+# MW_LII) can't fetch. Their old seeds were also the REPEALED framework acts (Zambia EPPCA 1990 → EMA
+# 2011; Malawi EMA 1996 → EMA 2017). FAOLEX carries the current acts and Zambia's EPR regulations.
+# --------------------------------------------------------------------------------------------------
+
+ZM_SEED_LAWS: list[dict] = [
+    {"id": "228997", "date": "2018-08-03",
+     "en": "Environmental Management (Extended Producer Responsibility) Regulations, 2018 (SI 65) — "
+           "packaging, bottles, cans, waste oils, tyres, e-waste"},
+    {"id": "117523", "en": "Environmental Management Act, 2011 (No. 12 of 2011, Zambia)"},
+    {"id": "219945", "date": "2023-08-17",
+     "en": "Environmental Management (Amendment) Act, 2023 (Zambia) — solid waste harmonisation"},
+]
+MW_SEED_LAWS: list[dict] = [
+    {"id": "169354", "date": "2017-05-05", "en": "Environment Management Act, 2017 (No. 19 of 2017, Malawi)"},
+]
+# TODO(MW): Environment Management (Plastics) Regulations 2015 — no FAOLEX id found (mlw240096 is a
+# nutrition plan, not the regs); UNEP LEAP hosts a PDF, usable via a seed `url` once the link is pinned.
+
+
+class ZambiaFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Zambia's environmental-management framework + EPR Regulations 2018."""
+
+    region = "ZM"
+    prefix = "zam"
+    seeds = ZM_SEED_LAWS
+
+
+class MalawiFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Malawi's Environment Management Act 2017."""
+
+    region = "MW"
+    prefix = "mlw"
+    seeds = MW_SEED_LAWS
+
+
+# --------------------------------------------------------------------------------------------------
+# Indonesia — BPK JDIH (peraturan.bpk.go.id), the Audit Board's database of every national and regional
+# regulation, with a text-layer PDF per instrument. Open, no key, but Cloudflare-fronted with a TLS
+# fingerprint check (plain httpx gets 403), so every request goes through impersonate_get (curl_cffi),
+# paced, with one retry — the WAF also 403s bursts. Live discovery: the site search is FULL-TEXT (a
+# "sampah" query returns the tax law that mentions waste fees), so keep only national instrument types
+# whose subject ("tentang …") is about waste / packaging / circularity. Regional Perda/Perwali/Pergub
+# (city plastic-bag rules) are deliberately excluded here — they belong to the municipal layer.
+#   discover: GET /Search?keywords={term}[&jenis={type}]  -> /Details/{id} cards (type + subject)
+#   law text: GET /Details/{id} (title, Tanggal Penetapan, Status, /Download/{fileId}) -> GET the PDF
+# --------------------------------------------------------------------------------------------------
+
+ID_BASE = "https://peraturan.bpk.go.id"
+# jenis = instrument-type facet: 8 Undang-Undang, 10 Peraturan Pemerintah, 11 Peraturan Presiden.
+# Ministerial regulations have no usable facet, so they come from unfiltered searches + the type filter.
+ID_SEARCHES: list[str] = [
+    *(f"keywords={t}&jenis={j}" for t in ("sampah", "plastik", "kemasan", "daur%20ulang")
+      for j in (8, 10, 11)),
+    "keywords=pengurangan%20sampah%20oleh%20produsen",
+    "keywords=ekonomi%20sirkular",
+    "keywords=sampah%20plastik%20produsen",
+    "keywords=limbah%20elektronik",
+]
+ID_SEED_LAWS: list[dict] = [
+    {"id": "39067", "en": "Law 18/2008 on Waste Management (producer obligation, Art. 15)"},
+    {"id": "5295", "en": "Government Regulation 81/2012 on Household Waste (producer reduction, Arts. 12-15)"},
+    {"id": "138876", "en": "Government Regulation 27/2020 on Specific Waste (incl. e-waste)"},
+    {"id": "73225", "en": "Presidential Regulation 97/2017 — National Household Waste Policy & Strategy"},
+    {"id": "94716", "en": "Presidential Regulation 83/2018 on Marine Debris Handling (plastics)"},
+    {"id": "312182", "en": "Minister of Environment Regulation P.75/2019 — Producer Waste Reduction "
+                           "Roadmap (EPR: 30% reduction by 2029)"},
+]
+_ID_CARD_RE = re.compile(r'<div class="col-lg-8 fw-semibold fs-5">(.*?)(?=<div class="col-lg-8 fw-semibold fs-5">|$)', re.S)
+_ID_CARD_DET_RE = re.compile(r'/Details/(\d+)/[^"]*">\s*([^<]+?)\s*</a>')
+_ID_CARD_SUBJ_RE = re.compile(r'fs-2 fw-bold[^>]*>\s*<a[^>]*>\s*([^<]+?)\s*</a>')
+_ID_NATIONAL_RE = re.compile(r"^(Undang-undang|Peraturan Pemerintah|Peraturan Presiden|Peraturan Menteri)", re.I)
+_ID_SUBJECT_RE = re.compile(
+    # Not bare "produsen": it matches "Produsen Data" (statistics-producer) rules.
+    r"sampah|plastik|kemasan|daur ulang|guna ulang|sirkular|limbah elektronik|tanggung jawab produsen",
+    re.I)
+_ID_FIELD_RE = r"{label}\s*</[^>]+>\s*(?:<[^>]+>\s*)*([^<]+?)\s*<"
+_ID_DOWNLOAD_RE = re.compile(r'href="/Download/(\d+)/')
+_ID_REPEALED_RE = re.compile(r"Status:\s*(Dicabut|Tidak Berlaku)", re.I)
+_ID_MONTHS = {m: i for i, m in enumerate(
+    ("januari", "februari", "maret", "april", "mei", "juni", "juli", "agustus",
+     "september", "oktober", "november", "desember"), 1)}
+
+
+def _id_date(s: str | None) -> "datetime.date | None":
+    """Indonesian long date '18 Oktober 2019' (BPK Tanggal Penetapan)."""
+    m = re.search(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", s or "")
+    if not m or m[2].lower() not in _ID_MONTHS:
+        return None
+    try:
+        return datetime.date(int(m[3]), _ID_MONTHS[m[2].lower()], int(m[1]))
+    except ValueError:
+        return None
+
+
+class IndonesiaBpkClient(ForeignSourceClient):
+    """BPK JDIH adapter. Indonesian national waste / packaging / EPR instruments as PDF (pypdf), no key;
+    Cloudflare TLS check cleared via curl_cffi. Live: seeds ∪ subject-filtered BPK search."""
+
+    region = "ID"
+    source = "bpk"
+    pace_seconds = 2.0
+
+    async def _get(self, url: str, binary: bool = False):
+        """Paced impersonated GET with one retry — BPK's WAF 403s request bursts, not the client."""
+        import asyncio
+
+        for attempt in range(2):
+            await asyncio.sleep(self.pace_seconds * (1 + 3 * attempt))
+            body = await (impersonate_get_bytes(url) if binary else impersonate_get(url, self._timeout))
+            if body:
+                return body
+        return None
+
+    async def discover(self) -> list[tuple[str, str]]:
+        out = [(s["id"], s["en"]) for s in ID_SEED_LAWS]
+        seen = {sid for sid, _ in out}
+        for query in ID_SEARCHES:
+            page = await self._get(f"{ID_BASE}/Search?{query}")
+            if not page:
+                log.warning("id_search_failed", query=query)
+                continue
+            for card in _ID_CARD_RE.findall(page):
+                det = _ID_CARD_DET_RE.search(card)
+                subj = _ID_CARD_SUBJ_RE.search(card)
+                if not det or not subj or det[1] in seen:
+                    continue
+                if _ID_NATIONAL_RE.search(det[2]) and _ID_SUBJECT_RE.search(subj[1]):
+                    seen.add(det[1])
+                    out.append((det[1], ""))
+        log.info("id_discovered", total=len(out), seeded=len(ID_SEED_LAWS))
+        return out
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        page_url = f"{ID_BASE}/Details/{source_id}"
+        page = await self._get(page_url)
+        if not page:
+            log.warning("id_details_failed", id=source_id)
+            return None
+        if _ID_REPEALED_RE.search(page):
+            log.info("id_skip_repealed", id=source_id)
+            return None
+        dl = _ID_DOWNLOAD_RE.search(page)
+        if not dl:
+            log.warning("id_no_download", id=source_id)
+            return None
+        pdf = await self._get(f"{ID_BASE}/Download/{dl[1]}", binary=True)
+        full_text = _pdf_to_text(pdf) if pdf else ""
+        if len(full_text) < 200:
+            log.warning("id_thin_text", id=source_id, chars=len(full_text))
+            return None
+        title_m = re.search(_ID_FIELD_RE.format(label="Judul"), page)
+        date_m = re.search(_ID_FIELD_RE.format(label="Tanggal Penetapan"), page)
+        title = html.unescape(title_m[1]) if title_m else source_id
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=title, full_text=full_text, source_url=page_url, english_label=english_label,
+            status_date=_id_date(date_m[1] if date_m else None),
         )
 
 
@@ -4160,8 +4479,12 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     # AfricanLII peachjam network (open, no token) — only sites verified to serve AKN text are here.
     # Ghana/Tanzania/Uganda/Zimbabwe/Lesotho are Cloudflare-walled on document pages (like AU_NSW) and
     # Eswatini was unreachable, so they're deliberately NOT registered until reachable (or via the paid API).
-    "ZM": ZambiaLiiClient,
-    "MW": MalawiLiiClient,
+    # ZambiaLII/MalawiLII went the same way 2026-10-23: ZM/MW now read FAOLEX; the LII adapters stay
+    # registered (dormant) under ZM_LII/MW_LII for when the challenge lifts or the paid API is bought.
+    "ZM": ZambiaFaolexClient,
+    "MW": MalawiFaolexClient,
+    "ZM_LII": ZambiaLiiClient,
+    "MW_LII": MalawiLiiClient,
     "RW": RwandaLiiClient,
     "SL": SierraLeoneLiiClient,
     "DK": DenmarkRetsinfoClient,
@@ -4198,6 +4521,10 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "NO": NorwayLovdataClient,
     # Türkiye (region="TR"): core EPR regs via the mevzuat.gov.tr GeneratePdf endpoint (PDF).
     "TR": TurkiyeMevzuatClient,
+    # Ecuador / Malaysia: FAOLEX PDF mirror (national portals gated / encrypted). Indonesia: BPK JDIH.
+    "EC": EcuadorFaolexClient,
+    "MY": MalaysiaFaolexClient,
+    "ID": IndonesiaBpkClient,
 }
 
 
@@ -4207,12 +4534,16 @@ async def sync_foreign(
     classify: bool = True,
     only_new: bool = False,
     max_laws: int | None = None,
+    changed_only: bool = False,
 ) -> dict:
     """End-to-end ingest for one foreign region: discover -> fetch -> upsert(bills+bill_texts) ->
     classify. The generic analog of sync_eurlex, keyed on the `foreign_id` column.
 
     - only_new: skip foreign_ids already in the DB (cheap refresh mode).
     - max_laws: cap laws processed this run (bounds a backfill / runaway).
+    - changed_only: re-fetch everything but classify only laws that are new or whose stored text
+      changed (an amended consolidated text), and never a human-reviewed row — the re-check mode for
+      seed-list adapters, which can't discover new laws but do see their listed laws amended.
     Foreign acts bypass the US keyword gate (curated source); the Haiku confidence floor decides
     ce_relevant. Commits every CHECKPOINT laws so a long run is checkpointed and re-runnable.
     """
@@ -4249,6 +4580,7 @@ async def sync_foreign(
         log.info("foreign_sync_start", region=region, to_process=len(candidates), only_new=only_new)
 
         ingested: list[int] = []
+        changed: list[int] = []  # new, or text differs from what was stored
         fetched = skipped = 0
         CHECKPOINT = 25
         total = len(candidates)
@@ -4287,7 +4619,14 @@ async def sync_foreign(
                 if bt is None:
                     bt = BillText(bill_id=bill.id)
                     db.add(bt)
-                bt.text = cap_for_tsvector(law.full_text)
+                new_text = cap_for_tsvector(law.full_text)
+                if bt.text != new_text:
+                    if bt.text is not None:
+                        log.info("foreign_text_changed", region=region, foreign_id=law.foreign_id,
+                                 old_chars=len(bt.text), new_chars=len(new_text))
+                    if not (changed_only and bill.reviewed):
+                        changed.append(bill.id)
+                bt.text = new_text
                 bt.char_len = len(bt.text)
                 ingested.append(bill.id)
                 if idx % CHECKPOINT == 0:
@@ -4297,12 +4636,14 @@ async def sync_foreign(
             await db.commit()
 
     summary = {"region": region, "found": found, "discovered": len(candidates), "fetched": fetched,
-               "skipped": skipped, "ingested": len(ingested), "classified": 0, "relevant": 0}
+               "skipped": skipped, "ingested": len(ingested), "changed": len(changed),
+               "classified": 0, "relevant": 0}
 
-    if classify and ingested:
+    to_classify = changed if changed_only else ingested
+    if classify and to_classify:
         chunk = max(1, settings.max_haiku_calls_per_run)
-        for i in range(0, len(ingested), chunk):
-            chunk_ids = ingested[i : i + chunk]
+        for i in range(0, len(to_classify), chunk):
+            chunk_ids = to_classify[i : i + chunk]
             async with AsyncSessionLocal() as db:
                 bills = list(
                     (await db.execute(select(Bill).where(Bill.id.in_(chunk_ids)))).scalars().all()

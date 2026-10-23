@@ -98,6 +98,9 @@ REGION_LABELS = {
     "IT": "Italy",
     "NO": "Norway",
     "TR": "Türkiye",
+    "EC": "Ecuador",
+    "MY": "Malaysia",
+    "ID": "Indonesia",
 }
 
 

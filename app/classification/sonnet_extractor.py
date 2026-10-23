@@ -31,7 +31,8 @@ REGION_LABELS = {
     "LU": "Luxembourg", "LV": "Latvia", "SK": "Slovakia", "LT": "Lithuania", "CZ": "Czechia",
     "EE": "Estonia", "KR": "South Korea", "NO": "Norway", "BE": "Belgium", "IT": "Italy",
     "PT": "Portugal", "CA": "Canada", "AU": "Australia", "CN": "China", "IN": "India",
-    "TR": "Türkiye",
+    "TR": "Türkiye", "MX": "Mexico", "CO": "Colombia", "PE": "Peru", "UY": "Uruguay",
+    "EC": "Ecuador", "MY": "Malaysia", "ID": "Indonesia",
 }
 
 
@@ -67,7 +68,12 @@ _NATIVE_ANCHORS = {
            "réparabilité", "indice de réparabilité", "réemploi", "réutilisation", "reconditionn"],
     "de": ["Herstellerverantwortung", "Produktverantwortung", "Verpackung", "Rücknahme",
            "Pfand", "Mehrweg", "Recycling", "Rezyklat"],
-    "es": ["responsabilidad ampliada", "envases", "residuos", "depósito", "reciclaje", "recogida"],
+    # Spain says "ampliada"; Latin America says "extendida" / "compartida" + "plan de manejo" (MX).
+    "es": ["responsabilidad ampliada", "responsabilidad extendida", "responsabilidad compartida",
+           "plan de manejo", "planes de manejo", "economía circular", "gestión circular",
+           "envases", "residuos", "depósito", "reciclaje", "recogida"],
+    "id": ["tanggung jawab produsen", "pengurangan sampah", "peta jalan", "kemasan", "daur ulang",
+           "guna ulang", "pendauran ulang"],
     "nl": ["producentenverantwoordelijkheid", "verpakking", "statiegeld", "inzameling", "recycling"],
     "sv": ["producentansvar", "förpackningar", "pant", "insamling", "återvinning"],
     "pl": ["odpowiedzialność producenta", "opakowania", "kaucja", "zbiórka", "recykling"],
@@ -87,7 +93,7 @@ _NATIVE_ANCHORS = {
 _REGION_LANG = {
     "FR": "fr", "DE": "de", "AT": "de", "ES": "es", "CL": "es", "NL": "nl", "SE": "sv",
     "PL": "pl", "BR": "pt", "IT": "it", "CZ": "cs", "JP": "ja", "CN": "zh", "KR": "ko",
-    "NO": "no", "TR": "tr",
+    "NO": "no", "TR": "tr", "MX": "es", "CO": "es", "PE": "es", "UY": "es", "EC": "es", "ID": "id",
 }
 
 

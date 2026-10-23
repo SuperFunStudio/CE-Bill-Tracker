@@ -252,9 +252,26 @@ class Settings(BaseSettings):
     enable_foreign_ingestion: bool = False
     foreign_ingestion_regions: list[str] = [
         "JP", "JP_ORD", "UK", "DE", "NL", "SE", "PL", "CN", "CN_GOV", "CA", "CA_BC",
-        "BR_CAMARA", "RW", "SL", "AU", "FR", "FR_CODE",
+        "BR_CAMARA", "RW", "SL", "AU", "FR", "FR_CODE", "MX", "ID",
     ]
     foreign_refresh_interval_days: int = 7
+    # Seed-list adapters (fixed curated ids) can't surface NEW laws, but the consolidated texts they
+    # point at do get amended (e.g. Mexico's LGPGIR after the 2026 circular-economy reform). These are
+    # re-fetched on a slower cadence with sync_foreign(changed_only=True): every law re-downloaded, only
+    # new or changed texts re-classified, human-reviewed rows never re-classified. A seed row added to
+    # an adapter in code is also picked up by the next run. Keys must not repeat foreign_ingestion_regions.
+    # Probed 2026-10-22/23: each fetched in full and returned byte-identical text on a second fetch (no
+    # volatile page chrome). Left out — their prod rows keep the text already stored, they just don't
+    # refresh: SI (gazette 503, PISRS behind a proof-of-work gate), LV (likumi.lv refuses connections),
+    # LT + AU_NSW (Cloudflare interactive challenge); the CA_*/AU_* sub-national seed adapters (not
+    # confirmed present in prod). CZ is in: 2 of its 3 acts currently return no text from the publisher
+    # (see CzechiaESbirkaClient) and are skipped, keeping their stored text, while 2001/477 refreshes.
+    foreign_seed_refresh_regions: list[str] = [
+        "EC", "MY", "IN", "CO", "PE", "UY", "BR", "CL",
+        "ES", "IE", "AT", "CH", "DK", "FI", "LU", "SK", "EE", "IT", "NO", "TR", "KE",
+        "ZM", "MW", "CZ",
+    ]
+    foreign_seed_refresh_interval_days: int = 30
     # Per region per run; bounds LLM spend (Haiku per law, Sonnet for the relevant ones).
     max_foreign_laws_per_run: int = 100
     # Restrict discovery to currently-valid acts (compliance focus). False = include repealed/historical.

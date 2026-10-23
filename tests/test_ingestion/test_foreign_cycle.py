@@ -37,9 +37,12 @@ def env(monkeypatch):
     calls = []
     outcomes = {}
 
-    async def fake_sync(region, *, classify, only_new, max_laws):
+    async def fake_sync(region, *, classify, only_new, changed_only, max_laws):
         calls.append(region)
-        assert classify and only_new and max_laws == jobs.settings.max_foreign_laws_per_run
+        assert classify and max_laws == jobs.settings.max_foreign_laws_per_run
+        # Live regions ingest only new laws; seed regions re-fetch all and classify only changes.
+        seed = region not in jobs.settings.foreign_ingestion_regions
+        assert (only_new, changed_only) == ((False, True) if seed else (True, False))
         result = outcomes.get(region, {"found": 10, "ingested": 1})
         if isinstance(result, Exception):
             raise result
@@ -54,6 +57,8 @@ def env(monkeypatch):
     monkeypatch.setattr(jobs.settings, "enable_foreign_ingestion", True)
     monkeypatch.setattr(jobs.settings, "foreign_ingestion_regions", ["JP", "UK", "CN"])
     monkeypatch.setattr(jobs.settings, "foreign_refresh_interval_days", 7)
+    monkeypatch.setattr(jobs.settings, "foreign_seed_refresh_regions", [])
+    monkeypatch.setattr(jobs.settings, "foreign_seed_refresh_interval_days", 30)
     return calls, outcomes
 
 
@@ -120,6 +125,34 @@ def test_scheduler_tolerates_late_wakeups_and_registers_the_job(monkeypatch):
     assert scheduler._job_defaults["misfire_grace_time"] == 3600
     assert scheduler._job_defaults["coalesce"] is True
     assert scheduler.get_job("foreign_refresh") is not None
+
+
+async def test_seed_regions_refresh_monthly_in_changed_only_mode(env, monkeypatch):
+    calls, _ = env
+    monkeypatch.setattr(jobs.settings, "foreign_seed_refresh_regions", ["EC", "IN"])
+    await jobs.run_foreign_cycle()
+    assert calls == ["EC", "IN", "JP", "UK", "CN"]  # mode asserted inside fake_sync
+    # 8 days on: the weekly regions are due again, the monthly seed regions are not.
+    row = FakeSession.store[jobs.FOREIGN_CURSOR_SOURCE]
+    old = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+    row.cursor = {"last_refreshed": {r: old for r in _stamps()}}
+    calls.clear()
+    await jobs.run_foreign_cycle()
+    assert calls == ["JP", "UK", "CN"]
+    # 31 days on: the seed regions are due too.
+    older = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+    row.cursor = {"last_refreshed": {**_stamps(), "EC": older, "IN": older}}
+    calls.clear()
+    await jobs.run_foreign_cycle()
+    assert calls == ["EC", "IN"]
+
+
+async def test_a_key_in_both_lists_runs_as_live(env, monkeypatch):
+    calls, _ = env
+    monkeypatch.setattr(jobs.settings, "foreign_seed_refresh_regions", ["JP"])
+    monkeypatch.setattr(jobs.settings, "foreign_ingestion_regions", ["JP"])
+    await jobs.run_foreign_cycle()  # fake_sync asserts JP ran live (only_new), not changed_only
+    assert calls == ["JP"]
 
 
 async def test_every_fetch_failing_is_not_a_successful_refresh(env):

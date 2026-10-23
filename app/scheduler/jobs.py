@@ -1769,11 +1769,15 @@ FOREIGN_CURSOR_SOURCE = "foreign"
 
 
 async def run_foreign_cycle() -> None:
-    """Keep foreign national law current: re-run discovery for each configured region that is due
-    and ingest only laws not yet in the DB, classified with the region-aware pipeline.
+    """Keep foreign national law current, on two cadences:
+
+    - live-discovery regions (foreign_ingestion_regions), every foreign_refresh_interval_days:
+      re-run discovery and ingest only laws not yet in the DB.
+    - seed-list regions (foreign_seed_refresh_regions), every foreign_seed_refresh_interval_days:
+      re-fetch every listed law and re-classify only new or amended texts (changed_only).
 
     Due-ness is per region: last successful refresh (ingestion_cursors row "foreign",
-    {"last_refreshed": {region: iso}}) older than foreign_refresh_interval_days. A region that
+    {"last_refreshed": {region: iso}}) older than that region's interval. A region that
     raises is logged and left unstamped, so it is retried the next day; one region's source being
     down never stops the rest. Compliance pathways for newly-ingested laws are still built by
     scripts/build_compliance_pathways.py, as for EUR-Lex.
@@ -1790,30 +1794,38 @@ async def run_foreign_cycle() -> None:
         return
 
     now = datetime.now(timezone.utc)
-    stale_before = now - timedelta(days=settings.foreign_refresh_interval_days)
     async with AsyncSessionLocal() as db:
         row = await db.get(IngestionCursor, FOREIGN_CURSOR_SOURCE)
         last_refreshed = dict((row.cursor if row else {}).get("last_refreshed") or {})
-    due = [
-        r for r in settings.foreign_ingestion_regions
-        if r not in last_refreshed or datetime.fromisoformat(last_refreshed[r]) < stale_before
-    ]
-    log.info("foreign_cycle_start", due=due, regions=len(settings.foreign_ingestion_regions))
+    # region -> seed mode? A key listed in both lists is treated as live (the cheaper, more frequent run).
+    modes = {r: True for r in settings.foreign_seed_refresh_regions}
+    modes.update({r: False for r in settings.foreign_ingestion_regions})
+
+    def is_due(region: str, seed: bool) -> bool:
+        days = settings.foreign_seed_refresh_interval_days if seed else settings.foreign_refresh_interval_days
+        last = last_refreshed.get(region)
+        return last is None or datetime.fromisoformat(last) < now - timedelta(days=days)
+
+    due = [r for r, seed in modes.items() if is_due(r, seed)]
+    log.info("foreign_cycle_start", due=due, regions=len(modes))
 
     refreshed, failed, empty = [], [], []
-    ingested = 0
+    ingested = changed = 0
     for i, region in enumerate(due):
         if i:
             await asyncio.sleep(5)
+        seed = modes[region]
         try:
             summary = await sync_foreign(
-                region, classify=True, only_new=True, max_laws=settings.max_foreign_laws_per_run
+                region, classify=True, only_new=not seed, changed_only=seed,
+                max_laws=settings.max_foreign_laws_per_run,
             )
         except Exception as e:
             failed.append(region)
             log.error("foreign_region_failed", region=region, error=f"{type(e).__name__}: {e}")
             continue
         ingested += summary.get("ingested", 0)
+        changed += summary.get("changed", 0)
         if summary.get("found") == 0:
             # Discovery found nothing at all — the source is down or changed shape. Not stamped,
             # so it is retried tomorrow, and logged loudly so a silently broken adapter shows up.
@@ -1838,4 +1850,4 @@ async def run_foreign_cycle() -> None:
             await db.commit()
 
     log.info("foreign_cycle_complete", due=len(due), refreshed=refreshed, failed=failed,
-             empty=empty, ingested=ingested)
+             empty=empty, ingested=ingested, changed=changed)

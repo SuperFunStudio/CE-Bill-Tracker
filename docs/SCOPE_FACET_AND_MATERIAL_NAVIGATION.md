@@ -93,6 +93,17 @@ per region and per term → review → `--commit` with a `classification_changes
   already `ce_relevant=true` (an EPR law that mentions incineration stays core).
 - **Open:** medical / hazardous-waste incineration — left out of the first pass.
 
+**First run (prod, 2026-10-23) — `scripts/backfill_energy_recovery.py`, run_id
+`adjacency-energy-recovery-2026-10-23`.** Scanned 8,840 out-of-scope rows; tagged **3**: WA HB-2416
+(waste-to-energy under the Climate Commitment Act), EU 2019/2010 (BAT conclusions for waste
+incineration), US SJR-85 (disapproval of the EPA commercial/industrial incinerator rule). With the 3
+Indonesian Perpres the bucket is **6 rows, all out of scope**. Lessons: the weak full-text signal was
+6/6 noise (waste-statistics formats, horse cremation, a tourism BEMP) and is now opt-in
+(`--include-weak`); PFAS-incineration bans go to the toxics pass and "recycling technology" bills to the
+chemical-recycling question (both now guards). The bucket is small because discovery never targeted
+waste-to-energy law — tagging only finds what's already ingested. Growing it means adding WtE discovery
+terms, which costs a classifier call per new law.
+
 **Water (for reference).** `water` is in scope only through a material tie: leakage into waterways
 (microplastics / microfibers, marine litter, river plastic) and recovery from water (biosolids,
 reclaimed water, nutrient recovery) — `haiku_classifier.py` water rules. General water quality,

@@ -12,6 +12,7 @@ import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
 import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
 import { BillFlowSankey } from '@/components/insights/BillFlowSankey';
+import { InsightsButterfly } from '@/components/insights/InsightsButterfly';
 import { useRegion } from '@/components/layout/RegionContext';
 import { RegionFilter } from '@/components/insights/RegionFilter';
 import { useAuth } from '@/components/auth/AuthContext';
@@ -57,6 +58,7 @@ const TABS = [
   { id: 'momentum', label: 'Momentum' },
   { id: 'coverage', label: 'Coverage' },
   { id: 'flows', label: 'Flows' },
+  { id: 'butterfly', label: 'Butterfly' },
   { id: 'impact', label: 'Impact' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
@@ -65,7 +67,7 @@ type TabId = (typeof TABS)[number]['id'];
  * Insights — a curated, link-shareable briefing room for legislative staffers. A Pro membership
  * feature: surfaced in the nav for Pro members/admins, gated with the standard sign-up-or-purchase
  * card for everyone else (still reachable by URL, where the gate does the selling). Organized into
- * tabs (Momentum / Coverage / Flows / Impact) with a region filter on the
+ * tabs (Momentum / Coverage / Flows / Butterfly / Impact) with a region filter on the
  * cross-jurisdiction views.
  */
 
@@ -295,6 +297,18 @@ export default function InsightsPage() {
             isolate everything touching it.
           </p>
           <BillFlowSankey />
+        </Section>
+      )}
+
+      {tab === 'butterfly' && (
+        <Section kicker="Circularity" title="Where a jurisdiction's law sits on the circular economy">
+          <p className="text-text-secondary text-body leading-relaxed">
+            The Ellen MacArthur butterfly, filled in with the law we track: repair, reuse, remanufacturing and
+            recycling loops on the technical side, composting, cascades and regeneration on the biological.
+            Pick a region to see its shape, or compare two to see which loops one regulates and the other
+            leaves open.
+          </p>
+          <InsightsButterfly />
         </Section>
       )}
 

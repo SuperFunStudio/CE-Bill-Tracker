@@ -306,3 +306,22 @@ body {
 .bfs-name { fill: var(--text-secondary); font-size: 12px; font-family: var(--font-sans), sans-serif; }
 .bfs-name .v { fill: var(--text-muted); }
 .bfs-col { fill: var(--text-muted); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-family: var(--font-sans), sans-serif; }
+
+/* ---- Butterfly diagram + zoomable bill clusters (components/insights/ButterflyDiagram, ButterflyExplorer) ---- */
+.bf-step > circle { transition: stroke-width .12s; }
+.bf-step:hover > circle, .bf-step:focus-visible > circle { stroke-width: 4.5; }
+.bf-step:focus { outline: none; }
+.bf-step:focus-visible > circle, .bf-step:focus-visible > rect { stroke: var(--text-primary); }
+/* A dot's wrapper carries the filter regroup (translate/scale); the circle carries the burst-in and hover. */
+.bf-dw { transform-box: fill-box; transform-origin: center; transition: transform .6s cubic-bezier(.3,.7,.2,1), opacity .4s; }
+.bf-dw.fade { opacity: .12; }
+.bf-dot { cursor: pointer; transform-box: fill-box; transform-origin: center; transition: transform .12s;
+  animation: bf-burst .56s cubic-bezier(.2,.8,.2,1) both; }
+.bf-dot:hover, .bf-dot:focus-visible { transform: scale(1.7); stroke: var(--text-primary); stroke-width: 1.4; outline: none; }
+@keyframes bf-burst { from { transform: translate(var(--dx), var(--dy)) scale(.2); opacity: 0; } to { transform: none; opacity: 1; } }
+.bf-stage { animation: bf-zoom .42s cubic-bezier(.3,.7,.2,1) both; }
+@keyframes bf-zoom { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .bf-dw, .bf-dot, .bf-step > circle { transition: none; }
+  .bf-dot, .bf-stage { animation: none; }
+}

@@ -29,6 +29,7 @@ from app.schemas import (
     BillStancePoint,
     BillSummary,
     BillTimelinePoint,
+    ButterflyCounts,
     CollectionTargetBasisPoint,
     DeadlineStats,
     DeadlineSummary,
@@ -245,11 +246,16 @@ async def list_bills(
             )
     q = q.order_by(Bill.last_action_date.desc().nullslast()).limit(limit).offset(offset)
     rows = (await db.execute(q)).all()
+    # Butterfly steps come from the same cached placement as /bills/butterfly (rebuilt every 10 min),
+    # so this is a dict lookup per row, not a recomputation.
+    steps_by_id = await _butterfly_steps_by_id(db) if any(r.Bill.ce_relevant for r in rows) else {}
     results = []
     for row in rows:
         s = BillSummary.model_validate(row.Bill)
         s.litigation_case_count = row.case_count
         s.max_preemption_risk = row.max_risk
+        if row.Bill.id in steps_by_id:
+            s.butterfly_steps = sorted(steps_by_id[row.Bill.id])
         results.append(s)
     return results
 
@@ -505,6 +511,100 @@ async def get_stance_momentum(
         BillStancePoint(year=row.year, stance=row.policy_stance, count=row.count, region=row.region)
         for row in rows
     ]
+
+
+# Butterfly step placement reads compliance_details for every in-scope bill, which is too heavy to redo
+# per request, so the per-bill placement is cached in-process and only the counting runs per request.
+# Ten minutes matches how fast the corpus moves (ingestion is hourly at best).
+_BUTTERFLY_TTL = 600.0
+_butterfly_cache: dict = {"at": 0.0, "rows": None, "by_id": {}}
+_BUTTERFLY_STATUS = {"enacted": {"enacted", "active"},
+                     "ended": {"failed", "vetoed", "repealed"}}
+_OTHERISH = {"other", "budget", "preemption", "reporting"}
+
+
+async def _butterfly_rows(db: AsyncSession) -> list[tuple]:
+    import time
+
+    from app.classification.butterfly import butterfly_steps
+    from app.classification.cycles import wing_of
+
+    now = time.monotonic()
+    if _butterfly_cache["rows"] is not None and now - _butterfly_cache["at"] < _BUTTERFLY_TTL:
+        return _butterfly_cache["rows"]
+    result = await db.execute(
+        select(Bill.id, Bill.region, Bill.status, Bill.title, Bill.ai_summary, Bill.instrument_type,
+               Bill.instrument_types, Bill.material_categories, Bill.adjacency, Bill.compliance_details)
+        .where(Bill.ce_relevant == True)  # noqa: E712
+    )
+    rows, by_id = [], {}
+    for r in result.all():
+        insts = list(r.instrument_types or ([r.instrument_type] if r.instrument_type else []))
+        steps = butterfly_steps({
+            "title": r.title, "ai_summary": r.ai_summary, "instrument_types": insts,
+            "material_categories": r.material_categories or [], "adjacency": r.adjacency,
+            "compliance_details": r.compliance_details,
+        })
+        unplaced = set()
+        if "incentives" in insts:
+            unplaced.add("incentives")
+        if "waste_shipment" in insts:
+            unplaced.add("waste_shipment")
+        if not insts or _OTHERISH & set(insts):
+            unplaced.add("other")
+        if not steps:
+            unplaced.add("no_step")
+        rows.append((r.region, r.status, wing_of(r.material_categories, insts), frozenset(steps), frozenset(unplaced)))
+        by_id[r.id] = frozenset(steps)
+    _butterfly_cache.update(at=now, rows=rows, by_id=by_id)
+    return rows
+
+
+async def _butterfly_steps_by_id(db: AsyncSession) -> dict[int, frozenset]:
+    """bill id -> its butterfly steps, from the same cache as _butterfly_rows."""
+    await _butterfly_rows(db)
+    return _butterfly_cache["by_id"]
+
+
+@router.get("/butterfly", response_model=ButterflyCounts)
+async def get_butterfly(
+    regions: str | None = None,
+    status: str = Query(default="all", pattern="^(all|enacted|pending|ended)$"),
+    response: Response = None,  # noqa: B008 — FastAPI injects; used only to set Cache-Control
+    db: AsyncSession = Depends(get_db),
+):
+    """Bills per circular-economy butterfly step (the methodology figure, and the Insights country view
+    and comparison). `regions` is the usual CSV (omit / "all" = every region). `status` groups bill
+    statuses the way the explorer does: enacted = enacted or in force (the cross-border level playing
+    field), ended = failed / vetoed / repealed, pending = everything else."""
+    if response is not None:
+        response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    codes = set(_parse_regions(regions) or [])
+    ended = _BUTTERFLY_STATUS["ended"]
+
+    def keep(region: str, st: str | None) -> bool:
+        if codes and region not in codes:
+            return False
+        if status == "all":
+            return True
+        if status == "pending":
+            return st not in _BUTTERFLY_STATUS["enacted"] and st not in ended
+        return st in _BUTTERFLY_STATUS[status]
+
+    steps: dict[str, int] = {}
+    wings = {"technical": 0, "biological": 0, "both": 0, "unclassified": 0}
+    unplaced = {"incentives": 0, "waste_shipment": 0, "other": 0, "no_step": 0}
+    total = 0
+    for region, st, wing, bill_steps, bill_unplaced in await _butterfly_rows(db):
+        if not keep(region, st):
+            continue
+        total += 1
+        wings[wing] += 1
+        for s in bill_steps:
+            steps[s] = steps.get(s, 0) + 1
+        for u in bill_unplaced:
+            unplaced[u] += 1
+    return ButterflyCounts(total=total, steps=steps, wings=wings, unplaced=unplaced)
 
 
 @router.get("/instrument-material-matrix", response_model=list[InstrumentMaterialCell])

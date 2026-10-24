@@ -116,6 +116,8 @@ export interface BillSummary {
   source_url_final?: string | null;
   litigation_case_count: number;
   max_preemption_risk: number | null;
+  /** Butterfly-diagram steps this bill sits at (e.g. ["collect", "recycle"]); see ButterflyDiagram. */
+  butterfly_steps?: string[] | null;
 }
 
 /** A full-text search result from GET /bills/search — a bill plus the highlighted snippet(s)
@@ -359,6 +361,21 @@ export interface InstrumentMaterialCell {
   count: number;
   region?: string;
 }
+
+/** Bills per circular-economy butterfly step for one scope, from /bills/butterfly. A bill can sit at
+ *  several steps, so `steps` doesn't sum to `total`. */
+export interface ButterflyCounts {
+  total: number;
+  steps: Record<string, number>;
+  /** technical / biological / both / unclassified — a strict partition of `total`. */
+  wings: Record<string, number>;
+  /** incentives / waste_shipment / other / no_step — bills the diagram can't place on a step. */
+  unplaced: Record<string, number>;
+}
+
+/** The status groups the butterfly counts by. enacted = enacted or in force (the cross-border level
+ *  playing field); ended = failed, vetoed or repealed; pending = everything else. */
+export type ButterflyStatus = 'all' | 'enacted' | 'pending' | 'ended';
 
 /** One state's CE-vs-baseline passage gap from /insights/state-gap. */
 export interface StateGapRow {

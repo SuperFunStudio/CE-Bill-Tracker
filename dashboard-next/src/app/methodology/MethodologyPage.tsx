@@ -5,6 +5,7 @@ import { GazetteHeader } from '@/components/ui/GazetteHeader';
 import { useBills, useLawsInForce } from '@/hooks/useBills';
 import { MATERIAL_CATEGORIES } from '@/components/bills/BillFilters';
 import { FAIR_QUESTIONS } from '@/lib/tiers';
+import { MethodologyButterfly } from '@/components/insights/MethodologyButterfly';
 
 // Public engine snapshot. Only observable facts live here — the numbers a reader could verify
 // from the site itself (corpus scale, jurisdiction breadth, the live relevant count). The engine
@@ -130,6 +131,7 @@ export default function MethodologyPage() {
           clears the sticky nav so the heading isn't parked under it on arrival. */}
       <section id="what-we-screen-for" className="scroll-mt-20 space-y-3">
         <h2 className="font-serif text-xl text-text-primary">What we screen for</h2>
+        <MethodologyButterfly />
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <div className="text-text-muted text-xs uppercase tracking-wide mb-1">Instruments</div>

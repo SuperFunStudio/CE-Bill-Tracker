@@ -49,6 +49,10 @@ class BillSummary(BaseModel):
     source_url_final: str | None = None
     litigation_case_count: int = 0
     max_preemption_risk: int | None = None
+    # Butterfly-diagram steps this bill sits at (app/classification/butterfly.py), e.g. ["collect",
+    # "recycle"]. Step ids only, derived and cached server-side; none of the extraction it reads leaves
+    # the server. Powers the zoomable butterfly on Methodology and Insights.
+    butterfly_steps: list[str] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -152,6 +156,17 @@ class InstrumentMaterialCell(BaseModel):
     material_category: str
     count: int
     region: str | None = None  # see BillTimelinePoint.region
+
+
+class ButterflyCounts(BaseModel):
+    """How many in-scope bills sit at each step of the circular-economy butterfly, for one scope
+    (regions + status). Steps come from app/classification/butterfly.py; a bill can sit at several,
+    so steps don't sum to `total`."""
+
+    total: int
+    steps: dict[str, int]      # step id (maintain, reuse, refurb, recycle, content, collect, ...) -> bills
+    wings: dict[str, int]      # technical / biological / both / unclassified (strict partition, cycles.py)
+    unplaced: dict[str, int]   # incentives / waste_shipment / other / no_step: bills the diagram can't place
 
 
 class ResearchAskRequest(BaseModel):

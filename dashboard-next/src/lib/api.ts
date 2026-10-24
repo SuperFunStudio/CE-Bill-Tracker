@@ -15,6 +15,8 @@ import type {
   EvaluateResponse,
   MaterialMapPoint,
   InstrumentMaterialCell,
+  ButterflyCounts,
+  ButterflyStatus,
   LawsInForcePoint,
   StateGapRow,
   StateCycleRow,
@@ -298,6 +300,17 @@ export async function fetchInstrumentMaterialMatrix(params?: {
 }): Promise<InstrumentMaterialCell[]> {
   return apiFetch<InstrumentMaterialCell[]>(
     buildUrl('/bills/instrument-material-matrix', params as Record<string, string | number | boolean | undefined>),
+  );
+}
+
+/** Bills per circular-economy butterfly step — the methodology figure and the Insights country view.
+ *  `regions` is the usual CSV (omit for every region). */
+export async function fetchButterfly(params?: {
+  regions?: string;
+  status?: ButterflyStatus;
+}): Promise<ButterflyCounts> {
+  return apiFetch<ButterflyCounts>(
+    buildUrl('/bills/butterfly', params as Record<string, string | number | boolean | undefined>),
   );
 }
 

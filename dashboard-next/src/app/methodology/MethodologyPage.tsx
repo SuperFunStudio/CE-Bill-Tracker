@@ -109,7 +109,10 @@ export default function MethodologyPage() {
           <div className="mt-1 text-xs text-text-muted leading-snug">U.S. bills screened wholesale — 50 states, D.C. &amp; federal</div>
         </div>
         <div className="bg-bg-card p-4 text-center">
-          <div className="font-serif text-2xl text-text-primary">{ENGINE.jurisdictions}</div>
+          {/* Live, the same regionCount the lede uses, so the card and the sentence above it can't
+              disagree (it read a hard-coded 37 after the count grew to 50). ENGINE.jurisdictions is
+              only the first-paint fallback inside regionCount. */}
+          <div className="font-serif text-2xl text-text-primary">{regionCount}</div>
           <div className="mt-1 text-xs text-text-muted leading-snug">jurisdictions worldwide — the EU &amp; national governments across six continents</div>
         </div>
         <div className="bg-bg-card p-4 text-center">

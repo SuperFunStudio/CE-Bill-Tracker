@@ -611,6 +611,14 @@ class FederalAction(Base):
     __table_args__ = (Index("idx_federal_published", "published_date"),)
 
 
+def deadline_state(state: str | None, region: str | None) -> str:
+    """compliance_deadlines.state is two letters, but bills.state can be a namespaced subnational code
+    ("BE-VLG", "CA-BC", "AU-NSW", "US" city ordinances "CA-SF"). Fall back to the part before the dash,
+    which is the country (or the US state) — `region` still says which family it belongs to."""
+    s = (state or region or "").split("-")[0]
+    return s[:2]
+
+
 class ComplianceDeadline(Base):
     __tablename__ = "compliance_deadlines"
 

@@ -19,6 +19,7 @@ from app.models import (
     BillText,
     ClassificationChange,
     ComplianceDeadline,
+    deadline_state,
 )
 
 log = structlog.get_logger()
@@ -282,7 +283,7 @@ class ClassificationPipeline:
                         cd = ComplianceDeadline(
                             bill_id=bill.id,
                             region=bill.region,
-                            state=bill.state,
+                            state=deadline_state(bill.state, bill.region),
                             deadline_type=dl.get("type", "compliance"),
                             deadline_date=deadline_date,
                             description=dl.get("description", ""),

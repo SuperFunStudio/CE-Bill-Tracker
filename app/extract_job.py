@@ -32,7 +32,7 @@ async def _run(regions: list[str] | None, include_us: bool, refresh: bool, max_b
 
     from app.classification.sonnet_extractor import SonnetExtractor, select_text_window
     from app.database import AsyncSessionLocal
-    from app.models import Bill, BillText, ComplianceDeadline
+    from app.models import Bill, BillText, ComplianceDeadline, deadline_state
 
     log = structlog.get_logger()
     sonnet = SonnetExtractor()
@@ -115,7 +115,7 @@ async def _run(regions: list[str] | None, include_us: bool, refresh: bool, max_b
                         ComplianceDeadline(
                             bill_id=bill.id,
                             region=bill.region,
-                            state=bill.state,
+                            state=deadline_state(bill.state, bill.region),
                             deadline_type=dl.get("type", "compliance"),
                             deadline_date=deadline_date,
                             description=dl.get("description", ""),

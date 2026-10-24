@@ -33,6 +33,8 @@ REGION_LABELS = {
     "PT": "Portugal", "CA": "Canada", "AU": "Australia", "CN": "China", "IN": "India",
     "TR": "Türkiye", "MX": "Mexico", "CO": "Colombia", "PE": "Peru", "UY": "Uruguay",
     "EC": "Ecuador", "MY": "Malaysia", "ID": "Indonesia",
+    "RO": "Romania", "HU": "Hungary", "GR": "Greece", "HR": "Croatia", "MT": "Malta",
+    "BG": "Bulgaria", "CY": "Cyprus",
 }
 
 
@@ -466,5 +468,10 @@ class SonnetExtractor:
     ) -> SonnetResult:
         params = self.build_params(state, bill_number, title, full_text, region,
                                    max_chars=max_chars, max_output_tokens=max_output_tokens)
-        resp = await self._client.messages.create(**params)
+        # Streamed, so the 120s timeout bounds the gap between chunks rather than the whole reply. A
+        # non-streamed call sends nothing until the JSON is complete, and a long extraction quoting
+        # Greek or Cyrillic law (many tokens per character) took >120s and timed out on every attempt
+        # (GR / BG FAOLEX ingest, 2026-10-24). A truly hung connection still fails within 120s.
+        async with self._client.messages.stream(**params) as stream:
+            resp = await stream.get_final_message()
         return self.parse_response(resp.content[0].text, bill_number=bill_number)

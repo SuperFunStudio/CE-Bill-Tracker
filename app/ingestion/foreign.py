@@ -4005,7 +4005,8 @@ class FaolexSeedClient(ForeignSourceClient):
                         ctype=resp.headers.get("content-type", ""))
             return None
 
-        full_text = self.text_filter(_pdf_to_text(resp.content))
+        # Postgres text columns reject NUL; some gazette PDFs (Croatia's Narodne novine) embed them.
+        full_text = self.text_filter(_pdf_to_text(resp.content)).replace("\x00", "")
         if len(full_text) < self.min_chars:
             log.warning("faolex_thin_text", region=self.region, id=source_id, chars=len(full_text))
             return None
@@ -4141,6 +4142,195 @@ class MalawiFaolexClient(FaolexSeedClient):
     region = "MW"
     prefix = "mlw"
     seeds = MW_SEED_LAWS
+
+
+# --------------------------------------------------------------------------------------------------
+# The nine EU member states that had no adapter (2026-10-24): RO, PT, HU, GR, HR, MT, BG, CY, BE. All via
+# the FAOLEX PDF mirror. FAOLEX ids were found through UNEP LEAP (leap.unep.org mirrors FAOLEX; each
+# record page names its LEX-FAOC id and PDF) and ECOLEX, then curated by hand: the current framework
+# waste / EPR / packaging / single-use-plastics instruments, plus national circular-economy strategies and
+# waste plans. Repealed predecessors (e.g. RO Law 211/2011, HU Decree 94/2002) are left out on purpose.
+# Native-language text (Greek, Bulgarian Cyrillic, Hungarian, ...); the classifier is multilingual.
+#
+# NOT in FAOLEX, so not seeded (known gaps; each needs a government-PDF `url` seed): HU Gov. Decree
+# 80/2023 (EPR concession), HR packaging & deposit ordinance NN 137/2023, RO HG 1074/2021 (deposit
+# return) and OUG 5/2015 (WEEE), BE interregional packaging cooperation agreement (2008) and the Brussels
+# waste ordinance / Brudalex. PT's deposit return (DL 24/2024) is an amendment to DL 152-D/2017, whose
+# FAOLEX PDF is the consolidated text, so it is covered.
+# --------------------------------------------------------------------------------------------------
+
+RO_SEED_LAWS: list[dict] = [
+    {"id": "242692", "date": "2021-08-19",
+     "en": "Government Emergency Ordinance No. 92/2021 on the waste regime (replaces Law 211/2011)"},
+    {"id": "225397", "date": "2015-10-28", "en": "Law No. 249/2015 on the management of packaging and packaging waste"},
+    {"id": "225412", "date": "2016-06-28", "en": "Emergency Ordinance No. 38/2016 amending Law No. 249/2015 on packaging"},
+    {"id": "234976", "date": "2016-11-17", "en": "Law No. 217/2016 on reducing food waste"},
+    {"id": "236194", "date": "2022-09-21", "en": "Government Decision No. 1172/2022 approving the National Strategy on the Circular Economy"},
+]
+PT_SEED_LAWS: list[dict] = [
+    {"id": "215351", "date": "2017-12-11",
+     "en": "Decree-Law No. 152-D/2017 (UNILEX) — unified regime for specific waste streams under extended "
+           "producer responsibility (packaging, oils, tyres, WEEE, batteries, vehicles); consolidated, incl. "
+           "the deposit-return amendments"},
+    {"id": "215352", "date": "2020-12-10",
+     "en": "Decree-Law No. 102-D/2020 — general waste management regime, landfill regime, specific waste streams"},
+]
+HU_SEED_LAWS: list[dict] = [
+    {"id": "121650", "en": "Act CLXXXV of 2012 on waste"},
+    {"id": "216161", "date": "2021-06-22",
+     "en": "Government Decree 349/2021 (VI. 22.) on reducing the impact of certain plastic products on the environment"},
+    {"id": "211499", "en": "National Waste Management Plan 2021-2027 (Hungary)"},
+]
+GR_SEED_LAWS: list[dict] = [
+    {"id": "211896", "date": "2021-07-22",
+     "en": "Law No. 4819/2021 — integrated framework for waste management (transposes Directives 2018/851, 2018/852)"},
+    {"id": "212040", "date": "2020-10-22",
+     "en": "Law No. 4736/2020 — reduction of the impact of certain plastic products (Directive 2019/904)"},
+    {"id": "211055", "date": "2018-12-01", "en": "National Circular Economy Strategy (Greece, 2018)"},
+    {"id": "211790", "date": "2021-11-01", "en": "New Circular Economy Action Plan of Greece (2021)"},
+    {"id": "235243", "date": "2011-02-02",
+     "en": "Joint Ministerial Decision No. 145116/2011 — measures, conditions and procedure for wastewater reuse"},
+]
+HR_SEED_LAWS: list[dict] = [
+    {"id": "210888", "date": "2021-07-15", "en": "Waste Management Act (Croatia, 2021)"},
+    {"id": "219530", "date": "2023-05-10", "en": "Regulation on the cancellation of waste status (end-of-waste)"},
+    {"id": "219548", "date": "2023-06-28", "en": "Waste Management Plan of the Republic of Croatia 2023-2028"},
+    # Not seeded: the 2021-2030 programme for circular management of space and buildings (FAOLEX 213055)
+    # is a font-encoded PDF that extracts as glyph codes, not text.
+    {"id": "202572", "date": "2015-04-28", "en": "Regulation establishing ecodesign requirements for energy-related products"},
+]
+MT_SEED_LAWS: list[dict] = [
+    {"id": "67457", "en": "Waste Management (Packaging and Packaging Waste) Regulations, 2006 (L.N. 277 of 2006)"},
+    {"id": "202125", "date": "2021-04-09",
+     "en": "Waste Management (Packaging and Packaging Waste) (Amendment) Regulations, 2021 (L.N. 152 of 2021)"},
+    {"id": "201231", "date": "2020-07-31", "en": "Beverage Containers Recycling Regulations, 2020 (deposit return)"},
+    {"id": "200463", "date": "2020-12-30", "en": "Restrictions on Placing on the Market of Single-Use Plastic Products Regulations, 2020"},
+    {"id": "75226", "en": "Batteries and Accumulators Regulations, 2007 (L.N. 311 of 2007)"},
+    {"id": "202094", "date": "2021-04-09",
+     "en": "Waste Management (Waste Batteries and Accumulators) (Amendment) Regulations, 2021"},
+    {"id": "202148", "date": "2021-04-09",
+     "en": "Waste Management (Electrical and Electronic Equipment) (Amendment) Regulations, 2021 (L.N. 148 of 2021)"},
+    {"id": "202151", "date": "2021-04-09",
+     "en": "Waste Management (End of Life Vehicles) (Amendment) Regulations (L.N. 150 of 2021)"},
+    {"id": "189521", "en": "Waste Management (Ship Recycling) Regulations, 2019"},
+]
+BG_SEED_LAWS: list[dict] = [
+    {"id": "154431", "date": "2012-07-13", "en": "Law on Waste Management (Bulgaria, 2012)"},
+    {"id": "207012", "date": "2021-10-26",
+     "en": "Decree No. 354/2021 adopting the Ordinance on reducing the impact of certain plastic products"},
+    {"id": "222393", "date": "2021-06-17", "en": "National Waste Management Plan 2021-2028 (Bulgaria)"},
+    {"id": "231424", "date": "2022-10-26", "en": "Strategy for the transition to a circular economy of Bulgaria 2022-2027"},
+    {"id": "200726", "date": "2021-01-27",
+     "en": "Regulation No. 3/2021 on the disposal of animal by-products and derived products"},
+]
+CY_SEED_LAWS: list[dict] = [
+    {"id": "110725", "date": "2011-12-23", "en": "Waste Law, 2011 (Law No. 185(I)/2011)"},
+    {"id": "214376", "date": "2022-04-08",
+     "en": "The Waste (Amendment) Law No. 48(I)/2022 — incl. reducing the impact of certain plastic products"},
+    {"id": "218033", "date": "2017-11-17",
+     "en": "Regulations No. 375/2017 on Packaging and Packaging Waste (reducing consumption of thin plastic bags)"},
+    {"id": "218024", "date": "2017-12-15",
+     "en": "Regulations No. 430/2017 on Waste (management of non-packaging paper waste) — producer responsibility"},
+    {"id": "214377", "date": "2022-07-22",
+     "en": "The Waste (Management of Municipal Waste by Local Authorities) Regulations No. 292/2022"},
+    {"id": "216864", "date": "2023-03-24",
+     "en": "Regulations No. 80/2023 on Waste (management of waste pharmaceutical products of household origin)"},
+]
+# Belgium: waste is a regional competence, so the law sits with Flanders / Wallonia (/ Brussels, a gap).
+BE_VLG_SEED_LAWS: list[dict] = [
+    {"id": "110494", "date": "2011-12-23",
+     "en": "Flemish Materials Decree — sustainable management of material cycles and waste (2011)"},
+    {"id": "136959", "date": "2012-02-17",
+     "en": "VLAREMA — Flemish regulation on the sustainable management of material cycles and waste (2012)"},
+    {"id": "212625", "en": "Action plan on circular food loss and residual biomass flows 2021-2025 (Flanders)"},
+]
+BE_WAL_SEED_LAWS: list[dict] = [
+    {"id": "222442", "date": "2023-03-09",
+     "en": "Walloon Decree on waste, the circularity of materials and public cleanliness (2023)"},
+    {"id": "211181", "en": "Circular Wallonia — strategy for deploying the circular economy (2021)"},
+]
+
+
+class RomaniaFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Romania's waste regime, packaging law and circular-economy strategy."""
+
+    region = "RO"
+    prefix = "rom"
+    seeds = RO_SEED_LAWS
+
+
+class PortugalFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Portugal's EPR (UNILEX) and general waste regimes."""
+
+    region = "PT"
+    prefix = "por"
+    seeds = PT_SEED_LAWS
+
+
+class HungaryFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Hungary's Waste Act, single-use plastics decree and waste plan."""
+
+    region = "HU"
+    prefix = "hun"
+    seeds = HU_SEED_LAWS
+
+
+class GreeceFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Greece's waste framework, single-use plastics law and circular-economy plans."""
+
+    region = "GR"
+    prefix = "gre"
+    seeds = GR_SEED_LAWS
+
+
+class CroatiaFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Croatia's Waste Management Act, end-of-waste rules and circular programmes."""
+
+    region = "HR"
+    prefix = "cro"
+    seeds = HR_SEED_LAWS
+
+
+class MaltaFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Malta's packaging, deposit-return, single-use plastics and EPR-stream regulations."""
+
+    region = "MT"
+    prefix = "mlt"
+    seeds = MT_SEED_LAWS
+
+
+class BulgariaFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Bulgaria's Waste Management Law, plastics ordinance and circular-economy strategy."""
+
+    region = "BG"
+    prefix = "bul"
+    seeds = BG_SEED_LAWS
+
+
+class CyprusFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Cyprus's Waste Law and its producer-responsibility regulations."""
+
+    region = "CY"
+    prefix = "cyp"
+    seeds = CY_SEED_LAWS
+
+
+class BelgiumFlandersFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Flanders (Materials Decree + VLAREMA)."""
+
+    region = "BE"
+    subnational = "BE-VLG"
+    prefix = "bel"
+    seeds = BE_VLG_SEED_LAWS
+
+
+class BelgiumWalloniaFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Wallonia (2023 waste and circularity decree, Circular Wallonia)."""
+
+    region = "BE"
+    subnational = "BE-WAL"
+    prefix = "bel"
+    seeds = BE_WAL_SEED_LAWS
 
 
 # --------------------------------------------------------------------------------------------------
@@ -4525,6 +4715,17 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "EC": EcuadorFaolexClient,
     "MY": MalaysiaFaolexClient,
     "ID": IndonesiaBpkClient,
+    # The nine EU member states added 2026-10-24 (FAOLEX mirror; Belgium by region).
+    "RO": RomaniaFaolexClient,
+    "PT": PortugalFaolexClient,
+    "HU": HungaryFaolexClient,
+    "GR": GreeceFaolexClient,
+    "HR": CroatiaFaolexClient,
+    "MT": MaltaFaolexClient,
+    "BG": BulgariaFaolexClient,
+    "CY": CyprusFaolexClient,
+    "BE_VLG": BelgiumFlandersFaolexClient,
+    "BE_WAL": BelgiumWalloniaFaolexClient,
 }
 
 

@@ -33,6 +33,8 @@ import asyncpg
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from app.models import deadline_state  # noqa: E402
+
 
 def _parse_date(value):
     if not value or not isinstance(value, str):
@@ -120,7 +122,8 @@ async def main():
                             "insert into compliance_deadlines "
                             "(bill_id,state,deadline_type,deadline_date,description,source_url,region) "
                             "values ($1,$2,$3,$4,$5,$6,$7)",
-                            b["id"], b["state"], dtype, ddate, desc, b["source_url"], b["region"])
+                            b["id"], deadline_state(b["state"], b["region"]), dtype, ddate, desc,
+                            b["source_url"], b["region"])
             if tx:
                 await tx.commit()
         except Exception:

@@ -61,6 +61,8 @@ const REST = [
   'CL', 'CH', 'SI', 'BR', 'AT', 'LU', 'LV', 'SK', 'LT', 'CZ', 'EE',
   'CN', 'CA', 'AU', 'IN', 'KE', 'NO', 'MX',
   'TR', 'CO', 'PE', 'UY', 'RW', 'EC', 'MY', 'ID',
+  // The nine EU member states ingested 2026-10-24 via FAOLEX (Belgium's rows are regional, region "BE").
+  'RO', 'PT', 'HU', 'GR', 'HR', 'MT', 'BG', 'CY', 'BE',
   // KR and ZA are deliberately absent: no adapter ingests them yet, so they returned an empty
   // result — which reads as a broken filter rather than as "not covered". They also leaked into the
   // homepage Dataset markup's spatialCoverage, asserting coverage of two countries we track nothing

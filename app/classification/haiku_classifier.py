@@ -101,6 +101,15 @@ REGION_LABELS = {
     "EC": "Ecuador",
     "MY": "Malaysia",
     "ID": "Indonesia",
+    "RO": "Romania",
+    "PT": "Portugal",
+    "HU": "Hungary",
+    "GR": "Greece",
+    "HR": "Croatia",
+    "MT": "Malta",
+    "BG": "Bulgaria",
+    "CY": "Cyprus",
+    "BE": "Belgium",
 }
 
 
@@ -124,6 +133,12 @@ Circular economy scope includes both the technical cycle (the above) and the bio
 bio-based / biomanufactured materials (biopolymers, bioplastics, compostable materials), regenerative \
 agriculture & soil health (healthy soils, cover crops, carbon farming, biochar), and organics recycling / \
 composting infrastructure (source-separated organics, anaerobic digestion, compost market development). \
+The inner loops between use and recycling are in scope in both cycles: REUSE, UPCYCLING and REPURPOSING of \
+products and materials (including duties on retailers or institutions to repurpose packaging, and funding \
+for upcycling programs), and BY-PRODUCTS and CASCADING use — by-product status under waste law, animal \
+by-products and derived products not intended for human consumption, surplus-food donation and edible-food \
+recovery, and residues processed into feed, fertiliser or new materials. Burning a by-product for heat or \
+power is energy recovery, not cascading use. \
 The technical cycle also covers the END-OF-LIFE and DECOMMISSIONING of durable products and infrastructure \
 assets — mandatory take-back, removal, recycling, and site restoration at the end of service life \
 (end-of-life vehicles, electronics, batteries, solar panels and utility-scale solar/wind facilities, \
@@ -169,8 +184,8 @@ Urgency guide: high = enrolled/passed/enacted or imminent deadline; medium = pas
 Missing text: if no text excerpt (and little/no description) is provided, classify from the TITLE.
 A title that is itself an unambiguous in-scope signal — it names extended producer responsibility or
 "producer responsibility", packaging/plastic reduction, recycled content, right to repair, a deposit
-return / bottle bill, single-use plastic restrictions, organics/compost diversion, or circular
-economy — is sufficient to set is_ce_relevant=true with confidence >= 0.6. Do NOT set
+return / bottle bill, single-use plastic restrictions, organics/compost diversion, upcycling or
+repurposing, by-products or food donation/recovery, or circular economy — is sufficient to set is_ce_relevant=true with confidence >= 0.6. Do NOT set
 is_ce_relevant=false or report low confidence MERELY because the full text is unavailable; only do so
 when the title/description themselves indicate the bill is out of scope.
 

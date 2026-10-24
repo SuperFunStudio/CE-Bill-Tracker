@@ -1,0 +1,1104 @@
+<title>Butterfly Bill Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one figure with two stacked layers (the butterfly, and a zoom stage of bill dots) under a
+   breadcrumb; the bill table below always lists exactly what the figure is focused on. */
+:root {
+  --bg: #f8f9fa; --surface: #ffffff; --line: #dee2e6;
+  --fg: #1a1a2e; --fg2: #495057; --muted: #6b7280;
+  --bio: #6f8a2e; --tech: #1e6ae9; --both: #3f7a8c; --out: #9aa1ab; --hatch: #c3c8cf; --hl: #f2b84b;
+  /* Butterfly step nodes carry white counts in both themes, so their fills stay dark enough for white:
+     the base hue for the quietest step, deepening toward --node-ink as the count grows (see node()). */
+  --node-tech: #1e6ae9; --node-bio: #637c25; --node-ink: #0b1633; --on-node: #ffffff;
+  --serif: "Playfair Display", Georgia, "Times New Roman", serif;
+  --sans: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Roboto Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111827; --surface: #1f2937; --line: #374151;
+  --fg: #f3f4f6; --fg2: #c2c8d0; --muted: #8b95a1;
+  --bio: #a5bd5c; --tech: #6ea2ff; --both: #6fb3c4; --out: #6b7280; --hatch: #4b5563; --hl: #f5c56a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111827; --surface: #1f2937; --line: #374151;
+  --fg: #f3f4f6; --fg2: #c2c8d0; --muted: #8b95a1;
+  --bio: #a5bd5c; --tech: #6ea2ff; --both: #6fb3c4; --out: #6b7280; --hatch: #4b5563; --hl: #f5c56a; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+[hidden] { display: none !important; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 32px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+header { display: grid; gap: 10px; max-width: 74ch; }
+.eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--serif); font-weight: 700; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--serif); font-weight: 500; font-size: 22px; margin: 0; text-wrap: balance; }
+p { margin: 0; color: var(--fg2); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--tech); outline-offset: 2px; }
+
+.split { display: grid; gap: 10px; }
+.seg { display: inline-flex; justify-self: start; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 14px; font-size: 13px; color: var(--fg2); min-height: 34px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.seg b { font-family: var(--mono); font-weight: 500; font-size: 11.5px; margin-left: 5px; opacity: .75; }
+/* One control row for the whole page: region (same multi-select as the homepage bar) + status. */
+.topctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.rsel { position: relative; display: flex; align-items: center; gap: 8px; }
+.rlabel { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+#rbtn { min-width: 11rem; height: 34px; padding: 0 30px 0 10px; text-align: left; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); font-size: 14px; position: relative; }
+#rbtn::after { content: ""; position: absolute; right: 11px; top: 50%; width: 7px; height: 7px; margin-top: -5px;
+  border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); }
+#rbtn:hover { border-color: var(--muted); }
+.rpop { position: absolute; left: 0; top: 100%; z-index: 25; margin-top: 4px; min-width: 15rem; max-height: 19rem; overflow-y: auto;
+  padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: 0 10px 28px rgb(0 0 0 / .14); }
+.rpop button { width: 100%; display: flex; align-items: center; gap: 9px; padding: 7px 8px; border: 0; border-radius: 4px; background: none;
+  font-size: 14px; color: var(--fg2); text-align: left; white-space: nowrap; }
+.rpop button:hover { background: var(--bg); }
+.rpop button[aria-selected="true"] { color: var(--fg); font-weight: 500; }
+.rpop i { flex: none; width: 16px; height: 16px; border: 1px solid var(--line); border-radius: 3px; display: grid; place-items: center;
+  font-style: normal; font-size: 10px; }
+.rpop button.all i { border-radius: 50%; }
+.rpop button[aria-selected="true"] i { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+.rpop small { margin-left: auto; padding-left: 12px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.rpop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.rclear { border: 0; background: none; padding: 0; font-size: 12.5px; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+.rclear:hover { color: var(--fg); }
+.rpage { font-size: 14px; color: var(--tech); text-decoration: none; }
+.rpage:hover { text-decoration: underline; }
+.wingsw { display: none; }
+.bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--line); }
+.bar span { display: block; height: 100%; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; color: var(--fg2); }
+.keys b { font-family: var(--mono); font-weight: 500; color: var(--fg); font-variant-numeric: tabular-nums; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+.figure { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; position: relative; }
+.nav { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); min-height: 52px; }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 14px; min-width: 0; }
+.crumbs button { background: none; border: 0; padding: 2px 4px; border-radius: 3px; color: var(--tech); }
+.crumbs button:hover { background: var(--bg); }
+.crumbs .cur { font-weight: 500; color: var(--fg); padding: 2px 4px; }
+.crumbs .sep { color: var(--muted); }
+.crumbs b { font-family: var(--mono); font-weight: 500; font-size: 12.5px; color: var(--muted); margin-left: 4px; }
+.nav .back { margin-left: auto; border: 1px solid var(--line); background: var(--bg); border-radius: 4px; padding: 4px 12px; font-size: 13px; }
+.nav .back[hidden] { display: none; }
+.hint { font-size: 12.5px; color: var(--muted); margin-left: auto; }
+
+.layers { position: relative; aspect-ratio: 1300 / 760; overflow: hidden; }
+.stagehead { padding: 16px 18px 0; display: grid; gap: 2px; }
+.stagehead h3 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: clamp(20px, 3vw, 28px); text-wrap: balance; }
+.stagehead p { font-size: 13.5px; }
+.steplist { display: none; padding: 4px 12px 12px; }
+.steplist details { border-top: 1px solid var(--line); }
+.steplist details:first-child { border-top: 0; }
+.steplist summary { display: flex; align-items: center; gap: 10px; padding: 14px 4px; min-height: 48px; cursor: pointer; list-style: none;
+  font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg2); font-weight: 500; }
+.steplist summary::-webkit-details-marker { display: none; }
+.steplist summary::after { content: "+"; margin-left: auto; font-size: 18px; letter-spacing: 0; color: var(--muted); }
+.steplist details[open] summary::after { content: "–"; }
+.steplist summary small { letter-spacing: 0; text-transform: none; color: var(--muted); font-weight: 400; font-family: var(--mono); }
+.steplist button { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); padding: 10px 4px; min-height: 48px; }
+.steplist i { flex: none; width: 16px; height: 16px; border-radius: 50%; }
+.steplist span { flex: 1; min-width: 0; display: grid; }
+.steplist b { font-weight: 500; font-size: 14.5px; }
+.steplist small { color: var(--muted); font-size: 12px; }
+.steplist em { font-style: normal; font-family: var(--mono); font-size: 13px; color: var(--fg); }
+/* Phone portrait: the butterfly shows one wing at a time, at a readable size (see applyCrop). */
+@media (max-width: 700px) and (orientation: portrait) {
+  .figure:not(.zoomed) .wingsw { display: inline-flex; }
+  #bf.crop .lbl { font-size: 22px; stroke-width: 7px; }
+  #bf.crop .sub, #bf.crop .tray { display: none; }
+  #bf.crop .node .num { font-size: 26px !important; }   /* beats the per-node inline size; leaves room for the icon */
+  #bf.crop .box .t { font-size: 18px; }
+  #bf.crop .box .c { font-size: 16px; }
+  #bf.crop .wingtag { font-size: 30px; }
+}
+@media (max-width: 700px) {
+  .glbl { font-size: 13px; }
+  .gnum { font-size: 11.5px; }
+  .steplist { display: block; }
+  .figure.zoomed .steplist { display: none; }
+  .figure:not(.zoomed) .legend > span:nth-child(n+3) { display: none; }
+  .hint { display: none; }
+  table { min-width: 0 !important; }
+  th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) { display: none; }
+  td.jur { white-space: normal; }
+}
+.layers > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; font-family: var(--sans); }
+.layers > svg.off { pointer-events: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 12px 18px 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--fg2); }
+.legend svg { vertical-align: -5px; margin-right: 6px; }
+
+.arc { fill: none; stroke-width: 3.5; }
+.arc.bio { stroke: var(--bio); } .arc.tech { stroke: var(--tech); }
+.arc.out { stroke: var(--out); stroke-dasharray: 5 5; stroke-width: 2.5; }
+.flow { fill: none; stroke-width: 2.5; }
+.box rect { fill: var(--bg); stroke: var(--line); }
+.box.go { cursor: pointer; } .box.go:hover rect { stroke: var(--tech); }
+.box .t { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; fill: var(--fg); }
+.box .c { font-size: 12px; fill: var(--fg2); }
+.box .c tspan.n { font-family: var(--mono); font-weight: 500; fill: var(--fg); }
+.node { cursor: pointer; }
+.node circle.ring { stroke-width: 2.5; transition: stroke-width .12s; }
+.node .num { font-family: var(--serif); font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; }
+.node .num.sm { font-size: 13px; font-family: var(--sans); font-weight: 500; }
+.node .num { paint-order: stroke; stroke-linejoin: round; }
+.node .num.mini { font-size: 44px; }
+.boxnum { font-family: var(--serif); font-weight: 700; font-size: 38px; fill: var(--fg); }
+/* Coverage fingerprint: the profile-card preview shown when one region is picked. */
+.fpcard { justify-self: start; width: min(460px, 100%); background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  padding: 16px 18px 14px; display: grid; gap: 8px; }
+.fp-head h3 { margin: 2px 0 0; font-family: var(--serif); font-weight: 500; font-size: 24px; }
+.fp-head p { font-size: 13.5px; }
+.fp-head p b { font-family: var(--mono); font-weight: 500; color: var(--fg); }
+#fp { width: 100%; height: auto; display: block; font-family: var(--sans); }
+.fp-note { font-size: 12px; color: var(--muted); }
+.node:hover circle.ring, .node:focus-visible circle.ring { stroke-width: 4.5; }
+.lbl { font-size: 12.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; fill: var(--fg);
+  paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+.sub { font-size: 11.5px; fill: var(--muted); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.wingtag { font-family: var(--serif); font-size: 22px; font-style: italic; cursor: pointer; }
+.wingtag:hover { text-decoration: underline; }
+.leak { fill: none; stroke: var(--muted); stroke-dasharray: 2 4; }
+
+/* stage */
+.grp { cursor: pointer; }
+.grp .bgc { fill: var(--bg); stroke: var(--line); transition: stroke .12s; }
+.grp:hover .bgc, .grp:focus-visible .bgc { stroke: var(--fg2); }
+.grp.sel .bgc { stroke: var(--hl); stroke-width: 3; }
+.grp.dim { opacity: .28; }
+.glbl { font-size: 15px; font-weight: 700; fill: var(--fg); }
+.gnum { font-family: var(--mono); font-size: 13px; fill: var(--muted); }
+.stitle { font-family: var(--serif); font-size: 26px; fill: var(--fg); }
+.ssub { font-size: 13px; fill: var(--muted); }
+.glink { cursor: pointer; }
+.glink .glbl { fill: var(--tech); }
+.glink:hover .glbl, .glink:focus-visible .glbl { text-decoration: underline; }
+.lvl2 .glink .glbl { fill: var(--fg); }
+.dw { transform-box: fill-box; transform-origin: center;
+  transition: transform .6s cubic-bezier(.3,.7,.2,1), opacity .4s; }
+.dw.fade { opacity: .12; }
+.d { cursor: pointer; transition: transform .12s; transform-box: fill-box; transform-origin: center; }
+.d:hover { transform: scale(1.7); stroke: var(--fg); stroke-width: 1.4; }
+.d.on { stroke: var(--hl); stroke-width: 3; transform: scale(1.6); }
+
+/* bill panel */
+.panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); z-index: 30; background: var(--surface);
+  border-left: 1px solid var(--line); box-shadow: -10px 0 30px rgb(0 0 0 / .14); display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.phead { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.phead button { border: 1px solid var(--line); background: var(--bg); border-radius: 4px; min-width: 36px; height: 34px; font-size: 16px; }
+.phead button:disabled { opacity: .4; cursor: default; }
+.phead #ppos { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.phead .pclose { margin-left: auto; font-size: 13px; padding: 0 12px; }
+.pbody { overflow-y: auto; padding: 18px 20px 28px; display: grid; gap: 14px; align-content: start; }
+.pbody h3 { margin: 0; font-family: var(--serif); font-weight: 500; font-size: 22px; line-height: 1.25; text-wrap: balance; }
+.pstat { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--fg2); }
+.psum { font-size: 14.5px; color: var(--fg); }
+.psum.muted { color: var(--muted); }
+.pbody dl { margin: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px 12px; font-size: 13.5px; }
+.pbody dt { color: var(--muted); }
+.pbody dd { margin: 0; color: var(--fg2); }
+.pquote { margin: 0; display: grid; gap: 6px; }
+.pquote figcaption { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.pquote blockquote { margin: 0; padding: 8px 12px; border-left: 3px solid var(--tech); background: var(--bg); font-size: 13.5px; color: var(--fg2); }
+.plinks { display: grid; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.plinks a { color: var(--tech); text-decoration: none; font-size: 14px; padding-top: 6px; }
+.plinks a:hover { text-decoration: underline; }
+.tlink { background: none; border: 0; padding: 0; text-align: left; color: var(--fg); font: inherit; }
+.tlink:hover { color: var(--tech); text-decoration: underline; }
+tr.on td { background: color-mix(in srgb, var(--hl) 16%, transparent); }
+
+.tip { position: absolute; pointer-events: none; max-width: 300px; background: var(--fg); color: var(--bg); z-index: 5;
+  padding: 10px 12px; border-radius: 5px; font-size: 12.5px; line-height: 1.45; box-shadow: 0 6px 20px rgb(0 0 0 / .18); }
+.tip b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+.tip .conf { display: inline-block; margin-top: 6px; font-family: var(--mono); font-size: 11px; opacity: .8; }
+
+/* table */
+.tablecard { display: grid; gap: 14px; }
+.thead { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 18px; }
+.thead h2 { flex: 1 1 340px; min-width: 0; }
+.thead h2 small { display: block; font-family: var(--sans); font-size: 13.5px; color: var(--fg2); margin-top: 4px; font-weight: 400; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls input { font: inherit; font-size: 14px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--fg); width: min(260px, 100%); }
+.note { font-size: 13.5px; color: var(--fg2); background: var(--surface); border: 1px dashed var(--hatch); border-radius: 4px; padding: 10px 14px; }
+.tbl-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 720px; }
+th { text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--fg2); }
+tr:last-child td { border-bottom: 0; }
+td.jur { white-space: nowrap; color: var(--fg); font-family: var(--mono); font-size: 12.5px; }
+td.bill a { color: var(--fg); text-decoration: none; }
+td.bill a:hover { color: var(--tech); text-decoration: underline; }
+td.bill .num { display: block; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+td.yr { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.st { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.st i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.st.enacted i { background: var(--fg2); } .st.pending i { border: 1.5px solid var(--fg2); } .st.ended i { background: var(--hatch); }
+.pill { font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line); white-space: nowrap; display: inline-block; margin: 0 4px 3px 0; }
+.more { justify-self: center; border: 1px solid var(--line); background: var(--surface); border-radius: 4px; padding: 7px 16px; font-size: 13.5px; }
+.empty { padding: 26px 12px; text-align: center; color: var(--muted); }
+footer { font-size: 12.5px; color: var(--muted); max-width: 92ch; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Atlas Circular · Coverage explorer</div>
+    <h1>Zoom into the law behind each circular step</h1>
+    <p>Click a step on the butterfly to open it into its bills, grouped by region. Click a region to split it by state or country, then click one to narrow further. The table below always lists what you're looking at.</p>
+  </header>
+
+  <section class="split" aria-label="Corpus split by cycle">
+    <div class="topctl">
+      <div class="rsel" id="rsel">
+        <span class="rlabel" id="rlabel">Regions</span>
+        <button id="rbtn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="rlabel rsum"><span id="rsum">All regions</span></button>
+        <div class="rpop" id="rpop" hidden role="listbox" aria-multiselectable="true" aria-label="Regions"></div>
+      </div>
+      <button class="rclear" id="rclear" type="button" hidden>Clear filter</button>
+      <a class="rpage" id="rpage" hidden target="_blank" rel="noopener"></a>
+      <div class="seg" id="status" role="group" aria-label="Status"></div>
+    </div>
+    <div class="keys" id="keys"></div>
+    <div class="bar" id="bar"></div>
+  </section>
+
+  <section class="fpcard" id="fpcard" hidden aria-label="Coverage fingerprint">
+    <div class="fp-head">
+      <div class="eyebrow">Coverage fingerprint · profile card preview</div>
+      <h3 id="fp-name"></h3>
+      <p id="fp-sub"></p>
+    </div>
+    <svg id="fp" viewBox="90 20 1080 745" role="img" aria-label="Coverage fingerprint for the selected region"></svg>
+    <p class="fp-note">Every count is a step on the butterfly. Paler means less law, deeper means more; hatched is a gap. Tap a step to zoom into its bills.</p>
+  </section>
+
+  <section class="figure" id="figure">
+    <div class="nav">
+      <nav class="crumbs" id="crumbs" aria-label="Zoom level"></nav>
+      <div class="seg wingsw" id="wingsw" role="group" aria-label="Which half of the butterfly">
+        <button data-w="tech" aria-pressed="true">Technical</button><button data-w="bio" aria-pressed="false">Biological</button>
+      </div>
+      <button class="back" id="back" hidden>Zoom out</button>
+      <span class="hint" id="hint">Click any step, box or wing title</span>
+    </div>
+    <div class="stagehead" id="stagehead" hidden></div>
+    <div class="layers" id="layers">
+      <svg id="bf" viewBox="0 0 1300 760" role="img" aria-labelledby="bf-title"><title id="bf-title">Butterfly diagram of Atlas Circular legislative coverage</title></svg>
+      <svg id="stage" class="off" viewBox="0 0 1300 760" style="opacity:0" aria-label="Bills in the selected step"></svg>
+    </div>
+    <div class="steplist" id="steplist" aria-label="Steps on the butterfly"></div>
+    <div class="legend" id="legend"></div>
+    <div class="tip" id="tip" hidden></div>
+  </section>
+
+  <aside class="panel" id="panel" hidden aria-label="Bill details">
+    <div class="phead">
+      <button id="pprev" aria-label="Previous bill">‹</button><span id="ppos"></span><button id="pnext" aria-label="Next bill">›</button>
+      <button id="pclose" class="pclose">Close</button>
+    </div>
+    <div class="pbody" id="pbody"></div>
+  </aside>
+
+  <section class="tablecard">
+    <div class="thead">
+      <h2 id="ttitle">All bills</h2>
+      <div class="controls">
+        <input id="q" type="search" placeholder="Search title, number, place" aria-label="Search bills">
+      </div>
+    </div>
+    <div class="note" id="tnote" hidden></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Where</th><th>Bill</th><th>Status</th><th>Year</th><th>Instruments</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <button class="more" id="more" hidden>Show 50 more</button>
+  </section>
+
+  <footer id="foot">Source: Atlas Circular production corpus, exported 23 Oct 2026 (2,639 bills, including 18 brought into scope that day: by-product law, CA AB-70 and NJ upcycling and repurposing bills). Includes introduced, pending and failed bills as well as enacted law. Steps with an instrument are counted from it. Recycle counts recycling and recovery targets extracted from each bill's text; minimum recycled content in new products has its own step where the loop re-enters production. Refurbish / remanufacture is placed mainly by a quote from each bill's text (from our compliance extraction), then by keyword; Cascades, Regeneration, Farming and Feedstock by material tag or a keyword search of titles and summaries. Treat those as medium confidence. A bill can sit at several steps, so steps don't add up to the total. Cycle comes from each bill's materials. Diagram after the Ellen MacArthur Foundation circular economy systems diagram (2019), based on Braungart &amp; McDonough, Cradle to Cradle.</footer>
+</div>
+
+<script>
+const RAW = __BILLS__;
+const SITE = "https://www.atlascircular.com";
+const BILLS = RAW.map(r => ({ id: r[0], region: r[1], state: r[2], num: r[3], title: r[4], status: r[5], year: r[6],
+  inst: r[7] ? r[7].split(",") : [], wing: r[8], mats: r[9] ? r[9].split(",") : [], sum: r[10], src: r[11], eff: r[12], last: r[13],
+  place: Object.fromEntries((r[14] ? r[14].split(",") : []).map(p => p.split(":"))), adj: r[15], quote: r[16] }));
+const BY_ID = new Map(BILLS.map(b => [b.id, b]));
+const fmt = n => n.toLocaleString("en-US");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const slug = b => (`${b.num} ${b.title}`.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "").slice(0, 70).replace(/-+$/g, "")) || "untitled";
+const href = b => `${SITE}/bill/${b.id}/${slug(b)}/`;
+
+// ---------- classification of bills ----------
+const STATUS = { enacted: "enacted", active: "enacted", introduced: "pending", in_committee: "pending",
+  passed_chamber: "pending", passed: "pending", failed: "ended", vetoed: "ended", repealed: "ended" };
+const sgroup = b => STATUS[b.status] || "pending";
+const SLABEL = { enacted: "In force", pending: "Pending", ended: "Failed or repealed" };
+const STATUS_TEXT = { enacted: "Enacted", active: "In force", introduced: "Introduced", in_committee: "In committee",
+  passed_chamber: "Passed one chamber", passed: "Passed", failed: "Failed", vetoed: "Vetoed", repealed: "Repealed" };
+const WCOL = { t: "var(--tech)", b: "var(--bio)", x: "var(--both)", u: "var(--out)" };
+
+const FAMS = {
+  US: { name: "United States", codes: ["US"] },
+  EUR: { name: "Europe", codes: "EU FR UK PL SE NL DE ES FI DK IT IE CH SI AT LU LT SK LV EE NO CZ TR BE BG HR CY GR HU MT PT RO".split(" ") },
+  APAC: { name: "Asia-Pacific", codes: "JP CN AU IN ID MY".split(" ") },
+  AMER: { name: "Rest of the Americas", codes: "CA BR EC CL CO PE UY MX".split(" ") },
+  AFR: { name: "Africa", codes: "KE RW ZM MW".split(" ") },
+};
+const famOf = b => Object.keys(FAMS).find(k => FAMS[k].codes.includes(b.region)) || "EUR";
+const CNAME = { US: "United States", EU: "European Union", FR: "France", UK: "United Kingdom", PL: "Poland", SE: "Sweden", NL: "Netherlands",
+  DE: "Germany", ES: "Spain", FI: "Finland", DK: "Denmark", IT: "Italy", IE: "Ireland", CH: "Switzerland", SI: "Slovenia",
+  AT: "Austria", LU: "Luxembourg", LT: "Lithuania", SK: "Slovakia", LV: "Latvia", EE: "Estonia", NO: "Norway", CZ: "Czechia",
+  TR: "Türkiye", JP: "Japan", CN: "China", AU: "Australia", IN: "India", ID: "Indonesia", MY: "Malaysia", CA: "Canada",
+  BR: "Brazil", EC: "Ecuador", CL: "Chile", CO: "Colombia", PE: "Peru", UY: "Uruguay", MX: "Mexico", KE: "Kenya",
+  RW: "Rwanda", ZM: "Zambia", MW: "Malawi", BE: "Belgium", BG: "Bulgaria", HR: "Croatia", CY: "Cyprus", GR: "Greece",
+  HU: "Hungary", MT: "Malta", PT: "Portugal", RO: "Romania" };
+// US city ordinances are stored as state="<ST>-<CITY>"; they roll up into their state here.
+const CITY = { SF: "San Francisco", LA: "Los Angeles", NYC: "New York City", PALOALTO: "Palo Alto", SANANTONIO: "San Antonio" };
+const cityOf = b => b.region === "US" && b.state && b.state.includes("-") ? b.state.split("-")[1] : null;
+const cityName = c => CITY[c] || c.charAt(0) + c.slice(1).toLowerCase();
+const jurOf = b => b.region === "US" ? (b.state === "US" || !b.state ? "US federal" : b.state.split("-")[0]) : b.region;
+const jurName = j => CNAME[j] || j;
+const whereText = b => b.region !== "US" ? jurName(b.region) : b.state === "US" || !b.state ? "US · federal"
+  : cityOf(b) ? `US · ${jurOf(b)} · ${cityName(cityOf(b))}` : `US · ${b.state}`;
+
+const has = (...xs) => b => xs.some(x => b.inst.includes(x));
+const placed = id => b => id in b.place;   // material tag or keyword placement, computed in the data prep
+const PLACE_HOW = { material: "material tag", keyword: "keyword match", by_products: "by-product scope", extraction: "from the bill text", instrument: "instrument" };
+const PLACED = ["right_to_repair", "deposit_return", "recycled_content", "epr", "product_stewardship", "disposal_ban",
+  "organics_diversion", "chemical_restriction", "labeling"];
+const OTHERISH = ["other", "budget", "preemption", "reporting"];
+
+// Steps. wing: bio | tech | out | none. pick: which bills sit here (null = not counted yet).
+const STEPS = [
+  { id: "maintain", wing: "tech", name: "Maintain / prolong", r: "R4 Repair", pick: has("right_to_repair"), src: "right_to_repair", conf: "high",
+    note: "Right-to-repair laws: parts, tools, manuals and diagnostics for owners and independent shops." },
+  { id: "share", wing: "tech", name: "Share", r: "R2 Reduce (use)", pick: null, src: "searched, none found", conf: "—",
+    note: "A real gap. We searched the whole corpus, in and out of scope, for sharing, lending and product-as-a-service law and found none." },
+  { id: "reuse", wing: "tech", name: "Reuse / redistribute", r: "R3 Reuse", pick: has("deposit_return"), src: "deposit_return", conf: "medium",
+    note: "Deposit-return systems. Some fund refillables (reuse), some only one-way recycling; the split needs the bill text." },
+  { id: "refurb", wing: "tech", name: "Refurbish / remanufacture", r: "R5–R7", pick: placed("refurb"), src: "bill-text extraction + keyword: remanufacture, refurbish, repurpose, upcycle", conf: "medium",
+    note: "Remanufacturing, refurbishment, preparing parts for reuse, repurposing and upcycling. Most bills are placed by a quote from their own text naming the practice (shown in each bill's panel); the rest by keyword." },
+  { id: "recycle", wing: "tech", name: "Recycle", r: "R8 Recycle", pick: placed("recycle"), src: "extracted recycling and recovery targets", conf: "medium",
+    note: "Recycling and recovery targets: rates of material recycled or recovered, from each bill's text. Pure collection rates stay with EPR take-back; minimum recycled content in new products sits on Recycled content." },
+  { id: "content", wing: "tech", name: "Recycled content in new products", r: "R8 Recycle (demand side)", pick: placed("content"), src: "recycled_content instrument + extracted content minimums", conf: "high",
+    note: "Minimum recycled content that new products or packaging must contain: where the recycling loop re-enters production at the parts manufacturer." },
+  { id: "collect", wing: "tech", name: "Collection · EPR take-back", r: "R2–R8", pick: has("epr", "product_stewardship"), src: "epr, product_stewardship", conf: "spans steps",
+    note: "Extended producer responsibility. Shown once at collection because it runs the whole technical wing." },
+  { id: "leak", wing: "tech", name: "Minimise leakage", r: "R8–R9", pick: has("disposal_ban"), src: "disposal_ban", conf: "medium",
+    note: "Landfill and disposal bans that keep material out of the waste stream." },
+  { id: "parts", wing: "none", name: "Parts manufacturer · safer inputs", r: "R1 Rethink", pick: has("chemical_restriction"), src: "chemical_restriction", conf: "medium",
+    note: "Chemical restrictions that change what goes into materials and parts." },
+  { id: "service", wing: "none", name: "Service provider · labeling", r: "R1 Rethink / R8", pick: has("labeling"), src: "labeling", conf: "low",
+    note: "Labeling rules: recyclability claims, disclosure and consumer information." },
+  { id: "compost", wing: "bio", name: "Composting / anaerobic digestion", r: "Bio: return nutrients", pick: b => has("organics_diversion")(b) || placed("compost")(b), src: "organics_diversion + keyword: compost, digestion, food scraps", conf: "high",
+    note: "Organics diversion: food-scrap and yard-waste mandates, composting and digestion requirements, compost markets." },
+  { id: "extract", wing: "bio", name: "Extraction of biochemical feedstock", r: "Bio: cascade", pick: placed("extract"), src: "material: biobased", conf: "medium",
+    note: "Bio-based and biomanufactured materials: bioplastics, biopolymers, biorefining. Placed by the bio-based material tag." },
+  { id: "cascade", wing: "bio", name: "Cascades", r: "Bio: cascade use", pick: placed("cascade"), src: "by-product scope + keyword: by-products, food donation", conf: "medium",
+    note: "By-products and cascading use: animal by-product rules, by-product status in waste law, surplus-food donation and edible-food recovery." },
+  { id: "biosphere", wing: "bio", name: "Regeneration", r: "Bio: regenerate", pick: placed("regen"), src: "keyword: soil health, regenerative, biodiversity", conf: "medium",
+    note: "Soil health, regenerative agriculture, cover crops, biochar and biodiversity outcomes, found by keyword." },
+  { id: "farm", wing: "bio", name: "Farming / collection", r: "Bio: regenerate", pick: placed("farm"), src: "material: agriculture + title keyword", conf: "medium",
+    note: "Agriculture laws, by the agriculture material tag or an agriculture title. Farm-equipment right to repair stays on Maintain." },
+  { id: "biogas", wing: "out", name: "Biogas / energy recovery", r: "R9 Recover", pick: null, src: "energy_recovery adjacency", conf: "out of scope",
+    note: "Waste-to-energy is tagged as adjacent and kept out of the corpus on purpose. It can be switched on per client." },
+  // wing titles and the unplaced tray are focus targets too
+  { id: "wing-t", wing: "tech", name: "Technical cycle", r: "", pick: b => b.wing === "t" || b.wing === "x", src: "materials", conf: "high",
+    note: "Every bill whose materials sit in the technical cycle, including bills that touch both cycles." },
+  { id: "wing-b", wing: "bio", name: "Biological cycle", r: "", pick: b => b.wing === "b" || b.wing === "x", src: "materials", conf: "high",
+    note: "Every bill whose materials sit in the biological cycle, including bills that touch both cycles." },
+  { id: "incent", wing: "none", name: "Incentives", r: "unplaced", pick: has("incentives"), src: "incentives", conf: "can't map",
+    note: "Grants, tax credits and procurement rules. What they fund varies too much to place on one step." },
+  { id: "ship", wing: "none", name: "Waste shipments", r: "unplaced", pick: has("waste_shipment"), src: "waste_shipment", conf: "can't map",
+    note: "Transboundary waste-shipment rules. They govern movement between cycles, not a step within one." },
+  { id: "other", wing: "none", name: "Other, budget and preemption", r: "unplaced", pick: b => b.inst.length === 0 || b.inst.some(i => OTHERISH.includes(i)), src: "other, budget, preemption", conf: "can't map",
+    note: "Bills whose instrument is general, financial or preemptive." },
+  { id: "nostep", wing: "none", name: "Bills on no step", r: "unplaced", pick: b => !b.inst.some(i => PLACED.includes(i)) && !Object.keys(b.place).length, src: "no placed instrument, material or keyword", conf: "—",
+    note: "Bills that no instrument, material tag or keyword places on a step. They're in the corpus but not on the butterfly." },
+];
+const S = Object.fromEntries(STEPS.map(s => [s.id, s]));
+// The page's two filters, set from the one control row at the top and applied everywhere (butterfly,
+// zoom stage, table). Status "In force" is the level playing field: introduced and pending bills
+// dominate some places (US states) and barely exist in others (EU member states), so only enacted law
+// compares across borders. Regions = the homepage's multi-select; empty = all regions.
+let regionSel = [], statusSel = "all";
+const inRegion = b => !regionSel.length || regionSel.includes(b.region);
+const regionPool = () => BILLS.filter(inRegion);
+const pool = () => BILLS.filter(b => inRegion(b) && (statusSel === "all" || sgroup(b) === statusSel));
+const NOUN = { all: ["circular-economy laws and bills", "bills"], enacted: ["laws in force", "in force"],
+  pending: ["pending bills", "pending"], ended: ["failed or repealed bills", "failed or repealed"] };
+function recount() { const P = pool(); for (const s of STEPS) s.bills = s.pick ? P.filter(s.pick) : []; }
+recount();
+
+// ---------- summary bar ----------
+const wc = k => pool().filter(b => b.wing === k).length;
+function renderSummary() {
+  const P = pool();
+  const split = [
+    { k: "Technical cycle", n: wc("t"), c: "var(--tech)" }, { k: "Both cycles", n: wc("x"), c: "var(--both)" },
+    { k: "Biological cycle", n: wc("b"), c: "var(--bio)" }, { k: "No cycle (materials untagged)", n: wc("u"), c: "var(--hatch)" },
+  ];
+  document.getElementById("keys").innerHTML = `<span><b>${fmt(P.length)}</b> ${NOUN[statusSel][0]}</span>` +
+    split.map(s => `<span><i class="sw" style="background:${s.c}"></i>${s.k} <b>${fmt(s.n)}</b></span>`).join("");
+  document.getElementById("bar").innerHTML = split.map(s =>
+    `<span title="${s.k}: ${fmt(s.n)}" style="width:${(s.n / Math.max(1, P.length) * 100).toFixed(2)}%;background:${s.c}"></span>`).join("");
+}
+renderSummary();
+
+// Lucide icons (lucide-static 0.460.0, ISC licence), inlined as inner SVG markup: 24x24, stroke-based.
+const ICONS = {"earth": "<path d=\"M21.54 15H17a2 2 0 0 0-2 2v4.54\" /> <path d=\"M7 3.34V5a3 3 0 0 0 3 3a2 2 0 0 1 2 2c0 1.1.9 2 2 2a2 2 0 0 0 2-2c0-1.1.9-2 2-2h3.17\" /> <path d=\"M11 21.95V18a2 2 0 0 0-2-2a2 2 0 0 1-2-2v-1a2 2 0 0 0-2-2H2.05\" /> <circle cx=\"12\" cy=\"12\" r=\"10\" />", "factory": "<path d=\"M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z\" /> <path d=\"M17 18h1\" /> <path d=\"M12 18h1\" /> <path d=\"M7 18h1\" />", "flame": "<path d=\"M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z\" />", "flask-conical": "<path d=\"M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2\" /> <path d=\"M8.5 2h7\" /> <path d=\"M7 16h10\" />", "hammer": "<path d=\"m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9\" /> <path d=\"m18 15 4-4\" /> <path d=\"m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5\" />", "layers": "<path d=\"m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z\" /> <path d=\"m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65\" /> <path d=\"m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65\" />", "package-plus": "<path d=\"M16 16h6\" /> <path d=\"M19 13v6\" /> <path d=\"M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14\" /> <path d=\"m7.5 4.27 9 5.15\" /> <polyline points=\"3.29 7 12 12 20.71 7\" /> <line x1=\"12\" x2=\"12\" y1=\"22\" y2=\"12\" />", "package": "<path d=\"M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z\" /> <path d=\"M12 22V12\" /> <path d=\"m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7\" /> <path d=\"m7.5 4.27 9 5.15\" />", "recycle": "<path d=\"M7 19H4.815a1.83 1.83 0 0 1-1.57-.881 1.785 1.785 0 0 1-.004-1.784L7.196 9.5\" /> <path d=\"M11 19h8.203a1.83 1.83 0 0 0 1.556-.89 1.784 1.784 0 0 0 0-1.775l-1.226-2.12\" /> <path d=\"m14 16-3 3 3 3\" /> <path d=\"M8.293 13.596 7.196 9.5 3.1 10.598\" /> <path d=\"m9.344 5.811 1.093-1.892A1.83 1.83 0 0 1 11.985 3a1.784 1.784 0 0 1 1.546.888l3.943 6.843\" /> <path d=\"m13.378 9.633 4.096 1.098 1.097-4.096\" />", "repeat": "<path d=\"m17 2 4 4-4 4\" /> <path d=\"M3 11v-1a4 4 0 0 1 4-4h14\" /> <path d=\"m7 22-4-4 4-4\" /> <path d=\"M21 13v1a4 4 0 0 1-4 4H3\" />", "share-2": "<circle cx=\"18\" cy=\"5\" r=\"3\" /> <circle cx=\"6\" cy=\"12\" r=\"3\" /> <circle cx=\"18\" cy=\"19\" r=\"3\" /> <line x1=\"8.59\" x2=\"15.42\" y1=\"13.51\" y2=\"17.49\" /> <line x1=\"15.41\" x2=\"8.59\" y1=\"6.51\" y2=\"10.49\" />", "sprout": "<path d=\"M7 20h10\" /> <path d=\"M10 20c5.5-2.5.8-6.4 3-10\" /> <path d=\"M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z\" /> <path d=\"M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z\" />", "store": "<path d=\"m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7\" /> <path d=\"M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8\" /> <path d=\"M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4\" /> <path d=\"M2 7h20\" /> <path d=\"M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7\" />", "trash-2": "<path d=\"M3 6h18\" /> <path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\" /> <path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\" /> <line x1=\"10\" x2=\"10\" y1=\"11\" y2=\"17\" /> <line x1=\"14\" x2=\"14\" y1=\"11\" y2=\"17\" />", "truck": "<path d=\"M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2\" /> <path d=\"M15 18H9\" /> <path d=\"M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14\" /> <circle cx=\"17\" cy=\"18\" r=\"2\" /> <circle cx=\"7\" cy=\"18\" r=\"2\" />", "user": "<path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\" /> <circle cx=\"12\" cy=\"7\" r=\"4\" />", "wheat": "<path d=\"M2 22 16 8\" /> <path d=\"M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z\" /> <path d=\"M7.47 8.53 9 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L9 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z\" /> <path d=\"M11.47 4.53 13 3l1.53 1.53a3.5 3.5 0 0 1 0 4.94L13 11l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z\" /> <path d=\"M20 2h2v2a4 4 0 0 1-4 4h-2V6a4 4 0 0 1 4-4Z\" /> <path d=\"M11.47 17.47 13 19l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L5 19l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z\" /> <path d=\"M15.47 13.47 17 15l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L9 15l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z\" /> <path d=\"M19.47 9.47 21 11l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L13 11l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z\" />", "wrench": "<path d=\"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z\" />"};
+const STEP_ICON = { maintain: "wrench", share: "share-2", reuse: "repeat", refurb: "hammer", recycle: "recycle",
+  content: "package-plus", collect: "truck", leak: "trash-2", parts: "factory", service: "store", compost: "sprout",
+  extract: "flask-conical", cascade: "layers", biosphere: "earth", farm: "wheat", biogas: "flame" };
+
+// ---------- svg helpers ----------
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (parent) parent.appendChild(e); return e; };
+const txt = (x, y, s, cls, parent, anchor = "middle") => { const t = el("text", { x, y, class: cls, "text-anchor": anchor }, parent); t.textContent = s; return t; };
+const icon = (parent, name, cx, cy, size, color) => {
+  const s = el("svg", { x: cx - size / 2, y: cy - size / 2, width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color,
+    "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", class: "ico", "aria-hidden": "true" }, parent);
+  s.innerHTML = ICONS[name] || "";
+  return s;
+};
+
+const fig = document.getElementById("figure"), tip = document.getElementById("tip");
+const showTip = (html, anchor) => {
+  tip.innerHTML = html; tip.hidden = false;
+  const fr = fig.getBoundingClientRect(), ar = anchor.getBoundingClientRect();
+  let x = ar.right - fr.left + 10, y = ar.top - fr.top - 6;
+  if (x + 310 > fr.width) x = ar.left - fr.left - 310;
+  tip.style.left = Math.max(8, x) + "px"; tip.style.top = Math.max(8, y) + "px";
+};
+const hideTip = () => { tip.hidden = true; };
+
+// ---------- the butterfly ----------
+// Drawn by a function so the "In force only" toggle can redraw counts and shading in place.
+const svg = document.getElementById("bf");
+const focusables = []; // [element, step] pairs for click wiring
+const color = w => w === "bio" ? "var(--bio)" : w === "tech" ? "var(--tech)" : "var(--out)";
+const stepTip = s => `<b>${esc(s.name)}</b>${s.pick ? `<span style="font-family:var(--mono)">${fmt(s.bills.length)} ${NOUN[statusSel][1]}</span> · ` : ""}${esc(s.r)}<br>${esc(s.note)}<span class="conf">from ${esc(s.src)} · confidence: ${esc(s.conf)}</span>`;
+// mini = the coverage-fingerprint card: no labels, bigger nodes and counts, nothing else.
+function drawButterfly(target, mini = false) {
+const svg = target || document.getElementById("bf");
+svg.innerHTML = mini ? "" : '<title id="bf-title">Butterfly diagram of Atlas Circular legislative coverage</title>';
+const fx = mini ? [] : focusables;
+fx.length = 0;
+const defs = el("defs", {}, svg);
+for (const w of ["bio", "tech", "out"]) {
+  const m = el("marker", { id: "ar-" + w, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" }, defs);
+  el("path", { d: "M0,0 L10,5 L0,10 z", fill: `var(--${w})` }, m);
+}
+const pat = el("pattern", { id: "hatch", width: 7, height: 7, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+el("rect", { width: 7, height: 7, fill: "var(--surface)" }, pat);
+el("line", { x1: 0, y1: 0, x2: 0, y2: 7, stroke: "var(--hatch)", "stroke-width": 2.5 }, pat);
+
+const CON = { x: 590, y: 440 }, USR = { x: 710, y: 440 }, R = 52;
+const BOX = { x: 520, w: 260, h: 54 };
+const BOXES = [
+  { y: 46, t: "Parts manufacturer", step: "parts", c: " chemical restrictions" },
+  { y: 136, t: "Product manufacturer", step: null, c: "eco-modulated fees · inside EPR" },
+  { y: 226, t: "Service provider", step: "service", c: " labeling rules" },
+];
+const TECH_IN = 784, BIO_IN = 516, BASE = 568;
+
+el("path", { d: "M 440 740 Q 650 640 860 740", class: "leak" }, svg);
+el("path", { d: `M ${CON.x} ${BASE} V 680`, class: "flow", stroke: "var(--bio)", "marker-end": "url(#ar-bio)" }, svg);
+el("path", { d: `M ${USR.x} ${BASE} V 680`, class: "flow", stroke: "var(--tech)", "marker-end": "url(#ar-tech)" }, svg);
+
+const loop = (cls, x0, yIn, xIn, rx, sweep) => el("path", { d: `M ${x0} ${BASE} A ${rx} ${(BASE - yIn) / 2} 0 0 ${sweep} ${xIn} ${yIn}`,
+  class: "arc " + cls, "marker-end": `url(#ar-${cls})` }, svg);
+const L = {
+  recycle: loop("tech", USR.x, BOXES[0].y + 14, TECH_IN, 390, 0),
+  refurb: loop("tech", USR.x, BOXES[1].y + 14, TECH_IN, 305, 0),
+  reuse: loop("tech", USR.x, BOXES[2].y + 14, TECH_IN, 222, 0),
+  farm: loop("bio", CON.x, BOXES[0].y + 14, BIO_IN, 370, 1),
+  extract: loop("bio", CON.x, BOXES[1].y + 40, BIO_IN, 215, 1),
+};
+const maintain = el("path", { d: `M ${USR.x + 20} ${BASE} A 95 70 0 1 0 ${USR.x + R + 2} ${USR.y - 14}`, class: "arc tech", "marker-end": "url(#ar-tech)" }, svg);
+el("path", { d: `M ${USR.x} ${USR.y + R} V ${BASE}`, class: "flow", stroke: "var(--tech)" }, svg);
+el("path", { d: `M ${CON.x} ${CON.y + R} V ${BASE}`, class: "flow", stroke: "var(--bio)" }, svg);
+for (const [i, rr] of [[0, 28], [1, 44], [2, 60]]) {
+  el("path", { d: `M ${CON.x - 8} ${BASE} A ${rr} ${rr + 6} 0 0 1 ${CON.x - R - 2} ${CON.y + 22 - i * 4}`, class: "arc bio", "stroke-width": 2.2, "marker-end": "url(#ar-bio)" }, svg);
+}
+
+for (let i = 0; i < BOXES.length; i++) {
+  const b = BOXES[i], g = el("g", { class: "box" + (b.step ? " go" : "") }, svg);
+  el("rect", { x: BOX.x, y: b.y, width: BOX.w, height: BOX.h, rx: 27 }, g);
+  const bIcon = b.step ? STEP_ICON[b.step] : "package";
+  if (mini) {
+    // Icon at the box's left end; the count (where the box is a step) in the middle.
+    icon(g, bIcon, b.step ? BOX.x + 44 : 650, b.y + BOX.h / 2, 34, "var(--fg2)");
+    if (b.step) txt(668, b.y + 41, fmt(S[b.step].bills.length), "boxnum", g);
+  } else {
+    icon(g, bIcon, BOX.x + 21, b.y + BOX.h / 2, 18, "var(--fg2)");
+    txt(650, b.y + 23, b.t, "t", g);
+    const c = el("text", { x: 650, y: b.y + 41, class: "c", "text-anchor": "middle" }, g);
+    if (b.step) { const n = el("tspan", { class: "n" }, c); n.textContent = fmt(S[b.step].bills.length); }
+    const rest = el("tspan", {}, c); rest.textContent = b.c;
+  }
+  if (b.step) { g.setAttribute("tabindex", 0); g.setAttribute("role", "button");
+    g.setAttribute("aria-label", `${S[b.step].name}: ${S[b.step].bills.length} bills`); fx.push([g, S[b.step]]); }
+  if (i < BOXES.length - 1) {
+    el("path", { d: `M 600 ${b.y + BOX.h} V ${BOXES[i + 1].y - 3}`, class: "flow", stroke: "var(--bio)", "marker-end": "url(#ar-bio)" }, svg);
+    el("path", { d: `M 700 ${b.y + BOX.h} V ${BOXES[i + 1].y - 3}`, class: "flow", stroke: "var(--tech)", "marker-end": "url(#ar-tech)" }, svg);
+  }
+}
+const svcBottom = BOXES[2].y + BOX.h;
+el("path", { d: `M 600 ${svcBottom} V ${svcBottom + 30} H ${CON.x - 14} V ${CON.y - R - 4}`, class: "flow", stroke: "var(--bio)", "marker-end": "url(#ar-bio)" }, svg);
+el("path", { d: `M 700 ${svcBottom} V ${svcBottom + 30} H ${USR.x + 14} V ${USR.y - R - 4}`, class: "flow", stroke: "var(--tech)", "marker-end": "url(#ar-tech)" }, svg);
+for (const [p, w, t] of [[CON, "bio", "Consumer"], [USR, "tech", "User"]]) {
+  el("circle", { cx: p.x, cy: p.y, r: R, fill: `var(--node-${w})` }, svg);
+  // A person: the icon alone on the fingerprint, icon over the word on the full diagram.
+  if (mini) { icon(svg, "user", p.x, p.y, 56, "var(--on-node)"); continue; }
+  icon(svg, "user", p.x, p.y - 12, 32, "var(--on-node)");
+  const tt = txt(p.x, p.y + 25, t, "", svg); tt.setAttribute("fill", "var(--on-node)");
+  tt.setAttribute("style", "font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase");
+}
+if (!mini) txt(CON.x - 6, BASE + 22, "Collection", "lbl", svg, "end");
+
+// Shade against the busiest step in the current pool, so "In force only" keeps the full range.
+const EPR_N = Math.max(1, ...STEPS.filter(s => s.pick && !s.id.startsWith("wing") && s.wing !== "none").map(s => s.bills.length));
+const node = (s, x, y, r, label, side = "right", sub) => {
+  const n = s.bills.length, ico = STEP_ICON[s.id];
+  // The fingerprint has no labels, so every node must fit its icon above its count.
+  if (mini) r = Math.max(r * 1.4, 44);
+  const g = el("g", { class: "node", tabindex: 0, role: "button", "aria-label": `${s.name}: ${s.pick ? fmt(n) + " bills" : "not counted"}` }, svg);
+  const c = color(s.wing);
+  const withIcon = ico && r >= 28;   // the smallest full-size nodes (Cascades) keep just the count
+  if (s.wing === "out") {
+    el("circle", { cx: x, cy: y, r, fill: "var(--surface)", stroke: c, "stroke-dasharray": "4 4", class: "ring" }, g);
+    icon(g, ico, x, y, r * 0.95, "var(--out)");
+  } else if (!s.pick) {
+    el("circle", { cx: x, cy: y, r, fill: "url(#hatch)", stroke: c, class: "ring" }, g);
+    icon(g, ico, x, y, r * 0.95, "var(--muted)");
+  } else {
+    // A gradient of activity: the quietest step is a soft pastel of the wing hue, the middle is the full
+    // hue, the busiest deepens toward ink. White counts carry a thin dark halo so they read on all three.
+    const base = s.wing === "bio" ? "var(--node-bio)" : s.wing === "tech" ? "var(--node-tech)" : "var(--out)";
+    const t = Math.sqrt(n / EPR_N);
+    const fill = t < 0.5 ? `color-mix(in srgb, ${base} ${Math.round(45 + 110 * t)}%, #ffffff)`
+                         : `color-mix(in srgb, ${base} ${Math.round(100 - 80 * (t - 0.5))}%, var(--node-ink))`;
+    el("circle", { cx: x, cy: y, r, fill, stroke: base, class: "ring" }, g);
+    const halo = `color-mix(in srgb, ${base} 55%, var(--node-ink))`;
+    // Icon above, count below; the count's size follows the node so small nodes stay tidy.
+    const fs = mini ? Math.min(40, r * 0.7) : withIcon ? Math.min(20, r * 0.56) : 20;
+    if (withIcon) {   // the card has no labels, so its icons run larger
+      const ic = icon(g, ico, x, y - r * (mini ? 0.36 : 0.34), r * (mini ? 0.62 : 0.5), "var(--on-node)");
+      ic.setAttribute("style", `filter: drop-shadow(0 0 1.5px ${halo})`);
+    }
+    const num = txt(x, withIcon ? y + r * (mini ? 0.6 : 0.5) : y + fs * 0.35, fmt(n), mini ? "num mini" : "num", g);
+    num.setAttribute("style", `font-size:${fs.toFixed(1)}px`);
+    num.setAttribute("fill", "var(--on-node)");
+    num.setAttribute("stroke", halo);
+    num.setAttribute("stroke-width", mini ? 6 : 3.5);
+  }
+  if (mini) { fx.push([g, s]); return; }
+  const lines = label.split("\n"), dx = side === "right" ? r + 10 : side === "left" ? -(r + 10) : 0;
+  const anchor = side === "right" ? "start" : side === "left" ? "end" : "middle";
+  const ly = side === "below" ? y + r + 18 : side === "above" ? y - r - 10 - (lines.length - 1) * 15 - (sub ? 15 : 0) : y - (lines.length - 1) * 7.5 + 4 - (sub ? 7 : 0);
+  lines.forEach((ln, i) => txt(x + dx, ly + i * 15, ln, "lbl", g, anchor));
+  if (sub) txt(x + dx, ly + lines.length * 15, sub, "sub", g, anchor);
+  const ring = g.querySelector("circle");
+  g.addEventListener("mouseenter", () => showTip(stepTip(s), ring));
+  g.addEventListener("focus", () => showTip(stepTip(s), ring));
+  g.addEventListener("mouseleave", hideTip); g.addEventListener("blur", hideTip);
+  fx.push([g, s]);
+};
+const at = (path, f) => path.getPointAtLength(path.getTotalLength() * f);
+let p;
+p = at(L.recycle, 0.64); node(S.recycle, p.x, p.y, 38, "Recycle", "right", "recycling & recovery targets");
+p = at(L.recycle, 0.9); node(S.content, p.x, p.y, 30, "Recycled content", "right", "minimums in new products");
+p = at(L.refurb, 0.6); node(S.refurb, p.x, p.y, 36, "Refurbish /\nremanufacture", "right", "repurpose · upcycle");
+p = at(L.reuse, 0.55); node(S.reuse, p.x, p.y, 38, "Reuse /\nredistribute", "right", "deposit-return");
+p = at(maintain, 0.42); node(S.maintain, p.x, p.y, 40, "Maintain /\nprolong", "right", "right to repair");
+node(S.share, 860, 352, 26, "Share", "above");
+el("path", { d: `M 842 370 Q 800 395 ${USR.x + R + 4} ${USR.y - 26}`, class: "arc tech", "stroke-width": 2.2, "marker-end": "url(#ar-tech)" }, svg);
+node(S.collect, USR.x + 4, BASE + 62, 44, "Collection", "right", "EPR take-back");
+node(S.leak, 650, 712, 30, "Minimise leakage", "right", "disposal bans");
+p = at(L.farm, 0.82); node(S.farm, p.x, p.y, 36, "Farming /\ncollection", "above");
+p = at(L.farm, 0.5); node(S.biosphere, p.x, p.y, 48, "Regeneration", "left", "biosphere");
+const ad = at(L.farm, 0.31); node(S.compost, ad.x, ad.y, 38, "Composting /\nanaerobic digestion", "below");
+p = at(L.extract, 0.56); node(S.extract, p.x, p.y, 32, "Biochemical\nfeedstock", "right", "extraction");
+node(S.cascade, CON.x - 112, CON.y + 46, 22, "Cascades", "above");
+if (!mini) {   // out of scope and never counted, so the card leaves it out
+  el("path", { d: `M ${ad.x - 38} ${ad.y - 8} Q ${ad.x - 90} ${ad.y - 60} ${ad.x - 132} ${ad.y - 92}`, class: "arc out", "marker-end": "url(#ar-out)" }, svg);
+  node(S.biogas, ad.x - 156, ad.y - 112, 26, "Biogas", "left", "out of scope");
+}
+
+if (mini) {
+  // The card's nodes open the same zoom as the big diagram.
+  for (const [elm, s] of fx) elm.addEventListener("click", () => { fig.scrollIntoView({ behavior: reduce ? "auto" : "smooth" }); goStep(s, elm); });
+  return;
+}
+for (const [id, x, fill] of [["wing-b", 250, "var(--bio)"], ["wing-t", 1050, "var(--tech)"]]) {
+  const t = txt(x, 728, `${S[id].name} · ${fmt(S[id].bills.length)} ${NOUN[statusSel][1]}`, "wingtag", svg);
+  t.setAttribute("fill", fill); t.setAttribute("tabindex", 0); t.setAttribute("role", "button");
+  txt(x, 748, `includes the ${fmt(wc("x"))} that touch both cycles`, "sub", svg);
+  fx.push([t, S[id]]);
+}
+// unplaced tray, top-left corner of the drawing
+txt(24, 34, "Not on a step", "lbl tray", svg, "start");
+["incent", "ship", "other", "nostep"].forEach((id, i) => {
+  const s = S[id], g = el("g", { class: "node tray", tabindex: 0, role: "button", "aria-label": `${s.name}: ${s.bills.length} bills` }, svg);
+  const y = 52 + i * 30;
+  el("rect", { x: 24, y, width: 212, height: 24, rx: 4, fill: "var(--surface)", stroke: "var(--hatch)", "stroke-dasharray": "4 3", class: "ring" }, g);
+  txt(34, y + 16, s.name, "sub", g, "start").setAttribute("style", "fill:var(--fg2);stroke:none");
+  const n = txt(226, y + 16, fmt(s.bills.length), "sub", g, "end"); n.setAttribute("style", "fill:var(--fg);stroke:none;font-family:var(--mono)");
+  g.addEventListener("mouseenter", () => showTip(stepTip(s), g)); g.addEventListener("mouseleave", hideTip);
+  fx.push([g, s]);
+});
+// Click wiring. goStep is defined further down; these handlers only call it on click.
+for (const [elm, s] of focusables) {
+  elm.addEventListener("click", () => goStep(s, elm));
+  elm.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goStep(s, elm); } });
+}
+}
+drawButterfly();
+
+// ---------- zoom stage ----------
+const stage = document.getElementById("stage"), layers = document.getElementById("layers"), stageHead = document.getElementById("stagehead");
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const anim = (elm, from, to, origin, ms = 460) => {
+  elm.style.transformOrigin = origin;
+  const a = elm.animate([{ transform: `scale(${from[0]})`, opacity: from[1] }, { transform: `scale(${to[0]})`, opacity: to[1] }],
+    { duration: reduce ? 1 : ms, easing: "cubic-bezier(.3,.7,.2,1)", fill: "forwards" });
+  return a.finished;
+};
+const originOf = target => {
+  const lr = layers.getBoundingClientRect(), r = target.getBoundingClientRect();
+  return `${r.left + r.width / 2 - lr.left}px ${r.top + r.height / 2 - lr.top}px`;
+};
+
+const GOLD = 2.39996323;
+// Pack groups (each a phyllotaxis disc of dots) onto shelves, then fit the viewBox to the result.
+function layoutGroups(groups, c, maxW) {
+  // Narrow screens get two clusters per row: a big cluster packs its dots tighter (its own spacing c)
+  // rather than taking a whole row to itself. Wide screens keep one spacing for every cluster.
+  const twoCol = maxW < 640, colW = maxW / 2;
+  for (const g of groups) {
+    g.c = twoCol ? Math.min(c, (colW / 2 - 14) / Math.sqrt(g.bills.length + 0.5)) : c;
+    g.rad = g.c * Math.sqrt(g.bills.length) + 8;
+  }
+  const gwOf = g => twoCol ? colW - 0.5 : Math.max(2 * g.rad, 150) + 34;
+  const rows = []; let row = [], w = 0;
+  for (const g of groups) {
+    const gw = gwOf(g);
+    if (row.length && w + gw > maxW) { rows.push(row); row = []; w = 0; }
+    row.push(g); w += gw;
+  }
+  if (row.length) rows.push(row);
+  let y = 6, maxX = 0;
+  for (const r of rows) {
+    const h = Math.max(...r.map(g => g.rad)); let x = 0;
+    for (const g of r) { const gw = gwOf(g); g.cx = x + gw / 2; g.cy = y + 34 + h; x += gw; }
+    maxX = Math.max(maxX, x); y += 2 * h + 60;
+  }
+  // One viewBox unit = one CSS pixel at the stage's real width, so labels and dots keep their size on
+  // any screen; only a group wider than the screen makes the drawing scale down. Rows are centered.
+  const W = Math.max(maxX, maxW);
+  for (const r of rows) { const rw = r.reduce((a, g) => a + gwOf(g), 0); for (const g of r) g.cx += (W - rw) / 2; }
+  return { w: W, h: Math.max(y, 260) };
+}
+const ORDER = { enacted: 0, pending: 1, ended: 2 };
+const phyllo = (g, i) => { const rr = g.c * Math.sqrt(i + 0.5), th = i * GOLD; return [g.cx + rr * Math.cos(th), g.cy + rr * Math.sin(th)]; };
+let stageGroups = [];   // [{g, items: [{wrap, b, x, y}]}] for the filter regroup animation
+function drawGroups(groups, opts) {
+  stage.innerHTML = "";
+  stageGroups = [];
+  stage.setAttribute("class", opts.cls);
+  stageHead.hidden = false;
+  stageHead.innerHTML = `<h3>${esc(opts.title)}</h3><p>${esc(opts.sub)}</p>`;
+  const avail = Math.max(280, layers.clientWidth - 24);
+  const { w, h } = layoutGroups(groups, opts.c, avail);
+  stage.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  layers.style.aspectRatio = `${w} / ${h}`;
+  for (const g of groups) {
+    const gEl = el("g", { class: "grp", "data-key": g.key }, stage);
+    el("circle", { cx: g.cx, cy: g.cy, r: g.rad, class: "bgc" }, gEl);
+    // The label is the drill control; dots are bills and open the panel.
+    const lab = el("g", { class: "glink", tabindex: 0, role: "button", "aria-label": `${opts.verb} ${g.label}: ${g.bills.length} bills` }, gEl);
+    txt(g.cx, g.cy - g.rad - 22, `${g.label} ${opts.arrow}`, "glbl", lab);
+    txt(g.cx, g.cy - g.rad - 6, `${fmt(g.bills.length)} · ${fmt(g.bills.filter(b => sgroup(b) === "enacted").length)} in force`, "gnum", lab);
+    const sorted = [...g.bills].sort((a, b) => ORDER[sgroup(a)] - ORDER[sgroup(b)] || (b.year || 0) - (a.year || 0));
+    const dot = opts.dot * g.c / opts.c, items = [];
+    sorted.forEach((b, i) => {
+      const [x, y] = phyllo(g, i), sg = sgroup(b), col = WCOL[b.wing];
+      const attrs = { cx: x.toFixed(1), cy: y.toFixed(1), r: dot, class: "d", "data-id": b.id, tabindex: -1 };
+      if (sg === "enacted") Object.assign(attrs, { fill: col });
+      else if (sg === "pending") Object.assign(attrs, { fill: "var(--surface)", stroke: col, "stroke-width": dot * 0.4, r: dot * 0.88 });
+      else Object.assign(attrs, { fill: "var(--hatch)", r: dot * 0.82 });
+      // The wrapper carries the movement (burst-in, filter regroup); the circle keeps its own hover scale.
+      const wrap = el("g", { class: "dw" }, gEl);
+      const d = el("circle", attrs, wrap);
+      items.push({ wrap, b, x, y });
+      if (!reduce) wrap.animate(
+        [{ transform: `translate(${g.cx - x}px, ${g.cy - y}px) scale(.2)`, opacity: 0 }, { transform: "none", opacity: 1 }],
+        { duration: 560, delay: Math.min(i * 1.4, 420), easing: "cubic-bezier(.2,.8,.2,1)", fill: "backwards" });
+      d.addEventListener("mouseenter", () => showTip(`<b>${esc(b.num || "Untitled")} · ${esc(whereText(b))}</b>${esc(b.title)}<span class="conf">${esc(STATUS_TEXT[b.status] || b.status)}${b.year ? " · " + b.year : ""} · click for details</span>`, d));
+      d.addEventListener("mouseleave", hideTip);
+      d.addEventListener("click", e => { e.stopPropagation(); hideTip(); openBill(b); });
+    });
+    stageGroups.push({ g, items });
+    const drill = () => opts.onGroup(g, gEl);
+    lab.addEventListener("click", e => { e.stopPropagation(); drill(); });
+    lab.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); drill(); } });
+    gEl.querySelector(".bgc").addEventListener("click", drill);
+  }
+  markOpen();
+}
+const groupBy = (bills, keyFn, labelFn) => {
+  const m = new Map();
+  for (const b of bills) { const k = keyFn(b); if (!m.has(k)) m.set(k, []); m.get(k).push(b); }
+  return [...m].map(([key, bs]) => ({ key, label: labelFn(key), bills: bs })).sort((a, b) => b.bills.length - a.bills.length);
+};
+
+// ---------- focus state ----------
+// path: [] = butterfly; [step] ; [step, fam]; [step, fam, jur]
+const state = { step: null, fam: null, jur: null, status: "all", q: "", shown: 50 };
+let level = 0;
+
+// First zoom level groups by continent; once regions are picked it groups by the picked countries, so
+// choosing (say) France, Germany and Poland compares them side by side.
+const L1 = () => regionSel.length ? { key: b => b.region, label: jurName, by: "country" }
+                                  : { key: famOf, label: k => FAMS[k].name, by: "region" };
+function renderLevel1() {
+  const s = state.step, l1 = L1();
+  drawGroups(groupBy(s.bills, l1.key, l1.label), {
+    cls: "lvl1", c: 7.2, dot: 4.8, verb: "Zoom into", arrow: "›",
+    title: s.name, sub: `${fmt(s.bills.length)} ${NOUN[statusSel][1]} by ${l1.by}. Click a name to split it by state or country. Click a dot to read the bill.`,
+    onGroup: (g, gEl) => zoomIn(gEl, () => { state.fam = g.key; state.jur = null; level = 2; renderLevel2(); }),
+  });
+}
+function renderLevel2() {
+  const s = state.step, l1 = L1(), fb = s.bills.filter(b => l1.key(b) === state.fam);
+  drawGroups(groupBy(fb, jurOf, jurName), {
+    cls: "lvl2", c: 9.4, dot: 6.4, verb: "Filter to", arrow: "",
+    title: `${s.name} · ${l1.label(state.fam)}`,
+    sub: `${fmt(fb.length)} bills by ${state.fam === "US" ? "state (city ordinances count under their state)" : "country"}. Click a name to filter the table. Click a dot to read the bill.`,
+    onGroup: g => { state.jur = state.jur === g.key ? null : g.key; state.shown = 50; markSelection(); update(); },
+  });
+  markSelection();
+}
+function markSelection() {
+  for (const g of stage.querySelectorAll(".grp")) {
+    g.classList.toggle("sel", state.jur === g.dataset.key);
+    g.classList.toggle("dim", !!state.jur && state.jur !== g.dataset.key);
+  }
+}
+
+let busy = false;
+async function zoomIn(target, render) {
+  if (busy) return; busy = true; hideTip();
+  const origin = layers.contains(target) ? originOf(target) : "50% 30%";
+  const from = level === 0 ? svg : stage;
+  await anim(from, [1, 1], [2.6, 0], origin, 380);
+  from.classList.add("off");
+  render(); state.shown = 50; update();
+  stage.classList.remove("off");
+  await anim(stage, [0.35, 0], [1, 1], level === 1 && from === svg ? "50% 30%" : origin, 460);
+  busy = false;
+}
+async function zoomOut(toLevel) {
+  if (busy || level === 0) return; busy = true; hideTip();
+  const origin = "50% 50%";
+  await anim(stage, [1, 1], [0.35, 0], origin, 340);
+  if (toLevel === 0) {
+    stage.classList.add("off"); level = 0; state.step = null; state.fam = null; state.jur = null;
+    stageHead.hidden = true; applyCrop();
+    svg.classList.remove("off"); state.shown = 50; update();
+    await anim(svg, [2.6, 0], [1, 1], origin, 460);
+  } else {
+    level = 1; state.fam = null; state.jur = null; renderLevel1(); state.shown = 50; update();
+    await anim(stage, [2.6, 0], [1, 1], origin, 460);
+  }
+  busy = false;
+}
+
+// butterfly clicks (and the phone step list, which calls the same thing)
+const goStep = (s, elm) => {
+  if (busy) return;
+  state.jur = null; state.fam = null;
+  if (!s.bills.length) { state.step = s; state.shown = 50; update(); return; }   // hatched step: table explains, no zoom
+  zoomIn(elm, () => { state.step = s; level = 1; renderLevel1(); });
+};
+const LIST = [
+  ["Technical cycle", ["maintain", "share", "reuse", "refurb", "recycle", "content", "collect", "leak"]],
+  ["Making and using", ["parts", "service"]],
+  ["Biological cycle", ["compost", "extract", "cascade", "biosphere", "farm", "biogas"]],
+  ["Not on a step", ["incent", "ship", "other", "nostep"]],
+  ["Whole cycles", ["wing-t", "wing-b"]],
+];
+const stepList = document.getElementById("steplist");
+// Collapsible sections, closed by default (phone portrait). Re-rendering keeps whichever were open.
+function renderStepList() {
+  const open = new Set([...stepList.querySelectorAll("details[open]")].map(d => d.dataset.sec));
+  stepList.innerHTML = LIST.map(([h, ids]) => {
+    return `<details data-sec="${h}"${open.has(h) ? " open" : ""}><summary>${h}<small>${ids.length} steps</small></summary>` + ids.map(id => {
+      const s = S[id], n = s.bills.length, c = color(s.wing);
+      const sw = !s.pick ? `background:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Cpath d='M0 6L6 0' stroke='%239aa1ab' stroke-width='1.5'/%3E%3C/svg%3E&quot;);border:1.5px solid ${c}`
+        : s.wing === "none" ? "background:var(--fg2)" : `background:${c}`;
+      return `<button data-step="${id}"><i style="${sw}"></i><span><b>${esc(s.name)}</b>${s.r ? `<small>${esc(s.r)}</small>` : ""}</span><em>${s.pick ? fmt(n) : s.wing === "out" ? "out of scope" : "gap"}</em></button>`;
+    }).join("") + "</details>";
+  }).join("");
+}
+renderStepList();
+stepList.addEventListener("click", e => { const b = e.target.closest("button[data-step]"); if (b) goStep(S[b.dataset.step], b); });
+document.getElementById("back").addEventListener("click", () => zoomOut(level === 2 ? 1 : 0));
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (!panel.hidden) closeBill(); else if (level > 0) zoomOut(level === 2 ? 1 : 0);
+});
+
+// ---------- bill panel ----------
+const panel = document.getElementById("panel"), pbody = document.getElementById("pbody");
+const pprev = document.getElementById("pprev"), pnext = document.getElementById("pnext"), ppos = document.getElementById("ppos");
+let openId = null, currentList = [];
+const dateText = s => s ? new Date(s + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "";
+const CYCLE = { t: "Technical", b: "Biological", x: "Both cycles", u: "None (materials untagged)" };
+function openBill(b) {
+  openId = b.id;
+  const steps = STEPS.filter(s => s.pick && !s.id.startsWith("wing") && s.id !== "nostep" && s.pick(b))
+    .map(s => s.name + (b.place[s.id] && !(s.id === "compost" && b.inst.includes("organics_diversion")) ? ` (${PLACE_HOW[b.place[s.id]]})` : ""));
+  const city = cityOf(b);
+  pbody.innerHTML = `
+    <div class="eyebrow">${esc(whereText(b))}${b.num ? " · " + esc(b.num) : ""}</div>
+    <h3>${esc(b.title || "Untitled")}</h3>
+    <div class="pstat"><span class="st ${sgroup(b)}"><i></i>${esc(STATUS_TEXT[b.status] || b.status)}</span>${b.last ? `<span>last action ${dateText(b.last)}</span>` : b.year ? `<span>${b.year}</span>` : ""}</div>
+    ${b.sum ? `<p class="psum">${esc(b.sum)}</p>` : `<p class="psum muted">No summary yet for this bill.</p>`}
+    <dl>
+      ${city ? `<dt>Level</dt><dd>City ordinance, ${esc(cityName(city))}</dd>` : ""}
+      ${b.adj ? `<dt>Scope</dt><dd>Added through the ${esc(b.adj.replace(/_/g, "-"))} scope rule</dd>` : ""}
+      <dt>On the butterfly</dt><dd>${steps.length ? steps.map(esc).join(" · ") : "Not on a step"}</dd>
+      <dt>Instruments</dt><dd>${b.inst.map(i => `<span class="pill">${esc(i)}</span>`).join("") || "—"}</dd>
+      <dt>Materials</dt><dd>${b.mats.map(m => `<span class="pill">${esc(m.replace(/_/g, " "))}</span>`).join("") || "—"}</dd>
+      <dt>Cycle</dt><dd>${CYCLE[b.wing]}</dd>
+      ${b.eff ? `<dt>Takes effect</dt><dd>${dateText(b.eff)}</dd>` : ""}
+    </dl>
+    ${b.quote ? `<figure class="pquote"><figcaption>Remanufacturing evidence, quoted from the bill</figcaption><blockquote>${esc(b.quote)}</blockquote></figure>` : ""}
+    <div class="plinks"><a href="${href(b)}" target="_blank" rel="noopener">Full bill page on Atlas Circular ↗</a>
+    ${b.src ? `<a href="${esc(b.src)}" target="_blank" rel="noopener">Official source ↗</a>` : ""}</div>`;
+  panel.hidden = false; pbody.scrollTop = 0;
+  syncPanelNav(); markOpen();
+  document.getElementById("pclose").focus({ preventScroll: true });
+}
+function closeBill() { panel.hidden = true; openId = null; markOpen(); }
+function syncPanelNav() {
+  const i = currentList.findIndex(b => b.id === openId);
+  pprev.disabled = i <= 0; pnext.disabled = i < 0 || i >= currentList.length - 1;
+  ppos.textContent = i >= 0 ? `${fmt(i + 1)} of ${fmt(currentList.length)}` : "";
+}
+function markOpen() {
+  for (const d of stage.querySelectorAll(".d.on")) d.classList.remove("on");
+  if (openId != null) { const d = stage.querySelector(`.d[data-id="${openId}"]`); if (d) d.classList.add("on"); }
+  for (const tr of rows.querySelectorAll("tr.on")) tr.classList.remove("on");
+  if (openId != null) { const tr = rows.querySelector(`tr[data-id="${openId}"]`); if (tr) tr.classList.add("on"); }
+}
+const step = dir => { const i = currentList.findIndex(b => b.id === openId); const n = currentList[i + dir]; if (n) openBill(n); };
+pprev.addEventListener("click", () => step(-1)); pnext.addEventListener("click", () => step(1));
+document.getElementById("pclose").addEventListener("click", closeBill);
+
+// ---------- breadcrumb + table ----------
+const crumbs = document.getElementById("crumbs"), back = document.getElementById("back"), hint = document.getElementById("hint");
+function focusSet() {
+  let bs = state.step ? state.step.bills : pool();
+  if (state.fam) bs = bs.filter(b => L1().key(b) === state.fam);
+  if (state.jur) bs = bs.filter(b => jurOf(b) === state.jur);
+  return bs;
+}
+function renderCrumbs() {
+  const parts = [{ label: "Butterfly", n: pool().length, go: level > 0 ? () => zoomOut(0) : null }];
+  if (state.step) parts.push({ label: state.step.name, n: state.step.bills.length, go: level === 2 ? () => zoomOut(1) : null });
+  if (state.fam) parts.push({ label: L1().label(state.fam), n: state.step.bills.filter(b => L1().key(b) === state.fam).length,
+    go: state.jur ? () => { state.jur = null; markSelection(); update(); } : null });
+  if (state.jur) parts.push({ label: jurName(state.jur), n: focusSet().length });
+  crumbs.innerHTML = "";
+  parts.forEach((pt, i) => {
+    if (i) { const sp = document.createElement("span"); sp.className = "sep"; sp.textContent = "›"; crumbs.append(sp); }
+    const e = document.createElement(pt.go ? "button" : "span");
+    e.className = pt.go ? "" : "cur"; e.textContent = pt.label;
+    const b = document.createElement("b"); b.textContent = fmt(pt.n); e.append(b);
+    if (pt.go) e.addEventListener("click", pt.go);
+    crumbs.append(e);
+  });
+  back.hidden = level === 0; hint.hidden = level !== 0;
+  fig.classList.toggle("zoomed", level > 0);
+}
+
+const q = document.getElementById("q"), rows = document.getElementById("rows");
+const more = document.getElementById("more"), ttitle = document.getElementById("ttitle"), tnote = document.getElementById("tnote");
+// Status and region are page-level (top control row); the table adds only a text search.
+const matches = b => !state.q || `${b.num} ${b.title} ${whereText(b)} ${jurName(b.region)}`.toLowerCase().includes(state.q);
+q.addEventListener("input", () => { state.q = q.value.trim().toLowerCase(); state.shown = 50; update(); });
+more.addEventListener("click", () => { state.shown += 50; update(); });
+rows.addEventListener("click", e => { const b = e.target.closest("button.tlink"); if (b) openBill(BY_ID.get(+b.dataset.id)); });
+
+function update() {
+  renderCrumbs();
+  const base = focusSet();
+  const list = base.filter(matches).sort((a, b) => (b.year || "0").localeCompare(a.year || "0") || ORDER[sgroup(a)] - ORDER[sgroup(b)]);
+  const where = [state.step && state.step.name, state.fam && L1().label(state.fam), state.jur && jurName(state.jur)].filter(Boolean).join(" · ");
+  ttitle.innerHTML = `${esc(where || "All bills")}<small>${state.q ? `${fmt(list.length)} of ${fmt(base.length)}` : fmt(base.length)} ${NOUN[statusSel][0]}${regionSel.length ? ` in ${esc(regionSel.map(jurName).join(", "))}` : ""}${state.q ? " match your search" : ""}</small>`;
+  const note = state.step && !state.fam ? state.step.note : "";
+  tnote.hidden = !note; tnote.textContent = state.step && !state.step.bills.length ? `${state.step.name}: ${note}` : note;
+  rows.innerHTML = list.length ? list.slice(0, state.shown).map(b => {
+    const sg = sgroup(b);
+    return `<tr data-id="${b.id}"><td class="jur">${esc(whereText(b))}</td>
+      <td class="bill"><button class="tlink" data-id="${b.id}">${esc(b.title || "Untitled")}</button><span class="num">${esc(b.num)}</span></td>
+      <td><span class="st ${sg}"><i></i>${esc(STATUS_TEXT[b.status] || b.status)}</span></td>
+      <td class="yr">${esc(b.year || "—")}</td>
+      <td>${b.inst.map(i => `<span class="pill">${esc(i)}</span>`).join("") || "—"}</td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="empty">${state.step && !state.step.bills.length ? "No bills are sorted to this step yet." : "No bills match. Clear the search or pick another status."}</td></tr>`;
+  currentList = list; syncPanelNav(); markOpen();
+  more.hidden = list.length <= state.shown;
+  more.textContent = `Show ${Math.min(50, list.length - state.shown)} more of ${fmt(list.length - state.shown)}`;
+  if (level > 0) regroup(new Set(list.map(b => b.id)), !!state.q);
+}
+
+// Filters re-pack each cluster: matching dots gather into a compact disc at the centre, the rest drift
+// out to the rim and fade, so the filter's effect reads as movement rather than a flicker.
+function regroup(ok, filtered) {
+  for (const { g, items } of stageGroups) {
+    let k = 0;
+    items.forEach(({ wrap, b, x, y }, i) => {
+      const hit = !filtered || ok.has(b.id);
+      let tx, ty, scale = 1;
+      if (hit) {
+        [tx, ty] = phyllo(g, filtered ? k++ : i);
+      } else {
+        const a = Math.atan2(y - g.cy, x - g.cx) || i * GOLD;
+        tx = g.cx + (g.rad - 4) * Math.cos(a); ty = g.cy + (g.rad - 4) * Math.sin(a); scale = 0.55;
+      }
+      wrap.style.transitionDelay = reduce ? "0ms" : `${Math.min(i * 0.8, 260)}ms`;
+      wrap.style.transform = tx === x && ty === y && scale === 1 ? "" : `translate(${tx - x}px, ${ty - y}px) scale(${scale})`;
+      wrap.classList.toggle("fade", !hit);
+    });
+  }
+}
+
+// legend
+document.getElementById("legend").innerHTML = `
+  <span><svg width="30" height="22"><circle cx="8" cy="11" r="7" fill="color-mix(in srgb, var(--node-tech) 50%, #ffffff)"/><circle cx="20" cy="11" r="7" fill="color-mix(in srgb, var(--node-tech) 62%, var(--node-ink))"/></svg>Paler = less law, deeper = more</span>
+  <span><svg width="22" height="22"><circle cx="11" cy="11" r="9" fill="url(#hatch)" stroke="var(--hatch)" stroke-width="2"/></svg>Gap: no law found</span>
+  <span><svg width="22" height="22"><circle cx="11" cy="11" r="5" fill="var(--fg2)"/></svg>Bill in force</span>
+  <span><svg width="22" height="22"><circle cx="11" cy="11" r="4.4" fill="var(--surface)" stroke="var(--fg2)" stroke-width="1.8"/></svg>Pending</span>
+  <span><svg width="22" height="22"><circle cx="11" cy="11" r="4" fill="var(--hatch)"/></svg>Failed or repealed</span>
+  <span>Dot colour = cycle: <i class="sw" style="background:var(--tech);margin-left:6px"></i>technical <i class="sw" style="background:var(--both);margin-left:6px"></i>both <i class="sw" style="background:var(--bio);margin-left:6px"></i>biological <i class="sw" style="background:var(--out);margin-left:6px"></i>none</span>`;
+
+// ---------- phone portrait: one wing at a time ----------
+// At phone width the whole butterfly is too small to read, so portrait shows the technical or the
+// biological half (with the centre column) at roughly twice the size; landscape shows the full diagram.
+const portrait = matchMedia("(max-width: 700px) and (orientation: portrait)");
+const CROP = { tech: "515 10 785 770", bio: "0 10 785 770" };   // each keeps the whole centre column
+let wing = "tech";
+function applyCrop() {
+  const crop = portrait.matches;
+  svg.setAttribute("viewBox", crop ? CROP[wing] : "0 0 1300 760");
+  svg.classList.toggle("crop", crop);
+  if (level === 0) layers.style.aspectRatio = crop ? "785 / 770" : "";
+}
+const wingSw = document.getElementById("wingsw");
+wingSw.addEventListener("click", e => {
+  const b = e.target.closest("button[data-w]"); if (!b || b.dataset.w === wing) return;
+  wing = b.dataset.w;
+  for (const x of wingSw.querySelectorAll("button")) x.setAttribute("aria-pressed", String(x.dataset.w === wing));
+  applyCrop();
+  if (!reduce) svg.animate([{ opacity: 0, transform: `translateX(${wing === "bio" ? -24 : 24}px)` }, { opacity: 1, transform: "none" }],
+    { duration: 320, easing: "ease-out" });
+});
+portrait.addEventListener("change", applyCrop);
+applyCrop();
+
+// ---------- top control row: region + status ----------
+// Re-applies both filters everywhere. A region change invalidates a picked country/continent cluster,
+// so the stage steps back to the first zoom level.
+// The profile-card preview: one region picked -> its fingerprint, at card size, with counts.
+const fpcard = document.getElementById("fpcard");
+function renderFingerprint() {
+  const sole = regionSel.length === 1 ? regionSel[0] : null;
+  fpcard.hidden = !sole;
+  if (!sole) return;
+  const R = regionPool(), inForce = R.filter(b => sgroup(b) === "enacted").length;
+  document.getElementById("fp-name").textContent = jurName(sole);
+  document.getElementById("fp-sub").innerHTML = `<b>${fmt(inForce)}</b> laws in force · <b>${fmt(R.length - inForce)}</b> pending, failed or repealed` +
+    (statusSel === "all" ? "" : ` · showing ${esc(SLABEL[statusSel].toLowerCase())}`);
+  drawButterfly(document.getElementById("fp"), true);
+}
+function applyFilters({ regionChanged = false } = {}) {
+  recount(); renderSummary(); drawButterfly(); applyCrop(); renderStepList(); renderStatus(); renderRegion(); renderFingerprint();
+  if (regionChanged && level === 2) { level = 1; state.fam = null; state.jur = null; }
+  if (level === 1) renderLevel1(); else if (level === 2) renderLevel2();
+  else if (!reduce) svg.animate([{ opacity: 0.25 }, { opacity: 1 }], { duration: 380, easing: "ease-out" });
+  state.shown = 50; update();
+}
+
+const statusSw = document.getElementById("status");
+function renderStatus() {
+  const R = regionPool();
+  const opts = [["all", "All", R.length], ...["enacted", "pending", "ended"].map(k => [k, SLABEL[k], R.filter(b => sgroup(b) === k).length])];
+  statusSw.innerHTML = opts.map(([k, l, n]) => `<button data-s="${k}" aria-pressed="${statusSel === k}">${l}<b>${fmt(n)}</b></button>`).join("");
+}
+statusSw.addEventListener("click", e => {
+  const b = e.target.closest("button[data-s]"); if (!b || busy || b.dataset.s === statusSel) return;
+  statusSel = b.dataset.s; applyFilters();
+});
+
+// Region multi-select, mirroring the homepage's RegionFilter: "All regions" reset row, US and EU first,
+// the rest alphabetical; built from the regions actually in the data so new countries appear on their own.
+const rbtn = document.getElementById("rbtn"), rpop = document.getElementById("rpop"), rsum = document.getElementById("rsum");
+const rclear = document.getElementById("rclear"), rpage = document.getElementById("rpage");
+const REGIONS = (() => {
+  const all = [...new Set(BILLS.map(b => b.region))];
+  const anchors = ["US", "EU"].filter(c => all.includes(c));
+  return [...anchors, ...all.filter(c => !anchors.includes(c)).sort((a, b) => jurName(a).localeCompare(jurName(b)))];
+})();
+const RCOUNT = Object.fromEntries(REGIONS.map(c => [c, BILLS.filter(b => b.region === c).length]));
+function renderRegion() {
+  rsum.textContent = !regionSel.length ? "All regions" : regionSel.length === 1 ? jurName(regionSel[0]) : `${regionSel.length} regions`;
+  rclear.hidden = !regionSel.length;
+  const sole = regionSel.length === 1 ? regionSel[0] : null;
+  rpage.hidden = !sole;
+  if (sole) {
+    rpage.href = sole === "US" ? `${SITE}/states/` : `${SITE}/jurisdictions/${sole.toLowerCase()}/${sole.toLowerCase()}/`;
+    rpage.textContent = sole === "US" ? "View state standings →" : `View ${jurName(sole)} page →`;
+  }
+  rpop.innerHTML = `<button class="all" data-r="" role="option" aria-selected="${!regionSel.length}"><i>${regionSel.length ? "" : "✓"}</i>All regions</button><hr>` +
+    REGIONS.map(c => { const on = regionSel.includes(c);
+      return `<button data-r="${c}" role="option" aria-selected="${on}"><i>${on ? "✓" : ""}</i>${esc(jurName(c))}<small>${c} · ${fmt(RCOUNT[c])}</small></button>`; }).join("");
+}
+const setPop = open => { rpop.hidden = !open; rbtn.setAttribute("aria-expanded", String(open)); };
+rbtn.addEventListener("click", () => setPop(rpop.hidden));
+rpop.addEventListener("click", e => {
+  const b = e.target.closest("button[data-r]"); if (!b || busy) return;
+  const c = b.dataset.r;
+  regionSel = !c ? [] : regionSel.includes(c) ? regionSel.filter(x => x !== c) : [...regionSel, c];
+  applyFilters({ regionChanged: true });
+});
+rclear.addEventListener("click", () => { if (busy) return; regionSel = []; setPop(false); applyFilters({ regionChanged: true }); });
+document.addEventListener("mousedown", e => { if (!rpop.hidden && !document.getElementById("rsel").contains(e.target)) setPop(false); });
+// Escape closes the popover before it can reach the zoom-out / panel-close handler.
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !rpop.hidden) { setPop(false); rbtn.focus(); e.stopPropagation(); } }, true);
+renderStatus(); renderRegion();
+// Deep link: #FR, #US, #EU ... opens the explorer scoped to that region (how a profile page links in).
+{ const code = (location.hash || "").slice(1).toUpperCase();
+  if (REGIONS.includes(code)) { regionSel = [code]; applyFilters({ regionChanged: true }); } }
+
+// The stage is laid out in CSS pixels, so re-lay it when the width changes (rotation, window resize).
+let lastW = layers.clientWidth, rt;
+addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => {
+  if (layers.clientWidth === lastW || busy) return; lastW = layers.clientWidth;
+  if (level === 1) renderLevel1(); else if (level === 2) renderLevel2();
+  update();
+}, 150); });
+
+update();
+</script>

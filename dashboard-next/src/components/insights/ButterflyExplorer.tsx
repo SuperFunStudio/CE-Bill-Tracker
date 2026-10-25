@@ -5,7 +5,10 @@ import type { RefObject } from 'react';
 import type { BillSummary, ButterflyCounts } from '@/lib/types';
 import { BillModal } from '@/components/ui/BillModal';
 import { regionLabel } from './RegionFilter';
-import { BUTTERFLY_NODES, ButterflyDiagram, ButterflyUnplaced, type ButterflyStepId } from './ButterflyDiagram';
+import {
+  BUTTERFLY_NODES, ButterflyDiagram, ButterflyUnplaced, UNPLACED_LABELS,
+  type ButterflyStepId, type ButterflyUnplacedId,
+} from './ButterflyDiagram';
 import { track } from '@/lib/analytics';
 
 /**
@@ -48,6 +51,16 @@ function dotColor(b: BillSummary) {
   const tech = mats.some(m => (!BIO.has(m) && m !== 'other') || CROSS.has(m));
   return bio && tech ? COLOR.x : bio ? COLOR.b : tech ? COLOR.t : COLOR.u;
 }
+
+// The "Not on a step" buckets. They overlap (an incentive with no step counts in both), like the steps do.
+const instrumentsOf = (b: BillSummary) => (b.instrument_types ?? (b.instrument_type ? [b.instrument_type] : [])) as string[];
+const UNPLACED_TEST: Record<ButterflyUnplacedId, (b: BillSummary) => boolean> = {
+  incentives: b => instrumentsOf(b).includes('incentives'),
+  waste_shipment: b => instrumentsOf(b).includes('waste_shipment'),
+  other: b => { const it = instrumentsOf(b); return !it.length || it.some(i => ['other', 'budget', 'preemption', 'reporting'].includes(i)); },
+  no_step: b => !(b.butterfly_steps ?? []).length,
+};
+const isUnplaced = (id: string): id is ButterflyUnplacedId => id in UNPLACED_TEST;
 
 const GOLD = 2.39996323;
 interface Group { key: string; label: string; bills: BillSummary[]; c: number; rad: number; cx: number; cy: number }
@@ -115,7 +128,7 @@ export function ButterflyExplorer({
   baseStatus?: Status;
   haloColor?: string;
 }) {
-  const [step, setStep] = useState<ButterflyStepId | null>(null);
+  const [step, setStep] = useState<ButterflyStepId | ButterflyUnplacedId | null>(null);
   const [fam, setFam] = useState<string | null>(null);
   const [jur, setJur] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>('all');
@@ -142,17 +155,14 @@ export function ButterflyExplorer({
     const steps: Record<string, number> = {};
     for (const b of scoped) for (const s of b.butterfly_steps ?? []) steps[s] = (steps[s] ?? 0) + 1;
     const unplaced = { incentives: 0, waste_shipment: 0, other: 0, no_step: 0 };
-    for (const b of scoped) {
-      const it = (b.instrument_types ?? (b.instrument_type ? [b.instrument_type] : [])) as string[];
-      if (it.includes('incentives')) unplaced.incentives++;
-      if (it.includes('waste_shipment')) unplaced.waste_shipment++;
-      if (!it.length || it.some(i => ['other', 'budget', 'preemption', 'reporting'].includes(i))) unplaced.other++;
-      if (!(b.butterfly_steps ?? []).length) unplaced.no_step++;
-    }
+    for (const b of scoped) for (const id of Object.keys(UNPLACED_TEST) as ButterflyUnplacedId[]) if (UNPLACED_TEST[id](b)) unplaced[id]++;
     return { total: scoped.length, steps, wings: {}, unplaced };
   }, [bills, scoped]);
 
-  const stepBills = useMemo(() => (step ? scoped.filter(b => b.butterfly_steps?.includes(step)) : []), [scoped, step]);
+  const stepBills = useMemo(
+    () => (!step ? [] : isUnplaced(step) ? scoped.filter(UNPLACED_TEST[step]) : scoped.filter(b => b.butterfly_steps?.includes(step))),
+    [scoped, step],
+  );
   const l1 = groupByCountry
     ? { key: (b: BillSummary) => b.region, label: (k: string) => regionLabel(k) }
     : { key: familyOf, label: familyName };
@@ -177,7 +187,9 @@ export function ButterflyExplorer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level, stepBills, famBills, width, groupByCountry]);
   const dot = level === 1 ? 4.8 : 6.4;
-  const stepName = step ? BUTTERFLY_NODES.find(n => n.id === step)?.name ?? (step === 'parts' ? 'Chemical restrictions' : 'Labeling') : '';
+  const stepName = !step ? ''
+    : isUnplaced(step) ? UNPLACED_LABELS[step]
+    : BUTTERFLY_NODES.find(n => n.id === step)?.name ?? (step === 'parts' ? 'Chemical restrictions' : 'Labeling');
 
   const zoomFrom = (el: Element | null) => {
     const host = stageRef.current;
@@ -186,7 +198,7 @@ export function ButterflyExplorer({
       setOrigin(`${r.left + r.width / 2 - a.left}px ${r.top + r.height / 2 - a.top}px`);
     } else setOrigin('50% 30%');
   };
-  const openStep = (id: ButterflyStepId, el: SVGGElement) => {
+  const openStep = (id: ButterflyStepId | ButterflyUnplacedId, el: Element) => {
     zoomFrom(el); setStep(id); setFam(null); setJur(null); setShown(30);
     track('butterfly_step_open', { step: id });
   };
@@ -318,7 +330,7 @@ export function ButterflyExplorer({
         )}
       </div>
 
-      {level === 0 && <ButterflyUnplaced counts={counts} />}
+      {level === 0 && <ButterflyUnplaced counts={counts} onOpen={openStep} />}
 
       {level > 0 && (
         <div className="space-y-2">

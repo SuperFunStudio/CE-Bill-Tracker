@@ -330,23 +330,41 @@ export function ButterflyDiagram({
   );
 }
 
-/** The bills the diagram can't place, as an HTML strip (it wraps on a phone, unlike SVG text). */
-export function ButterflyUnplaced({ counts }: { counts: ButterflyCounts | null }) {
+export type ButterflyUnplacedId = 'incentives' | 'waste_shipment' | 'other' | 'no_step';
+
+export const UNPLACED_LABELS: Record<ButterflyUnplacedId, string> = {
+  incentives: 'Incentives',
+  waste_shipment: 'Waste shipments',
+  other: 'Other, budget and preemption',
+  no_step: 'On no step',
+};
+
+/** The bills the diagram can't place, as an HTML strip (it wraps on a phone, unlike SVG text). With
+ *  `onOpen`, every non-empty bucket is a button that opens into its bills like a step does. */
+export function ButterflyUnplaced({
+  counts,
+  onOpen,
+}: {
+  counts: ButterflyCounts | null;
+  onOpen?: (id: ButterflyUnplacedId, el: HTMLElement) => void;
+}) {
   if (!counts) return null;
-  const items: Array<[string, number]> = [
-    ['Incentives', counts.unplaced.incentives ?? 0],
-    ['Waste shipments', counts.unplaced.waste_shipment ?? 0],
-    ['Other, budget and preemption', counts.unplaced.other ?? 0],
-    ['On no step', counts.unplaced.no_step ?? 0],
-  ];
+  const chip = 'rounded border border-dashed border-border-default px-2 py-1 text-text-secondary';
   return (
     <div className="flex flex-wrap gap-2 text-xs">
       <span className="text-text-muted uppercase tracking-wide self-center mr-1">Not on a step</span>
-      {items.map(([label, n]) => (
-        <span key={label} className="rounded border border-dashed border-border-default px-2 py-1 text-text-secondary">
-          {label} <span className="font-mono text-text-primary">{fmt(n)}</span>
-        </span>
-      ))}
+      {(Object.keys(UNPLACED_LABELS) as ButterflyUnplacedId[]).map(id => {
+        const n = counts.unplaced[id] ?? 0;
+        const body = <>{UNPLACED_LABELS[id]} <span className="font-mono text-text-primary">{fmt(n)}</span></>;
+        return onOpen && n > 0 ? (
+          <button key={id} type="button" onClick={e => onOpen(id, e.currentTarget)}
+            className={`${chip} hover:border-solid hover:text-text-primary hover:bg-bg-tertiary`}>
+            {body}
+          </button>
+        ) : (
+          <span key={id} className={chip}>{body}</span>
+        );
+      })}
     </div>
   );
 }

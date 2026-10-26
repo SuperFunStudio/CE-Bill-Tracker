@@ -29,7 +29,7 @@ REGION_LABELS = {
     "NL": "Netherlands", "ES": "Spain", "FI": "Finland", "IE": "Ireland", "CL": "Chile",
     "DK": "Denmark", "CH": "Switzerland", "SI": "Slovenia", "BR": "Brazil", "AT": "Austria",
     "LU": "Luxembourg", "LV": "Latvia", "SK": "Slovakia", "LT": "Lithuania", "CZ": "Czechia",
-    "EE": "Estonia", "KR": "South Korea", "TW": "Taiwan", "NO": "Norway", "BE": "Belgium", "IT": "Italy",
+    "EE": "Estonia", "KR": "South Korea", "TW": "Taiwan", "RU": "Russia", "NO": "Norway", "BE": "Belgium", "IT": "Italy",
     "PT": "Portugal", "CA": "Canada", "AU": "Australia", "CN": "China", "IN": "India",
     "TR": "Türkiye", "MX": "Mexico", "CO": "Colombia", "PE": "Peru", "UY": "Uruguay",
     "EC": "Ecuador", "MY": "Malaysia", "ID": "Indonesia",
@@ -94,12 +94,17 @@ _NATIVE_ANCHORS = {
     "zh-Hant": ["責任業者", "應回收廢棄物", "回收清除處理費", "資源回收", "資源循環", "包裝", "容器",
                 "回收", "再利用", "再生資源", "押金"],
     "ko": ["생산자책임", "생산자책임재활용", "포장", "재활용", "회수", "보증금"],
+    # Russia's EPR vocabulary (89-FZ Arts. 24.2–24.5): recycling norms and the eco-fee on producers
+    # and importers of goods and packaging.
+    "ru": ["расширенная ответственность", "производители товаров", "импортеры товаров", "экологический сбор",
+           "норматив утилизации", "нормативы утилизации", "отходы от использования товаров", "упаковк",
+           "вторичные ресурсы", "вторичное сырье", "утилизаци"],
 }
 # Region code -> stored-text language (English regions omitted; they use the base anchors alone).
 # CH is trilingual (de/fr/it), handled explicitly in _anchor_re.
 _REGION_LANG = {
     "FR": "fr", "DE": "de", "AT": "de", "ES": "es", "CL": "es", "NL": "nl", "SE": "sv",
-    "PL": "pl", "BR": "pt", "IT": "it", "CZ": "cs", "JP": "ja", "CN": "zh", "KR": "ko", "TW": "zh-Hant",
+    "PL": "pl", "BR": "pt", "IT": "it", "CZ": "cs", "JP": "ja", "CN": "zh", "KR": "ko", "TW": "zh-Hant", "RU": "ru",
     "NO": "no", "TR": "tr", "MX": "es", "CO": "es", "PE": "es", "UY": "es", "EC": "es", "ID": "id",
 }
 

@@ -4930,6 +4930,125 @@ class TaiwanLawMojClient(ForeignSourceClient):
         )
 
 
+# --------------------------------------------------------------------------------------------------
+# Russia — ips.pravo.gov.ru, the consolidated-law database (ИПС «Законодательство России»). No key. The
+# main portal pravo.gov.ru times out from outside Russia; this host and publication.pravo.gov.ru answer.
+# The site is a JS app over a JSON API (found in its main.js bundle):
+#   search: POST /api/ips/legislation/search.json {"query"|"text": <q>, "limit": 10|20|50|100|200, "page"}
+#           -> docs[] {nd, adoption ("Постановление Правительства … от DD.MM.YYYY № N"), name, description, state}
+#   text:   GET  /api/ips/legislation/document?nd=<nd>&target_format=html  -> current consolidated version
+# Both search fields match FULL TEXT (strategies, budgets and treaties come back), so candidates are
+# filtered on the official title. Russia's EPR lives in 89-FZ Arts. 24.2–24.5 plus the 2023–25 reform
+# decrees: goods/packaging lists (№ 2414), eco-fee rates (№ 2406) and collection (№ 1990), recycler
+# registry (№ 2400), producer/importer reporting (№ 741/742). Federal acts only, in force only; amending
+# acts are skipped because the consolidated originals already carry their changes.
+# --------------------------------------------------------------------------------------------------
+
+RU_API = "http://ips.pravo.gov.ru/api/ips/legislation"
+# Human-facing link: the document endpoint itself renders the consolidated text as a complete HTML page,
+# and unlike the pravo.gov.ru viewer it answers from outside Russia.
+RU_PAGE = RU_API + "/document?nd={nd}&target_format=html"
+RU_PAGE_SIZE = 50
+RU_TITLE_QUERIES = ["об отходах производства и потребления", "утилизации отходов от использования товаров",
+                    "экологического сбора", "вторичных ресурсов", "упаковки", "обращения с отходами"]
+RU_TEXT_QUERIES = ["расширенная ответственность производителей", "экологический сбор норматив утилизации",
+                   "утилизация отходов от использования товаров", "производителями товаров, импортерами товаров",
+                   "нормативы утилизации", "вторичные материальные ресурсы"]
+_RU_TYPES = re.compile(r"^(Федеральный закон|Постановление Правительства|Распоряжение Правительства)")
+_RU_TITLE_RE = re.compile(r"отход|утилизац|упаковк|экологическ\w* сбор|вторичн\w* \w*ресурс|"
+                          r"производител\w* товаров|импортер\w* товаров|переработк", re.I)
+# Amending/repealing acts, plus title matches that aren't the CE slice: strategies, budgets, treaties,
+# agency appointments, product-marking (track-and-trace) rules, pilot "experiments" (mostly marking
+# pilots), radioactive/nuclear waste, MSW tariff-setting, medicines lists.
+_RU_SKIP_RE = re.compile(r"О внесении изменени|О признании утратившим|О приостановлении|Стратеги|бюджет|"
+                         r"Соглашени|Концепци|генеральн\w* директор|резервного фонда|ратификации|маркировк|"
+                         r"эксперимент|радиоактив|ядерн|тариф|лекарствен|Президенту|судна|оборонн", re.I)
+_RU_DATE_RE = re.compile(r"от (\d{2})\.(\d{2})\.(\d{4})")
+# The HTML is a Word export; its document-properties block survives tag-stripping as this line.
+_RU_WORD_HEADER_RE = re.compile(r"Print(?: false)+ MicrosoftInternetExplorer4\s*")
+# 89-FZ opens on a long list of amending laws, so its first ~1.5k chars say nothing about EPR.
+RU_LABEL_HINTS = {
+    "1000000000102053807": "Federal Law 89-FZ on Production and Consumption Waste 1998 (EPR: producers' "
+                           "and importers' recycling norms and eco-fee, Arts. 24.2–24.5)",
+}
+
+
+def ru_title(doc: dict) -> str:
+    """Official title: `name`, which government decrees leave empty (they carry it in `description`)."""
+    for key in ("name", "description"):
+        v = (doc.get(key) or "").strip()
+        if v and v != "None":
+            return v
+    return ""
+
+
+def ru_in_scope(doc: dict) -> bool:
+    title = ru_title(doc)
+    return (bool(_RU_TYPES.match(doc.get("adoption") or "")) and (doc.get("state") or "").startswith("Действует")
+            and bool(_RU_TITLE_RE.search(title)) and not _RU_SKIP_RE.search(title))
+
+
+def ru_adoption_date(adoption: str) -> "datetime.date | None":
+    m = _RU_DATE_RE.search(adoption or "")
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m[3]), int(m[2]), int(m[1]))
+    except ValueError:
+        return None
+
+
+class RussiaIpsClient(ForeignSourceClient):
+    """ips.pravo.gov.ru adapter. Russian federal EPR law + government decrees, consolidated HTML (no key)."""
+
+    region = "RU"
+    source = "ips"
+
+    def __init__(self, timeout: float = 120.0):
+        super().__init__(timeout)
+        self._docs: dict[str, dict] = {}
+
+    async def discover(self) -> list[tuple[str, str]]:
+        for field_name, queries in (("query", RU_TITLE_QUERIES), ("text", RU_TEXT_QUERIES)):
+            for q in queries:
+                for page in (1, 2):
+                    try:
+                        r = await self.http.post(f"{RU_API}/search.json",
+                                                 json={field_name: q, "limit": RU_PAGE_SIZE, "page": page})
+                        r.raise_for_status()
+                        docs = r.json().get("docs") or []
+                    except (httpx.HTTPError, ValueError) as e:
+                        log.warning("ru_search_failed", q=q, error=str(e))
+                        break
+                    for d in docs:
+                        if d.get("nd") and ru_in_scope(d):
+                            self._docs.setdefault(d["nd"], d)
+                    if len(docs) < RU_PAGE_SIZE:
+                        break
+        log.info("ru_discovered", total=len(self._docs))
+        return [(nd, RU_LABEL_HINTS.get(nd, "")) for nd in self._docs]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            r = await self.http.get(f"{RU_API}/document", params={"nd": source_id, "target_format": "html"})
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("ru_fetch_failed", nd=source_id, error=str(e))
+            return None
+        full_text = _RU_WORD_HEADER_RE.sub("", _strip_tags(_SCRIPT_STYLE_RE.sub(" ", r.text)))
+        if len(full_text) < 200:
+            log.warning("ru_thin_text", nd=source_id, chars=len(full_text))
+            return None
+        doc = self._docs.get(source_id, {})
+        adoption = doc.get("adoption") or ""
+        title = " ".join(p for p in (adoption, ru_title(doc)) if p) or source_id
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source, title=title,
+            full_text=full_text, source_url=RU_PAGE.format(nd=source_id),
+            english_label=english_label, status_date=ru_adoption_date(adoption),
+        )
+
+
 # Registry of available foreign adapters, by region code. New countries: add the subclass + register.
 # Note: a registry key is just a lookup handle (e.g. "FR_CODE"); the client's own `.region` drives the
 # row's region (LegifranceCodeClient writes region="FR"), so JORF + codified FR data co-exist.
@@ -5007,6 +5126,7 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     # Türkiye (region="TR"): core EPR regs via the mevzuat.gov.tr GeneratePdf endpoint (PDF).
     "TR": TurkiyeMevzuatClient,
     "TW": TaiwanLawMojClient,
+    "RU": RussiaIpsClient,
     # Ecuador / Malaysia: FAOLEX PDF mirror (national portals gated / encrypted). Indonesia: BPK JDIH.
     "EC": EcuadorFaolexClient,
     "MY": MalaysiaFaolexClient,

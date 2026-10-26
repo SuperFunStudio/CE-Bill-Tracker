@@ -29,7 +29,7 @@ const REGION_LABELS: Record<string, string> = {
   DK: 'Denmark', FI: 'Finland', CA: 'Canada', CH: 'Switzerland', CL: 'Chile', LU: 'Luxembourg',
   EE: 'Estonia', SK: 'Slovakia', NO: 'Norway', IT: 'Italy', TR: 'Türkiye', IN: 'India',
   AU: 'Australia', CN: 'China', BR: 'Brazil', KE: 'Kenya', ZA: 'South Africa', KR: 'South Korea',
-  TW: 'Taiwan',
+  TW: 'Taiwan', RU: 'Russia',
 };
 
 const FEE_KIND_LABELS: Record<string, string> = {

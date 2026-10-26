@@ -37,7 +37,7 @@ REGION_LANG = {
     "US": "en", "EU": "en", "UK": "en", "IE": "en", "CA": "en/fr", "AU": "en", "ZA": "en",
     "FR": "fr", "DE": "de", "AT": "de", "CH": "de/fr/it", "NL": "nl", "ES": "es",
     "CL": "es", "SE": "sv", "PL": "pl", "CZ": "cs", "BR": "pt", "KR": "ko", "JP": "ja",
-    "CN": "zh", "IT": "it", "TW": "zh-Hant",
+    "CN": "zh", "IT": "it", "TW": "zh-Hant", "RU": "ru",
 }
 ENGLISH = {"US", "EU", "UK", "IE", "CA", "AU", "ZA"}  # CA is bilingual but stores EN
 

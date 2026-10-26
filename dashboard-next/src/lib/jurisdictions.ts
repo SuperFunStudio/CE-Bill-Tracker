@@ -22,7 +22,7 @@ export const REGION_LABELS: Record<string, string> = {
 // and RegionInsetMap.tsx's CODE_TO_ISO.
 export const FOREIGN_COUNTRY_NAMES: Record<string, string> = {
   JP: 'Japan', UK: 'United Kingdom', CL: 'Chile', CH: 'Switzerland', BR: 'Brazil',
-  KR: 'South Korea', TW: 'Taiwan', ZA: 'South Africa', KE: 'Kenya', CN: 'China', CA: 'Canada',
+  KR: 'South Korea', TW: 'Taiwan', RU: 'Russia', ZA: 'South Africa', KE: 'Kenya', CN: 'China', CA: 'Canada',
   AU: 'Australia', NO: 'Norway', MX: 'Mexico', IN: 'India', TR: 'Türkiye',
   RW: 'Rwanda', ZM: 'Zambia', MW: 'Malawi', SL: 'Sierra Leone',
   CO: 'Colombia', PE: 'Peru', UY: 'Uruguay', EC: 'Ecuador', MY: 'Malaysia', ID: 'Indonesia',

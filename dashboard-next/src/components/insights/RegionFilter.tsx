@@ -28,6 +28,7 @@ const NON_EU_LABELS: Record<string, string> = {
   // renders as "South Korea" rather than a bare code, before anyone updates the filter list.
   KR: 'South Korea',
   TW: 'Taiwan',
+  RU: 'Russia',
   ZA: 'South Africa',
   KE: 'Kenya',
   MX: 'Mexico',
@@ -64,8 +65,9 @@ const REST = [
   'TR', 'CO', 'PE', 'UY', 'RW', 'EC', 'MY', 'ID',
   // The nine EU member states ingested 2026-10-24 via FAOLEX (Belgium's rows are regional, region "BE").
   'RO', 'PT', 'HU', 'GR', 'HR', 'MT', 'BG', 'CY', 'BE',
-  // South Korea (law.go.kr DRF API) and Taiwan (law.moj.gov.tw bulk JSON), ingested 2026-10-25.
-  'KR', 'TW',
+  // South Korea (law.go.kr DRF API) and Taiwan (law.moj.gov.tw bulk JSON), ingested 2026-10-25;
+  // Russia (ips.pravo.gov.ru), 2026-10-26.
+  'KR', 'TW', 'RU',
   // ZA is deliberately absent: no adapter ingests it yet, so it would return an empty result — which
   // reads as a broken filter rather than as "not covered" — and would leak into the homepage Dataset
   // markup's spatialCoverage. Its label stays in NON_EU_LABELS above; add the code here the day data lands.

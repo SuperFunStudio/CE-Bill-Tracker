@@ -4122,6 +4122,9 @@ class FaolexSeedClient(ForeignSourceClient):
     Subclass sets region, prefix (FAOLEX's 3-letter country code), seeds, and optionally text_filter.
     Seed rows: {"id", "en", "date"?, "url"?, "page"?} — `url` pulls the PDF from a government/legal
     mirror instead of FAOLEX (for texts FAOLEX hasn't catalogued); `page` overrides the human-facing link.
+    A `url` seed may instead be an HTML page ("html": True) that embeds the law in site chrome; "start"
+    and "end" then name the text markers the law runs between (end exclusive), and a page missing either
+    marker is skipped rather than stored as navigation text.
     """
 
     source = "faolex"
@@ -4147,14 +4150,23 @@ class FaolexSeedClient(ForeignSourceClient):
         except httpx.HTTPError as e:
             log.warning("faolex_fetch_failed", region=self.region, id=source_id, url=url, error=str(e))
             return None
+        if seed.get("html"):
+            text = _strip_tags(resp.text)
+            start, end = text.find(seed["start"]), text.find(seed["end"])
+            if start < 0 or end <= start:
+                log.warning("faolex_html_markers_missing", region=self.region, id=source_id, url=url)
+                return None
+            raw = text[start:end]
         # A 404 is served as an HTML stub; guard against storing it as "text" if it ever returns 200.
-        if "application/pdf" not in resp.headers.get("content-type", "").lower():
+        elif "application/pdf" not in resp.headers.get("content-type", "").lower():
             log.warning("faolex_not_pdf", region=self.region, id=source_id,
                         ctype=resp.headers.get("content-type", ""))
             return None
+        else:
+            raw = _pdf_to_text(resp.content)
 
         # Postgres text columns reject NUL; some gazette PDFs (Croatia's Narodne novine) embed them.
-        full_text = self.text_filter(_pdf_to_text(resp.content)).replace("\x00", "")
+        full_text = self.text_filter(raw).replace("\x00", "")
         if len(full_text) < self.min_chars:
             log.warning("faolex_thin_text", region=self.region, id=source_id, chars=len(full_text))
             return None
@@ -4301,9 +4313,10 @@ class MalawiFaolexClient(FaolexSeedClient):
 # packaging recovery targets for large enterprises (20% for 2023 rising to 80% from 2028); DAO 2023-02
 # is its IRR. English text.
 #
-# VN: the Law on Environmental Protection 2020 (Arts. 54-55 = EPR) plus Decree 08/2022, which sets the
-# per-product recycling rates, the financial contribution to the Vietnam Environment Protection Fund,
-# and the single-use plastics roadmap (Art. 64); Decree 05/2025 amends it. FAOLEX holds Decree 08 in
+# VN: the Law on Environmental Protection 2020 (Arts. 54-55 = EPR) and Decree 110/2026, which since
+# 25 May 2026 sets the per-product mandatory recycling rates and the contribution to the Vietnam
+# Environment Protection Fund (replacing Decree 08/2022's EPR chapter, as amended by Decree 05/2025;
+# both stay for history and Decree 08's single-use plastics roadmap). FAOLEX holds Decree 08 in
 # Vietnamese only (the rest are English translations), hence the "vi" extraction anchors.
 #
 # NOT in FAOLEX (known gaps; each needs a government-PDF `url` seed): VN Decision 1316/QD-TTg (2021,
@@ -4332,11 +4345,22 @@ VN_SEED_LAWS: list[dict] = [
     {"id": "212027", "date": "2020-11-17",
      "en": "Law on Environmental Protection 2020 (Law No. 72/2020/QH14) — extended producer "
            "responsibility (Arts. 54-55)"},
+    # Decree 110/2026 is the current EPR instrument: it took the recycling / waste-treatment duties out of
+    # Decree 08 (FAOLEX's Decree 08 text is the 2026 consolidation that cites it). Not in FAOLEX yet; the
+    # Ministry of Industry and Trade's ASEM Connect portal carries the official reference translation,
+    # incl. Appendix I's mandatory recycling rates, inside site chrome.
+    {"id": "nd-110-2026", "date": "2026-04-01", "html": True,
+     "url": "https://asemconnectvietnam.gov.vn/law.aspx?ID1=2&MaVB_id=3132&ZID1=10",
+     "start": "THE GOVERNMENT OF VIETNAM", "end": "(This translation is for reference only)",
+     "en": "Decree No. 110/2026/ND-CP on product and packaging recycling responsibility and waste treatment "
+           "responsibility of producers and importers (EPR; mandatory recycling rates, Vietnam Environment "
+           "Protection Fund contribution)"},
     {"id": "212268", "date": "2022-01-10",
-     "en": "Decree No. 08/2022/ND-CP detailing the Law on Environmental Protection — EPR recycling rates, "
-           "financial contribution to the Environment Protection Fund, single-use plastics roadmap"},
+     "en": "Decree No. 08/2022/ND-CP detailing the Law on Environmental Protection (consolidated 2026; its "
+           "EPR recycling provisions now sit in Decree 110/2026) — incl. single-use plastics roadmap"},
     {"id": "237225", "date": "2025-01-06",
-     "en": "Decree No. 05/2025/ND-CP amending Decree 08/2022/ND-CP — revised EPR obligations and exemptions"},
+     "en": "Decree No. 05/2025/ND-CP amending Decree 08/2022/ND-CP — EPR obligations and exemptions, "
+           "superseded for EPR by Decree 110/2026"},
     {"id": "228964", "date": "2019-12-04",
      "en": "Decision No. 1746/QD-TTg — National Action Plan for Management of Marine Plastic Litter by 2030"},
 ]

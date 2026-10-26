@@ -269,7 +269,7 @@ class Settings(BaseSettings):
     foreign_seed_refresh_regions: list[str] = [
         "EC", "MY", "IN", "CO", "PE", "UY", "BR", "CL",
         "ES", "IE", "AT", "CH", "DK", "FI", "LU", "SK", "EE", "IT", "NO", "TR", "KE",
-        "ZM", "MW", "CZ",
+        "ZM", "MW", "CZ", "PH", "VN",
     ]
     foreign_seed_refresh_interval_days: int = 30
     # Per region per run; bounds LLM spend (Haiku per law, Sonnet for the relevant ones).

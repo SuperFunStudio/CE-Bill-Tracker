@@ -82,6 +82,8 @@ COUNTRIES: dict[str, tuple[str, str, list[str]]] = {
     "EC": ("Ecuador", "country", ["Ecuador", "Ecuadorian"]),
     "MY": ("Malaysia", "country", ["Malaysia", "Malaysian"]),
     "ID": ("Indonesia", "country", ["Indonesia", "Indonesian"]),
+    "PH": ("Philippines", "country", ["Philippines", "Philippine", "Filipino"]),
+    "VN": ("Vietnam", "country", ["Vietnam", "Viet Nam", "Vietnamese"]),
     "ZM": ("Zambia", "country", ["Zambia", "Zambian"]),
 }
 

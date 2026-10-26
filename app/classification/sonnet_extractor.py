@@ -32,7 +32,7 @@ REGION_LABELS = {
     "EE": "Estonia", "KR": "South Korea", "TW": "Taiwan", "RU": "Russia", "NO": "Norway", "BE": "Belgium", "IT": "Italy",
     "PT": "Portugal", "CA": "Canada", "AU": "Australia", "CN": "China", "IN": "India",
     "TR": "Türkiye", "MX": "Mexico", "CO": "Colombia", "PE": "Peru", "UY": "Uruguay",
-    "EC": "Ecuador", "MY": "Malaysia", "ID": "Indonesia",
+    "EC": "Ecuador", "MY": "Malaysia", "ID": "Indonesia", "PH": "Philippines", "VN": "Vietnam",
     "RO": "Romania", "HU": "Hungary", "GR": "Greece", "HR": "Croatia", "MT": "Malta",
     "BG": "Bulgaria", "CY": "Cyprus",
 }
@@ -99,6 +99,11 @@ _NATIVE_ANCHORS = {
     "ru": ["расширенная ответственность", "производители товаров", "импортеры товаров", "экологический сбор",
            "норматив утилизации", "нормативы утилизации", "отходы от использования товаров", "упаковк",
            "вторичные ресурсы", "вторичное сырье", "утилизаци"],
+    # Vietnam's Decree 08/2022 is stored in Vietnamese (FAOLEX has no translation); the rest of the VN
+    # corpus is English and matches the base anchors. "Trách nhiệm mở rộng của nhà sản xuất" = EPR;
+    # "tỷ lệ tái chế bắt buộc" = mandatory recycling rate; the contribution goes to the Quỹ Bảo vệ môi trường.
+    "vi": ["trách nhiệm mở rộng của nhà sản xuất", "tỷ lệ tái chế bắt buộc", "đóng góp tài chính",
+           "Quỹ Bảo vệ môi trường", "bao bì", "tái chế", "thu gom", "nhựa dùng một lần"],
 }
 # Region code -> stored-text language (English regions omitted; they use the base anchors alone).
 # CH is trilingual (de/fr/it), handled explicitly in _anchor_re.
@@ -106,6 +111,7 @@ _REGION_LANG = {
     "FR": "fr", "DE": "de", "AT": "de", "ES": "es", "CL": "es", "NL": "nl", "SE": "sv",
     "PL": "pl", "BR": "pt", "IT": "it", "CZ": "cs", "JP": "ja", "CN": "zh", "KR": "ko", "TW": "zh-Hant", "RU": "ru",
     "NO": "no", "TR": "tr", "MX": "es", "CO": "es", "PE": "es", "UY": "es", "EC": "es", "ID": "id",
+    "VN": "vi",
 }
 
 

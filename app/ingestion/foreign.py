@@ -4293,6 +4293,72 @@ class MalawiFaolexClient(FaolexSeedClient):
 
 
 # --------------------------------------------------------------------------------------------------
+# Philippines / Vietnam — FAOLEX mirror (2026-10-26). Both have binding packaging EPR, and both were
+# in a client deliverable as desk research only. FAOLEX ids found via UNEP LEAP record pages; every
+# PDF fetched in full with a text layer.
+#
+# PH: the Extended Producer Responsibility Act of 2022 (RA 11898) amends RA 9003 and sets plastic-
+# packaging recovery targets for large enterprises (20% for 2023 rising to 80% from 2028); DAO 2023-02
+# is its IRR. English text.
+#
+# VN: the Law on Environmental Protection 2020 (Arts. 54-55 = EPR) plus Decree 08/2022, which sets the
+# per-product recycling rates, the financial contribution to the Vietnam Environment Protection Fund,
+# and the single-use plastics roadmap (Art. 64); Decree 05/2025 amends it. FAOLEX holds Decree 08 in
+# Vietnamese only (the rest are English translations), hence the "vi" extraction anchors.
+#
+# NOT in FAOLEX (known gaps; each needs a government-PDF `url` seed): VN Decision 1316/QD-TTg (2021,
+# plastic-waste scheme), 491/QD-TTg (2018, solid-waste strategy), 687/QD-TTg (2022, circular-economy
+# scheme) and 222/QD-TTg (2025, circular-economy action plan) — the only 222 mirror found
+# (binhdinh.gov.vn) serves an expired TLS certificate. VN Circular 02/2022/TT-BTNMT (EPR reporting
+# forms) is also absent.
+# --------------------------------------------------------------------------------------------------
+
+PH_SEED_LAWS: list[dict] = [
+    {"id": "228024", "date": "2022-07-23",
+     "en": "Extended Producer Responsibility Act of 2022 (Republic Act No. 11898) — plastic packaging "
+           "recovery targets for large enterprises, amending RA 9003"},
+    {"id": "233819",
+     "en": "DENR Administrative Order No. 2023-02 — Implementing Rules and Regulations of the Extended "
+           "Producer Responsibility Act (RA 11898)"},
+    # FAOLEX's record id is zero-padded (LEX-FAOC045260) though the PDF name isn't (phi45260.pdf).
+    {"id": "45260", "date": "2001-01-26",
+     "page": "https://www.fao.org/faolex/results/details/en/c/LEX-FAOC045260/",
+     "en": "Ecological Solid Waste Management Act of 2000 (Republic Act No. 9003) — incl. the ban on "
+           "non-environmentally acceptable packaging"},
+    {"id": "68080", "date": "2001-12-20",
+     "en": "DENR Administrative Order No. 2001-34 — Implementing Rules and Regulations of RA 9003"},
+]
+VN_SEED_LAWS: list[dict] = [
+    {"id": "212027", "date": "2020-11-17",
+     "en": "Law on Environmental Protection 2020 (Law No. 72/2020/QH14) — extended producer "
+           "responsibility (Arts. 54-55)"},
+    {"id": "212268", "date": "2022-01-10",
+     "en": "Decree No. 08/2022/ND-CP detailing the Law on Environmental Protection — EPR recycling rates, "
+           "financial contribution to the Environment Protection Fund, single-use plastics roadmap"},
+    {"id": "237225", "date": "2025-01-06",
+     "en": "Decree No. 05/2025/ND-CP amending Decree 08/2022/ND-CP — revised EPR obligations and exemptions"},
+    {"id": "228964", "date": "2019-12-04",
+     "en": "Decision No. 1746/QD-TTg — National Action Plan for Management of Marine Plastic Litter by 2030"},
+]
+
+
+class PhilippinesFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for the Philippines' EPR Act 2022 + Ecological Solid Waste Management Act and IRRs."""
+
+    region = "PH"
+    prefix = "phi"
+    seeds = PH_SEED_LAWS
+
+
+class VietnamFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Vietnam's Law on Environmental Protection 2020 and its EPR decrees."""
+
+    region = "VN"
+    prefix = "vie"
+    seeds = VN_SEED_LAWS
+
+
+# --------------------------------------------------------------------------------------------------
 # The nine EU member states that had no adapter (2026-10-24): RO, PT, HU, GR, HR, MT, BG, CY, BE. All via
 # the FAOLEX PDF mirror. FAOLEX ids were found through UNEP LEAP (leap.unep.org mirrors FAOLEX; each
 # record page names its LEX-FAOC id and PDF) and ECOLEX, then curated by hand: the current framework
@@ -5131,6 +5197,8 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "EC": EcuadorFaolexClient,
     "MY": MalaysiaFaolexClient,
     "ID": IndonesiaBpkClient,
+    "PH": PhilippinesFaolexClient,
+    "VN": VietnamFaolexClient,
     # The nine EU member states added 2026-10-24 (FAOLEX mirror; Belgium by region).
     "RO": RomaniaFaolexClient,
     "PT": PortugalFaolexClient,

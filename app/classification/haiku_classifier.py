@@ -103,6 +103,8 @@ REGION_LABELS = {
     "EC": "Ecuador",
     "MY": "Malaysia",
     "ID": "Indonesia",
+    "PH": "Philippines",
+    "VN": "Vietnam",
     "RO": "Romania",
     "PT": "Portugal",
     "HU": "Hungary",

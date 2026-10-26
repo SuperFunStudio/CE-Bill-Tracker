@@ -1,7 +1,7 @@
 """law.go.kr DRF parsing. Fixtures are trimmed from the live DRF XML shape (checked 2026-10-25)."""
 import datetime
 
-from app.ingestion.foreign import _kr_norm, kr_parse_law, kr_parse_search
+from app.ingestion.foreign import _kr_norm, kr_parse_history, kr_parse_law, kr_parse_search
 
 SEARCH_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <LawSearch><target>law</target><totalCnt>3</totalCnt>
@@ -46,3 +46,24 @@ def test_amended_version_is_not_dated_by_its_amendment():
 
 def test_seed_titles_match_across_middle_dot_variants():
     assert _kr_norm("전기·전자제품 및 자동차") == _kr_norm("전기ㆍ전자제품 및자동차")
+
+
+HISTORY_HTML = """<table><tr><th>순번</th><th>법령명</th><th>소관부처</th><th>제개정구분</th><th>법령종류</th>
+<th>공포번호</th><th>공포일자</th><th>시행일</th><th>현행/연혁</th></tr>
+<tr><td>1</td><td><a href="#">자원의 절약과 재활용촉진에 관한 법률</a></td><td>기후에너지환경부</td><td>일부개정</td>
+<td>법률</td><td>제 21849호</td><td>2026.7.7</td><td>2027.1.8</td><td>시행예정</td></tr>
+<tr><td>2</td><td><a href="#">자원의절약과재활용촉진에관한법률</a></td><td>환경처</td><td>제정</td>
+<td>법률</td><td>제 4538호</td><td>1992.12.8</td><td>1993.6.9</td><td>연혁</td></tr>
+<tr><td>3</td><td><a href="#">자원의절약과재활용촉진에관한법률시행령</a></td><td>환경처</td><td>제정</td>
+<td>대통령령</td><td>제 13937호</td><td>1993.6.24</td><td>1993.6.24</td><td>연혁</td></tr></table>"""
+
+
+def test_history_rows_parse_with_dates_and_skip_the_header():
+    rows = kr_parse_history(HISTORY_HTML)
+    assert len(rows) == 3
+    assert rows[1] == ("자원의절약과재활용촉진에관한법률", "제정", datetime.date(1992, 12, 8))
+    # Early rows spell the title without spaces; the normalized match must still pair them, and must
+    # NOT pair the act with its decree.
+    act = _kr_norm("자원의 절약과 재활용촉진에 관한 법률")
+    enacted = [d for name, kind, d in rows if kind == "제정" and _kr_norm(name) == act]
+    assert enacted == [datetime.date(1992, 12, 8)]

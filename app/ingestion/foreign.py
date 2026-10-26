@@ -2149,13 +2149,13 @@ KR_DISCOVERY_TERMS = ["자원순환", "재활용", "순환경제", "포장재", 
 # Curated anchors: (search query, official title, English label). Matched on the normalized title
 # (spaces and the several middle-dot variants law.go.kr mixes — · ㆍ ・ — removed), so the English
 # label lands on the right MST whatever the source's punctuation.
-# Each label carries the ORIGINAL enactment year: the DRF document is the current consolidated
-# version, whose 공포일자 is the latest amendment's date, so the year in the label is what dates the row.
+# Each label carries the ORIGINAL enactment year. fetch() dates every law to the day from the
+# lsHistory 제정 row; the label year is the fallback when that lookup fails.
 KR_SEED_LAWS = [
     ("자원의 절약과 재활용촉진에 관한 법률", "자원의 절약과 재활용촉진에 관한 법률",
      "Act on the Promotion of Saving and Recycling of Resources 1992 (EPR, packaging, deposit)"),
     ("자원의 절약과 재활용촉진에 관한 법률", "자원의 절약과 재활용촉진에 관한 법률 시행령",
-     "Enforcement Decree of the Resource Recycling Act 1992 (EPR products, recycling obligation rates)"),
+     "Enforcement Decree of the Resource Recycling Act 1993 (EPR products, recycling obligation rates)"),
     ("자동차의 자원순환", "전기·전자제품 및 자동차의 자원순환에 관한 법률",
      "Act on Resource Circulation of Electrical and Electronic Equipment and Vehicles 2007"),
     ("순환경제사회", "순환경제사회 전환 촉진법",
@@ -2201,6 +2201,30 @@ def kr_parse_search(xml: str) -> list[dict]:
         dm = _KR_DATE_RE.search(block)
         out.append({"mst": m.group(1), "title": _kr_text(nm.group(1)) if nm else "",
                     "date": dm.group(1) if dm else ""})
+    return out
+
+
+_KR_ROW_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S)
+_KR_CELL_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.S)
+_KR_DOTDATE_RE = re.compile(r"(\d{4})\.(\d{1,2})\.(\d{1,2})")
+
+
+def kr_parse_history(html: str) -> list[tuple[str, str, "datetime.date | None"]]:
+    """lsHistory HTML table → [(title, 제개정구분, 공포일자)]. Columns: 순번, 법령명, 소관부처, 제개정구분,
+    법령종류, 공포번호, 공포일자 (YYYY.M.D), 시행일, 현행/연혁. The header row has no <td> cells."""
+    out = []
+    for row in _KR_ROW_RE.findall(html):
+        cells = [_strip_tags(c) for c in _KR_CELL_RE.findall(row)]
+        if len(cells) < 7:
+            continue
+        m = _KR_DOTDATE_RE.search(cells[6])
+        date = None
+        if m:
+            try:
+                date = datetime.date(int(m[1]), int(m[2]), int(m[3]))
+            except ValueError:
+                pass
+        out.append((cells[1], cells[3], date))
     return out
 
 
@@ -2266,6 +2290,42 @@ class KoreaLawGoKrClient(ForeignSourceClient):
         log.info("kr_discovered", total=len(out), seeds=sum(1 for v in out.values() if v))
         return list(out.items())
 
+    async def enactment_date(self, title: str, max_pages: int = 10) -> "datetime.date | None":
+        """The original enactment (제정) date from the lsHistory version table. The DRF document is the
+        current version, so its own 공포일자 is usually the latest amendment's. A title search also
+        returns the act's decree and rule histories, so match the exact normalized title. A law created
+        by a renaming rewrite (전부개정 — e.g. the 2022 Circular Economy Act, which replaced the Framework
+        Act on Resource Circulation) has no 제정 row under its current name; it gets the earliest dated
+        version under that name, i.e. when the law took its current form."""
+        want = _kr_norm(title)
+        earliest = None
+        for page in range(1, max_pages + 1):
+            params = {"OC": self._oc(), "target": "lsHistory", "type": "HTML", "query": title,
+                      "display": KR_MAXREC, "page": page}
+            r = None
+            for attempt in range(2):  # the DRF server drops the odd connection mid-run
+                try:
+                    r = await self.http.get(KR_SEARCH, params=params)
+                    r.raise_for_status()
+                    break
+                except httpx.HTTPError as e:
+                    r = None
+                    log.warning("kr_history_failed", title=title, attempt=attempt + 1, error=str(e))
+            if r is None:
+                return earliest
+            rows = kr_parse_history(r.text)
+            for name, kind, date in rows:
+                if _kr_norm(name) != want or date is None:
+                    continue
+                if kind == "제정":
+                    return date
+                earliest = min(earliest, date) if earliest else date
+            if len(rows) < KR_MAXREC:
+                break
+        if earliest is None:
+            log.warning("kr_enactment_not_found", title=title)
+        return earliest
+
     async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
         oc = self._oc()
         if not oc:
@@ -2280,6 +2340,8 @@ class KoreaLawGoKrClient(ForeignSourceClient):
         if _KR_FAIL in r.text:
             return None
         title, full_text, promulgated = kr_parse_law(r.text)
+        if promulgated is None and title:
+            promulgated = await self.enactment_date(title)
         if len(full_text) < 100:
             log.warning("kr_thin_text", mst=source_id, chars=len(full_text))
             return None

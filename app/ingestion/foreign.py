@@ -4783,6 +4783,153 @@ class TurkiyeMevzuatClient(ForeignSourceClient):
         )
 
 
+# --------------------------------------------------------------------------------------------------
+# Taiwan — 全國法規資料庫 (law.moj.gov.tw) open data. No key. The whole corpus is published as zipped
+# JSON bulk files, one for statutes (法律) and one for regulations (命令):
+#   GET https://law.moj.gov.tw/api/Ch/Law/JSON    -> ChLaw.json   (~6 MB zip, ~1.4k statutes)
+#   GET https://law.moj.gov.tw/api/Ch/Order/JSON  -> ChOrder.json (~26 MB zip, ~10k regulations; slow)
+# Each record carries LawName, EngLawName (official English name — a free curated label), LawCategory,
+# LawURL (pcode), LawHistories (amendment history; entry 1 = original enactment, as an ROC-calendar
+# date in Chinese numerals) and LawArticles. Taiwan's EPR (the "4-in-1" recycling fund: 應回收廢棄物
+# 責任業者 pay fees per regulated item) sits in the Waste Disposal Act + its regulations, all filed under
+# the environment ministry's 資源循環目 category — a far cleaner filter than keywords. Discovery is
+# that category plus every ministry's industrial-waste reuse rules (再利用管理辦法 — by-products, in
+# scope). discover() downloads + filters once; fetch() reads from that cache.
+# --------------------------------------------------------------------------------------------------
+
+TW_BULK = "https://law.moj.gov.tw/api/Ch/{kind}/JSON"
+TW_BULK_ATTEMPTS = 4
+TW_CATEGORY = "資源循環目"
+TW_EXTRA_TITLE_RE = re.compile(r"再利用管理辦法|過度包裝")
+# Administrative/penal/out-of-scope rules inside the category: permit and review fee schedules, penalty
+# guidelines, agency organisation, fund accounting, incineration (energy recovery is kept out of scope),
+# radioactive waste, staff certification.
+TW_EXCLUDE_RE = re.compile(r"收費標準|罰鍰|按日連續處罰|所得利益|組織|編制表|處務規程|委員會|收支保管|"
+                           r"焚化|放射性|專業技術人員|扣留作業")
+# Curated labels where the official English name hides the EPR content. The classifier reads the label
+# + the first ~1.5k chars, and the Waste Disposal Act opens on definitions — its recycling-fee articles
+# (Arts. 15–16, the legal basis of the 4-in-1 fund) come much later, so it was judged out of scope.
+TW_LABEL_HINTS = {
+    "O0050001": "Waste Disposal Act 1974 (EPR: recycling fees on regulated recyclable items, "
+                "Taiwan's 4-in-1 Resource Recycling Fund)",
+}
+_TW_PCODE_RE = re.compile(r"pcode=(\w+)")
+_ZH_DIGITS = {c: i for i, c in enumerate("零一二三四五六七八九")} | {"〇": 0}
+_ZH_NUM = "〇零一二三四五六七八九十百"
+_TW_ROC_DATE_RE = re.compile(rf"中華民國\s*([{_ZH_NUM}\d]+)\s*年\s*([{_ZH_NUM}\d]+)\s*月\s*([{_ZH_NUM}\d]+)\s*日")
+
+
+def _zh_int(s: str) -> int:
+    """Chinese (or Arabic) numeral → int, up to the hundreds: 六十三 = 63, 一百十四 = 114, 一百零二 = 102."""
+    if s.isdigit():
+        return int(s)
+    total, num = 0, 0
+    for ch in s:
+        if ch in _ZH_DIGITS:
+            num = _ZH_DIGITS[ch]
+        elif ch == "十":
+            total += (num or 1) * 10
+            num = 0
+        elif ch == "百":
+            total += (num or 1) * 100
+            num = 0
+    return total + num
+
+
+def tw_enactment_date(histories: str) -> "datetime.date | None":
+    """First ROC date in LawHistories (entry 1 = 制定/訂定 = enactment). ROC year + 1911 = Gregorian."""
+    m = _TW_ROC_DATE_RE.search(histories or "")
+    if not m:
+        return None
+    try:
+        return datetime.date(_zh_int(m[1]) + 1911, _zh_int(m[2]), _zh_int(m[3]))
+    except ValueError:
+        return None
+
+
+def tw_in_scope(rec: dict) -> bool:
+    """Discovery filter over one bulk record: in force, in the resource-circulation category (or a reuse
+    rule from another ministry), and not an administrative/penal rule."""
+    name = rec.get("LawName") or ""
+    if rec.get("LawAbandonNote") or TW_EXCLUDE_RE.search(name):
+        return False
+    return TW_CATEGORY in (rec.get("LawCategory") or "") or bool(TW_EXTRA_TITLE_RE.search(name))
+
+
+def tw_law_text(rec: dict) -> str:
+    """Foreword + chapter headings + numbered articles, in order."""
+    parts = [rec.get("LawForeword") or ""]
+    for a in rec.get("LawArticles") or []:
+        content = (a.get("ArticleContent") or "").strip()
+        no = (a.get("ArticleNo") or "").strip()
+        parts.append(f"{no} {content}" if a.get("ArticleType") == "A" and no else content)
+    return "\n".join(p.replace("\r\n", "\n").strip() for p in parts if p and p.strip())
+
+
+class TaiwanLawMojClient(ForeignSourceClient):
+    """law.moj.gov.tw open-data adapter. Taiwan's EPR statutes + regulations from the bulk JSON (no key)."""
+
+    region = "TW"
+    source = "lawmoj"
+
+    def __init__(self, timeout: float = 45.0):
+        super().__init__(timeout)
+        self._records: dict[str, dict] | None = None
+
+    async def _load(self) -> dict[str, dict]:
+        if self._records is not None:
+            return self._records
+        records: dict[str, dict] = {}
+        for kind in ("Law", "Order"):
+            data = None
+            # The server drops connections mid-body at random and ignores Range requests (always a full
+            # 200), so a dropped download can't resume — retry the whole file, with backoff.
+            for attempt in range(1, TW_BULK_ATTEMPTS + 1):
+                try:
+                    # The Order file is ~26 MB and trickles out; give it minutes, not seconds.
+                    r = await self.http.get(TW_BULK.format(kind=kind), timeout=900.0)
+                    r.raise_for_status()
+                    with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+                        name = next(n for n in zf.namelist() if n.endswith(".json"))
+                        data = json.loads(zf.read(name).decode("utf-8-sig"))
+                    break
+                except (httpx.HTTPError, zipfile.BadZipFile, StopIteration, ValueError) as e:
+                    log.warning("tw_bulk_failed", kind=kind, attempt=attempt, error=str(e))
+                    if attempt < TW_BULK_ATTEMPTS:
+                        await asyncio.sleep(15 * attempt)
+            if data is None:
+                continue
+            for rec in data.get("Laws", []):
+                m = _TW_PCODE_RE.search(rec.get("LawURL") or "")
+                if m and tw_in_scope(rec):
+                    records[m.group(1)] = rec
+        self._records = records
+        return records
+
+    async def discover(self) -> list[tuple[str, str]]:
+        records = await self._load()
+        log.info("tw_discovered", total=len(records))
+        return [(pcode, TW_LABEL_HINTS.get(pcode) or rec.get("EngLawName") or "")
+                for pcode, rec in records.items()]
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        rec = (await self._load()).get(source_id)
+        if not rec:
+            log.warning("tw_unknown_pcode", pcode=source_id)
+            return None
+        full_text = tw_law_text(rec)
+        if len(full_text) < 100:
+            log.warning("tw_thin_text", pcode=source_id, chars=len(full_text))
+            return None
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=rec.get("LawName") or source_id, full_text=full_text,
+            source_url=rec.get("LawURL") or f"https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode={source_id}",
+            english_label=english_label or rec.get("EngLawName") or "",
+            status_date=tw_enactment_date(rec.get("LawHistories") or ""),
+        )
+
+
 # Registry of available foreign adapters, by region code. New countries: add the subclass + register.
 # Note: a registry key is just a lookup handle (e.g. "FR_CODE"); the client's own `.region` drives the
 # row's region (LegifranceCodeClient writes region="FR"), so JORF + codified FR data co-exist.
@@ -4859,6 +5006,7 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "NO": NorwayLovdataClient,
     # Türkiye (region="TR"): core EPR regs via the mevzuat.gov.tr GeneratePdf endpoint (PDF).
     "TR": TurkiyeMevzuatClient,
+    "TW": TaiwanLawMojClient,
     # Ecuador / Malaysia: FAOLEX PDF mirror (national portals gated / encrypted). Indonesia: BPK JDIH.
     "EC": EcuadorFaolexClient,
     "MY": MalaysiaFaolexClient,

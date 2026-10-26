@@ -69,6 +69,7 @@ COUNTRIES: dict[str, tuple[str, str, list[str]]] = {
     "IT": ("Italy", "country", ["Italy", "Italian", "Italia"]),
     "KE": ("Kenya", "country", ["Kenya", "Kenyan"]),
     "KR": ("South Korea", "country", ["South Korea", "Korea", "Korean", "Republic of Korea"]),
+    "TW": ("Taiwan", "country", ["Taiwan", "Taiwanese"]),
     "MW": ("Malawi", "country", ["Malawi", "Malawian"]),
     "MX": ("Mexico", "country", ["Mexico", "Mexican", "México"]),
     "NO": ("Norway", "country", ["Norway", "Norwegian", "Norge"]),

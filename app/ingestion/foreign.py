@@ -2131,20 +2131,94 @@ class PolandEliClient(ForeignSourceClient):
 # South Korea — law.go.kr DRF Open API. Requires a free "OC" id (registered email prefix at
 # open.law.go.kr) AND the calling IP/domain registered there — so this stays dormant until
 # settings.lawgokr_oc is set (mirrors the FR PISTE account-side setup). Korean full text (XML).
-# NOTE: written to the documented DRF contract but UNVERIFIED end-to-end (no OC during build); the
-# first real run should confirm the Korean response tag names below.
-#   discover: GET lawSearch.do?OC=&target=law&type=XML&query=<term>  -> 법령일련번호 (MST) list
+# Tag names and parsing verified against live responses 2026-10-25 (via the public OC=test demo id,
+# which answers for read-only search/service calls): 6/6 seeds resolve, 24 candidates after excludes.
+#   discover: GET lawSearch.do?OC=&target=law&type=XML&query=<term>  -> <law> entries (법령일련번호=MST)
 #   law text: GET lawService.do?OC=&target=law&type=XML&MST=<mst>    -> full law XML
+# Search is a TITLE search, and its results include each act's 시행령 (enforcement decree) and
+# 시행규칙 (enforcement rule) — for KR EPR the decree matters most: it lists the obligated products and
+# the annual recycling-obligation rates. Text fields arrive CDATA-wrapped; the law body is spread over
+# 조문내용/항내용/호내용/목내용 (article/paragraph/item/sub-item), with 부칙 (addenda) after.
 # --------------------------------------------------------------------------------------------------
 
 KR_SEARCH = "https://www.law.go.kr/DRF/lawSearch.do"
 KR_SERVICE = "https://www.law.go.kr/DRF/lawService.do"
 KR_PAGE = "https://www.law.go.kr/LSW/lsInfoP.do?lsiSeq={mst}"
-KR_MAXREC = 20
-KR_DISCOVERY_TERMS = ["자원순환", "재활용", "순환경제", "포장재", "전기·전자제품 및 자동차"]
-_KR_MST_RE = re.compile(r"<법령일련번호>(\d+)</법령일련번호>")
+KR_MAXREC = 100  # DRF's max page size; one page per term is plenty for title matches
+KR_DISCOVERY_TERMS = ["자원순환", "재활용", "순환경제", "포장재", "자동차의 자원순환", "폐기물"]
+# Curated anchors: (search query, official title, English label). Matched on the normalized title
+# (spaces and the several middle-dot variants law.go.kr mixes — · ㆍ ・ — removed), so the English
+# label lands on the right MST whatever the source's punctuation.
+# Each label carries the ORIGINAL enactment year: the DRF document is the current consolidated
+# version, whose 공포일자 is the latest amendment's date, so the year in the label is what dates the row.
+KR_SEED_LAWS = [
+    ("자원의 절약과 재활용촉진에 관한 법률", "자원의 절약과 재활용촉진에 관한 법률",
+     "Act on the Promotion of Saving and Recycling of Resources 1992 (EPR, packaging, deposit)"),
+    ("자원의 절약과 재활용촉진에 관한 법률", "자원의 절약과 재활용촉진에 관한 법률 시행령",
+     "Enforcement Decree of the Resource Recycling Act 1992 (EPR products, recycling obligation rates)"),
+    ("자동차의 자원순환", "전기·전자제품 및 자동차의 자원순환에 관한 법률",
+     "Act on Resource Circulation of Electrical and Electronic Equipment and Vehicles 2007"),
+    ("순환경제사회", "순환경제사회 전환 촉진법",
+     "Circular Economy Act 2022, in force 2024 (Act on Promotion of Transition to a Circular Economy Society)"),
+    ("폐기물관리법", "폐기물관리법", "Wastes Control Act 1986"),
+    ("건설폐기물", "건설폐기물의 재활용촉진에 관한 법률", "Construction Waste Recycling Promotion Act 2003"),
+]
+# Titles that match a CE term but aren't the CE slice: water/sewage, livestock manure, nuclear waste.
+_KR_NAME_EXCLUDE = re.compile(r"하수도|가축분뇨|방사성|원자력|수도법|해양폐기물")
+_KR_LAW_RE = re.compile(r"<law\b[^>]*>(.*?)</law>", re.S)
+_KR_MST_RE = re.compile(r"<법령일련번호>\s*(\d+)\s*</법령일련번호>")
 _KR_NAME_RE = re.compile(r"<법령명_?한글>(.*?)</법령명_?한글>", re.S)
+_KR_STATUS_RE = re.compile(r"<현행연혁코드>(.*?)</현행연혁코드>", re.S)
+_KR_DATE_RE = re.compile(r"<공포일자>\s*(\d{8})\s*</공포일자>")
+_KR_KIND_RE = re.compile(r"<제개정구분>(.*?)</제개정구분>", re.S)
+_KR_BODY_RE = re.compile(r"<(조문내용|항내용|호내용|목내용|부칙내용)>(.*?)</\1>", re.S)
+_KR_CDATA_RE = re.compile(r"<!\[CDATA\[(.*?)\]\]>", re.S)
+_KR_DOTS_RE = re.compile(r"[\s·ㆍ・‧]")
 _KR_FAIL = "검증에 실패"  # "verification failed" — bad/unregistered OC
+
+
+def _kr_text(raw: str) -> str:
+    # Unwrap CDATA BEFORE tag-stripping: _TAG_RE would otherwise eat "<![CDATA[ … >" as one tag. The
+    # inline amendment notes (<개정 2020. 5. 26.>) then strip as tags, which is the noise we'd drop anyway.
+    return _strip_tags(_KR_CDATA_RE.sub(r"\1", raw))
+
+
+def _kr_norm(title: str) -> str:
+    return _KR_DOTS_RE.sub("", title)
+
+
+def kr_parse_search(xml: str) -> list[dict]:
+    """lawSearch.do XML → [{mst, title, date}] for current (현행) laws; historical versions dropped."""
+    out = []
+    for block in _KR_LAW_RE.findall(xml):
+        m = _KR_MST_RE.search(block)
+        if not m:
+            continue
+        st = _KR_STATUS_RE.search(block)
+        if st and _kr_text(st.group(1)) not in ("", "현행"):
+            continue
+        nm = _KR_NAME_RE.search(block)
+        dm = _KR_DATE_RE.search(block)
+        out.append({"mst": m.group(1), "title": _kr_text(nm.group(1)) if nm else "",
+                    "date": dm.group(1) if dm else ""})
+    return out
+
+
+def kr_parse_law(xml: str) -> tuple[str, str, "datetime.date | None"]:
+    """lawService.do XML → (title, body text, enactment date). Body = the article/paragraph/item text
+    in document order; falls back to the whole stripped document if those tags are absent. The date is
+    returned only when this version IS the original enactment (제개정구분 = 제정) — an amended version's
+    공포일자 is the amendment's date, which would re-date a 1992 act to last year."""
+    tm = _KR_NAME_RE.search(xml)
+    title = _kr_text(tm.group(1)) if tm else ""
+    parts = [_kr_text(body) for _, body in _KR_BODY_RE.findall(xml)]
+    text = "\n".join(p for p in parts if p) or _kr_text(xml)
+    km, dm = _KR_KIND_RE.search(xml), _KR_DATE_RE.search(xml)
+    date = None
+    if dm and km and _kr_text(km.group(1)) == "제정":
+        s = dm.group(1)
+        date = _iso_to_date(f"{s[:4]}-{s[4:6]}-{s[6:]}")
+    return title, text, date
 
 
 class KoreaLawGoKrClient(ForeignSourceClient):
@@ -2163,8 +2237,9 @@ class KoreaLawGoKrClient(ForeignSourceClient):
         if not oc:
             log.warning("kr_no_oc", hint="set lawgokr_oc in .env (register at open.law.go.kr)")
             return []
-        out: dict[str, str] = {}
-        for term in KR_DISCOVERY_TERMS:
+        # One search per distinct query; seeds and keyword terms share the cache.
+        hits: dict[str, list[dict]] = {}
+        for term in dict.fromkeys([q for q, _, _ in KR_SEED_LAWS] + KR_DISCOVERY_TERMS):
             params = {"OC": oc, "target": "law", "type": "XML", "query": term, "display": KR_MAXREC}
             try:
                 resp = await self.http.get(KR_SEARCH, params=params)
@@ -2175,9 +2250,20 @@ class KoreaLawGoKrClient(ForeignSourceClient):
             if _KR_FAIL in resp.text:
                 log.warning("kr_oc_invalid", hint="OC or calling IP/domain not registered at open.law.go.kr")
                 return []
-            for mst in _KR_MST_RE.findall(resp.text):
-                out.setdefault(mst, "")
-        log.info("kr_discovered", total=len(out))
+            hits[term] = kr_parse_search(resp.text)
+
+        out: dict[str, str] = {}
+        for query, title, en in KR_SEED_LAWS:
+            match = next((h for h in hits.get(query, []) if _kr_norm(h["title"]) == _kr_norm(title)), None)
+            if match:
+                out[match["mst"]] = en
+            else:
+                log.warning("kr_seed_unresolved", title=title)
+        for term in KR_DISCOVERY_TERMS:
+            for h in hits.get(term, []):
+                if not _KR_NAME_EXCLUDE.search(h["title"]):
+                    out.setdefault(h["mst"], "")
+        log.info("kr_discovered", total=len(out), seeds=sum(1 for v in out.values() if v))
         return list(out.items())
 
     async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
@@ -2193,15 +2279,15 @@ class KoreaLawGoKrClient(ForeignSourceClient):
             return None
         if _KR_FAIL in r.text:
             return None
-        tm = _KR_NAME_RE.search(r.text)
-        title = _strip_tags(tm.group(1)) if tm else (english_label or source_id)
-        full_text = _strip_tags(r.text)
+        title, full_text, promulgated = kr_parse_law(r.text)
         if len(full_text) < 100:
             log.warning("kr_thin_text", mst=source_id, chars=len(full_text))
             return None
         return ForeignLaw(
-            source_id=source_id, region=self.region, source=self.source, title=title,
-            full_text=full_text, source_url=KR_PAGE.format(mst=source_id), english_label=english_label,
+            source_id=source_id, region=self.region, source=self.source,
+            title=title or english_label or source_id, full_text=full_text,
+            source_url=KR_PAGE.format(mst=source_id), english_label=english_label,
+            status_date=promulgated,
         )
 
 

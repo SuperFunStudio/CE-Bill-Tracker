@@ -1,0 +1,807 @@
+<title>Where the Loop Closes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Compare which steps of the circular economy each region's law reaches, by material. From the Atlas Circular legislative corpus.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one question up top, the controls that answer it, then two butterflies side by side (stacked on a
+   phone), a mirrored step-by-step comparison under them, and a material lens that feeds back into the filter.
+   Brand tokens match atlascircular.com and the Insights butterfly; --a / --b are the two regions' own inks. */
+:root {
+  --bg: #f6f7f4; --surface: #ffffff; --line: #dde1dc; --soft: #eef0ec;
+  --fg: #16182a; --fg2: #464c57; --muted: #6b7079;
+  --bio: #6f8a2e; --tech: #1e6ae9; --out: #9aa1ab; --hatch: #c3c8cf; --hl: #f2b84b;
+  --a: #b4532a; --b: #26304f;
+  --node-tech: #1e6ae9; --node-bio: #637c25; --node-ink: #0b1633; --on-node: #ffffff;
+  --serif: "Playfair Display", Georgia, "Times New Roman", serif;
+  --sans: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Roboto Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10141c; --surface: #1a202b; --line: #313a48; --soft: #222a36;
+  --fg: #f1f3f5; --fg2: #c3c9d1; --muted: #8d96a3;
+  --bio: #a5bd5c; --tech: #6ea2ff; --out: #6b7280; --hatch: #4b5563; --hl: #f5c56a;
+  --a: #f08a5d; --b: #c9d3ec; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #10141c; --surface: #1a202b; --line: #313a48; --soft: #222a36;
+  --fg: #f1f3f5; --fg2: #c3c9d1; --muted: #8d96a3;
+  --bio: #a5bd5c; --tech: #6ea2ff; --out: #6b7280; --hatch: #4b5563; --hl: #f5c56a;
+  --a: #f08a5d; --b: #c9d3ec; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+[hidden] { display: none !important; }
+.wrap { max-width: 1200px; margin: 0 auto; padding-block: 36px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px; }
+.wrap > * { min-width: 0; }
+a { color: var(--tech); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--tech); outline-offset: 2px; }
+p { margin: 0; }
+.eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1, h2, h3 { font-family: var(--serif); margin: 0; text-wrap: balance; }
+
+/* header */
+header { display: grid; gap: 12px; max-width: 760px; }
+h1 { font-weight: 700; font-size: clamp(32px, 5.2vw, 54px); line-height: 1.04; letter-spacing: -.01em; }
+h1 em { font-style: italic; font-weight: 500; }
+.dek { font-size: 17px; color: var(--fg2); max-width: 64ch; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand svg { flex: none; }
+
+/* controls */
+.controls { display: grid; gap: 14px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.vs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.pick { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pick i { flex: none; width: 12px; height: 12px; border-radius: 50%; }
+.pick select { height: 40px; min-width: 0; max-width: 100%; width: 15.5rem; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); font-size: 15px; font-weight: 500; }
+.vs .v { font-family: var(--serif); font-style: italic; font-size: 20px; color: var(--muted); }
+.iconbtn { height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font-size: 13.5px; color: var(--fg2);
+  display: inline-flex; align-items: center; gap: 6px; }
+.iconbtn:hover { border-color: var(--muted); color: var(--fg); }
+.vs .spacer { flex: 1; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--bg); }
+.seg button { border: 0; background: none; padding: 0 14px; height: 38px; font-size: 13.5px; color: var(--fg2); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.row2 { min-width: 0; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.lab { font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; flex: 1 1 320px; }
+.chip { border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 5px 12px; font-size: 13.5px; color: var(--fg2);
+  display: inline-flex; align-items: center; gap: 6px; }
+.chip:hover { border-color: var(--muted); color: var(--fg); }
+.chip[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+.chip small { font-family: var(--mono); font-size: 11px; opacity: .7; }
+.chip.zero { opacity: .5; }
+
+/* verdict */
+.verdict { display: grid; gap: 10px; }
+.verdict h2 { font-weight: 500; font-size: clamp(22px, 3.2vw, 32px); line-height: 1.2; max-width: 30ch; }
+.verdict h2 .na { color: var(--a); } .verdict h2 .nb { color: var(--b); }
+.diff { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 14px; color: var(--fg2); }
+.diff b { font-weight: 500; color: var(--fg); }
+
+/* butterflies */
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.fly { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 16px 10px; display: grid; gap: 6px; align-content: start;
+  border-top: 4px solid var(--c); }
+.fly.a { --c: var(--a); } .fly.b { --c: var(--b); }
+.flyhead { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; }
+.flyhead h3 { font-weight: 700; font-size: 24px; }
+.score { font-family: var(--serif); font-size: 22px; white-space: nowrap; }
+.score b { font-size: 38px; color: var(--c); font-weight: 700; }
+.score span { color: var(--muted); font-size: 15px; font-family: var(--sans); }
+.flysub { font-size: 13.5px; color: var(--fg2); }
+.flysub b { font-family: var(--mono); font-weight: 500; color: var(--fg); }
+.fly svg { width: 100%; height: auto; display: block; font-family: var(--sans); }
+.flyfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted);
+  border-top: 1px solid var(--line); padding-top: 8px; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--fg2); }
+.key i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -2px; margin-right: 6px; }
+
+.node { cursor: pointer; }
+.node circle.ring { stroke-width: 2.5; transition: stroke-width .12s, stroke .12s; }
+.node:hover circle.ring, .node:focus-visible circle.ring, .node.hot circle.ring { stroke-width: 7; stroke: var(--hl); }
+.box rect { fill: var(--bg); stroke: var(--line); }
+.box.node:hover rect, .box.node.hot rect { stroke: var(--hl); stroke-width: 5; }
+.num { font-family: var(--serif); font-weight: 700; font-variant-numeric: tabular-nums; paint-order: stroke; stroke-linejoin: round; }
+.boxnum { font-family: var(--serif); font-weight: 700; font-size: 38px; fill: var(--fg); }
+.arc { fill: none; stroke-width: 3.5; } .arc.bio { stroke: var(--bio); } .arc.tech { stroke: var(--tech); }
+.flow { fill: none; stroke-width: 2.5; }
+.leak { fill: none; stroke: var(--muted); stroke-dasharray: 2 4; }
+
+/* step by step */
+section.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 20px 14px; display: grid; gap: 14px; }
+.cardhead { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; justify-content: space-between; }
+.cardhead h2 { font-weight: 500; font-size: 24px; }
+.cardhead p { font-size: 14px; color: var(--fg2); max-width: 62ch; margin-top: 4px; }
+.steps { display: grid; }
+.grouplab { padding: 14px 0 6px; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); }
+.srow { display: grid; grid-template-columns: minmax(0, 1fr) 236px minmax(0, 1fr); align-items: center; gap: 12px; padding: 7px 4px;
+  border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 4px; }
+.srow:hover, .srow.hot { background: color-mix(in srgb, var(--hl) 14%, transparent); }
+.sname { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sname svg { flex: none; }
+.sname b { font-weight: 500; font-size: 14.5px; display: block; line-height: 1.25; }
+.sname small { display: block; font-size: 12px; color: var(--muted); }
+.track { position: relative; height: 22px; display: flex; align-items: center; }
+.track.a { justify-content: flex-end; }
+.bar { height: 14px; border-radius: 2px; min-width: 0; transition: width .45s cubic-bezier(.3,.7,.2,1); }
+.track.a .bar { background: var(--a); } .track.b .bar { background: var(--b); }
+.val { font-family: var(--mono); font-size: 12.5px; color: var(--fg); padding: 0 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.val.gap { color: var(--muted); font-style: italic; font-family: var(--sans); }
+.track.a .val { order: -1; }
+.swatchgap { width: 22px; height: 14px; border-radius: 2px; background: repeating-linear-gradient(45deg, var(--hatch) 0 2px, transparent 2px 5px); flex: none; }
+.legendab { display: flex; gap: 18px; font-size: 13px; color: var(--fg2); }
+.legendab i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+/* material lens */
+.mats { display: grid; }
+.mrow { display: grid; grid-template-columns: 220px minmax(0, 1fr) 68px; align-items: center; gap: 14px; padding: 6px 4px; border-bottom: 1px solid var(--line);
+  cursor: pointer; border-radius: 4px; background: none; border-left: 0; border-right: 0; border-top: 0; text-align: left; width: 100%; }
+.mrow:hover { background: color-mix(in srgb, var(--hl) 14%, transparent); }
+.mrow[aria-pressed="true"] { background: color-mix(in srgb, var(--hl) 24%, transparent); }
+.mrow .mn { font-size: 14px; color: var(--fg); }
+.mrow .mn small { color: var(--muted); font-family: var(--mono); font-size: 11.5px; margin-left: 6px; }
+.dumb { position: relative; height: 22px; }
+.dumb .rail { position: absolute; left: 0; right: 0; top: 10px; height: 2px; background: repeating-linear-gradient(90deg, var(--line) 0 2px, transparent 2px calc(100% / 15)); }
+.dumb .link { position: absolute; top: 9px; height: 4px; background: var(--hatch); border-radius: 2px; }
+.dumb .dot { position: absolute; top: 3px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; }
+.dumb .dot.a { background: var(--a); }
+.dumb .dot.b { background: transparent; border: 3px solid var(--b); }
+.mrow .mv { font-family: var(--mono); font-size: 12.5px; color: var(--fg2); text-align: right; white-space: nowrap; }
+.axis { display: grid; grid-template-columns: 220px minmax(0, 1fr) 68px; gap: 14px; font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 0 4px; }
+.axis div { display: flex; justify-content: space-between; }
+
+/* bills drawer */
+.scrim { position: fixed; inset: 0; background: rgb(10 14 24 / .35); z-index: 29; }
+.panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); z-index: 30; background: var(--surface);
+  border-left: 1px solid var(--line); box-shadow: -10px 0 30px rgb(0 0 0 / .16); display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.phead { display: flex; align-items: start; gap: 12px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
+.phead h3 { font-size: 24px; font-weight: 500; }
+.phead p { font-size: 13.5px; color: var(--fg2); margin-top: 4px; }
+.phead button { margin-left: auto; flex: none; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; height: 34px; padding: 0 12px; font-size: 13px; }
+.ptabs { display: flex; border-bottom: 1px solid var(--line); }
+.ptabs button { flex: 1; border: 0; background: none; padding: 10px 8px; font-size: 14px; color: var(--fg2); border-bottom: 3px solid transparent; }
+.ptabs button[aria-selected="true"] { color: var(--fg); font-weight: 500; border-bottom-color: var(--c); }
+.ptabs button.a { --c: var(--a); } .ptabs button.b { --c: var(--b); }
+.plist { overflow-y: auto; padding: 4px 18px 24px; display: grid; align-content: start; }
+.bill { display: grid; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.bill a { color: var(--fg); font-size: 14.5px; }
+.bill a:hover { color: var(--tech); }
+.bill .meta { font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.st { display: inline-flex; align-items: center; gap: 5px; }
+.st i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.st.enacted i { background: var(--fg2); } .st.pending i { border: 1.5px solid var(--fg2); } .st.ended i { background: var(--hatch); }
+.pnote { font-size: 13.5px; color: var(--fg2); padding: 14px 0 4px; }
+.more { justify-self: center; margin-top: 12px; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 7px 16px; font-size: 13.5px; }
+.empty { padding: 28px 0; color: var(--muted); text-align: center; }
+
+.tip { position: fixed; pointer-events: none; max-width: 300px; background: var(--fg); color: var(--bg); z-index: 40;
+  padding: 10px 12px; border-radius: 6px; font-size: 12.5px; line-height: 1.45; box-shadow: 0 6px 20px rgb(0 0 0 / .2); }
+.tip b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+.tip .tn { font-family: var(--mono); display: flex; gap: 14px; margin: 4px 0 6px; }
+.tip .tn span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--c); }
+.tip .tn .ta { --c: var(--a); } .tip .tn .tb { --c: var(--b); }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 50; background: var(--fg); color: var(--bg);
+  padding: 9px 16px; border-radius: 6px; font-size: 14px; box-shadow: 0 6px 20px rgb(0 0 0 / .2); }
+
+/* closing */
+.cta { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: center; padding: 24px; border-radius: 8px;
+  background: var(--fg); color: var(--bg); }
+.cta h2 { font-weight: 500; font-size: clamp(22px, 3vw, 30px); color: var(--bg); }
+.cta p { color: color-mix(in srgb, var(--bg) 78%, var(--fg)); margin-top: 8px; font-size: 15px; }
+.cta .links { display: grid; gap: 8px; }
+.cta a { color: var(--bg); border: 1px solid color-mix(in srgb, var(--bg) 35%, var(--fg)); border-radius: 6px; padding: 10px 14px; display: flex; justify-content: space-between; gap: 10px; font-size: 14.5px; }
+.cta a:hover { background: color-mix(in srgb, var(--bg) 10%, var(--fg)); text-decoration: none; }
+footer { font-size: 12.5px; color: var(--muted); max-width: 96ch; display: grid; gap: 8px; }
+
+@media (max-width: 860px) {
+  .pair { grid-template-columns: minmax(0, 1fr); }
+  .cta { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .pick { width: 100%; } .pick select { flex: 1; width: auto; }
+  .vs .v { display: none; }
+  .vs .spacer { display: none; }
+  .srow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 8px; }
+  .srow .sname { grid-column: 1 / -1; order: -1; }
+  .mrow, .axis { grid-template-columns: 112px minmax(0, 1fr) 46px; gap: 8px; }
+  .mrow .mn small { display: none; }
+  .mrow .mn { font-size: 13px; }
+  .chips { flex-wrap: nowrap; overflow-x: auto; margin-inline: -4px; padding: 2px 4px 6px; }
+  .chip { flex: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand eyebrow">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+      <a href="https://www.atlascircular.com" target="_blank" rel="noopener" style="color:inherit">Atlas Circular</a> · Butterfly compare
+    </div>
+    <h1>Where does the law <em>close the loop?</em></h1>
+    <p class="dek">The circular economy is a set of loops: repair, reuse, remanufacture, recycle, compost, regenerate. Pick two places and a material to see which loops their laws reach, and which they leave open.</p>
+  </header>
+
+  <section class="controls" aria-label="Compare">
+    <div class="vs">
+      <label class="pick"><i style="background:var(--a)"></i><select id="selA" aria-label="First region"></select></label>
+      <span class="v">vs</span>
+      <label class="pick"><i style="background:var(--b)"></i><select id="selB" aria-label="Second region"></select></label>
+      <button class="iconbtn" id="swap" type="button" aria-label="Swap regions">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>Swap</button>
+      <span class="spacer"></span>
+      <div class="seg" id="status" role="group" aria-label="Which laws to count"></div>
+    </div>
+    <div class="row2">
+      <span class="lab" id="matlab">Material</span>
+      <div class="chips" id="chips" role="group" aria-labelledby="matlab"></div>
+    </div>
+  </section>
+
+  <section class="verdict" aria-live="polite">
+    <h2 id="verdict"></h2>
+    <div class="diff" id="diff"></div>
+  </section>
+
+  <section class="pair" aria-label="Butterflies">
+    <article class="fly a" id="flyA"></article>
+    <article class="fly b" id="flyB"></article>
+  </section>
+  <div class="key" style="margin-top:-14px">
+    <span><i style="background:var(--node-tech)"></i>Technical cycle: materials kept in use</span>
+    <span><i style="background:var(--node-bio)"></i>Biological cycle: nutrients returned</span>
+    <span><i style="background:repeating-linear-gradient(45deg,var(--hatch) 0 2px,var(--surface) 2px 5px);border:1px solid var(--hatch)"></i>No law at this step: an open loop</span>
+    <span>Deeper colour means more law, relative to that region's busiest step. Tap any step to read its bills.</span>
+  </div>
+
+  <section class="card" aria-labelledby="sbs">
+    <div class="cardhead">
+      <div><h2 id="sbs">Step by step</h2><p id="sbsSub"></p></div>
+      <div class="seg" id="measure" role="group" aria-label="Measure"></div>
+    </div>
+    <div class="legendab" id="legendab"></div>
+    <div class="steps" id="steps"></div>
+  </section>
+
+  <section class="card" aria-labelledby="ml">
+    <div class="cardhead">
+      <div><h2 id="ml">Material lens</h2><p>How many of the 15 steps each place's law reaches for one material. Pick a row to filter the whole page to it.</p></div>
+      <div class="legendab" id="legendab2"></div>
+    </div>
+    <div class="axis" aria-hidden="true"><span></span><div><span>0</span><span>5</span><span>10</span><span>15 steps</span></div><span></span></div>
+    <div class="mats" id="mats"></div>
+  </section>
+
+  <section class="cta">
+    <div>
+      <h2>Every count here is a bill you can open.</h2>
+      <p>Atlas Circular tracks circular-economy law across the US states, the EU and 40 countries, with each bill's obligations, deadlines and status. This page is one view of it.</p>
+    </div>
+    <div class="links">
+      <a id="ctaA" href="https://www.atlascircular.com" target="_blank" rel="noopener"></a>
+      <a id="ctaB" href="https://www.atlascircular.com" target="_blank" rel="noopener"></a>
+      <a href="https://www.atlascircular.com/methodology/" target="_blank" rel="noopener"><span>How we place bills on the butterfly</span><span>→</span></a>
+    </div>
+  </section>
+
+  <footer>
+    <p id="srcnote"></p>
+    <p>A bill sits at every step its instruments, materials or text place it, so step counts don't add up to the total. Steps placed by instrument (repair, deposit-return, EPR, recycled content, disposal bans, chemical restrictions, labeling, organics diversion) are high confidence; Refurbish, Recycle, Cascades, Regeneration, Farming and Feedstock are placed from bill text, material tags or keywords and are medium confidence. Share is a real gap: we searched the whole corpus for sharing and product-as-a-service law and found none. Energy recovery is out of scope. A material filter counts bills tagged with that material, so bills with no material tag drop out. Diagram after the Ellen MacArthur Foundation circular economy systems diagram (2019), based on Braungart &amp; McDonough, <i>Cradle to Cradle</i>.</p>
+  </footer>
+</div>
+
+<aside class="scrim" id="scrim" hidden></aside>
+<aside class="panel" id="panel" hidden aria-label="Bills at this step" role="dialog">
+  <div class="phead"><div><div class="eyebrow" id="peye"></div><h3 id="ptitle"></h3><p id="psub"></p></div><button id="pclose" type="button">Close</button></div>
+  <div class="ptabs" role="tablist" id="ptabs"></div>
+  <div class="plist" id="plist"></div>
+</aside>
+<div class="tip" id="tip" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const RAW = __BILLS__;
+const EXPORTED = "__EXPORTED__";
+const SITE = "https://www.atlascircular.com";
+// Rows are positional (see scripts/build_butterfly_explorer.py); this page reads only the columns it needs.
+const BILLS = RAW.map(r => ({ id: r[0], region: r[1], state: r[2], num: r[3], title: r[4], status: r[5], year: r[6],
+  inst: r[7] ? r[7].split(",") : [], wing: r[8], mats: r[9] ? r[9].split(",") : [],
+  place: Object.fromEntries((r[14] ? r[14].split(",") : []).map(p => p.split(":"))) }));
+const fmt = n => n.toLocaleString("en-US");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const slug = b => (`${b.num} ${b.title}`.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase()
+  .replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "").slice(0, 70).replace(/-+$/g, "")) || "untitled";
+const billHref = b => `${SITE}/bill/${b.id}/${slug(b)}/`;
+
+// ---------- status ----------
+const STATUS = { enacted: "enacted", active: "enacted", introduced: "pending", in_committee: "pending",
+  passed_chamber: "pending", passed: "pending", failed: "ended", vetoed: "ended", repealed: "ended" };
+const sgroup = b => STATUS[b.status] || "pending";
+const STATUS_TEXT = { enacted: "Enacted", active: "In force", introduced: "Introduced", in_committee: "In committee",
+  passed_chamber: "Passed one chamber", passed: "Passed", failed: "Failed", vetoed: "Vetoed", repealed: "Repealed" };
+const STATUSES = [
+  { id: "enacted", label: "In force", noun: "laws in force", short: "in force" },
+  { id: "pending", label: "Pending", noun: "pending bills", short: "pending" },
+  { id: "all", label: "Everything", noun: "bills and laws", short: "bills" },
+];
+
+// ---------- regions ----------
+const CNAME = { EU: "European Union", FR: "France", UK: "United Kingdom", PL: "Poland", SE: "Sweden", NL: "Netherlands",
+  DE: "Germany", ES: "Spain", FI: "Finland", DK: "Denmark", IT: "Italy", IE: "Ireland", CH: "Switzerland", SI: "Slovenia",
+  AT: "Austria", LU: "Luxembourg", LT: "Lithuania", SK: "Slovakia", LV: "Latvia", EE: "Estonia", NO: "Norway", CZ: "Czechia",
+  TR: "Türkiye", JP: "Japan", CN: "China", AU: "Australia", IN: "India", ID: "Indonesia", MY: "Malaysia", CA: "Canada",
+  BR: "Brazil", EC: "Ecuador", CL: "Chile", CO: "Colombia", PE: "Peru", UY: "Uruguay", MX: "Mexico", KE: "Kenya",
+  RW: "Rwanda", ZM: "Zambia", MW: "Malawi", BE: "Belgium", BG: "Bulgaria", HR: "Croatia", CY: "Cyprus", GR: "Greece",
+  HU: "Hungary", MT: "Malta", PT: "Portugal", RO: "Romania", KR: "South Korea", TW: "Taiwan", VN: "Vietnam", PH: "Philippines",
+  TH: "Thailand", RU: "Russia", NZ: "New Zealand", SG: "Singapore", ZA: "South Africa", NG: "Nigeria" };
+const USN = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware",
+  DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas",
+  KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi",
+  MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
+  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island",
+  SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington",
+  WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming", PR: "Puerto Rico", GU: "Guam", VI: "US Virgin Islands" };
+const FAMS = {
+  eur: { name: "Europe", codes: "EU FR UK PL SE NL DE ES FI DK IT IE CH SI AT LU LT SK LV EE NO CZ TR BE BG HR CY GR HU MT PT RO".split(" ") },
+  apac: { name: "Asia-Pacific", codes: "JP CN AU IN ID MY KR TW VN PH TH NZ SG".split(" ") },
+  amer: { name: "Americas outside the US", codes: "CA BR EC CL CO PE UY MX".split(" ") },
+  afr: { name: "Africa", codes: "KE RW ZM MW ZA NG".split(" ") },
+};
+const usState = b => !b.state || b.state === "US" ? null : b.state.split("-")[0];   // city ordinances roll into their state
+// Region ids are hash-safe: lowercase letters and one hyphen (us-ca). Each has a predicate, a name and a page on the site.
+const REGIONS = new Map();
+const addRegion = (id, name, test, page) => REGIONS.set(id, { id, name, test, page });
+addRegion("all", "Everywhere we track", () => true, `${SITE}/`);
+for (const [k, f] of Object.entries(FAMS)) addRegion(k, f.name, b => f.codes.includes(b.region), `${SITE}/jurisdictions/`);
+addRegion("us", "United States", b => b.region === "US", `${SITE}/states/`);
+addRegion("us-fed", "US federal", b => b.region === "US" && !usState(b), `${SITE}/federal/`);
+for (const c of [...new Set(BILLS.filter(b => b.region !== "US").map(b => b.region))])
+  addRegion(c.toLowerCase(), CNAME[c] || c, b => b.region === c, `${SITE}/jurisdictions/${c.toLowerCase()}/${c.toLowerCase()}/`);
+for (const s of [...new Set(BILLS.map(usState).filter(Boolean))])
+  addRegion("us-" + s.toLowerCase(), USN[s] || s, b => b.region === "US" && usState(b) === s, `${SITE}/jurisdictions/us/${s.toLowerCase()}/`);
+const REG_BILLS = new Map([...REGIONS.values()].map(r => [r.id, BILLS.filter(r.test)]));
+// "the United States" reads better in a sentence than "United States"
+const THE = new Set(["us", "uk", "nl", "us-fed", "eu"]);
+const inSentence = r => (THE.has(r.id) ? "the " : "") + r.name;
+
+// ---------- materials ----------
+const MATS = [
+  { id: "any", name: "All materials", m: null },
+  { id: "plastic", name: "Plastic packaging", m: ["plastic_packaging", "plastics", "plastic_products", "packaging", "microplastics"] },
+  { id: "paper", name: "Paper and card", m: ["paper_packaging", "paper"] },
+  { id: "glass", name: "Glass", m: ["glass"] },
+  { id: "metals", name: "Metals", m: ["metals", "critical_minerals"] },
+  { id: "electronics", name: "Electronics", m: ["electronics", "lighting", "thermostats"] },
+  { id: "batteries", name: "Batteries", m: ["batteries", "nickel_cadmium"] },
+  { id: "textiles", name: "Textiles", m: ["textiles"] },
+  { id: "furnishings", name: "Furniture, mattresses, carpet", m: ["furniture", "mattresses", "carpet"] },
+  { id: "vehicles", name: "Vehicles and tires", m: ["vehicles", "tires", "auto_switches", "used_oil"] },
+  { id: "construction", name: "Construction", m: ["construction"] },
+  { id: "solar", name: "Solar panels", m: ["solar_panels"] },
+  { id: "paint", name: "Paint", m: ["paint"] },
+  { id: "hazardous", name: "Hazardous and pharma", m: ["hazardous_materials", "pharmaceuticals", "mercury", "pesticides", "hazardous_waste"] },
+  { id: "organics", name: "Food and organics", m: ["organics"] },
+  { id: "biobased", name: "Bio-based materials", m: ["biobased"] },
+  { id: "agriculture", name: "Agriculture and soil", m: ["agriculture", "biodiversity"] },
+];
+const MAT = Object.fromEntries(MATS.map(m => [m.id, m]));
+const matTest = id => { const m = MAT[id].m; return m ? b => b.mats.some(x => m.includes(x)) : () => true; };
+
+// ---------- steps (same placement as the Insights butterfly and app/classification/butterfly.py) ----------
+const has = (...xs) => b => xs.some(x => b.inst.includes(x));
+const placed = id => b => id in b.place;
+const STEPS = [
+  { id: "maintain", wing: "tech", name: "Maintain / prolong", sub: "right to repair", r: "R4 Repair", pick: has("right_to_repair"),
+    note: "Right-to-repair laws: parts, tools, manuals and diagnostics for owners and independent shops." },
+  { id: "share", wing: "tech", name: "Share", sub: "sharing, product-as-a-service", r: "R2 Reduce", pick: () => false,
+    note: "A real gap. We searched the whole corpus for sharing, lending and product-as-a-service law and found none." },
+  { id: "reuse", wing: "tech", name: "Reuse / redistribute", sub: "deposit-return", r: "R3 Reuse", pick: has("deposit_return"),
+    note: "Deposit-return systems. Some fund refillables, some only one-way recycling." },
+  { id: "refurb", wing: "tech", name: "Refurbish / remanufacture", sub: "repurpose, upcycle", r: "R5–R7", pick: placed("refurb"),
+    note: "Remanufacturing, refurbishment, repurposing and upcycling, mostly placed by a quote from the bill's own text." },
+  { id: "recycle", wing: "tech", name: "Recycle", sub: "recycling and recovery targets", r: "R8 Recycle", pick: placed("recycle"),
+    note: "Recycling and recovery targets: rates of material recycled or recovered, from each bill's text." },
+  { id: "content", wing: "tech", name: "Recycled content", sub: "minimums in new products", r: "R8 demand side", pick: placed("content"),
+    note: "Minimum recycled content in new products or packaging: where the recycling loop re-enters production." },
+  { id: "collect", wing: "tech", name: "Collection", sub: "EPR take-back", r: "R2–R8", pick: has("epr", "product_stewardship"),
+    note: "Extended producer responsibility. Shown once at collection because it runs the whole technical wing." },
+  { id: "leak", wing: "tech", name: "Minimise leakage", sub: "disposal bans", r: "R8–R9", pick: has("disposal_ban"),
+    note: "Landfill and disposal bans that keep material out of the waste stream." },
+  { id: "parts", wing: "none", name: "Safer inputs", sub: "chemical restrictions", r: "R1 Rethink", pick: has("chemical_restriction"),
+    note: "Chemical restrictions that change what goes into materials and parts." },
+  { id: "service", wing: "none", name: "Labeling", sub: "claims and disclosure", r: "R1 Rethink / R8", pick: has("labeling"),
+    note: "Labeling rules: recyclability claims, disclosure and consumer information." },
+  { id: "compost", wing: "bio", name: "Composting / digestion", sub: "organics diversion", r: "Return nutrients", pick: b => has("organics_diversion")(b) || placed("compost")(b),
+    note: "Organics diversion: food-scrap and yard-waste mandates, composting and digestion, compost markets." },
+  { id: "extract", wing: "bio", name: "Biochemical feedstock", sub: "bio-based materials", r: "Cascade", pick: placed("extract"),
+    note: "Bio-based and biomanufactured materials: bioplastics, biopolymers, biorefining." },
+  { id: "cascade", wing: "bio", name: "Cascades", sub: "by-products, food donation", r: "Cascade use", pick: placed("cascade"),
+    note: "By-products and cascading use: by-product status in waste law, surplus-food donation and edible-food recovery." },
+  { id: "biosphere", wing: "bio", name: "Regeneration", sub: "soil health, biodiversity", r: "Regenerate", pick: placed("regen"),
+    note: "Soil health, regenerative agriculture, cover crops, biochar and biodiversity outcomes." },
+  { id: "farm", wing: "bio", name: "Farming / collection", sub: "agriculture", r: "Regenerate", pick: placed("farm"),
+    note: "Agriculture laws, by the agriculture material tag or an agriculture title." },
+];
+const S = Object.fromEntries(STEPS.map(s => [s.id, s]));
+const NSTEPS = STEPS.length;
+const GROUPS = [
+  { name: "Technical cycle · keeping products and materials in use", ids: ["maintain", "share", "reuse", "refurb", "recycle", "content", "collect", "leak"] },
+  { name: "Upstream · design and information", ids: ["parts", "service"] },
+  { name: "Biological cycle · returning nutrients", ids: ["compost", "extract", "cascade", "biosphere", "farm"] },
+];
+
+// Lucide icons (lucide-static 0.460.0, ISC licence), inner SVG markup on a 24x24 stroke grid.
+const ICONS = {"earth": "<path d=\"M21.54 15H17a2 2 0 0 0-2 2v4.54\" /> <path d=\"M7 3.34V5a3 3 0 0 0 3 3a2 2 0 0 1 2 2c0 1.1.9 2 2 2a2 2 0 0 0 2-2c0-1.1.9-2 2-2h3.17\" /> <path d=\"M11 21.95V18a2 2 0 0 0-2-2a2 2 0 0 1-2-2v-1a2 2 0 0 0-2-2H2.05\" /> <circle cx=\"12\" cy=\"12\" r=\"10\" />", "factory": "<path d=\"M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z\" /> <path d=\"M17 18h1\" /> <path d=\"M12 18h1\" /> <path d=\"M7 18h1\" />", "flame": "<path d=\"M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z\" />", "flask-conical": "<path d=\"M10 2v7.527a2 2 0 0 1-.211.896L4.72 20.55a1 1 0 0 0 .9 1.45h12.76a1 1 0 0 0 .9-1.45l-5.069-10.127A2 2 0 0 1 14 9.527V2\" /> <path d=\"M8.5 2h7\" /> <path d=\"M7 16h10\" />", "hammer": "<path d=\"m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9\" /> <path d=\"m18 15 4-4\" /> <path d=\"m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5\" />", "layers": "<path d=\"m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z\" /> <path d=\"m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65\" /> <path d=\"m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65\" />", "package-plus": "<path d=\"M16 16h6\" /> <path d=\"M19 13v6\" /> <path d=\"M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14\" /> <path d=\"m7.5 4.27 9 5.15\" /> <polyline points=\"3.29 7 12 12 20.71 7\" /> <line x1=\"12\" x2=\"12\" y1=\"22\" y2=\"12\" />", "package": "<path d=\"M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z\" /> <path d=\"M12 22V12\" /> <path d=\"m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7\" /> <path d=\"m7.5 4.27 9 5.15\" />", "recycle": "<path d=\"M7 19H4.815a1.83 1.83 0 0 1-1.57-.881 1.785 1.785 0 0 1-.004-1.784L7.196 9.5\" /> <path d=\"M11 19h8.203a1.83 1.83 0 0 0 1.556-.89 1.784 1.784 0 0 0 0-1.775l-1.226-2.12\" /> <path d=\"m14 16-3 3 3 3\" /> <path d=\"M8.293 13.596 7.196 9.5 3.1 10.598\" /> <path d=\"m9.344 5.811 1.093-1.892A1.83 1.83 0 0 1 11.985 3a1.784 1.784 0 0 1 1.546.888l3.943 6.843\" /> <path d=\"m13.378 9.633 4.096 1.098 1.097-4.096\" />", "repeat": "<path d=\"m17 2 4 4-4 4\" /> <path d=\"M3 11v-1a4 4 0 0 1 4-4h14\" /> <path d=\"m7 22-4-4 4-4\" /> <path d=\"M21 13v1a4 4 0 0 1-4 4H3\" />", "share-2": "<circle cx=\"18\" cy=\"5\" r=\"3\" /> <circle cx=\"6\" cy=\"12\" r=\"3\" /> <circle cx=\"18\" cy=\"19\" r=\"3\" /> <line x1=\"8.59\" x2=\"15.42\" y1=\"13.51\" y2=\"17.49\" /> <line x1=\"15.41\" x2=\"8.59\" y1=\"6.51\" y2=\"10.49\" />", "sprout": "<path d=\"M7 20h10\" /> <path d=\"M10 20c5.5-2.5.8-6.4 3-10\" /> <path d=\"M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z\" /> <path d=\"M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z\" />", "store": "<path d=\"m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7\" /> <path d=\"M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8\" /> <path d=\"M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4\" /> <path d=\"M2 7h20\" /> <path d=\"M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7\" />", "trash-2": "<path d=\"M3 6h18\" /> <path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\" /> <path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\" /> <line x1=\"10\" x2=\"10\" y1=\"11\" y2=\"17\" /> <line x1=\"14\" x2=\"14\" y1=\"11\" y2=\"17\" />", "truck": "<path d=\"M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2\" /> <path d=\"M15 18H9\" /> <path d=\"M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14\" /> <circle cx=\"17\" cy=\"18\" r=\"2\" /> <circle cx=\"7\" cy=\"18\" r=\"2\" />", "user": "<path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\" /> <circle cx=\"12\" cy=\"7\" r=\"4\" />", "wheat": "<path d=\"M2 22 16 8\" /> <path d=\"M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z\" /> <path d=\"M7.47 8.53 9 7l1.53 1.53a3.5 3.5 0 0 1 0 4.94L9 15l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z\" /> <path d=\"M11.47 4.53 13 3l1.53 1.53a3.5 3.5 0 0 1 0 4.94L13 11l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z\" /> <path d=\"M20 2h2v2a4 4 0 0 1-4 4h-2V6a4 4 0 0 1 4-4Z\" /> <path d=\"M11.47 17.47 13 19l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L5 19l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z\" /> <path d=\"M15.47 13.47 17 15l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L9 15l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z\" /> <path d=\"M19.47 9.47 21 11l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L13 11l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z\" />", "wrench": "<path d=\"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z\" />"};
+const STEP_ICON = { maintain: "wrench", share: "share-2", reuse: "repeat", refurb: "hammer", recycle: "recycle",
+  content: "package-plus", collect: "truck", leak: "trash-2", parts: "factory", service: "store", compost: "sprout",
+  extract: "flask-conical", cascade: "layers", biosphere: "earth", farm: "wheat" };
+
+// ---------- state (mirrored in the hash: #eur--us--batteries--enacted) ----------
+const state = { a: "eur", b: "us", mat: "any", status: "enacted", measure: "share" };
+function readHash() {
+  const p = decodeURIComponent(location.hash.slice(1)).split("--");
+  if (p.length < 2) return;
+  if (REGIONS.has(p[0])) state.a = p[0];
+  if (REGIONS.has(p[1])) state.b = p[1];
+  if (p[2] && MAT[p[2]]) state.mat = p[2];
+  if (p[3] && STATUSES.some(s => s.id === p[3])) state.status = p[3];
+}
+function writeHash() {
+  const h = `#${state.a}--${state.b}--${state.mat}--${state.status}`;
+  if (location.hash === h) return;
+  try { history.replaceState(null, "", h); } catch { try { location.hash = h; } catch { /* sandboxed: state still lives in the page */ } }
+}
+readHash();
+
+const statusTest = () => state.status === "all" ? () => true : b => sgroup(b) === state.status;
+// The bills one side counts: its region, the status, the material.
+function scope(regionId, matId = state.mat) {
+  const st = statusTest(), mt = matTest(matId);
+  return REG_BILLS.get(regionId).filter(b => st(b) && mt(b));
+}
+function tally(bills) {
+  const by = {};
+  for (const s of STEPS) by[s.id] = bills.filter(s.pick);
+  const covered = STEPS.filter(s => by[s.id].length).length;
+  return { bills, by, covered };
+}
+
+// ---------- svg helpers ----------
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (parent) parent.appendChild(e); return e; };
+const txt = (x, y, s, cls, parent, anchor = "middle") => { const t = el("text", { x, y, class: cls, "text-anchor": anchor }, parent); t.textContent = s; return t; };
+const icon = (parent, name, cx, cy, size, color) => {
+  const s = el("svg", { x: cx - size / 2, y: cy - size / 2, width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color,
+    "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" }, parent);
+  s.innerHTML = ICONS[name] || "";
+  return s;
+};
+const iconHTML = (name, size, color) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+const wingColor = w => w === "bio" ? "var(--node-bio)" : w === "tech" ? "var(--node-tech)" : "var(--fg2)";
+
+// ---------- the butterfly (geometry from the Insights figure, drawn as its label-free fingerprint) ----------
+function drawFly(svg, T, side) {
+  svg.innerHTML = "";
+  const id = "h" + side;
+  const defs = el("defs", {}, svg);
+  for (const w of ["bio", "tech"]) {
+    const m = el("marker", { id: `ar-${w}-${side}`, viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", fill: `var(--${w})` }, m);
+  }
+  const pat = el("pattern", { id, width: 7, height: 7, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+  el("rect", { width: 7, height: 7, fill: "var(--surface)" }, pat);
+  el("line", { x1: 0, y1: 0, x2: 0, y2: 7, stroke: "var(--hatch)", "stroke-width": 2.5 }, pat);
+  const mk = w => `url(#ar-${w}-${side})`;
+
+  const CON = { x: 590, y: 440 }, USR = { x: 710, y: 440 }, R = 52, BOX = { x: 520, w: 260, h: 54 };
+  const BOXES = [{ y: 46, step: "parts" }, { y: 136, step: null }, { y: 226, step: "service" }];
+  const TECH_IN = 784, BIO_IN = 516, BASE = 568;
+  el("path", { d: "M 440 740 Q 650 640 860 740", class: "leak" }, svg);
+  el("path", { d: `M ${CON.x} ${BASE} V 680`, class: "flow", stroke: "var(--bio)", "marker-end": mk("bio") }, svg);
+  el("path", { d: `M ${USR.x} ${BASE} V 680`, class: "flow", stroke: "var(--tech)", "marker-end": mk("tech") }, svg);
+  const loop = (cls, x0, yIn, xIn, rx, sweep) => el("path", { d: `M ${x0} ${BASE} A ${rx} ${(BASE - yIn) / 2} 0 0 ${sweep} ${xIn} ${yIn}`,
+    class: "arc " + cls, "marker-end": mk(cls) }, svg);
+  const L = {
+    recycle: loop("tech", USR.x, BOXES[0].y + 14, TECH_IN, 390, 0),
+    refurb: loop("tech", USR.x, BOXES[1].y + 14, TECH_IN, 305, 0),
+    reuse: loop("tech", USR.x, BOXES[2].y + 14, TECH_IN, 222, 0),
+    farm: loop("bio", CON.x, BOXES[0].y + 14, BIO_IN, 370, 1),
+    extract: loop("bio", CON.x, BOXES[1].y + 40, BIO_IN, 215, 1),
+  };
+  const maintain = el("path", { d: `M ${USR.x + 20} ${BASE} A 95 70 0 1 0 ${USR.x + R + 2} ${USR.y - 14}`, class: "arc tech", "marker-end": mk("tech") }, svg);
+  el("path", { d: `M ${USR.x} ${USR.y + R} V ${BASE}`, class: "flow", stroke: "var(--tech)" }, svg);
+  el("path", { d: `M ${CON.x} ${CON.y + R} V ${BASE}`, class: "flow", stroke: "var(--bio)" }, svg);
+  for (const [i, rr] of [[0, 28], [1, 44], [2, 60]])
+    el("path", { d: `M ${CON.x - 8} ${BASE} A ${rr} ${rr + 6} 0 0 1 ${CON.x - R - 2} ${CON.y + 22 - i * 4}`, class: "arc bio", "stroke-width": 2.2, "marker-end": mk("bio") }, svg);
+
+  const nodes = [];
+  BOXES.forEach((b, i) => {
+    const g = el("g", { class: "box" + (b.step ? " node" : "") }, svg);
+    const n = b.step ? T.by[b.step].length : 0;
+    el("rect", { x: BOX.x, y: b.y, width: BOX.w, height: BOX.h, rx: 27, style: b.step && !n ? `fill:url(#${id})` : "" }, g);
+    icon(g, b.step ? STEP_ICON[b.step] : "package", b.step ? BOX.x + 44 : 650, b.y + BOX.h / 2, 34, "var(--fg2)");
+    if (b.step) { txt(668, b.y + 41, fmt(n), "boxnum", g); nodes.push([g, S[b.step]]); }
+    if (i < BOXES.length - 1) {
+      el("path", { d: `M 600 ${b.y + BOX.h} V ${BOXES[i + 1].y - 3}`, class: "flow", stroke: "var(--bio)", "marker-end": mk("bio") }, svg);
+      el("path", { d: `M 700 ${b.y + BOX.h} V ${BOXES[i + 1].y - 3}`, class: "flow", stroke: "var(--tech)", "marker-end": mk("tech") }, svg);
+    }
+  });
+  const svcBottom = BOXES[2].y + BOX.h;
+  el("path", { d: `M 600 ${svcBottom} V ${svcBottom + 30} H ${CON.x - 14} V ${CON.y - R - 4}`, class: "flow", stroke: "var(--bio)", "marker-end": mk("bio") }, svg);
+  el("path", { d: `M 700 ${svcBottom} V ${svcBottom + 30} H ${USR.x + 14} V ${USR.y - R - 4}`, class: "flow", stroke: "var(--tech)", "marker-end": mk("tech") }, svg);
+  for (const [p, w] of [[CON, "bio"], [USR, "tech"]]) {
+    el("circle", { cx: p.x, cy: p.y, r: R, fill: `var(--node-${w})` }, svg);
+    icon(svg, "user", p.x, p.y, 56, "var(--on-node)");
+  }
+
+  // Shade against this side's own busiest step, so a 40-bill country and a 1,600-bill country compare by shape.
+  const MAXN = Math.max(1, ...STEPS.filter(s => s.wing !== "none").map(s => T.by[s.id].length));
+  const node = (s, x, y, r0) => {
+    const n = T.by[s.id].length, r = Math.max(r0 * 1.4, 44);
+    const g = el("g", { class: "node" }, svg);
+    const base = s.wing === "bio" ? "var(--node-bio)" : "var(--node-tech)";
+    if (!n) {
+      el("circle", { cx: x, cy: y, r, fill: `url(#${id})`, stroke: base, class: "ring" }, g);
+      icon(g, STEP_ICON[s.id], x, y, r * 0.95, "var(--muted)");
+    } else {
+      const t = Math.sqrt(n / MAXN);
+      const fill = t < 0.5 ? `color-mix(in srgb, ${base} ${Math.round(45 + 110 * t)}%, #ffffff)`
+                           : `color-mix(in srgb, ${base} ${Math.round(100 - 80 * (t - 0.5))}%, var(--node-ink))`;
+      el("circle", { cx: x, cy: y, r, fill, stroke: base, class: "ring" }, g);
+      const halo = `color-mix(in srgb, ${base} 55%, var(--node-ink))`;
+      const ic = icon(g, STEP_ICON[s.id], x, y - r * 0.36, r * 0.62, "var(--on-node)");
+      ic.setAttribute("style", `filter: drop-shadow(0 0 1.5px ${halo})`);
+      const num = txt(x, y + r * 0.6, fmt(n), "num", g);
+      num.setAttribute("style", `font-size:${Math.min(40, r * 0.7).toFixed(1)}px`);
+      num.setAttribute("fill", "var(--on-node)"); num.setAttribute("stroke", halo); num.setAttribute("stroke-width", 6);
+    }
+    nodes.push([g, s]);
+  };
+  const at = (path, f) => path.getPointAtLength(path.getTotalLength() * f);
+  let p;
+  p = at(L.recycle, 0.64); node(S.recycle, p.x, p.y, 38);
+  p = at(L.recycle, 0.9); node(S.content, p.x, p.y, 30);
+  p = at(L.refurb, 0.6); node(S.refurb, p.x, p.y, 36);
+  p = at(L.reuse, 0.55); node(S.reuse, p.x, p.y, 38);
+  p = at(maintain, 0.42); node(S.maintain, p.x, p.y, 40);
+  node(S.share, 860, 352, 26);
+  el("path", { d: `M 842 370 Q 800 395 ${USR.x + R + 4} ${USR.y - 26}`, class: "arc tech", "stroke-width": 2.2, "marker-end": mk("tech") }, svg);
+  node(S.collect, USR.x + 4, BASE + 62, 44);
+  node(S.leak, 650, 712, 30);
+  p = at(L.farm, 0.82); node(S.farm, p.x, p.y, 36);
+  p = at(L.farm, 0.5); node(S.biosphere, p.x, p.y, 48);
+  p = at(L.farm, 0.31); node(S.compost, p.x, p.y, 38);
+  p = at(L.extract, 0.56); node(S.extract, p.x, p.y, 32);
+  node(S.cascade, CON.x - 112, CON.y + 46, 22);
+
+  for (const [g, s] of nodes) {
+    g.dataset.step = s.id;
+    g.setAttribute("tabindex", 0); g.setAttribute("role", "button");
+    g.setAttribute("aria-label", `${s.name}: ${fmt(T.by[s.id].length)} ${STATUSES.find(x => x.id === state.status).short}`);
+    wireStep(g, s);
+  }
+}
+
+// ---------- shared hover and click across both butterflies and the rows ----------
+const tip = document.getElementById("tip");
+let cur = null;   // { A, B, ra, rb } for the current render
+function stepTip(s) {
+  return `<b>${esc(s.name)}</b><span style="opacity:.8">${esc(s.sub)} · ${esc(s.r)}</span>` +
+    `<div class="tn"><span class="ta">${esc(cur.ra.name)} ${fmt(cur.A.by[s.id].length)}</span><span class="tb">${esc(cur.rb.name)} ${fmt(cur.B.by[s.id].length)}</span></div>${esc(s.note)}`;
+}
+function hot(id, on) { for (const e of document.querySelectorAll(`[data-step="${id}"]`)) e.classList.toggle("hot", on); }
+function showTip(s, anchor) {
+  tip.innerHTML = stepTip(s); tip.hidden = false;
+  const r = anchor.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = r.right + 10, y = r.top;
+  if (x + tw > innerWidth - 8) x = Math.max(8, r.left - tw - 10);
+  if (y + th > innerHeight - 8) y = Math.max(8, innerHeight - th - 8);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function wireStep(elm, s) {
+  elm.addEventListener("mouseenter", () => { hot(s.id, true); if (elm.closest("svg")) showTip(s, elm.querySelector("circle, rect") || elm); });
+  elm.addEventListener("mouseleave", () => { hot(s.id, false); tip.hidden = true; });
+  elm.addEventListener("focus", () => hot(s.id, true));
+  elm.addEventListener("blur", () => hot(s.id, false));
+  elm.addEventListener("click", () => { tip.hidden = true; openStep(s); });
+  elm.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openStep(s); } });
+}
+
+// ---------- controls ----------
+const selA = document.getElementById("selA"), selB = document.getElementById("selB");
+function fillSelect(sel) {
+  const opt = r => `<option value="${r.id}">${esc(r.name)} (${fmt(REG_BILLS.get(r.id).length)})</option>`;
+  const all = [...REGIONS.values()];
+  const byCount = (a, b) => REG_BILLS.get(b.id).length - REG_BILLS.get(a.id).length || a.name.localeCompare(b.name);
+  const groups = [
+    ["Blocs and continents", all.filter(r => r.id === "all" || r.id in FAMS || r.id === "us" || r.id === "us-fed" || r.id === "eu").sort(byCount)],
+    ["Countries", all.filter(r => /^[a-z]{2}$/.test(r.id) && r.id !== "us" && r.id !== "eu").sort((a, b) => a.name.localeCompare(b.name))],
+    ["US states", all.filter(r => r.id.startsWith("us-") && r.id !== "us-fed").sort((a, b) => a.name.localeCompare(b.name))],
+  ];
+  sel.innerHTML = groups.map(([g, rs]) => `<optgroup label="${g}">${rs.map(opt).join("")}</optgroup>`).join("");
+}
+fillSelect(selA); fillSelect(selB);
+selA.addEventListener("change", () => { state.a = selA.value; render(); });
+selB.addEventListener("change", () => { state.b = selB.value; render(); });
+document.getElementById("swap").addEventListener("click", () => { [state.a, state.b] = [state.b, state.a]; render(); });
+
+const statusEl = document.getElementById("status");
+statusEl.innerHTML = STATUSES.map(s => `<button type="button" data-s="${s.id}">${s.label}</button>`).join("");
+statusEl.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.status = b.dataset.s; render(); } });
+const measureEl = document.getElementById("measure");
+measureEl.innerHTML = `<button type="button" data-m="share">Share of each place's law</button><button type="button" data-m="count">Number of laws</button>`;
+measureEl.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.measure = b.dataset.m; renderSteps(); } });
+const chipsEl = document.getElementById("chips");
+chipsEl.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.mat = b.dataset.m; render(); } });
+
+// ---------- render ----------
+const pctTxt = (T, id) => { const n = T.by[id].length, p = 100 * n / Math.max(1, T.bills.length); return n && p < 1 ? "<1%" : Math.round(p) + "%"; };
+const poss = n => n + (n.endsWith("s") ? "'" : "'s");
+const listNames = ids => {
+  const n = ids.map(i => S[i].name);
+  return n.length < 3 ? n.join(" and ") : n.slice(0, -1).join(", ") + " and " + n.at(-1);
+};
+function render() {
+  const ra = REGIONS.get(state.a), rb = REGIONS.get(state.b), st = STATUSES.find(s => s.id === state.status);
+  const A = tally(scope(state.a)), B = tally(scope(state.b));
+  cur = { A, B, ra, rb };
+  selA.value = state.a; selB.value = state.b;
+  for (const b of statusEl.children) b.setAttribute("aria-pressed", b.dataset.s === state.status);
+  writeHash();
+
+  // material chips carry how many bills the two sides hold for each material
+  const both = new Set([...REG_BILLS.get(state.a), ...REG_BILLS.get(state.b)]), stt = statusTest();
+  chipsEl.innerHTML = MATS.map(m => {
+    const t = matTest(m.id), n = [...both].filter(b => stt(b) && t(b)).length;
+    return `<button type="button" class="chip${n ? "" : " zero"}" data-m="${m.id}" aria-pressed="${m.id === state.mat}">${esc(m.name)} <small>${fmt(n)}</small></button>`;
+  }).join("");
+
+  // the verdict line
+  const mat = state.mat === "any" ? "" : ` for ${MAT[state.mat].name.toLowerCase()}`;
+  const [lead, verb] = { enacted: ["Law in force", "reaches"], pending: ["Pending bills", "reach"], all: ["Law and bills", "reach"] }[state.status];
+  const vA = `<span class="na">${esc(inSentence(ra))}</span>`, vB = `<span class="nb">${esc(inSentence(rb))}</span>`;
+  document.getElementById("verdict").innerHTML = state.a === state.b
+    ? `${lead}${esc(mat)} ${verb} ${A.covered} of ${NSTEPS} circular steps in ${vA}.`
+    : `${lead}${esc(mat)} ${verb} ${A.covered} of ${NSTEPS} circular steps in ${vA} and ${B.covered} in ${vB}.`;
+  const onlyA = STEPS.filter(s => A.by[s.id].length && !B.by[s.id].length).map(s => s.id);
+  const onlyB = STEPS.filter(s => B.by[s.id].length && !A.by[s.id].length).map(s => s.id);
+  const neither = STEPS.filter(s => !A.by[s.id].length && !B.by[s.id].length).map(s => s.id);
+  const parts = [];
+  if (state.a !== state.b) {
+    if (onlyA.length) parts.push(`<span>Only ${esc(ra.name)}: <b>${esc(listNames(onlyA))}</b></span>`);
+    if (onlyB.length) parts.push(`<span>Only ${esc(rb.name)}: <b>${esc(listNames(onlyB))}</b></span>`);
+  }
+  // The widest gap in share: where the two places put their law most differently.
+  if (state.a !== state.b && A.bills.length && B.bills.length) {
+    const sh = (T, id) => T.by[id].length / T.bills.length;
+    const big = STEPS.map(s => ({ s, d: sh(A, s.id) - sh(B, s.id) })).sort((x, y) => Math.abs(y.d) - Math.abs(x.d))[0];
+    if (Math.abs(big.d) >= 0.05) {
+      const [hi, lo, Th, Tl] = big.d > 0 ? [ra, rb, A, B] : [rb, ra, B, A];
+      parts.push(`<span>Biggest difference: <b>${esc(big.s.name)}</b>, ${pctTxt(Th, big.s.id)} of ${esc(poss(inSentence(hi)))} ${st.short === "bills" ? "bills" : "law"} vs ${pctTxt(Tl, big.s.id)} of ${esc(poss(inSentence(lo)))}</span>`);
+    }
+  }
+  if (neither.length) parts.push(`<span>${state.a === state.b ? "Open loops" : "Neither"}: <b>${esc(listNames(neither))}</b></span>`);
+  document.getElementById("diff").innerHTML = parts.join("");
+
+  // the two butterflies
+  for (const [side, r, T] of [["A", ra, A], ["B", rb, B]]) {
+    const card = document.getElementById("fly" + side);
+    const inForce = T.bills.filter(b => sgroup(b) === "enacted").length;
+    card.innerHTML = `<div class="flyhead"><h3>${esc(r.name)}</h3><div class="score"><b>${T.covered}</b><span> of ${NSTEPS} steps</span></div></div>
+      <p class="flysub"><b>${fmt(T.bills.length)}</b> ${st.noun}${esc(mat)}${state.status === "all" ? ` · <b>${fmt(inForce)}</b> in force` : ""}</p>
+      <svg viewBox="90 20 1080 745" role="img" aria-label="Circular economy butterfly for ${esc(r.name)}: ${T.covered} of ${NSTEPS} steps have law"></svg>
+      <div class="flyfoot"><span>${T.bills.length ? "Tap a step to read its bills" : "Nothing to show for this mix. Try another material or status."}</span>
+      <a href="${r.page}" target="_blank" rel="noopener">${esc(r.name)} on Atlas Circular →</a></div>`;
+    drawFly(card.querySelector("svg"), T, side);
+  }
+  document.getElementById("ctaA").innerHTML = `<span>Explore ${esc(ra.name)}</span><span>→</span>`; document.getElementById("ctaA").href = ra.page;
+  document.getElementById("ctaB").innerHTML = `<span>Explore ${esc(rb.name)}</span><span>→</span>`; document.getElementById("ctaB").href = rb.page;
+  document.getElementById("ctaB").hidden = state.a === state.b;
+
+  const leg = `<span><i style="background:var(--a)"></i>${esc(ra.name)}</span><span><i style="background:var(--b)"></i>${esc(rb.name)}</span>`;
+  document.getElementById("legendab").innerHTML = leg;
+  document.getElementById("legendab2").innerHTML = leg.replace('style="background:var(--b)"', 'style="background:var(--surface);border:3px solid var(--b);width:8px;height:8px;border-radius:50%"').replace('style="background:var(--a)"', 'style="background:var(--a);border-radius:50%"');
+  renderSteps();
+  renderMats();
+}
+
+function renderSteps() {
+  const { A, B, ra, rb } = cur, share = state.measure === "share";
+  for (const b of measureEl.children) b.setAttribute("aria-pressed", b.dataset.m === state.measure);
+  const v = (T, id) => share ? T.by[id].length / Math.max(1, T.bills.length) : T.by[id].length;
+  const max = Math.max(1e-9, ...STEPS.flatMap(s => [v(A, s.id), v(B, s.id)]));
+  const label = (T, id) => {
+    const n = T.by[id].length;
+    if (!n) return `<span class="val gap">open loop</span>`;
+    return `<span class="val">${share ? pctTxt(T, id) : fmt(n)}</span>`;
+  };
+  const side = (T, id, cls) => `<div class="track ${cls}">${T.by[id].length ? `<span class="bar" style="width:${(78 * v(T, id) / max).toFixed(2)}%"></span>` : '<span class="swatchgap"></span>'}${label(T, id)}</div>`;
+  document.getElementById("sbsSub").textContent = share
+    ? `The share of each place's ${STATUSES.find(s => s.id === state.status).noun} that sits at each step, so a small corpus and a large one compare fairly. A bill can sit at several steps.`
+    : `How many ${STATUSES.find(s => s.id === state.status).noun} sit at each step. A bill can sit at several steps.`;
+  const box = document.getElementById("steps");
+  box.innerHTML = GROUPS.map(g => `<div class="grouplab">${esc(g.name)}</div>` + g.ids.map(id => {
+    const s = S[id];
+    return `<div class="srow" data-step="${id}" tabindex="0" role="button" aria-label="${esc(s.name)}: ${esc(ra.name)} ${A.by[id].length}, ${esc(rb.name)} ${B.by[id].length}. Open its bills">
+      ${side(A, id, "a")}
+      <div class="sname">${iconHTML(STEP_ICON[id], 22, wingColor(s.wing))}<span><b>${esc(s.name)}</b><small>${esc(s.sub)}</small></span></div>
+      ${side(B, id, "b")}</div>`;
+  }).join("")).join("");
+  for (const row of box.querySelectorAll(".srow")) wireStep(row, S[row.dataset.step]);
+}
+
+function renderMats() {
+  const box = document.getElementById("mats"), stt = statusTest();
+  const rows = MATS.map(m => {
+    const mt = matTest(m.id);
+    const a = tally(REG_BILLS.get(state.a).filter(b => stt(b) && mt(b))), b = tally(REG_BILLS.get(state.b).filter(x => stt(x) && mt(x)));
+    return { m, a: a.covered, b: b.covered, n: a.bills.length + (state.a === state.b ? 0 : b.bills.length) };
+  });
+  const [head, ...rest] = rows;
+  rest.sort((x, y) => Math.max(y.a, y.b) - Math.max(x.a, x.b) || (y.a + y.b) - (x.a + x.b) || y.n - x.n);
+  const pct = n => (100 * n / NSTEPS).toFixed(2);
+  box.innerHTML = [head, ...rest].map(r => {
+    const lo = Math.min(r.a, r.b), hi = Math.max(r.a, r.b);
+    return `<button type="button" class="mrow" data-m="${r.m.id}" aria-pressed="${r.m.id === state.mat}" aria-label="${esc(r.m.name)}: ${esc(cur.ra.name)} ${r.a} steps, ${esc(cur.rb.name)} ${r.b} steps">
+      <span class="mn">${esc(r.m.name)}<small>${fmt(r.n)}</small></span>
+      <span class="dumb"><span class="rail"></span><span class="link" style="left:${pct(lo)}%;width:${pct(hi - lo)}%"></span>
+        <span class="dot a" style="left:${pct(r.a)}%"></span><span class="dot b" style="left:${pct(r.b)}%"></span></span>
+      <span class="mv">${r.a}${state.a === state.b ? "" : " · " + r.b}</span></button>`;
+  }).join("");
+  for (const b of box.querySelectorAll(".mrow")) b.addEventListener("click", () => {
+    state.mat = b.dataset.m; render();
+    document.querySelector(".controls").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+}
+
+// ---------- bills drawer ----------
+const panel = document.getElementById("panel"), scrim = document.getElementById("scrim"), plist = document.getElementById("plist");
+let open = null;   // { s, side, shown }
+const ORDER = { enacted: 0, pending: 1, ended: 2 };
+const whereText = b => b.region !== "US" ? (CNAME[b.region] || b.region) : usState(b) ? (USN[usState(b)] || usState(b)) + (b.state.includes("-") ? " · city" : "") : "US federal";
+function openStep(s) {
+  open = { s, side: open && open.s === s ? open.side : "a", shown: 40 };
+  if (!cur.A.by[s.id].length && cur.B.by[s.id].length) open.side = "b";
+  panel.hidden = false; scrim.hidden = false;
+  renderPanel();
+  document.getElementById("pclose").focus();
+}
+function closePanel() { panel.hidden = true; scrim.hidden = true; open = null; }
+function renderPanel() {
+  const { s, side } = open, { A, B, ra, rb } = cur;
+  document.getElementById("peye").textContent = `${s.r} · ${s.wing === "bio" ? "biological cycle" : s.wing === "tech" ? "technical cycle" : "upstream"}`;
+  document.getElementById("ptitle").textContent = s.name;
+  document.getElementById("psub").textContent = s.note;
+  const tabs = [["a", ra, A], ["b", rb, B]].filter((t, i) => i === 0 || state.a !== state.b);
+  document.getElementById("ptabs").innerHTML = tabs.map(([k, r, T]) =>
+    `<button type="button" role="tab" class="${k}" data-k="${k}" aria-selected="${k === side}">${esc(r.name)} · ${fmt(T.by[s.id].length)}</button>`).join("");
+  const [, r, T] = tabs.find(t => t[0] === side) || tabs[0];
+  const bills = [...T.by[s.id]].sort((x, y) => ORDER[sgroup(x)] - ORDER[sgroup(y)] || (y.year || 0) - (x.year || 0));
+  const mat = state.mat === "any" ? "" : `, ${MAT[state.mat].name.toLowerCase()}`;
+  plist.innerHTML = !bills.length
+    ? `<p class="empty">No ${STATUSES.find(x => x.id === state.status).noun}${esc(mat)} in ${esc(r.name)} sit at this step. That loop is open.</p>`
+    : `<p class="pnote">${fmt(bills.length)} ${STATUSES.find(x => x.id === state.status).noun}${esc(mat)} in ${esc(r.name)}, in force first.</p>` +
+      bills.slice(0, open.shown).map(b => `<div class="bill"><a href="${billHref(b)}" target="_blank" rel="noopener">${esc(b.title || "Untitled")}</a>
+        <div class="meta"><span>${esc(b.num || "")}</span><span>${esc(whereText(b))}</span><span class="st ${sgroup(b)}"><i></i>${esc(STATUS_TEXT[b.status] || b.status)}</span>${b.year ? `<span>${b.year}</span>` : ""}</div></div>`).join("") +
+      (bills.length > open.shown ? `<button type="button" class="more" id="pmore">Show ${fmt(Math.min(40, bills.length - open.shown))} more</button>` : "");
+  const more = document.getElementById("pmore");
+  if (more) more.addEventListener("click", () => { open.shown += 40; renderPanel(); });
+}
+document.getElementById("ptabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { open.side = b.dataset.k; open.shown = 40; renderPanel(); } });
+document.getElementById("pclose").addEventListener("click", closePanel);
+scrim.addEventListener("click", closePanel);
+addEventListener("keydown", e => { if (e.key === "Escape" && open) closePanel(); });
+addEventListener("hashchange", () => { readHash(); render(); });
+addEventListener("scroll", () => { tip.hidden = true; }, { passive: true });
+
+document.getElementById("srcnote").textContent = `Source: Atlas Circular legislative corpus, exported ${EXPORTED} (${fmt(BILLS.length)} circular-economy bills and laws, including introduced, pending and failed bills). "In force" counts enacted law only, the fairest basis for comparing places with very different legislative systems.`;
+render();
+</script>

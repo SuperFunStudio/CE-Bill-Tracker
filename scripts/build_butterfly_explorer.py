@@ -6,6 +6,9 @@ Read-only against the DB.
 
     python scripts/build_butterfly_explorer.py --dsn "postgresql://...@127.0.0.1:5462/signalscout" \
         --out butterfly-explorer.html
+
+`--page compare` builds the shareable region comparison (docs/butterfly-compare/compare.src.html) from the same
+rows, with the summary, source and quote columns blanked: that page never shows them, and it loads faster without.
 """
 from __future__ import annotations
 
@@ -13,6 +16,7 @@ import argparse
 import asyncio
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 from sqlalchemy import text
@@ -25,7 +29,12 @@ from app.classification.butterfly import butterfly_steps, remanufacturing_eviden
 from app.classification.cycles import wing_of  # noqa: E402
 from scripts.add_bill_from_legiscan import _normalize_dsn  # noqa: E402
 
-TEMPLATE = ROOT / "docs" / "butterfly-explorer" / "explorer.src.html"
+TEMPLATES = {
+    "explorer": ROOT / "docs" / "butterfly-explorer" / "explorer.src.html",
+    "compare": ROOT / "docs" / "butterfly-compare" / "compare.src.html",
+}
+# Columns the compare page doesn't read: ai_summary, source url, effective date, last action, adjacency, quote.
+_COMPARE_BLANK = (10, 11, 12, 13, 15, 16)
 WING = {"technical": "t", "biological": "b", "both": "x", "unclassified": "u"}
 
 
@@ -54,6 +63,7 @@ async def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dsn", default=None, help="Postgres DSN; defaults to app settings (local).")
     ap.add_argument("--out", default="butterfly-explorer.html")
+    ap.add_argument("--page", choices=sorted(TEMPLATES), default="explorer")
     args = ap.parse_args()
     dsn = args.dsn
     if not dsn:
@@ -68,8 +78,16 @@ async def main() -> None:
             "FROM bills WHERE ce_relevant ORDER BY id"))).mappings().all()
     await engine.dispose()
 
-    data = json.dumps([_row(dict(r)) for r in rows], ensure_ascii=False, separators=(",", ":"))
-    html = TEMPLATE.read_text(encoding="utf-8").replace("__BILLS__", data.replace("</", "<\\/"), 1)
+    out_rows = [_row(dict(r)) for r in rows]
+    if args.page == "compare":
+        for row in out_rows:
+            row[4] = row[4][:160]
+            for i in _COMPARE_BLANK:
+                row[i] = ""
+    data = json.dumps(out_rows, ensure_ascii=False, separators=(",", ":"))
+    html = TEMPLATES[args.page].read_text(encoding="utf-8").replace("__BILLS__", data.replace("</", "<\\/"), 1)
+    today = date.today()
+    html = html.replace("__EXPORTED__", f"{today.day} {today:%b %Y}", 1)
     Path(args.out).write_text(html, encoding="utf-8")
     print(f"{len(rows)} bills -> {args.out} ({len(html) // 1024} KB)")
 

@@ -105,6 +105,7 @@ REGION_LABELS = {
     "ID": "Indonesia",
     "PH": "Philippines",
     "VN": "Vietnam",
+    "TH": "Thailand",
     "RO": "Romania",
     "PT": "Portugal",
     "HU": "Hungary",

@@ -4366,6 +4366,54 @@ VN_SEED_LAWS: list[dict] = [
 ]
 
 
+# Thailand — FAOLEX ("tha" prefix). Thailand has no national EPR law in force (2026-10): the PCD's
+# Sustainable Packaging Materials Management Bill (EPR + PROs) was still a draft after its Feb 2025
+# consultation, and the WEEE bill has been in draft since 2021. What IS binding is the 1992 framework
+# (environmental quality, public health/municipal waste, cleanliness, factory) plus the Ministry of
+# Industry's 2023 industrial-waste notification and the national-parks single-use plastics ban. LEX-FAOC
+# ids found via UNEP LEAP (leap.unep.org/en/countries/th/national-legislation) and ECOLEX. The 1992
+# environmental-quality act's FAOLEX PDF (tha19415.pdf) is a scan with no text layer; FAOLEX also hosts
+# the Council of State's English translation as tha19415E.pdf, used via `url`. Public Health Act, the
+# 2018 amendment and the parks ban are Thai-script; the rest are official English translations.
+#
+# NOT in FAOLEX, and the national sources (ratchakitcha.soc.go.th 403, dft.go.th 503, pcd.go.th timeout)
+# are unreachable from non-TH egress: the Commerce Ministry notice of 16 Dec 2024 (B.E. 2567) banning
+# plastic-scrap imports (HS 39.15) from 1 Jan 2025, and the draft packaging EPR bill. The 1997 (No. 6)
+# and 2005 industrial-waste notifications are left out as superseded by the 2023 one.
+TH_SEED_LAWS: list[dict] = [
+    {"id": "19415", "date": "1992-03-29", "url": "https://faolex.fao.org/docs/pdf/tha19415E.pdf",
+     "page": "https://www.fao.org/faolex/results/details/en/c/LEX-FAOC019415/",
+     "en": "Enhancement and Conservation of National Environmental Quality Act, B.E. 2535 (1992) — "
+           "framework environmental law, pollution control and the Environmental Fund"},
+    {"id": "229216", "date": "2018-04-16",
+     "en": "Enhancement and Conservation of National Environmental Quality Act (No. 2), B.E. 2561 (2018)"},
+    {"id": "209339",
+     "en": "Public Health Act, B.E. 2535 (1992) — municipal solid waste collection, disposal and fees "
+           "by local authorities"},
+    {"id": "209432", "date": "1992-02-19",
+     "en": "Act on the Maintenance of the Cleanliness and Orderliness of the Country, B.E. 2535 (1992) — "
+           "littering and waste disposal in public places"},
+    {"id": "209657", "date": "1992-04-02",
+     "en": "Factory Act, B.E. 2535 (1992) — legal basis for industrial waste management"},
+    {"id": "211111", "date": "2019-04-30", "en": "Factory Act (No. 2), B.E. 2562 (2019)"},
+    {"id": "211128", "date": "2019-04-30", "en": "Factory Act (No. 3), B.E. 2562 (2019)"},
+    {"id": "228705", "date": "2023-05-31",
+     "en": "Notification of the Ministry of Industry on Management of Waste or Unused Materials, "
+           "B.E. 2566 (2023) — industrial waste generators, transporters and recyclers"},
+    {"id": "211135", "date": "2022-04-05",
+     "en": "Notification of the Department of National Parks, Wildlife and Plant Conservation prohibiting "
+           "single-use plastics in national parks (2022)"},
+]
+
+
+class ThailandFaolexClient(FaolexSeedClient):
+    """FAOLEX adapter for Thailand's waste framework acts, industrial-waste rule and parks plastics ban."""
+
+    region = "TH"
+    prefix = "tha"
+    seeds = TH_SEED_LAWS
+
+
 class PhilippinesFaolexClient(FaolexSeedClient):
     """FAOLEX adapter for the Philippines' EPR Act 2022 + Ecological Solid Waste Management Act and IRRs."""
 
@@ -5223,6 +5271,7 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "ID": IndonesiaBpkClient,
     "PH": PhilippinesFaolexClient,
     "VN": VietnamFaolexClient,
+    "TH": ThailandFaolexClient,
     # The nine EU member states added 2026-10-24 (FAOLEX mirror; Belgium by region).
     "RO": RomaniaFaolexClient,
     "PT": PortugalFaolexClient,

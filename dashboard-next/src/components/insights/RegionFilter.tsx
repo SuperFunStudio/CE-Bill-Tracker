@@ -49,6 +49,7 @@ const NON_EU_LABELS: Record<string, string> = {
   ID: 'Indonesia',
   PH: 'Philippines',
   VN: 'Vietnam',
+  TH: 'Thailand',
 };
 
 export function regionLabel(code: string): string {
@@ -70,8 +71,8 @@ const REST = [
   // South Korea (law.go.kr DRF API) and Taiwan (law.moj.gov.tw bulk JSON), ingested 2026-10-25;
   // Russia (ips.pravo.gov.ru), 2026-10-26.
   'KR', 'TW', 'RU',
-  // Philippines and Vietnam, via FAOLEX (2026-10-26).
-  'PH', 'VN',
+  // Philippines and Vietnam, via FAOLEX (2026-10-26); Thailand, via FAOLEX (2026-10-29).
+  'PH', 'VN', 'TH',
   // ZA is deliberately absent: no adapter ingests it yet, so it would return an empty result — which
   // reads as a broken filter rather than as "not covered" — and would leak into the homepage Dataset
   // markup's spatialCoverage. Its label stays in NON_EU_LABELS above; add the code here the day data lands.

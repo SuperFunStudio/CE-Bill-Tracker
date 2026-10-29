@@ -33,7 +33,7 @@ REGION_LABELS = {
     "PT": "Portugal", "CA": "Canada", "AU": "Australia", "CN": "China", "IN": "India",
     "TR": "Türkiye", "MX": "Mexico", "CO": "Colombia", "PE": "Peru", "UY": "Uruguay",
     "EC": "Ecuador", "MY": "Malaysia", "ID": "Indonesia", "PH": "Philippines", "VN": "Vietnam",
-    "RO": "Romania", "HU": "Hungary", "GR": "Greece", "HR": "Croatia", "MT": "Malta",
+    "TH": "Thailand", "RO": "Romania", "HU": "Hungary", "GR": "Greece", "HR": "Croatia", "MT": "Malta",
     "BG": "Bulgaria", "CY": "Cyprus",
 }
 
@@ -104,6 +104,11 @@ _NATIVE_ANCHORS = {
     # "tỷ lệ tái chế bắt buộc" = mandatory recycling rate; the contribution goes to the Quỹ Bảo vệ môi trường.
     "vi": ["trách nhiệm mở rộng của nhà sản xuất", "tỷ lệ tái chế bắt buộc", "đóng góp tài chính",
            "Quỹ Bảo vệ môi trường", "bao bì", "tái chế", "thu gom", "nhựa dùng một lần"],
+    # Thailand's Thai-script texts (Public Health Act, the 2018 environmental-quality amendment, the parks
+    # plastics ban): มูลฝอย = solid waste, บรรจุภัณฑ์ = packaging, พลาสติกแบบใช้ครั้งเดียว = single-use
+    # plastic, ของเสีย = waste, การนำกลับมาใช้ใหม่ = reuse/recycling.
+    "th": ["มูลฝอย", "ขยะ", "บรรจุภัณฑ์", "พลาสติก", "พลาสติกแบบใช้ครั้งเดียว", "ของเสีย",
+           "การนำกลับมาใช้ใหม่", "รีไซเคิล", "ค่าธรรมเนียม"],
 }
 # Region code -> stored-text language (English regions omitted; they use the base anchors alone).
 # CH is trilingual (de/fr/it), handled explicitly in _anchor_re.
@@ -111,7 +116,7 @@ _REGION_LANG = {
     "FR": "fr", "DE": "de", "AT": "de", "ES": "es", "CL": "es", "NL": "nl", "SE": "sv",
     "PL": "pl", "BR": "pt", "IT": "it", "CZ": "cs", "JP": "ja", "CN": "zh", "KR": "ko", "TW": "zh-Hant", "RU": "ru",
     "NO": "no", "TR": "tr", "MX": "es", "CO": "es", "PE": "es", "UY": "es", "EC": "es", "ID": "id",
-    "VN": "vi",
+    "VN": "vi", "TH": "th",
 }
 
 

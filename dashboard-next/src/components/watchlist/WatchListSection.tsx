@@ -4,12 +4,10 @@ import Link from 'next/link';
 import { BillTable } from '@/components/bills/BillTable';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { SkeletonList } from '@/components/ui/SkeletonList';
-import { StarIcon, LockIcon } from '@/components/ui/icons';
+import { StarIcon } from '@/components/ui/icons';
 import { GateCard } from '@/components/ui/GateCard';
 import { useAuth } from '@/components/auth/AuthContext';
-import { useWatchlist } from '@/components/watchlist/WatchlistContext';
-import { startProCheckout } from '@/lib/billing';
-import { PRO, upgradeLabel } from '@/lib/tiers';
+import { useWatchlist, FREE_WATCH_LIMIT } from '@/components/watchlist/WatchlistContext';
 import { useBills } from '@/hooks/useBills';
 import {
   getWatchlistPrefs,
@@ -19,10 +17,10 @@ import {
 } from '@/lib/userSettings';
 
 /** The user's watch list — their starred bills + per-account alert preferences. Self-gating:
- *  routes anon→sign-in and non-Pro→upgrade. Lives at the top of /library ("My Library"); the
+ *  routes anon→sign-in; a free account sees its bills (up to FREE_WATCH_LIMIT). Lives at the top of /library ("My Library"); the
  *  old standalone /watchlist route now redirects here. */
 export function WatchListSection() {
-  const { user, isPro, loading, openAuth, getToken } = useAuth();
+  const { user, isPro, loading, openAuth } = useAuth();
   const { watched, ready } = useWatchlist();
   const { data: bills = [] } = useBills({ ce_relevant: true, limit: 5000 });
 
@@ -48,17 +46,6 @@ export function WatchListSection() {
           cta="Sign in"
           onClick={openAuth}
         />
-      ) : !isPro ? (
-        <GateCard
-          gate="pro"
-          feature="watchlist"
-          outcome="checkout"
-          icon={<LockIcon className="text-2xl text-green-accent" />}
-          title="Watch lists are a Pro feature"
-          body={`Follow bills, get alerts when they move, and track the deadlines that matter to you. ${PRO.foundingNote}`}
-          cta={upgradeLabel()}
-          onClick={() => startProCheckout(getToken)}
-        />
       ) : !ready ? (
         <p className="text-text-muted text-sm">Loading your watchlist…</p>
       ) : watched.size === 0 ? (
@@ -72,7 +59,14 @@ export function WatchListSection() {
         </div>
       ) : (
         <>
-          <NotifyPrefs />
+          {/* Notification prefs are a Pro control (the endpoint is Pro-gated); a free account's
+              starred bills still alert on status changes by default. */}
+          {isPro ? <NotifyPrefs /> : (
+            <p className="text-sm text-text-secondary">
+              Following {watched.size} of {FREE_WATCH_LIMIT} bills on the free plan.{' '}
+              <Link href="/pricing" className="link-quiet">Track more with Pro</Link>
+            </p>
+          )}
           <BillTable bills={watchedBills} />
         </>
       )}

@@ -104,6 +104,24 @@ export function jurisdictionHref(region: string, state?: string | null): string 
   return `/jurisdictions/${r}/${r}/`;
 }
 
+/**
+ * The profile page for a bill's jurisdiction, or null when none was pre-rendered (the site is a static
+ * export, so a link outside allJurisdictionParams is a 404). A US city ordinance ("OR-PORTLAND") goes to
+ * its state's page, which carries the city section; a foreign province goes to its country's.
+ */
+export function profileHrefForBill(region: string | null | undefined, state: string | null | undefined): string | null {
+  if (!region) return null;
+  const r = region.toUpperCase();
+  if (r === 'US') {
+    const st = (state ?? '').toUpperCase();
+    const base = st.includes('-') ? st.split('-')[0] : st;
+    if (base === 'US' || base in STATE_NAMES) return jurisdictionHref('US', base);
+    return null;
+  }
+  if (r === 'EU' || r in EU_MEMBERS || r in FOREIGN_COUNTRY_NAMES) return jurisdictionHref(r);
+  return null;
+}
+
 /** The sub-jurisdiction noun for a region, for copy ("state" / "member state" / "country"). */
 export function unitNoun(region: string): string {
   const r = region.toUpperCase();

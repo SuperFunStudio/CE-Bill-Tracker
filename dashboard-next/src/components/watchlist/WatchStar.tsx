@@ -5,7 +5,7 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { StarIcon } from '@/components/ui/icons';
 import { track } from '@/lib/analytics';
 
-/** A follow/unfollow star for a bill. Stops row-click propagation; routes anon→sign-in, non-Pro→upgrade. */
+/** A follow/unfollow star for a bill. Stops row-click propagation; routes anon→sign-in (the free limit lives in WatchlistContext). */
 export function WatchStar({ billId, className }: { billId: number; className?: string }) {
   const { isWatched, toggle } = useWatchlist();
   const { user, isPro } = useAuth();
@@ -16,9 +16,7 @@ export function WatchStar({ billId, className }: { billId: number; className?: s
     ? 'Unwatch'
     : !user
       ? 'Sign in to watch bills'
-      : isPro
-        ? 'Watch this bill'
-        : 'Watch lists are a Pro feature — upgrade';
+      : 'Watch this bill';
 
   return (
     <button

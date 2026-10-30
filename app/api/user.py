@@ -1,16 +1,17 @@
 """Per-account settings + the Pro watch list, behind Firebase-token auth.
 
 /me/settings is free (any authenticated user) — it persists UI prefs (the saved scope) per Firebase
-uid so they follow the user across devices. /me/watchlist is Pro-gated — the bills an account
-follows. See app/api/auth.py + gating-and-monetization-plan.
+uid so they follow the user across devices. /me/watchlist — the bills an account follows — is open to
+any signed-in user up to FREE_WATCHLIST_LIMIT bills; past that it's Pro. See app/api/auth.py +
+gating-and-monetization-plan.
 """
 from __future__ import annotations
 
 import stripe
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -20,6 +21,7 @@ from app.api.auth import (
     _ensure_firebase,
     get_current_user,
     get_entitlement,
+    is_pro,
     require_pro,
 )
 from app.config import settings
@@ -134,13 +136,18 @@ async def patch_settings(
     return {"prefs": row.prefs}
 
 
+# A free account can follow this many bills — enough to start a tracker and feel it work. The 6th star
+# is where Pro begins (the frontend shows a soft prompt on the watchlist_free_limit 403, not checkout).
+FREE_WATCHLIST_LIMIT = 5
+
+
 class WatchAdd(BaseModel):
     bill_id: int
 
 
 @router.get("/watchlist")
 async def get_watchlist(
-    user: AuthedUser = Depends(require_pro),
+    user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     res = await db.execute(
@@ -152,7 +159,7 @@ async def get_watchlist(
 @router.post("/watchlist", status_code=201)
 async def add_watch(
     payload: WatchAdd,
-    user: AuthedUser = Depends(require_pro),
+    user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     exists = await db.execute(
@@ -162,6 +169,11 @@ async def add_watch(
         )
     )
     if exists.scalar_one_or_none() is None:
+        if not is_pro(await get_entitlement(db, user)):
+            count = await db.scalar(
+                select(func.count()).select_from(WatchlistItem).where(WatchlistItem.firebase_uid == user.uid))
+            if (count or 0) >= FREE_WATCHLIST_LIMIT:
+                raise HTTPException(status_code=403, detail="watchlist_free_limit")
         db.add(WatchlistItem(firebase_uid=user.uid, bill_id=payload.bill_id))
         # Following a bill opts the user into the alert pipeline: ensure their watch-list alert
         # subscription exists (with default prefs) so status changes on this bill reach them.
@@ -177,7 +189,7 @@ async def add_watch(
 @router.delete("/watchlist/{bill_id}")
 async def remove_watch(
     bill_id: int,
-    user: AuthedUser = Depends(require_pro),
+    user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await db.execute(

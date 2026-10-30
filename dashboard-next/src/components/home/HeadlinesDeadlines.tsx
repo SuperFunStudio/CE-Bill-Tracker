@@ -29,7 +29,7 @@ const SITE_URL = 'https://www.atlascircular.com';
  *  jurisdiction-labelled only, so a best-effort resolution is enough: US states win, then
  *  EU members, then the non-EU countries we ingest, then the umbrella regions ("US" on a federal
  *  deadline, "EU" on an EU-wide one — both real codes here, neither a state or a country). */
-function jurisdiction(code: string | null | undefined): string {
+export function jurisdiction(code: string | null | undefined): string {
   if (!code) return '';
   const c = code.toUpperCase();
   return STATE_NAMES[c] ?? EU_MEMBERS[c] ?? FOREIGN_COUNTRY_NAMES[c] ?? REGION_LABELS[c] ?? c;
@@ -46,14 +46,110 @@ const TOPIC_BY_MATERIAL: Record<string, string> = {
   solar_panels: 'solar panels', organics: 'food waste', construction: 'construction waste',
   thermostats: 'mercury thermostats', lighting: 'lamps', vehicles: 'vehicles', furniture: 'furniture',
 };
-function topicOf(o: BillOutcome): string {
+export function topicOf(o: BillOutcome): string {
   if (o.instrument_type && TOPIC_BY_INSTRUMENT[o.instrument_type]) return TOPIC_BY_INSTRUMENT[o.instrument_type];
   for (const m of o.material_categories ?? []) if (TOPIC_BY_MATERIAL[m]) return TOPIC_BY_MATERIAL[m];
   return 'waste';
 }
-const possessive = (place: string) => (place.endsWith('s') ? `${place}’` : `${place}’s`);
+export const possessive = (place: string) => (place.endsWith('s') ? `${place}’` : `${place}’s`);
 
 const ACCENT = 'rgb(var(--green-accent))';
+
+/** The documented POSITIVE outcomes of enacted law that have a displayable figure, newest first. Shared
+ *  by the Explore headline card and the Rankings headline scroll. */
+export function usePositiveOutcomes(): BillOutcome[] {
+  const { data: outcomes } = useQuery({
+    // region 'all': outcomes span 11 regions and the endpoint defaults to US alone, which would drop
+    // three quarters of the set on a page whose whole claim is global coverage.
+    queryKey: ['billOutcomes', 'positive', 'all'],
+    queryFn: () => fetchBillOutcomes({ direction: 'positive', region: 'all', reviewed_only: true }),
+    staleTime: 30 * 60 * 1000,
+  });
+
+  return useMemo(() => (outcomes ?? []).filter(o => outcomeMetricText(o)), [outcomes]);
+}
+
+/**
+ * Where an outcome's law lives on the Atlas, and a share action for it. One implementation, so every
+ * surface that shares a headline sends the same UTM-tagged link and the same GA event.
+ */
+export function useOutcomeShare(current: BillOutcome | null) {
+  const [shared, setShared] = useState(false);
+  // The canonical bill row, fetched for its TITLE and nothing else. An outcome carries a
+  // denormalized law_title written for this card — "…Redemption Law (Bottle Bill)", "…Act 2022
+  // (Tasmania)" — which is free to differ from bills.title, and did on 4 of 6 rows. The bill page is
+  // a static export whose slug generateStaticParams built from bills.title, so a slug derived from
+  // law_title addresses a file that was never generated and there is no fallback route to catch it:
+  // every shared headline landed on a 404. Slug from the same field the build did.
+  const { data: bill } = useQuery({
+    queryKey: ['bill', current?.bill_id],
+    queryFn: () => fetchBill(current!.bill_id!),
+    enabled: current?.bill_id != null,
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const o = current;
+  // The law itself, on the Atlas. bill_id is a soft link: famous laws we haven't ingested as rows
+  // carry the denormalized number only, and those stay plain text rather than linking nowhere — as
+  // does a bill whose row hasn't loaded yet, or one outside the ce_relevant set the pages are built
+  // from, since neither has a page at the other end.
+  const billPath = bill && bill.ce_relevant !== false ? billHref(bill) : null;
+
+  // Share the LAW's page, not the homepage: it's the durable, indexable URL, and it's where someone
+  // arriving from the post can check the figure against the statute.
+  //
+  // UTM-TAGGED, and the tags are the whole point of tagging them here rather than leaving it to
+  // whoever pastes the link. lib/attribution reads utm_* off the landing URL and stores it, and
+  // AuthContext spreads that into every later signup event — so a session that started on a shared
+  // headline is attributable end-to-end in GA4 (utm_campaign=outcome_headline as the campaign
+  // dimension, utm_content as the WHICH-headline breakdown). Untagged, those arrivals land in Direct
+  // and the loop is unmeasurable. utm_* param names are GA-safe; bare `campaign`/`content` are not —
+  // see the reserved-name rule in lib/analytics.
+  //
+  // #impact is load-bearing, not decoration: it lands the reader ON the block that repeats the figure
+  // they tapped. Without it a shared "$16 million/year" opens a page whose first screen is the bill's
+  // identity and metadata, and the promise the share made goes unkept.
+  /** One shape for every share event, so the GA dimensions can't drift between the two channels. */
+  const shareEvent = (slug: string, channel: 'native' | 'copy') => ({
+    share_channel: channel,
+    outcome_slug: slug,
+    utm_campaign: 'outcome_headline',
+    utm_content: slug,
+  });
+
+  // LINK ONLY, in both channels. Every target worth sharing to renders a preview card off the URL —
+  // headline, description, image — so a `text` payload that restates the figure gets typed into the
+  // message body ABOVE that card and says the same thing twice. `title` stays: share sheets label
+  // themselves with it, and the apps that ignore it were the ones duplicating the body.
+  async function share() {
+    if (!o) return;
+    const place = jurisdiction(o.state);
+    const shareUrl =
+      `${SITE_URL}${billPath ?? '/insights/'}` +
+      `?utm_source=share&utm_medium=social&utm_campaign=outcome_headline&utm_content=${encodeURIComponent(o.slug)}` +
+      (billPath ? '#impact' : '');
+    const shareText = `${outcomeMetricText(o) ?? ''} ${o.metric_label ?? ''}${place ? ` — ${place}` : ''}`.trim();
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title: shareText, url: shareUrl });
+        track('outcome_share', shareEvent(o.slug, 'native'));
+        return;
+      } catch {
+        /* dismissed or unsupported — fall through to the clipboard */
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShared(true);
+      setTimeout(() => setShared(false), 1800);
+      track('outcome_share', shareEvent(o.slug, 'copy'));
+    } catch {
+      window.prompt('Copy this link:', shareUrl);
+    }
+  }
+
+  return { billPath, share, shared };
+}
 
 /**
  * A slow rotation through the documented POSITIVE outcomes of enacted law — the answer to "so does
@@ -71,26 +167,17 @@ const ACCENT = 'rgb(var(--green-accent))';
  * card still, and a card that changes mid-read is how a figure gets read against the wrong caption.
  */
 function OutcomeTicker() {
-  const { data: outcomes } = useQuery({
-    // region 'all': outcomes span 11 regions and the endpoint defaults to US alone, which would drop
-    // three quarters of the set on a page whose whole claim is global coverage.
-    queryKey: ['billOutcomes', 'positive', 'all'],
-    queryFn: () => fetchBillOutcomes({ direction: 'positive', region: 'all', reviewed_only: true }),
-    staleTime: 30 * 60 * 1000,
-  });
+  const items = usePositiveOutcomes();
 
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
   /** The reader took the wheel (arrows or a tap). Auto-advance doesn't come back. */
   const [manual, setManual] = useState(false);
   const [reduced, setReduced] = useState(false);
-  const [shared, setShared] = useState(false);
 
   useEffect(() => {
     setReduced(!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
   }, []);
-
-  const items = useMemo(() => (outcomes ?? []).filter(o => outcomeMetricText(o)), [outcomes]);
 
   useEffect(() => {
     if (reduced || paused || manual || items.length < 2) return;
@@ -116,81 +203,13 @@ function OutcomeTicker() {
 
   const current = items.length ? items[idx % items.length] : null;
 
-  // The canonical bill row, fetched for its TITLE and nothing else. An outcome carries a
-  // denormalized law_title written for this card — "…Redemption Law (Bottle Bill)", "…Act 2022
-  // (Tasmania)" — which is free to differ from bills.title, and did on 4 of 6 rows. The bill page is
-  // a static export whose slug generateStaticParams built from bills.title, so a slug derived from
-  // law_title addresses a file that was never generated and there is no fallback route to catch it:
-  // every shared headline landed on a 404. Slug from the same field the build did.
-  const { data: bill } = useQuery({
-    queryKey: ['bill', current?.bill_id],
-    queryFn: () => fetchBill(current!.bill_id!),
-    enabled: current?.bill_id != null,
-    staleTime: 30 * 60 * 1000,
-  });
+  const { billPath, share, shared } = useOutcomeShare(current);
 
   if (!current) return null;
 
   const o = current;
   const metric = outcomeMetricText(o)!;
   const place = jurisdiction(o.state);
-  // The law itself, on the Atlas. bill_id is a soft link: famous laws we haven't ingested as rows
-  // carry the denormalized number only, and those stay plain text rather than linking nowhere — as
-  // does a bill whose row hasn't loaded yet, or one outside the ce_relevant set the pages are built
-  // from, since neither has a page at the other end.
-  const billPath = bill && bill.ce_relevant !== false ? billHref(bill) : null;
-
-  // Share the LAW's page, not the homepage: it's the durable, indexable URL, and it's where someone
-  // arriving from the post can check the figure against the statute.
-  //
-  // UTM-TAGGED, and the tags are the whole point of tagging them here rather than leaving it to
-  // whoever pastes the link. lib/attribution reads utm_* off the landing URL and stores it, and
-  // AuthContext spreads that into every later signup event — so a session that started on a shared
-  // headline is attributable end-to-end in GA4 (utm_campaign=outcome_headline as the campaign
-  // dimension, utm_content as the WHICH-headline breakdown). Untagged, those arrivals land in Direct
-  // and the loop is unmeasurable. utm_* param names are GA-safe; bare `campaign`/`content` are not —
-  // see the reserved-name rule in lib/analytics.
-  //
-  // #impact is load-bearing, not decoration: it lands the reader ON the block that repeats the figure
-  // they tapped. Without it a shared "$16 million/year" opens a page whose first screen is the bill's
-  // identity and metadata, and the promise the share made goes unkept.
-  const shareUrl =
-    `${SITE_URL}${billPath ?? '/insights/'}` +
-    `?utm_source=share&utm_medium=social&utm_campaign=outcome_headline&utm_content=${encodeURIComponent(o.slug)}` +
-    (billPath ? '#impact' : '');
-  const shareText = `${metric} ${o.metric_label ?? ''}${place ? ` — ${place}` : ''}`.trim();
-
-  /** One shape for every share event, so the GA dimensions can't drift between the two channels. */
-  const shareEvent = (channel: 'native' | 'copy') => ({
-    share_channel: channel,
-    outcome_slug: o.slug,
-    utm_campaign: 'outcome_headline',
-    utm_content: o.slug,
-  });
-
-  // LINK ONLY, in both channels. Every target worth sharing to renders a preview card off the URL —
-  // headline, description, image — so a `text` payload that restates the figure gets typed into the
-  // message body ABOVE that card and says the same thing twice. `title` stays: share sheets label
-  // themselves with it, and the apps that ignore it were the ones duplicating the body.
-  async function share() {
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      try {
-        await navigator.share({ title: shareText, url: shareUrl });
-        track('outcome_share', shareEvent('native'));
-        return;
-      } catch {
-        /* dismissed or unsupported — fall through to the clipboard */
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setShared(true);
-      setTimeout(() => setShared(false), 1800);
-      track('outcome_share', shareEvent('copy'));
-    } catch {
-      window.prompt('Copy this link:', shareUrl);
-    }
-  }
 
   return (
     <FeatureCard
@@ -200,6 +219,9 @@ function OutcomeTicker() {
       onBlur={() => setPaused(false)}
       onTouchStart={holdForTouch}
     >
+      {/* Kicker left, share pinned top-right — away from the footer's "More insights" link, which it
+          used to crowd. */}
+      <div className="flex items-start justify-between gap-4">
       <Kicker tone={ACCENT}>
         {place ? `${possessive(place)} impact on ${topicOf(o)}` : `Impact on ${topicOf(o)}`}
         {o.bill_number && (
@@ -220,6 +242,17 @@ function OutcomeTicker() {
           </>
         )}
       </Kicker>
+        {/* One share channel: the tagged link, which every target expands into a preview card. */}
+        <button
+          type="button"
+          onClick={share}
+          aria-label={shared ? 'Link copied' : 'Copy a shareable link to this outcome'}
+          title={shared ? 'Copied' : 'Share'}
+          className={`-mr-1 -mt-1 inline-flex shrink-0 items-center p-1 text-lg transition-colors ${shared ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'}`}
+        >
+          {shared ? <CheckIcon /> : <LinkGlyph />}
+        </button>
+      </div>
 
       {/* aria-live so the rotation is announced rather than silently swapping under a screen reader.
           Fixed rows (figure at a set size, the sentence clamped AND floored) keep the card the same
@@ -239,25 +272,13 @@ function OutcomeTicker() {
           {o.as_of_date ? `As of ${formatDate(o.as_of_date)}` : ''}
         </p>
         <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-5">
-            <Link
-              href="/insights"
-              onClick={() => track('cta_click', { entry_source: 'home_outcome_ticker', slug: o.slug })}
-              className="text-base font-medium text-text-primary underline-offset-4 hover:underline"
-            >
-              More insights <span aria-hidden>→</span>
-            </Link>
-            {/* One share channel: the tagged link, which every target expands into a preview card. */}
-            <button
-              type="button"
-              onClick={share}
-              aria-label={shared ? 'Link copied' : 'Copy a shareable link to this outcome'}
-              title={shared ? 'Copied' : 'Share'}
-              className={`inline-flex items-center text-lg transition-colors ${shared ? 'text-text-primary' : 'text-text-muted hover:text-text-primary'}`}
-            >
-              {shared ? <CheckIcon /> : <LinkGlyph />}
-            </button>
-          </div>
+          <Link
+            href="/insights"
+            onClick={() => track('cta_click', { entry_source: 'home_outcome_ticker', slug: o.slug })}
+            className="min-w-0 text-base font-medium text-text-primary underline-offset-4 hover:underline"
+          >
+            More insights <span aria-hidden>→</span>
+          </Link>
           {/* Both directions; stepping stops the auto-advance (see `manual`). */}
           {items.length > 1 && (
             <div className="flex shrink-0 items-center gap-3 text-text-muted">
@@ -273,7 +294,7 @@ function OutcomeTicker() {
 }
 
 /** Chain-link glyph, matching ShareBillButton's. */
-function LinkGlyph() {
+export function LinkGlyph() {
   return (
     <svg
       width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -293,14 +314,22 @@ function LinkGlyph() {
  * The outcome card degrades to nothing rather than an empty shell; with only one card the grid
  * collapses to a single column.
  */
-export function HeadlinesDeadlines({ deadlines, notices }: { deadlines?: React.ReactNode; notices?: React.ReactNode }) {
+export function HeadlinesDeadlines({ deadlines, notices, compact = false, id = 'hd-title' }: {
+  deadlines?: React.ReactNode;
+  notices?: React.ReactNode;
+  /** Set in the Explore split view, where the spread sits under the table rather than across the page
+   *  foot: a section-sized heading instead of the display one, so the first screen stays one screen. */
+  compact?: boolean;
+  /** Heading id — distinct per instance when the page renders a desktop and a phone copy. */
+  id?: string;
+}) {
   return (
-    <section aria-labelledby="hd-title">
-      <h2 id="hd-title" className="font-serif text-4xl leading-tight text-text-primary sm:text-5xl">
+    <section aria-labelledby={id}>
+      <h2 id={id} className={`font-serif leading-tight text-text-primary ${compact ? 'text-2xl' : 'text-4xl sm:text-5xl'}`}>
         Headlines <span className="italic" style={{ color: ACCENT }}>&amp;</span> Deadlines
       </h2>
-      <p className="mt-1 text-lg text-text-muted">What moved, and what&rsquo;s due.</p>
-      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+      <p className={`mt-1 text-text-muted ${compact ? 'text-sm' : 'text-lg'}`}>What moved, and what&rsquo;s due.</p>
+      <div className={`grid gap-5 lg:grid-cols-2 ${compact ? 'mt-4' : 'mt-6'}`}>
         <OutcomeTicker />
         {deadlines}
       </div>

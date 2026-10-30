@@ -48,12 +48,17 @@ export async function getWatchlist(token: string | null): Promise<number[]> {
   return (json.bill_ids as number[]) ?? [];
 }
 
+/** A free account has followed as many bills as it can (the server's FREE_WATCHLIST_LIMIT). */
+export class WatchLimitError extends Error {}
+
 export async function addWatch(token: string | null, billId: number): Promise<void> {
-  await authedFetch('/me/watchlist', token, {
+  const res = await authedFetch('/me/watchlist', token, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ bill_id: billId }),
   });
+  if (res.status === 403) throw new WatchLimitError('watchlist_free_limit');
+  if (!res.ok) throw new Error(`watchlist add failed: ${res.status}`);
 }
 
 export async function removeWatch(token: string | null, billId: number): Promise<void> {

@@ -211,7 +211,7 @@ export default function MethodologyPage() {
           <li>
             <span className="text-text-primary font-medium">Jurisdiction profiles</span> — bill activity
             rolled up per state and country on the{' '}
-            <Link href="/states" className="text-green-accent hover:underline">Leaderboard</Link>,
+            <Link href="/states" className="text-green-accent hover:underline">Rankings</Link>,
             with cross-border comparison in{' '}
             <Link href="/insights" className="text-green-accent hover:underline">Insights</Link>.
           </li>

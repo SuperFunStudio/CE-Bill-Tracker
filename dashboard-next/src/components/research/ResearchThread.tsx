@@ -13,6 +13,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { ReferralUnlock } from '@/components/ui/ReferralUnlock';
 import { CAP, useAuth } from '@/components/auth/AuthContext';
 import { ApiError, askResearch, fetchMyResearchSessions, fetchResearchBills, fetchResearchSession } from '@/lib/api';
 import type { BillSummary, ResearchAnswer, ResearchBillPage, ResearchChart, ResearchCitation } from '@/lib/types';
@@ -284,31 +285,29 @@ export function useResearch() {
   /**
    * Pick a question back up after a reload. /ask keeps the question in the URL while it's in flight, so
    * a refresh mid-ask would otherwise fire a SECOND deep read — real money, for an answer the server is
-   * already writing. Look for the saved copy first (short window: if it isn't there in ~20s the original
-   * request probably never reached synthesis), and only ask fresh when there's nothing to pick up.
+   * already writing. Recover only when this exact question is on record as in flight; otherwise it's a
+   * fresh handoff from Explore and is simply asked.
+   *
+   * There used to be a blind 20s poll for the no-record case. ask() writes the pending record before
+   * the request goes out, so no record means nothing was sent — the poll only ever made a first-time
+   * visitor watch "Picking up where you left off" for twenty seconds before their question was asked.
    */
   async function resume(q: string) {
-    // If this exact question is on record as in-flight, it has a real chance of landing — poll for
-    // what's left of the server's budget using the ORIGINAL attempt's session and turn count. Without
-    // the record we can only guess, so the old blind 20s applies: long enough to catch an answer
-    // already written, short enough not to strand a reader behind a request that never happened.
     const pending = readPendingAsk();
-    const matches = pending?.q === q.trim();
-    const found = matches && pending
-      ? await recoverAnswer(q, pending.sessionId, pending.priorTurns, resumeWindowMs(pending.startedAt))
-      : await recoverAnswer(q, null, turns.length, 20_000);
-    if (!found && !matches) await ask(q);
+    if (!pending || pending.q !== q.trim()) { await ask(q); return; }
+    const found = await recoverAnswer(q, pending.sessionId, pending.priorTurns, resumeWindowMs(pending.startedAt));
     // A matching pending record that didn't land is NOT re-asked: the server is probably still
     // working on it, and a second deep read is real money spent to duplicate an answer we're already
     // waiting for. The pending record survives, so the next mount tries again.
-    else if (!found) setDropped(true);
+    if (!found) setDropped(true);
   }
 
   async function ask(q: string) {
     const trimmed = q.trim();
     if (trimmed.length < 3 || busy) return;
-    // Wall the right people before spending a request.
-    if (user && !canAsk) { setWall('upgrade'); return; }
+    // Wall the right people before spending a request. A signed-in free account isn't pre-walled: its
+    // first question is answered (the server knows whether it's been spent and 403s with
+    // ask_upgrade_required once it has — a cheap refusal, no model call).
     if (!user && freeAskUsed) { setWall('signin'); return; }
     recoverGen.current++;                       // a fresh ask supersedes any in-flight recovery poll
     setRecovering(false);
@@ -692,25 +691,38 @@ function BillPager({ page, busy, onGo }: { page: ResearchBillPage; busy: boolean
 
 /** The sign-in / upgrade wall — shown when the reader hits their ask limit. */
 export function ResearchWall({ wall, onSignIn }: { wall: 'signin' | 'upgrade'; onSignIn: () => void }) {
+  // The way past the wall leads with the free month for sharing, not a payment: a reader who has just
+  // seen their first answer is a likely referrer, and a cold Stripe page here was where people left.
+  // Plans are the second option, and they go to /pricing (context first), never straight to checkout.
   return (
-    <div className="rounded-lg border border-green-accent/40 bg-green-dark/40 p-5 space-y-3">
-      <h2 className="font-serif text-lg text-text-primary">
-        {wall === 'signin' ? 'That was your free question' : 'Ask the Atlas is a member feature'}
-      </h2>
-      <p className="text-body text-text-secondary">
-        {wall === 'signin'
-          ? 'Create a free account and choose a membership to keep asking — Students pay what they wish with a verified .edu email.'
-          : 'Your plan includes browsing every bill. Upgrade to a Student, Research, or Pro membership to ask the Atlas.'}
-      </p>
-      <div className="flex flex-wrap gap-2">
+    <div className="rounded-lg border border-green-accent/40 bg-green-dark/40 p-5 space-y-4">
+      <div className="space-y-1">
+        <h2 className="font-serif text-lg text-text-primary">
+          {wall === 'signin' ? 'That was your free question' : 'Keep the conversation going'}
+        </h2>
+        <p className="text-body text-text-secondary">
+          {wall === 'signin'
+            ? 'Create a free account, then share the Atlas with a colleague to get a month of Pro free — follow-ups and new questions included.'
+            : 'Your free question is saved in My Library. Share the Atlas with a colleague and get a month of Pro free — follow-ups and new questions included.'}
+        </p>
+      </div>
+      <div className="max-w-md">
+        <ReferralUnlock
+          source="ask_wall"
+          gateFeature="ask"
+          heading="Get a month of Pro free"
+          blurb="When a colleague creates a free account through your link, your month of Pro starts. No card needed."
+          shareTitle="Ask the Atlas — circular-economy law, answered with citations"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         {wall === 'signin' && (
-          <button type="button" onClick={onSignIn}
-            className="rounded-full bg-green-accent px-5 py-2 text-sm font-medium text-bg-primary hover:opacity-90">
-            Sign in / sign up
+          <button type="button" onClick={onSignIn} className="text-text-secondary underline-offset-2 hover:text-text-primary hover:underline">
+            Already have an account? Sign in
           </button>
         )}
-        <Link href="/pricing" className="rounded-full border border-border-default px-5 py-2 text-sm text-text-secondary hover:text-text-primary">
-          See memberships
+        <Link href="/pricing" onClick={() => track('cta_click', { entry_source: 'ask_wall_plans' })} className="link-arrow text-text-secondary">
+          See plans
         </Link>
       </div>
     </div>

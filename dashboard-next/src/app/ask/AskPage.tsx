@@ -16,6 +16,7 @@ import { useTypedPlaceholder, WORKING_PHRASES } from '@/components/research/useT
  * URL states:
  *   /ask                  the empty surface — bar + examples
  *   /ask?q=<question>     handoff from the homepage; this page owns the request
+ *   /ask?prefill=<text>   the Explore Ask toggle: the text lands in the box, unasked
  *   /ask?session=<id>     canonical: an owned thread, follow-ups append to it (useResearch restores it)
  *
  * No AI-Analysis toggle here — on this page the bar is always a question box, which is the whole point
@@ -41,6 +42,18 @@ export default function AskPage() {
     void research.resume(q);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [research.authLoading]);
+
+  // ?prefill= — the Explore Ask toggle: put the reader's words in the box to finish, don't ask them.
+  // Dropped from the URL at once so a reload is a clean page.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prefill = params.get('prefill');
+    if (prefill === null) return;
+    setQuery(prefill);
+    params.delete('prefill');
+    const qs = params.toString();
+    window.history.replaceState(null, '', `/ask/${qs ? `?${qs}` : ''}`);
+  }, []);
 
   // Once an answer is on screen the question no longer needs to ride the URL — drop ?q= so Back and
   // refresh behave, and so newThread() starts genuinely clean.

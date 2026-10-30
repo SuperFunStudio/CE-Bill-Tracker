@@ -5,8 +5,13 @@ import { useBills } from '@/hooks/useBills';
 import { useFederalSummary } from '@/hooks/useFederal';
 import { useRegion } from '@/components/layout/RegionContext';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
+import { RegionFilter, regionLabel } from '@/components/insights/RegionFilter';
+import { ButterflyExplorer } from '@/components/insights/ButterflyExplorer';
+import { RankingTicker } from '@/components/rankings/RankingTicker';
+import { HeadlineScroll } from '@/components/rankings/HeadlineScroll';
 import { STATE_NAMES } from '@/lib/utils';
 import { EU_MEMBERS, jurisdictionDisplayName } from '@/lib/jurisdictions';
+import { track } from '@/lib/analytics';
 
 /**
  * Pipeline stages, ordered from earliest to latest. A bill's momentum is how far
@@ -44,15 +49,71 @@ function tallyStage(t: StageTally, status: string | null | undefined): void {
   if (stage) t[stage] += 1; // failed/vetoed/dead map to no stage — the momentum bar shows LIVE movement
 }
 
-// Which board to show, derived from the global region selection. An EXPLICIT US selection gets the
-// deep US-state momentum board; an EU/member selection gets the EU board; everything else — the
-// default "all regions" landing and any lone foreign selection — gets the flagship two-column
-// Standings board (US states next to the world's nations).
+/**
+ * Rankings — benchmarking the regions enabling the circular economy.
+ *
+ * The page's job is to send readers into the jurisdiction profiles, not to be a table: the ranking is a
+ * ticker of links at the top, the documented outcomes step past as you scroll, and the butterfly shows
+ * what the selected region's laws cover. A sub-national board appears only when it means something —
+ * the US states when the US is selected, the member states for the EU. The full national list is kept
+ * one click down, so every profile stays reachable without the ticker.
+ */
 export default function StatesPage() {
-  const { regions } = useRegion();
-  if (regions.includes('US')) return <UsStandings />;
-  if (regions.includes('EU') || regions.some(r => r in EU_MEMBERS)) return <RegionStandings />;
-  return <WorldStandings />;
+  const { regions, setRegions } = useRegion();
+  const usSelected = regions.includes('US');
+  const euSelected = !usSelected && (regions.includes('EU') || regions.some(r => r in EU_MEMBERS));
+  const scopeName = regions.length === 0 ? 'every region' : regions.map(regionLabel).join(', ');
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-12 p-4 sm:p-6">
+      <div className="space-y-5">
+        <GazetteHeader title="Rankings" subtitle="Benchmarking the regions enabling the circular economy" />
+        <WorldStandings />
+      </div>
+
+      <HeadlineScroll />
+
+      {(usSelected || euSelected) && (
+        <section className="space-y-4">
+          {usSelected ? <UsStandings /> : <RegionStandings />}
+        </section>
+      )}
+
+      <RankingsButterfly regions={regions} setRegions={setRegions} scopeName={scopeName} />
+    </div>
+  );
+}
+
+/** What the selected region's laws cover — the butterfly, scoped by the same region picker as the rest
+ *  of the site, so picking a place here re-scopes the boards above too. */
+function RankingsButterfly({ regions, setRegions, scopeName }: {
+  regions: string[]; setRegions: (r: string[]) => void; scopeName: string;
+}) {
+  const { data: allBills } = useBills({ ce_relevant: true, limit: 5000, regions: 'all' });
+  const regionKey = regions.join(',');
+  const bills = useMemo(
+    () => (allBills ? allBills.filter(b => !regions.length || regions.includes(b.region)) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allBills, regionKey],
+  );
+  return (
+    <section aria-labelledby="rank-butterfly-title" className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 id="rank-butterfly-title" className="font-serif text-2xl text-text-primary">What the laws cover</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Laws in force in {scopeName}, placed on the circular-economy butterfly. Click a step to see its laws.
+          </p>
+        </div>
+        <RegionFilter
+          selected={regions}
+          onChange={r => { setRegions(r); track('rankings_region', { regions: r.join(',') || 'all' }); }}
+          variant="toolbar"
+        />
+      </div>
+      <ButterflyExplorer bills={bills} groupByCountry={regions.length > 0} baseStatus="enacted" haloColor="var(--bg-secondary)" />
+    </section>
+  );
 }
 
 /** US-state momentum leaderboard — the original "State Standings" board. */
@@ -88,11 +149,9 @@ function UsStandings() {
   const dormant = ranking.filter(r => r.count === 0);
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <GazetteHeader title="State Leaderboard" subtitle="US circular-economy law momentum" />
-
+    <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to Explore</Link>
+        <h2 className="font-serif text-2xl text-text-primary">US states</h2>
         <div className="inline-flex rounded-md border border-border-default overflow-hidden text-xs">
           {([['active', 'Most active'], ['enacted', 'Most enacted']] as const).map(([mode, label]) => (
             <button
@@ -230,15 +289,14 @@ function RegionStandings() {
       .sort((a, b) => b.count - a.count || b.enacted - a.enacted || a.name.localeCompare(b.name));
   }, [bills]);
 
-  const title = 'Member State Leaderboard';
+  const title = 'EU member states';
   const subtitle = 'Circular-economy law across the European Union';
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <GazetteHeader title={title} subtitle={subtitle} />
-
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to Explore</Link>
+    <div className="space-y-6">
+      <div>
+        <h2 className="font-serif text-2xl text-text-primary">{title}</h2>
+        <p className="mt-1 text-sm text-text-muted">{subtitle}</p>
       </div>
 
       <p className="text-text-secondary text-body -mt-2">
@@ -336,26 +394,18 @@ type StandingEntry = {
 };
 
 /**
- * The flagship two-column ranking: NATIONAL law by country (left) alongside SUB-NATIONAL law (right).
- * Not a US-vs-world comparison — just the global tally, by jurisdiction. Each column carries its OWN
- * ranking control, because the two tiers are measured differently:
+ * The national ranking, as the ticker at the top of Rankings (plus the full list one click down).
+ * Ranked by ENACTED laws in force — national law is enacted-heavy with no introduced→enacted funnel, so
+ * enacted is the fair comparison across borders. The toggle is "National" vs "Combined": Combined folds
+ * each country's sub-national enacted laws into its total — today only the US has a tracked
+ * sub-national tier, so Combined is what lifts the US (no federal EPR statute) on the strength of its
+ * states. It generalizes as more federations gain state coverage. (Foreign provinces collapse to their
+ * country code in the data — see foreign_id in app/ingestion/foreign.py.)
  *
- * NATIONAL toggle — "National" vs "Combined". National law is enacted-heavy with no introduced→enacted
- * funnel, so an activity/introduced axis is meaningless here; both views rank by ENACTED laws in force.
- * "Combined" folds each country's sub-national enacted laws into its total — today only the US has a
- * tracked sub-national tier, so switching to Combined is what lifts the US (no federal EPR statute) up
- * on the strength of its 50 states. It generalizes as more federations gain state coverage.
- *
- * SUB-NATIONAL toggle — "Enacted" vs "Activity". Here the US pipeline IS a funnel, so the introduced/
- * enacted distinction is real: Enacted ranks by laws in force; Activity ranks by a plain count of every
- * tracked bill (all statuses). This is where that toggle lives.
- *
- * Sub-national rows are first-class only for the US today: foreign provinces (CA/AU) collapse to their
- * country code in the data (see foreign_id in app/ingestion/foreign.py), so decomposing them into the
- * sub-national column is a v2.
+ * The US state board is no longer a standing second column: it shows on Rankings only when the US is
+ * selected (UsStandings).
  */
 function WorldStandings() {
-  const { setRegions } = useRegion();
   // region: 'all' is REQUIRED here — the /bills endpoint defaults to US-only when no region is given,
   // so without this the national column would only ever show the United States (no France/Japan/…).
   const { data: bills = [], isLoading, isError, refetch } = useBills({ ce_relevant: true, limit: 5000, region: 'all' });
@@ -368,9 +418,8 @@ function WorldStandings() {
   const { data: federalStats } = useFederalSummary();
   const federalCount = federalStats?.total ?? 0;
   const [natView, setNatView] = useState<'national' | 'combined'>('national'); // left column: enacted scope
-  const [subView, setSubView] = useState<'enacted' | 'activity'>('enacted');   // right column: enacted vs activity
 
-  const { states, nations, maxStateRaw, usRollup } = useMemo(() => {
+  const { nations, usRollup } = useMemo(() => {
     const stStage: Record<string, StageTally> = {};
     const natStage: Record<string, StageTally> = { US: blankStage() };
     const natMeta: Record<string, { region: string; code: string; name: string }> = {
@@ -414,8 +463,6 @@ function WorldStandings() {
       return row;
     });
 
-    const maxStateRaw = Math.max(1, ...states.map(r => r.activity));
-
     // Per-country combined rollup callout: the US across every tier (federal + all 50 states).
     const usNat = nations.find(n => n.code === 'US')!;
     const usRollup = {
@@ -425,7 +472,7 @@ function WorldStandings() {
       federalActions: federalCount,
     };
 
-    return { states, nations, maxStateRaw, usRollup };
+    return { nations, usRollup };
   }, [bills, federalCount]);
 
   // National column ranks by enacted law only; "Combined" swaps in the tier-combined figures.
@@ -439,20 +486,6 @@ function WorldStandings() {
     isCombined
       ? { primary: r.combinedEnacted, secondary: r.combinedMotion, barPct: r.combinedMotion ? (r.combinedEnacted / r.combinedMotion) * 100 : 0 }
       : { primary: r.enacted, secondary: r.motion, barPct: r.motion ? (r.enacted / r.motion) * 100 : 0 };
-
-  // Sub-national column carries the enacted-vs-activity toggle (the US pipeline is a real funnel).
-  const subEnacted = subView === 'enacted';
-  const sortedStates = useMemo(() => {
-    const cmp = (a: StandingEntry, b: StandingEntry) =>
-      subEnacted
-        ? b.enacted - a.enacted || b.activity - a.activity || a.name.localeCompare(b.name)
-        : b.activity - a.activity || b.enacted - a.enacted || a.name.localeCompare(b.name);
-    return [...states].sort(cmp);
-  }, [states, subEnacted]);
-  const subRowFor = (r: StandingEntry) =>
-    subEnacted
-      ? { primary: r.enacted, secondary: r.motion, barPct: r.motion ? (r.enacted / r.motion) * 100 : 0 }
-      : { primary: r.activity, secondary: r.enacted, barPct: (r.activity / maxStateRaw) * 100 };
 
   const Toggle = <T extends string>({ value, options, onChange }: {
     value: T; options: readonly (readonly [T, string])[]; onChange: (v: T) => void;
@@ -473,117 +506,50 @@ function WorldStandings() {
     </div>
   );
 
-  return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
-      <GazetteHeader title="Leaderboard" subtitle="Global rankings of regions enabling the circular economy" />
+  const profileHref = (r: StandingEntry) => `/jurisdictions/${r.region.toLowerCase()}/${r.code.toLowerCase()}/`;
+  const tickerEntries = sortedNations
+    .map(r => ({ code: r.code, name: r.name, href: profileHref(r), count: natRowFor(r).primary }))
+    .filter(e => e.count > 0);
+  const natToggle = (
+    <Toggle value={natView} onChange={v => { setNatView(v); track('rankings_view', { view: v }); }}
+      options={[['national', 'National'], ['combined', 'Combined']] as const} />
+  );
 
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <Link href="/" className="text-sm text-green-accent hover:underline">&larr; Back to Explore</Link>
+  if (isError) {
+    return (
+      <div className="surface-inset px-4 py-8 text-center space-y-2">
+        <p className="text-body text-text-primary">Couldn&rsquo;t load the rankings.</p>
+        <button onClick={() => refetch()} className="text-sm text-green-accent hover:underline">Try again</button>
       </div>
+    );
+  }
+  if (isLoading) return <div className="h-11 rounded bg-bg-secondary animate-pulse" />;
 
-      <p className="text-text-secondary text-body -mt-2">
-        Two leaderboards side by side. <strong>National</strong> ranks countries by circular-economy law in
-        force — the fair comparison across borders; switch it to <strong>Combined</strong> to fold in each
-        country&rsquo;s sub-national laws (today that means the US and its 50 states). <strong>Sub-national</strong>
-        ranks US states, where you can toggle between law <strong>enacted</strong> and total <strong>activity</strong>.
-      </p>
-
-      {/* Per-country combined rollup: the US across every tier (federal + all 50 states). */}
-      {!isLoading && !isError && (
-        <div className="rounded-lg border border-border-default bg-bg-secondary/50 px-4 py-3 text-sm text-text-secondary">
-          <span className="font-serif text-text-primary">United States — all tiers combined:</span>{' '}
-          <span className="tabular-nums text-text-primary">{usRollup.enacted}</span> enacted ·{' '}
-          <span className="tabular-nums text-text-primary">{usRollup.motion}</span> bills in motion across
-          federal + {usRollup.states} states ·{' '}
-          <Link href="/federal" className="text-green-accent hover:underline">
-            <span className="tabular-nums">{usRollup.federalActions}</span> federal regulatory actions
-          </Link>
-        </div>
-      )}
-
-      {isError ? (
-        <div className="surface-inset px-4 py-8 text-center space-y-2">
-          <p className="text-body text-text-primary">Couldn&rsquo;t load standings.</p>
-          <button onClick={() => refetch()} className="text-sm text-green-accent hover:underline">Try again</button>
-        </div>
-      ) : isLoading ? (
-        <div className="grid gap-8 md:grid-cols-2">
-          {[0, 1].map(col => (
-            <div key={col} className="space-y-2">{[...Array(6)].map((_, i) => <div key={i} className="h-9 bg-bg-secondary rounded animate-pulse" />)}</div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-8 md:grid-cols-2">
-          {/* Left: national law by country — ranked by enacted law (National) or tier-combined enacted (Combined). */}
-          <section className="space-y-3">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="font-serif text-xl text-text-primary">National</h2>
-              <Toggle value={natView} onChange={setNatView}
-                options={[['national', 'National'], ['combined', 'Combined']] as const} />
-            </div>
-            <ol className="rounded-lg border border-border-default overflow-hidden">
-              <li className="flex items-center gap-2.5 bg-bg-secondary px-3 py-2 text-xs uppercase tracking-wide text-text-muted">
-                <span className="w-5 text-right shrink-0">#</span>
-                <span className="w-9 shrink-0">Jx</span>
-                <span className="flex-1 min-w-0">Country</span>
-                <span className="hidden sm:block w-14 shrink-0">Enac. share</span>
-                <span className="w-8 text-right shrink-0">Bills</span>
-                <span className="w-9 text-right shrink-0">Laws</span>
-              </li>
-              {sortedNations.map((r, i) => {
-                const v = natRowFor(r);
-                return (
-                  <StandingRow key={`${r.region}/${r.code}`} rank={i + 1} code={r.code} name={r.name}
-                    href={`/jurisdictions/${r.region.toLowerCase()}/${r.code.toLowerCase()}/`}
-                    primary={v.primary} secondary={v.secondary} barPct={v.barPct}
-                    tag={r.region === 'US' && !isCombined ? 'federal' : undefined} />
-                );
-              })}
-            </ol>
-            <p className="text-meta text-text-muted">
-              National law is enacted-heavy with no introduced→enacted pipeline, so this column ranks
-              purely by <strong>laws in force</strong>. On <span className="uppercase">National</span> a
-              federal tag marks a country counted on its national statutes only (e.g. the US, with no
-              federal EPR law); <span className="uppercase">Combined</span> folds in its sub-national tier —
-              the board on the right — which is what lifts the US.
-            </p>
-          </section>
-
-          {/* Right: sub-national law (US states today) + a quick pivot to its parent national jurisdiction */}
-          <section className="space-y-3">
-            <div className="flex items-baseline justify-between gap-3">
-              <h2 className="font-serif text-xl text-text-primary">Sub-national</h2>
-              <div className="flex items-center gap-3">
-                <Toggle value={subView} onChange={setSubView}
-                  options={[['enacted', 'Enacted'], ['activity', 'Activity']] as const} />
-                {/* Quick-select the national jurisdiction this sub-national tier belongs to. Today that's the
-                    US (opens its full momentum board); becomes a picker when more federations are tracked. */}
-                <button onClick={() => setRegions(['US'])} className="text-xs text-green-accent hover:underline whitespace-nowrap">
-                  United States &rarr;
-                </button>
-              </div>
-            </div>
-            <ol className="rounded-lg border border-border-default overflow-hidden">
-              <li className="flex items-center gap-2.5 bg-bg-secondary px-3 py-2 text-xs uppercase tracking-wide text-text-muted">
-                <span className="w-5 text-right shrink-0">#</span>
-                <span className="w-9 shrink-0">St</span>
-                <span className="flex-1 min-w-0">State</span>
-                <span className="hidden sm:block w-14 shrink-0">{subEnacted ? 'Enac. share' : 'Activity'}</span>
-                <span className="w-8 text-right shrink-0">{subEnacted ? 'Bills' : 'Enac.'}</span>
-                <span className="w-9 text-right shrink-0">{subEnacted ? 'Laws' : 'Total'}</span>
-              </li>
-              {sortedStates.map((r, i) => {
-                const v = subRowFor(r);
-                return (
-                  <StandingRow key={r.code} rank={i + 1} code={r.code} name={r.name}
-                    href={`/jurisdictions/us/${r.code.toLowerCase()}/`}
-                    primary={v.primary} secondary={v.secondary} barPct={v.barPct} />
-                );
-              })}
-            </ol>
-          </section>
-        </div>
-      )}
+  return (
+    <div className="space-y-3">
+      {/* Ranked by enacted law: national statutes only, or Combined with each country's sub-national
+          tier folded in (today the US and its states — which is what lifts the US). */}
+      <RankingTicker entries={tickerEntries} controls={natToggle} />
+      <details className="group text-sm">
+        <summary className="cursor-pointer list-none text-text-secondary hover:text-text-primary">
+          <span className="link-arrow">Full ranking — {tickerEntries.length} regions</span>
+        </summary>
+        <ol className="mt-3 rounded-lg border border-border-default overflow-hidden">
+          {sortedNations.map((r, i) => {
+            const v = natRowFor(r);
+            return (
+              <StandingRow key={`${r.region}/${r.code}`} rank={i + 1} code={r.code} name={r.name}
+                href={profileHref(r)} primary={v.primary} secondary={v.secondary} barPct={v.barPct}
+                tag={r.region === 'US' && !isCombined ? 'federal' : undefined} />
+            );
+          })}
+        </ol>
+        <p className="mt-2 text-meta text-text-muted">
+          Laws in force per region; the smaller figure is laws and bills in motion.{' '}
+          <span className="tabular-nums">{usRollup.federalActions}</span>{' '}
+          <Link href="/federal" className="text-green-accent hover:underline">US federal regulatory actions</Link> are tracked separately.
+        </p>
+      </details>
     </div>
   );
 }

@@ -1890,7 +1890,7 @@ async def _shadow_route(question: str, det, rf, used_router: bool) -> dict | Non
 # Ask the Atlas access policy
 #
 # Members (Student+ carry the `ask` capability, plus admins) get full, persisted, threaded asks. A
-# signed-in FREE account is walled — they get Bill Explorer, not Ask. An anonymous visitor is allowed a
+# signed-in FREE account gets one answered (and saved) question, then the wall. An anonymous visitor is allowed a
 # single stateless teaser ask (one per UTC day per IP), then the frontend shows the sign-in/upgrade wall.
 # ---------------------------------------------------------------------------
 class _AskAccess:
@@ -1918,7 +1918,15 @@ async def _ask_access(
     ent = await get_entitlement(db, user)
     if has_capability(ent, CAP_ASK):
         return _AskAccess(uid=user.uid, is_member=True)
-    # Signed in but no Ask capability (free plan) — wall them (frontend routes to upgrade).
+    # Signed in on the free plan: the first question is on us — answered and saved to their library
+    # like a member's, so the wall comes after they've seen what an answer is, not before. Keyed on
+    # owning no research session yet (durable, unlike the per-instance anonymous counter); a synthesis
+    # failure persists nothing, so a failed first ask doesn't spend it. After that, the upgrade wall.
+    from app.models import ResearchSession
+    owned = await db.scalar(
+        select(func.count()).select_from(ResearchSession).where(ResearchSession.owner_uid == user.uid))
+    if not owned:
+        return _AskAccess(uid=user.uid, is_member=True)
     raise HTTPException(status_code=403, detail="ask_upgrade_required")
 
 
@@ -2216,7 +2224,8 @@ async def research_bills(
 @router.get("/my-sessions")
 async def my_research_sessions(
     limit: int = Query(default=50, ge=1, le=200),
-    _user: AuthedUser = Depends(require_capability(CAP_ASK)),
+    # Any signed-in user: owner-scoped, and a free account's one free question lives here too.
+    _user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
     """The signed-in member's own Ask-the-Atlas history — the list backing My Library. Returns each
@@ -2253,7 +2262,8 @@ async def my_research_sessions(
 @router.get("/session/{session_id}", response_model=ResearchSessionOut)
 async def research_session(
     session_id: str,
-    _user: AuthedUser = Depends(require_capability(CAP_ASK)),
+    # Any signed-in user: owner-scoped, and a free account's one free question lives here too.
+    _user: AuthedUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ResearchSessionOut:
     """Load an owned research thread with its turns in order — so the Ask page can restore/continue a

@@ -11,7 +11,6 @@ import { RegionInstrumentMatrix } from '@/components/insights/RegionInstrumentMa
 import { RealWorldImpact } from '@/components/insights/RealWorldImpact';
 import { OutliersPlaylist } from '@/components/insights/OutliersPlaylist';
 import { MaterialRegimeMap } from '@/components/insights/MaterialRegimeMap';
-import { BillFlowSankey } from '@/components/insights/BillFlowSankey';
 import { InsightsButterfly } from '@/components/insights/InsightsButterfly';
 import { useRegion } from '@/components/layout/RegionContext';
 import { RegionFilter } from '@/components/insights/RegionFilter';
@@ -19,22 +18,19 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { LockIcon } from '@/components/ui/icons';
 import Link from 'next/link';
 import { fetchBillTimeline } from '@/lib/api';
-import { formatInstrumentType } from '@/lib/utils';
 import { track } from '@/lib/analytics';
 import type { BillTimelinePoint } from '@/lib/types';
 
-// In-scope circular-economy instruments, canonical list mirrors INSTRUMENT_TYPES in
-// components/bills/BillFilters.tsx. `undefined` is the "All instruments" view (the running total).
-const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = [
-  { value: undefined, label: 'All instruments' },
-  ...['epr', 'deposit_return', 'right_to_repair', 'recycled_content', 'incentives', 'labeling', 'preemption', 'disposal_ban', 'organics_diversion', 'waste_shipment', 'other'].map(
-    (v) => ({ value: v, label: formatInstrumentType(v) }),
-  ),
-];
-
 // Tabs group the visualizations so the page isn't one long scroll.
 //
-// Momentum LEADS. The old first tab was "World", whose global-coverage choropleth said the same thing
+// 2026-10-30: Butterfly LEADS — the most visual view, and the one that answers "what does this
+// region's law actually cover" at a glance. One row of four equal tabs. Two views are ARCHIVED, not
+// deleted (their components stay; restoring one is a tab entry + an import):
+//   - Flows (BillFlowSankey) — tab removed.
+//   - Momentum's "Shots on goal" timeline (BillTimelineChart, instrument pills) — removed from the
+//     Momentum tab; the chart still renders in the non-member teaser below.
+//
+// Before that, Momentum led. The old first tab was "World", whose global-coverage choropleth said the same thing
 // as the globe on Explore — so the briefing room opened on a restatement of the front page. Momentum
 // (are these laws multiplying, and in which direction?) is the question the corpus can answer and the
 // map can't, so it opens the page; Coverage — which instruments meet which materials — follows.
@@ -55,10 +51,9 @@ const INSTRUMENT_OPTIONS: Array<{ value: string | undefined; label: string }> = 
 // components/insights/GeographyPanels — promoting one back is an import.
 // See memory: state-profile-pages / legislative-analytics-dump.
 const TABS = [
+  { id: 'butterfly', label: 'Butterfly' },
   { id: 'momentum', label: 'Momentum' },
   { id: 'coverage', label: 'Coverage' },
-  { id: 'flows', label: 'Flows' },
-  { id: 'butterfly', label: 'Butterfly' },
   { id: 'impact', label: 'Impact' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
@@ -67,7 +62,7 @@ type TabId = (typeof TABS)[number]['id'];
  * Insights — a curated, link-shareable briefing room for legislative staffers. A Pro membership
  * feature: surfaced in the nav for Pro members/admins, gated with the standard sign-up-or-purchase
  * card for everyone else (still reachable by URL, where the gate does the selling). Organized into
- * tabs (Momentum / Coverage / Flows / Butterfly / Impact) with a region filter on the
+ * tabs (Butterfly / Momentum / Coverage / Impact) with a region filter on the
  * cross-jurisdiction views.
  */
 
@@ -105,7 +100,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default function InsightsPage() {
-  const [tab, setTab] = useState<TabId>('momentum');
+  const [tab, setTab] = useState<TabId>('butterfly');
   // The region selection now lives IN the Momentum panel rather than in the site-wide bar under the
   // nav (which /insights no longer renders — see REGION_BAR_HIDDEN in AppShell). It's still the same
   // shared RegionContext, so a selection made here survives a nav to Explore and back.
@@ -114,13 +109,12 @@ export default function InsightsPage() {
 
   const [points, setPoints] = useState<BillTimelinePoint[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [instrument, setInstrument] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
     setPoints(null);
-    fetchBillTimeline({ instrument_type: instrument, regions: regionsCsv })
+    fetchBillTimeline({ regions: regionsCsv })
       .then((d) => {
         if (!cancelled) setPoints(d);
       })
@@ -130,7 +124,7 @@ export default function InsightsPage() {
     return () => {
       cancelled = true;
     };
-  }, [instrument, regionsCsv]);
+  }, [regionsCsv]);
 
   // Headline figures: total laws on the books, and the current year's introductions.
   // points are region-grouped now, so sum across regions for the aggregate stat.
@@ -165,7 +159,7 @@ export default function InsightsPage() {
       <div className="mx-auto max-w-4xl px-6 py-10 space-y-6">
         <GazetteHeader
           title="Insights"
-          subtitle="Field notes on the circular-economy policy landscape — for the people writing it."
+          subtitle="Tracking impacts from circular economy policy trends."
         />
 
         <section className="space-y-4">
@@ -259,12 +253,12 @@ export default function InsightsPage() {
     <div className="mx-auto max-w-5xl px-6 py-10 space-y-8">
       <GazetteHeader
         title="Insights"
-        subtitle="Field notes on the circular-economy policy landscape — for the people writing it."
+        subtitle="Tracking impacts from circular economy policy trends."
       />
 
       {/* Tab bar. The region filter is not here — it belongs to Momentum, the only view it changes. */}
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border-default">
-        <div className="flex flex-wrap gap-1 -mb-px" role="tablist">
+      <div className="border-b border-border-default">
+        <div className="-mb-px grid grid-cols-4" role="tablist">
           {TABS.map((t) => {
             const active = t.id === tab;
             return (
@@ -276,7 +270,7 @@ export default function InsightsPage() {
                   setTab(t.id);
                   track('insights_tab', { tab: t.id });
                 }}
-                className={`border-b-2 px-4 py-2 text-sm transition-colors ${
+                className={`border-b-2 px-2 py-2.5 text-center text-sm transition-colors ${
                   active
                     ? 'border-[rgb(var(--green-accent))] text-text-primary font-semibold'
                     : 'border-transparent text-text-muted hover:text-text-secondary'
@@ -289,24 +283,10 @@ export default function InsightsPage() {
         </div>
       </div>
 
-      {tab === 'flows' && (
-        <Section kicker="Structure" title="How circular-economy law flows between material, instrument, and jurisdiction">
-          <p className="text-text-secondary text-body leading-relaxed">
-            Two readings of the same corpus: which policy instruments regulate each material, and which
-            materials each jurisdiction legislates. Follow a ribbon to trace a flow, or hover a node to
-            isolate everything touching it.
-          </p>
-          <BillFlowSankey />
-        </Section>
-      )}
-
       {tab === 'butterfly' && (
         <Section kicker="Circularity" title="Where a jurisdiction's law sits on the circular economy">
-          <p className="text-text-secondary text-body leading-relaxed">
-            The Ellen MacArthur butterfly, filled in with the law we track: repair, reuse, remanufacturing and
-            recycling loops on the technical side, composting, cascades and regeneration on the biological.
-            Pick a region to see its shape, or compare two to see which loops one regulates and the other
-            leaves open.
+          <p className="text-text-secondary text-body">
+            The law we track, placed on the Ellen MacArthur butterfly. Pick a region, or compare two.
           </p>
           <InsightsButterfly />
         </Section>
@@ -322,7 +302,7 @@ export default function InsightsPage() {
             <p className="text-xs text-text-muted">
               {regions.length === 0
                 ? 'Every tracked region, aggregated. Pick regions to trace their trajectories side by side.'
-                : 'Scoping the two charts below. The other tabs read the whole corpus.'}
+                : 'Scoping the chart below. The other tabs read the whole corpus.'}
             </p>
             {regions.length > 0 && (
               <button
@@ -334,86 +314,10 @@ export default function InsightsPage() {
             )}
           </div>
 
-          <Section
-            kicker="Timeline"
-            title={
-              instrument
-                ? `Shots on goal: ${formatInstrumentType(instrument)} bills, introduced through enacted`
-                : 'Shots on goal: circularity bills, introduced through enacted'
-            }
-          >
-            <p className="text-text-secondary text-body leading-relaxed">
-              The headline line is how many circular-economy laws were enacted each year — across every
-              instrument we track (EPR, deposit-return, right-to-repair, recycled-content, and more), not
-              EPR alone. Toggle the upstream statuses to see the full pipeline — how many bills get
-              introduced, advance through committee, and pass a chamber for each one that finally becomes
-              law. Pick a policy instrument to slice the same total, or switch to Cumulative for a running
-              tally — but read the note under the chart first, because a running total counts each
-              amending act as a new law and never subtracts one that has been repealed.
-            </p>
-
-            {/* Instrument selector — another view on the same running total. */}
-            <div className="flex flex-wrap gap-2">
-              {INSTRUMENT_OPTIONS.map((opt) => {
-                const active = opt.value === instrument;
-                return (
-                  <button
-                    key={opt.label}
-                    onClick={() => {
-                      setInstrument(opt.value);
-                      track('insights_timeline_instrument', { instrument: opt.value ?? 'all' });
-                    }}
-                    aria-pressed={active}
-                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                      active
-                        ? 'border-[rgb(var(--green-accent))] bg-[rgb(var(--green-accent))] text-white'
-                        : 'border-border-default bg-bg-primary text-text-secondary hover:bg-bg-tertiary'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            <p className="text-text-muted text-xs">
-              <span className="font-semibold text-text-secondary">Other</span> — in-scope circular-economy
-              bills that don&apos;t map to one of the named instruments above (e.g. disposal/landfill
-              bans, product or packaging standards, reuse/refill mandates, and organics-diversion or
-              composting requirements).
-            </p>
-
-            {stats && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <Stat
-                  value={stats.enacted.toLocaleString()}
-                  label={instrument ? `${formatInstrumentType(instrument)} laws enacted to date` : 'Circular-economy laws enacted to date'}
-                />
-                {stats.latestIntro.year > 0 && (
-                  <Stat
-                    value={stats.latestIntro.count.toLocaleString()}
-                    label={`Bills introduced in ${stats.latestIntro.year} so far`}
-                  />
-                )}
-                {stats.firstYear && <Stat value={`${stats.firstYear}`} label="Earliest law tracked" />}
-              </div>
-            )}
-
-            {error ? (
-              <p className="text-sm text-error">{error}</p>
-            ) : !points ? (
-              <div className="h-[360px] w-full animate-pulse rounded-lg bg-bg-tertiary" />
-            ) : (
-              <BillTimelineChart points={points} instrument={instrument} />
-            )}
-          </Section>
-
           <Section kicker="Momentum" title="Policy momentum: advancing vs. being rolled back">
-            <p className="text-text-secondary text-body leading-relaxed">
-              Counting bills misses the most important question: which direction are they pushing? Above
-              the line are bills that <em>establish or strengthen</em> a circular-economy obligation; below
-              it, bills that <em>exempt, narrow, repeal, or preempt</em> one. Slice by instrument to see
-              where the field is gaining ground and where the backlash is concentrated.
+            <p className="text-text-secondary text-body">
+              Above the line, bills that <em>strengthen</em> a circular-economy obligation; below it, bills
+              that <em>roll one back</em>.
             </p>
             <StanceMomentumChart regions={regionsCsv} />
           </Section>
@@ -429,64 +333,45 @@ export default function InsightsPage() {
           </div>
 
           <Section kicker="Regulatory personality" title="Which instruments each jurisdiction leans on">
-            <p className="text-text-secondary text-body leading-relaxed">
-              Every jurisdiction regulates circularity with a different toolkit. Read across a row to see the
-              mix — where a region reaches first for extended-producer-responsibility, where for deposit-return,
-              recycled-content mandates, or right-to-repair. The contrasts are the story: the EU&apos;s ecodesign
-              tilt, the US EPR build-out, France&apos;s repairability push.
+            <p className="text-text-secondary text-body">
+              Read across a row to see which tool each region reaches for first.
             </p>
             <RegionInstrumentMatrix />
           </Section>
 
           <Section kicker="Coverage" title="Where instruments meet materials">
             <p className="text-text-secondary text-body leading-relaxed">
-              Which policy tools have been aimed at which materials. The dense cells are well-trodden
-              ground; the empty ones are the white space — a material with deposit-return or labeling
-              precedent but no EPR yet is often where the next wave of bills lands.
+              Dense cells are well-trodden ground; empty ones are where the next wave often lands.
             </p>
             <InstrumentMaterialMatrix />
           </Section>
 
           <Section kicker="Intervention regime" title="Which materials can go circular incrementally — and which need critical mass">
             <p className="text-text-secondary text-body leading-relaxed">
-              Not every material needs the same law. High-value, concentrated ones with an established
-              reverse channel (lead-acid batteries, aluminium, precious metals) cross the collection valley
-              on their own economics — legislation only has to stop penalizing the first mover. Low-value,
-              dispersed ones (textiles, footwear, flexible film) have no incremental path: their unit
-              economics never close below near-total coverage, so a law has to engineer critical mass
-              deliberately — mandated collection, pooled PRO financing, and design intervention at once.
-              Where a material sits here is which of those two playbooks its bills should carry.
+              High-value materials close on their own economics; low-value, dispersed ones need a law that
+              engineers critical mass.
             </p>
             <MaterialRegimeMap />
           </Section>
 
           <Section kicker="Coverage" title="How collection targets are measured">
             <p className="text-text-secondary text-body leading-relaxed">
-              When a law sets a collection or recovery target, what is it measured against? Most set a
-              <em> weight</em> (tonnage) target — but a minority measure <em>value recovered</em> (the
-              critical-metals angle) or apply <em>material-specific</em> mandates. Extracted per target
-              from each bill&apos;s text, so a bill with several targets contributes several.
+              Most targets are by <em>weight</em>; a minority measure <em>value recovered</em> or set
+              material-specific mandates.
             </p>
             <CollectionTargetBasisChart />
           </Section>
 
           <Section kicker="Producer fees" title="What compliance actually costs: fees across jurisdictions">
             <p className="text-text-secondary text-body leading-relaxed">
-              The money a producer owes — read straight from the enacting text and cited to it. This spans
-              the whole tracked corpus (it ignores the region filter): registration fees, per-tonne and
-              per-unit producer charges, revenue thresholds, and eco-modulation, jurisdiction by
-              jurisdiction. It&apos;s the clearest picture anywhere of what circular-economy compliance costs,
-              and it&apos;s the one dataset our API gates by breadth — the US slice is open, the 40+-jurisdiction
-              body is the paid product.
+              What a producer owes, read from the enacting text and cited to it.
             </p>
             <FeeCoverageChart />
           </Section>
 
           <Section kicker="Outliers" title="The 'Other' bucket: emergent instruments to watch">
             <p className="text-text-secondary text-body leading-relaxed">
-              In-scope bills that don&apos;t map to a named instrument yet — disposal bans, reuse/refill
-              mandates, product standards. Mining this bucket is how new instrument categories surface
-              before they&apos;re formalized.
+              Bills that don&apos;t fit a named instrument yet — where new categories surface first.
             </p>
             <OutliersPlaylist />
           </Section>
@@ -496,9 +381,7 @@ export default function InsightsPage() {
       {tab === 'impact' && (
         <Section kicker="Field notes" title="Real-world impact: what enacted laws actually did">
           <p className="text-text-secondary text-body leading-relaxed">
-            Everywhere else we track what a law <em>requires</em>. This is what enacted laws have been
-            documented to <em>produce</em> — measured outcomes, positive and negative, each anchored to
-            a citation. Measured impacts are rare and uneven, so the list grows as evidence surfaces.
+            What enacted laws have been documented to <em>produce</em>, positive and negative, each cited.
           </p>
           <RealWorldImpact />
         </Section>

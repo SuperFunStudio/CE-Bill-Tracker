@@ -32,18 +32,6 @@ export const PRICING_HEADER = {
   title: 'Pricing',
   tagline:
     'Cheaper than missing a PRO registration deadline, and more valuable than an outdated spreadsheet',
-  lede: (regions: number) =>
-    `Atlas tracks circular economy law as it moves — bills, enacted statutes, producer fee schedules ` +
-    `and compliance dates — across ${regions} regions, national and supranational, including US state law.`,
-};
-
-/** Coverage ledger, directly above the tiers: what you are actually buying, in numbers, before a
- *  price is named. Labels only — the counts are summed from /bills/timeline on the page itself. */
-export const LEDGER = {
-  noteLead: 'Every measure links to the document it came from.',
-  noteRest:
-    'Public legislative APIs where they exist, hand-collected filings where they do not. Open any ' +
-    'citation and read the source yourself.',
 };
 
 // Category anchor. Legislative-intelligence platforms are sold to government-affairs teams with
@@ -52,15 +40,13 @@ export const LEDGER = {
 // glance. The $50k is an approximate published entry price, so the footnote says so rather than
 // letting the headline pass it off as surveyed fact.
 export const SCALE = {
-  eyebrow: 'What this normally costs',
   title:
     'Legislative intelligence can cost over $50,000 a year. We make it accessible for the teams that ' +
     'need it the most.',
   intro:
-    'Platforms in this category are sold to government affairs teams with government affairs budgets. ' +
     'Atlas is built for the people who have to comply — designers, consultants, counsel, and ' +
-    'sustainability teams — so it is priced against their budget instead. Every tier on this page, from ' +
-    'a student seat to a full professional seat, falls between free and $1,800 a year.',
+    'sustainability teams. Every tier on this page, from a student seat to a full professional seat, ' +
+    'falls between free and $1,800 a year.',
   foot:
     'The comparison figure is an approximate published entry price for the category, shown for scale. ' +
     'Enterprise engagements are scoped separately and sit outside this range.',

@@ -53,6 +53,14 @@ const CoverageGlobe = dynamic(
   { ssr: false, loading: () => <div className="h-[340px] bg-bg-secondary rounded-lg animate-pulse" /> }
 );
 
+// Ghost text for the Explore box, cycled while it's empty. Most visitors don't know what the corpus
+// answers to, so the placeholder shows the range: a law's shorthand, a sector, a place, a material.
+// Every term here returns results (place names match the jurisdiction — see matchesJurisdictionName).
+const SEARCH_EXAMPLES = [
+  'PPWR', 'Deconstruction', 'Cars', 'United States', 'Batteries', 'China', 'Oysters', 'France',
+  'Bottles', 'Packaging', 'Textiles', 'California',
+];
+
 // Rows per page. Five by default — a calm first screen that ends on the pager rather than running on;
 // the footer control (or a filter) takes a reader to 10–100 when they're scanning a set.
 const ROWS_PER_PAGE_OPTIONS = [5, 10, 25, 50, 100];
@@ -111,6 +119,12 @@ export default function HomePage() {
   const [query, setQuery] = useState('');
   const [searchMode, setSearchMode] = useState<'filter' | 'ask'>('filter');
   const freeAskUsed = useFreeAskUsed();
+  const [exampleIdx, setExampleIdx] = useState(0);
+  useEffect(() => {
+    if (query) return;
+    const t = setInterval(() => setExampleIdx(i => (i + 1) % SEARCH_EXAMPLES.length), 2200);
+    return () => clearInterval(t);
+  }, [query]);
   const onSearchChange = (v: string) => {
     setQuery(v);
     if (searchMode === 'filter') setBillFilters(prev => ({ ...prev, search: v }));
@@ -118,6 +132,15 @@ export default function HomePage() {
   function switchSearchMode(mode: 'filter' | 'ask') {
     if (mode === searchMode) return;
     track('explore_search_mode', { mode });
+    // Ask lives on /ask: pressing the toggle goes there straight away, rather than turning this box
+    // into a second, lesser question box. Anything typed rides along as a PREFILL, not a submitted
+    // question — a filter keyword ("Batteries") isn't a question, and must not spend a free ask.
+    if (mode === 'ask') {
+      const q = query.trim();
+      track('cta_click', { entry_source: 'explore_ask_toggle' });
+      router.push(q ? `/ask/?prefill=${encodeURIComponent(q)}` : '/ask/');
+      return;
+    }
     setSearchMode(mode);
     // The table follows the box only in Filter mode: entering Ask releases the keyword filter, and
     // coming back applies whatever is typed.
@@ -478,7 +501,7 @@ export default function HomePage() {
                 onClick={() => track('cta_click', { entry_source: 'explore_methodology' })}
                 className="link-quiet text-text-secondary"
               >
-                circular economy laws and bills
+                circular economy policies
               </Link>
               <FreshnessNote className="ml-2" />
             </p>
@@ -508,7 +531,7 @@ export default function HomePage() {
               <input
                 value={query}
                 onChange={e => onSearchChange(e.target.value)}
-                placeholder={searchMode === 'filter' ? 'Keyword, bill # or material' : 'Ask about circular-economy law'}
+                placeholder={searchMode === 'filter' ? `Try: ${SEARCH_EXAMPLES[exampleIdx]}` : 'Ask about circular-economy law'}
                 aria-label={searchMode === 'filter' ? 'Filter laws by keyword' : 'Ask the Atlas a question'}
                 enterKeyHint={searchMode === 'ask' ? 'send' : 'search'}
                 // ≥27 characters of input where there's room; on a phone the field takes what's left after
@@ -638,6 +661,13 @@ export default function HomePage() {
               urlSync
             />
           )}
+
+          {/* Desktop: Headlines & Deadlines fill the column under the table, beside the globe and the
+              top list — the space that used to sit empty — so Explore reads as one screen. Below lg
+              the copy at the page foot shows instead. */}
+          <div className="mt-8 hidden lg:block">
+            <HeadlinesDeadlines compact id="hd-title-split" deadlines={<ScopedDeadlineBanner />} />
+          </div>
         </section>
 
         <aside
@@ -691,11 +721,10 @@ export default function HomePage() {
       </div>
 
       <div className="mt-12 space-y-10">
-        {/* Headlines & Deadlines — the signals that aren't bills, below the table (out of the way of
-            the bills, which are what visitors came for). */}
-        <HeadlinesDeadlines
-          deadlines={<ScopedDeadlineBanner />}
-        />
+        {/* Headlines & Deadlines — phones only here; at lg they sit in the split view under the table. */}
+        <div className="lg:hidden">
+          <HeadlinesDeadlines deadlines={<ScopedDeadlineBanner />} />
+        </div>
 
         {/* Guided-tour CTA — a standing home for the demo-led motion (the highest-converting path for
             the considered compliance buyer). Ink, not accent: the accent is reserved for data and the

@@ -39,9 +39,9 @@ const NAV_ITEMS: NavItem[] = [
   // (?session=). Nav entry so the primary AI surface is somewhere you can go, not only somewhere you
   // land after typing. See docs/ASK_SURFACE_SPEC.md.
   { href: '/ask', label: 'Ask the Atlas', Icon: AskIcon },
-  // Leaderboard is the global two-column activity tracker (national law by country + sub-national) —
-  // global, so no usOnly gate. /states adapts to the region selection (US momentum / EU / two-column).
-  { href: '/states', label: 'Leaderboard', Icon: CapitolIcon, wideOnly: true },
+  // Rankings: the national ticker, outcome headlines and butterfly (+ the US state board when the US is
+  // selected) — global, so no usOnly gate.
+  { href: '/states', label: 'Rankings', Icon: CapitolIcon, wideOnly: true },
   // Upcoming Deadlines is a tabbed surface — Federal Actions is folded in as a subpage tab (see
   // DeadlinesTabs), so /federal lights this item up too. Federal has no top-level nav entry anymore.
   { href: '/compliance', label: 'Upcoming Deadlines', short: 'Deadlines', Icon: CalendarIcon, altPaths: ['/federal'] },
@@ -53,14 +53,15 @@ const NAV_ITEMS: NavItem[] = [
   // walkthrough) each get their own top-level entry — they used to share one "Guides" item, which hid
   // both names from a desktop reader. The in-page GuidesTabs still links the two pages.
   { href: '/design-guide', label: 'Design Guide', Icon: CompassIcon },
-  { href: '/studio', label: 'Packaging Studio', short: 'Studio', Icon: TagIcon },
+  // Admin-only until it's ready for release (the route itself stays reachable by URL).
+  { href: '/studio', label: 'Packaging Studio', short: 'Studio', Icon: TagIcon, adminOnly: true },
   // Graduated from the admin-only prototype: the page + endpoint gate on isPro / require_pro, so the
   // nav entry does the discovering and the page does the selling.
   { href: '/evaluate', label: 'Evaluate a Bill', Icon: ScaleIcon, secondary: true },
   // Regulation Facts is admin-only for now — still being validated, so it's kept off the public nav
   // (and its route guarded) until it graduates. See the /label page guard.
   { href: '/label', label: 'Regulation Facts', Icon: LabelIcon, adminOnly: true, secondary: true },
-  { href: '/pricing', label: 'Pricing', Icon: TagIcon },
+  { href: '/pricing', label: 'Pricing', Icon: TagIcon, secondary: true },
   { href: '/about', label: 'About', Icon: InfoIcon, secondary: true },
 ];
 

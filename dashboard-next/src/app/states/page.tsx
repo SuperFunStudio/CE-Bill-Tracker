@@ -3,15 +3,15 @@ import StatesPage from './StatesPage';
 
 // Server wrapper — see the note in methodology/page.tsx.
 export const metadata: Metadata = {
-  title: 'Standings — circular-economy law by jurisdiction | Atlas Circular',
+  title: 'Rankings — benchmarking the regions enabling the circular economy | Atlas Circular',
   description:
-    'Which jurisdictions are actually passing circular-economy law: US states and nations ranked ' +
-    'by enacted measures, with the EU bloc broken out by member state. Enacted counts, so the ' +
-    'comparison holds across borders.',
+    'Which regions are enabling the circular economy: countries ranked by circular-economy law in ' +
+    'force, the documented outcomes of that law, and what each region’s laws cover. Enacted counts, ' +
+    'so the comparison holds across borders.',
   alternates: { canonical: '/states/' },
   openGraph: {
-    title: 'Standings — circular-economy law by jurisdiction',
-    description: 'US states and nations ranked by enacted circular-economy law.',
+    title: 'Rankings — benchmarking the regions enabling the circular economy',
+    description: 'Countries ranked by enacted circular-economy law, with the outcomes it has produced.',
     url: '/states/',
   },
 };

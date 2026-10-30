@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { STATE_NAMES, formatInstrumentType } from '@/lib/utils';
 import { CheckIcon, CloseIcon, CalendarIcon, ChevronDownIcon } from '@/components/ui/icons';
 import { useRegion } from '@/components/layout/RegionContext';
-import { RegionFilter } from '@/components/insights/RegionFilter';
+import { RegionFilter, regionLabel } from '@/components/insights/RegionFilter';
 
 export interface BillFilterState {
   state: string;
@@ -648,7 +648,17 @@ export function matchesKeywordText(b: BillSummary, query: string): boolean {
   if (!q) return true;
   return fixEncoding(b.title).toLowerCase().includes(q)
     || fixEncoding(b.ai_summary).toLowerCase().includes(q)
-    || matchesBillNumber(b, q);
+    || matchesBillNumber(b, q)
+    || matchesJurisdictionName(b, q);
+}
+
+// A place name typed into the box ("France", "United States", "California") means that jurisdiction's
+// laws, not laws whose title happens to mention it. Prefix match on the name only, from 3 characters,
+// so "can" doesn't pull in every Canadian statute while someone types "cans".
+function matchesJurisdictionName(b: BillSummary, q: string): boolean {
+  if (q.length < 3) return false;
+  const names = [b.region ? regionLabel(b.region) : '', b.region === 'US' ? STATE_NAMES[b.state] ?? '' : ''];
+  return names.some(n => n && n.toLowerCase().startsWith(q) && q.length >= Math.min(n.length, 4));
 }
 
 export function applyBillFilters(bills: BillSummary[], f: BillFilterState): BillSummary[] {

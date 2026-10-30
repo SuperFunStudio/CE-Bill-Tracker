@@ -43,7 +43,7 @@ export function track(event: string, params: Record<string, unknown> = {}): void
 }
 
 /** What a gate decided to do with the visitor. Keep in sync with the `outcome` custom dimension in GA. */
-export type GateOutcome = 'sign_in' | 'checkout' | 'pricing' | 'allowed';
+export type GateOutcome = 'sign_in' | 'checkout' | 'pricing' | 'allowed' | 'soft_prompt';
 
 /**
  * A wall was RENDERED — a passive impression, the counterpart to trackGateHit's click.

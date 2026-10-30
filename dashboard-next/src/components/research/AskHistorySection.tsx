@@ -22,7 +22,8 @@ export function AskHistorySection() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!user || !canAsk) { setSessions(null); return; }
+    // Any signed-in reader: a free account's one free question is saved here too.
+    if (!user) { setSessions(null); return; }
     (async () => {
       try {
         const rows = await fetchMyResearchSessions(await getToken());
@@ -32,7 +33,7 @@ export function AskHistorySection() {
       }
     })();
     return () => { cancelled = true; };
-  }, [user, canAsk, getToken]);
+  }, [user, getToken]);
 
   const markShared = (id: string, shared: boolean) =>
     setSessions(prev => prev?.map(s => (s.session_id === id ? { ...s, shared } : s)) ?? prev);
@@ -87,24 +88,24 @@ export function AskHistorySection() {
         </p>
       )}
 
-      {user && !canAsk && (
+      {user && !canAsk && sessions && sessions.length > 0 && (
         <p className="text-text-secondary text-body">
-          Ask the Atlas is a member feature.{' '}
+          Your free question is saved below.{' '}
           <Link href="/pricing" className="text-green-accent hover:underline">See memberships</Link> to
-          start saving research.
+          keep asking and build your research history.
         </p>
       )}
 
       {error && <p className="text-sm text-error">{error}</p>}
 
-      {user && canAsk && sessions !== null && sessions.length === 0 && (
+      {user && sessions !== null && sessions.length === 0 && (
         <p className="text-text-secondary text-body">
           No saved threads yet.{' '}
-          <Link href="/" className="text-green-accent hover:underline">Ask your first question →</Link>
+          <Link href="/ask" className="text-green-accent hover:underline">Ask your first question →</Link>
         </p>
       )}
 
-      {user && canAsk && sessions && sessions.length > 0 && (
+      {user && sessions && sessions.length > 0 && (
         <ul className="space-y-2">
           {sessions.map(s => (
             <li

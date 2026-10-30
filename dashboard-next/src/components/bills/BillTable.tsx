@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import type { BillSummary } from '@/lib/types';
 import { fixEncoding, formatDate, formatInstrumentType, isWeakening, billHref } from '@/lib/utils';
 import { BillModal } from '@/components/ui/BillModal';
@@ -8,7 +9,7 @@ import { WatchStar } from '@/components/watchlist/WatchStar';
 import { track } from '@/lib/analytics';
 import { useSelectedBill } from '@/hooks/useSelectedBill';
 import { useBill } from '@/hooks/useBills';
-import { jurisdictionCell } from '@/lib/jurisdictions';
+import { jurisdictionCell, profileHrefForBill } from '@/lib/jurisdictions';
 
 interface BillTableProps {
   bills: BillSummary[];
@@ -31,12 +32,27 @@ interface BillTableProps {
   onRowHover?: (bill: BillSummary | null) => void;
 }
 
-/** "California · US" — the jurisdiction's full name with its parent tag for sub-national units. */
+/** "California · US" — the jurisdiction's full name with its parent tag for sub-national units. The
+ *  name links to that jurisdiction's profile (the way down the rabbit hole from any row);
+ *  stopPropagation keeps the row's own open-the-bill handler from firing too. */
 function JurisdictionLabel({ bill, className = '' }: { bill: BillSummary; className?: string }) {
   const { name, parent } = jurisdictionCell(bill.region, bill.state);
+  const href = profileHrefForBill(bill.region, bill.state);
   return (
     <span className={className}>
-      <span className="text-text-primary font-medium">{name}</span>
+      {href ? (
+        <Link
+          href={href}
+          onClick={e => { e.stopPropagation(); track('cta_click', { entry_source: 'bill_table_jurisdiction' }); }}
+          onKeyDown={e => e.stopPropagation()}
+          title={`Open the ${name} profile`}
+          className="text-text-primary font-medium underline decoration-transparent decoration-1 underline-offset-4 transition-colors hover:decoration-text-primary"
+        >
+          {name}
+        </Link>
+      ) : (
+        <span className="text-text-primary font-medium">{name}</span>
+      )}
       {parent && <span className="text-text-muted text-meta"> · {parent}</span>}
     </span>
   );

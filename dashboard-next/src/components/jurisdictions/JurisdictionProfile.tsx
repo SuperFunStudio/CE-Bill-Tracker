@@ -185,7 +185,7 @@ export function JurisdictionProfile({ region, code }: { region: string; code: st
         <GazetteHeader title="Unknown jurisdiction" />
         <p className="text-text-secondary text-body">
           We don&rsquo;t recognize &ldquo;{code}&rdquo;.{' '}
-          <Link href="/states/" className="text-green-accent hover:underline">Back to the Leaderboard</Link>
+          <Link href="/states/" className="text-green-accent hover:underline">Back to Rankings</Link>
         </p>
       </div>
     );

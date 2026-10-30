@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 
 const DESTINATIONS = [
   { href: '/', label: 'Explore the tracker', desc: 'Every circular-economy bill we track, by jurisdiction.' },
-  { href: '/states/', label: 'Standings', desc: 'Which jurisdictions are moving, ranked.' },
+  { href: '/states/', label: 'Rankings', desc: 'Benchmarking the regions enabling the circular economy.' },
   { href: '/methodology/', label: 'Methodology', desc: 'What we track, how it is classified, and what we get wrong.' },
   { href: '/about/', label: 'About', desc: 'Who builds the Atlas and why.' },
 ];

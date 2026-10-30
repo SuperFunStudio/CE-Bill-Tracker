@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { CheckIcon } from '@/components/ui/icons';
 import { GazetteHeader } from '@/components/ui/GazetteHeader';
@@ -7,18 +7,17 @@ import { RequestAccessModal } from '@/components/access/RequestAccessModal';
 import { useAuth } from '@/components/auth/AuthContext';
 import { startCheckout } from '@/lib/billing';
 import {
-  PRO, RESEARCH, STUDENT, ENTERPRISE, DATA, PRICING_HEADER, LEDGER, SCALE, FOUNDING,
-  REGION_COUNT_FALLBACK, featureText, featureEmphasis, type BillingPeriod, type Feature,
+  PRO, RESEARCH, STUDENT, ENTERPRISE, DATA, PRICING_HEADER, SCALE, FOUNDING,
+  featureText, featureEmphasis, type BillingPeriod, type Feature,
 } from '@/lib/tiers';
-import { useLawsInForce, useBillTimeline } from '@/hooks/useBills';
 import { useFoundingSeats } from '@/hooks/useFoundingSeats';
 import { track } from '@/lib/analytics';
 import type { PlanInterest } from '@/lib/api';
 
-// Pricing, argued rather than listed. The order is deliberate: what's in the corpus (ledger) → what
-// this category normally costs (reference scale) → the tiers → the objections (fair questions). A
-// reader should be able to price the thing before a price is named, and every number they pass on the
-// way is read from live corpus data rather than typed in here.
+// Pricing, argued rather than listed. The order is deliberate: what this category normally costs
+// (reference scale) → the tiers → the objections (fair questions). The coverage ledger that used to
+// open the page (measures / enacted / moved / regions) was cut 2026-10-30 — the page now leads with
+// the price anchor.
 //
 // Three self-serve tiers sit in the grid (Student, Researcher, Professional); Enterprise is a
 // full-width band underneath, because it is an inquiry rather than a checkout and reads as the runt of
@@ -30,37 +29,6 @@ export default function PricingPage() {
   const [modal, setModal] = useState<{ plan: PlanInterest; label: string; heading?: string; source?: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // which tier's CTA is mid-flight
   const [error, setError] = useState<string | null>(null);
-
-  // How many regions we actually cover, from the same enacted-laws source the globe and the homepage
-  // ticker shade from — so the headline claim can't drift from what the map shows.
-  const { data: lawsInForce = [] } = useLawsInForce();
-  const regionCount = useMemo(
-    () => new Set(lawsInForce.map(r => r.region)).size || REGION_COUNT_FALLBACK,
-    [lawsInForce],
-  );
-
-  // Coverage ledger. /bills/timeline is a grouped count (year × status × region) over every CE-relevant
-  // measure carrying a status date, so summing it gives the corpus totals for the price of one cached
-  // aggregate. The "latest year" comes out of the data rather than the clock: a client-side
-  // new Date() would disagree with the prerendered HTML across a new year, and the newest year the
-  // corpus actually contains is the more honest label anyway.
-  const { data: timeline = [] } = useBillTimeline();
-  const ledger = useMemo(() => {
-    let measures = 0;
-    let enacted = 0;
-    let latestYear = 0;
-    for (const p of timeline) {
-      measures += p.count;
-      if (p.status === 'enacted') enacted += p.count;
-      if (p.year > latestYear) latestYear = p.year;
-    }
-    const movedLatest = timeline.reduce((n, p) => (p.year === latestYear ? n + p.count : n), 0);
-    return { measures, enacted, latestYear, movedLatest };
-  }, [timeline]);
-
-  // Until the aggregate lands, an em dash — never a zero. A pricing page that flashes "0 measures
-  // tracked" argues the opposite of what it is here to argue.
-  const num = (n: number) => (n > 0 ? n.toLocaleString('en-US') : '—');
 
   // Live from /billing/founding-seats, so the counter moves as seats sell rather than when someone
   // remembers to edit a constant.
@@ -111,7 +79,6 @@ export default function PricingPage() {
   const primaryBtn = 'w-full rounded-lg bg-green-accent text-bg-primary px-4 py-2 font-medium text-sm transition-opacity hover:opacity-90 disabled:opacity-50';
   const secondaryBtn = 'block w-full text-center rounded-lg border border-green-accent bg-green-dark px-4 py-2 font-serif font-medium text-green-accent transition-opacity hover:opacity-90';
   const chip = 'text-meta uppercase tracking-wider text-green-accent border border-green-accent/40 rounded-full px-2 py-0.5';
-  const eyebrow = 'block font-mono text-meta uppercase tracking-widest text-green-accent';
   // One bullet per list may be marked emphasis (see Feature in lib/tiers): it drops the muted secondary
   // colour and takes medium weight, so the reason-to-buy is the line the eye lands on first.
   const feat = (f: Feature) => {
@@ -133,46 +100,10 @@ export default function PricingPage() {
       {/* ── Masthead — the shared GazetteHeader, same as every other page: the pitch rides as the
              italic tagline rather than getting a pricing-only headline treatment. ── */}
       <GazetteHeader title={PRICING_HEADER.title} subtitle={PRICING_HEADER.tagline} />
-      <p className="text-text-secondary leading-relaxed max-w-[62ch] mx-auto text-center">
-        {PRICING_HEADER.lede(regionCount)}
-      </p>
-
-      {/* ── Coverage ledger — what a seat buys, in numbers, before a price is named. Live counts. ── */}
-      <section aria-label="Coverage" className="border-y border-border-default grid grid-cols-2 md:grid-cols-4">
-        {[
-          { n: num(ledger.measures), l: 'measures tracked, each linked to its source' },
-          { n: num(ledger.enacted), l: `enacted laws, across ${regionCount} regions` },
-          {
-            n: num(ledger.movedLatest),
-            l: ledger.latestYear ? `measures that moved in ${ledger.latestYear}` : 'measures that moved this year',
-          },
-          { n: String(regionCount), l: 'regions — national, supranational, and US state law' },
-        ].map((cell, i) => (
-          <div
-            key={cell.l}
-            className={[
-              'py-5 pr-4',
-              // Hairline rules between cells, and none on a row's first cell — which is a different
-              // index at each breakpoint (2-up on mobile, 4-up above it).
-              i % 2 === 1 ? 'border-l border-border-default pl-4' : 'md:border-l md:border-border-default md:pl-5',
-              i === 0 ? 'md:border-l-0 md:pl-0' : '',
-              i < 2 ? 'border-b border-border-default md:border-b-0' : '',
-            ].join(' ')}
-          >
-            <span className="block font-mono text-2xl tracking-tight text-text-primary">{cell.n}</span>
-            <span className="block text-meta text-text-muted mt-1.5 leading-snug">{cell.l}</span>
-          </div>
-        ))}
-      </section>
-      <p className="text-meta text-text-muted leading-relaxed">
-        <span className="text-text-secondary">{LEDGER.noteLead}</span> {LEDGER.noteRest}
-      </p>
-
       {/* ── Category anchor — stated in prose. An earlier version drew this as a scale bar (Atlas's
              range bracketed against a tick at the category's entry price); it didn't read at a glance,
              so the comparison is a sentence now. ── */}
-      <section aria-label="How Atlas is priced against comparable platforms" className="pt-6 space-y-3">
-        <span className={eyebrow}>{SCALE.eyebrow}</span>
+      <section aria-label="How Atlas is priced against comparable platforms" className="space-y-3">
         <h2 className="font-serif text-xl leading-snug text-text-primary max-w-[46ch]">{SCALE.title}</h2>
         <p className="text-text-secondary text-sm leading-relaxed max-w-[62ch]">{SCALE.intro}</p>
         <p className="text-meta text-text-muted leading-relaxed border-t border-border-default pt-3">

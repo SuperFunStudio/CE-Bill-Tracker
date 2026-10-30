@@ -114,6 +114,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/about': 'About',
   '/methodology': 'Methodology',
   '/insights': 'Insights',
+  '/circular-economy': 'Circular Economy Policies',
   '/studio': 'Studio',
   '/label': 'Regulation Label',
   '/evaluate': 'Evaluate a Bill',

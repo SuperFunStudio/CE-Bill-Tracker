@@ -24,7 +24,7 @@ import { track } from '@/lib/analytics';
 type Status = 'all' | 'enacted' | 'pending' | 'ended';
 const ENACTED = new Set(['enacted', 'active']);
 const ENDED = new Set(['failed', 'vetoed', 'repealed']);
-const sgroup = (b: BillSummary): Exclude<Status, 'all'> =>
+export const sgroup = (b: BillSummary): Exclude<Status, 'all'> =>
   ENACTED.has(b.status ?? '') ? 'enacted' : ENDED.has(b.status ?? '') ? 'ended' : 'pending';
 const STATUS_LABEL: Record<Status, string> = { all: 'All', enacted: 'In force', pending: 'Pending', ended: 'Failed or repealed' };
 const ORDER = { enacted: 0, pending: 1, ended: 2 } as const;
@@ -61,6 +61,16 @@ const UNPLACED_TEST: Record<ButterflyUnplacedId, (b: BillSummary) => boolean> = 
   no_step: b => !(b.butterfly_steps ?? []).length,
 };
 const isUnplaced = (id: string): id is ButterflyUnplacedId => id in UNPLACED_TEST;
+
+/** The diagram's counts for a bill list, tallied client-side. Exported so every surface that draws the
+ *  butterfly from the snapshot counts the same way (the /circular-economy page among them). */
+export function tallyButterfly(bills: BillSummary[]): ButterflyCounts {
+  const steps: Record<string, number> = {};
+  for (const b of bills) for (const s of b.butterfly_steps ?? []) steps[s] = (steps[s] ?? 0) + 1;
+  const unplaced = { incentives: 0, waste_shipment: 0, other: 0, no_step: 0 };
+  for (const b of bills) for (const id of Object.keys(UNPLACED_TEST) as ButterflyUnplacedId[]) if (UNPLACED_TEST[id](b)) unplaced[id]++;
+  return { total: bills.length, steps, wings: {}, unplaced };
+}
 
 const GOLD = 2.39996323;
 interface Group { key: string; label: string; bills: BillSummary[]; c: number; rad: number; cx: number; cy: number }
@@ -150,14 +160,7 @@ export function ButterflyExplorer({
   const scopeSig = bills ? `${bills.length}:${bills[0]?.id ?? ''}:${bills[bills.length - 1]?.id ?? ''}` : '';
   useEffect(() => { setFam(null); setJur(null); }, [groupByCountry, scopeSig]);
 
-  const counts: ButterflyCounts | null = useMemo(() => {
-    if (!bills) return null;
-    const steps: Record<string, number> = {};
-    for (const b of scoped) for (const s of b.butterfly_steps ?? []) steps[s] = (steps[s] ?? 0) + 1;
-    const unplaced = { incentives: 0, waste_shipment: 0, other: 0, no_step: 0 };
-    for (const b of scoped) for (const id of Object.keys(UNPLACED_TEST) as ButterflyUnplacedId[]) if (UNPLACED_TEST[id](b)) unplaced[id]++;
-    return { total: scoped.length, steps, wings: {}, unplaced };
-  }, [bills, scoped]);
+  const counts: ButterflyCounts | null = useMemo(() => (bills ? tallyButterfly(scoped) : null), [bills, scoped]);
 
   const stepBills = useMemo(
     () => (!step ? [] : isUnplaced(step) ? scoped.filter(UNPLACED_TEST[step]) : scoped.filter(b => b.butterfly_steps?.includes(step))),
@@ -210,7 +213,7 @@ export function ButterflyExplorer({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
         <nav aria-label="Zoom level" className="flex flex-wrap items-center gap-1">
           {[
-            { label: 'Butterfly', n: scoped.length, go: level ? () => { setOrigin('50% 50%'); setStep(null); setFam(null); setJur(null); } : null },
+            { label: 'Circular Economy Policies', n: scoped.length, go: level ? () => { setOrigin('50% 50%'); setStep(null); setFam(null); setJur(null); } : null },
             ...(step ? [{ label: stepName, n: stepBills.length, go: fam ? () => { setOrigin('50% 50%'); setFam(null); setJur(null); } : null }] : []),
             ...(fam ? [{ label: l1.label(fam), n: famBills.length, go: jur ? () => setJur(null) : null }] : []),
             ...(jur ? [{ label: jurName(jur), n: focus.length, go: null }] : []),

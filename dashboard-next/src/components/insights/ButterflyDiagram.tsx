@@ -69,6 +69,8 @@ const BOXES: Array<{ y: number; title: string; step: ButterflyStepId | null; cap
 // the site's theme tokens.
 const NODE = { tech: '#1e6ae9', bio: '#637c25', out: '#9aa1ab', ink: '#0b1633' };
 const LINE = { tech: '#1e6ae9', bio: '#6f8a2e', out: '#9aa1ab' };
+/** The gap ring: the same gold the zoomed explorer uses for a picked cluster. */
+const RING = '#f2b84b';
 
 const BASE = 568;
 // One user, where both cycles meet: the biological loops leave from its left (x 590), the technical
@@ -118,8 +120,17 @@ export function ButterflyDiagram({
   className,
   ariaLabel,
   onStepClick,
+  fit = false,
+  highlight,
+  selected,
 }: {
   counts: ButterflyCounts | null;
+  /** Fill the parent's height as well as its width (letterboxed), for single-screen layouts. */
+  fit?: boolean;
+  /** Steps to ring in gold: the compare view's one-sided gaps. */
+  highlight?: ReadonlySet<string>;
+  /** The step whose bills are open beside the diagram. */
+  selected?: string | null;
   /** Makes every counted step a button (mouse + keyboard); gets the step and the clicked element. */
   onStepClick?: (id: ButterflyStepId, el: SVGGElement) => void;
   /** The coverage-fingerprint size: icons and counts, no labels. */
@@ -163,7 +174,7 @@ export function ButterflyDiagram({
       className={className}
       role="img"
       aria-label={ariaLabel ?? 'Circular economy butterfly diagram with law counts per step'}
-      style={{ width: '100%', height: 'auto', display: 'block', fontFamily: 'var(--font-sans), Roboto, system-ui, sans-serif' }}
+      style={{ width: '100%', height: fit ? '100%' : 'auto', display: 'block', fontFamily: 'var(--font-sans), Roboto, system-ui, sans-serif' }}
     >
       <defs>
         {(['bio', 'tech', 'out'] as const).map(w => (
@@ -206,7 +217,10 @@ export function ButterflyDiagram({
         const n = b.step ? get(b.step) : 0;
         return (
           <g key={b.title} {...(b.step && onStepClick && n > 0 ? stepHandlers(b.step) : {})}>
-            <rect x={BOX.x} y={b.y} width={BOX.w} height={BOX.h} rx={27} fill="var(--bg-primary)" stroke="var(--border-default)" />
+            <rect x={BOX.x} y={b.y} width={BOX.w} height={BOX.h} rx={27} fill="var(--bg-primary)"
+              stroke={b.step && selected === b.step ? 'var(--text-primary)' : b.step && highlight?.has(b.step) ? RING : 'var(--border-default)'}
+              strokeWidth={b.step && (selected === b.step || highlight?.has(b.step)) ? 3.5 : 1}
+              strokeDasharray={b.step && selected !== b.step && highlight?.has(b.step) ? '7 4' : undefined} />
             {b.step && <title>{`${b.title}: ${fmt(n)} ${unit}${b.caption}`}</title>}
             {compact ? (
               <>
@@ -283,6 +297,11 @@ export function ButterflyDiagram({
         return (
           <g key={nd.id} {...(clickable ? stepHandlers(nd.id) : {})}>
             <title>{tip}</title>
+            {(selected === nd.id || highlight?.has(nd.id)) && (
+              <circle cx={nd.x} cy={nd.y} r={r + 8} fill="none"
+                stroke={selected === nd.id ? 'var(--text-primary)' : RING} strokeWidth={3.5}
+                strokeDasharray={selected === nd.id ? undefined : '7 4'} />
+            )}
             {nd.wing === 'out' ? (
               <>
                 <circle cx={nd.x} cy={nd.y} r={r} fill="var(--bg-primary)" stroke={NODE.out} strokeWidth={2.5} strokeDasharray="4 4" />

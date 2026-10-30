@@ -23,13 +23,17 @@ import { ScopeOnboarding } from '@/components/scope/ScopeOnboarding';
 // is the same case: it describes how the whole engine works, and its counts are the whole-corpus totals.
 // '/insights' hosts the Regions selector inside its Momentum panel — the only tab whose charts read it.
 // Site-wide, it hovered above a dozen visualizations and changed three of them.
+const FOCUS_ROUTES = ['/circular-economy'];
 const REGION_BAR_HIDDEN = ['/', '/compliance', '/federal', '/studio', '/ask', '/pricing', '/methodology', '/insights'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isEmbed = pathname?.startsWith('/embed') ?? false;
 
-  if (isEmbed) return <>{children}</>;
+  // Single-screen experiences (the /circular-economy map) bring their own slim header and fit the
+  // viewport, so the nav, footer and onboarding would only push the stage below the fold.
+  const isFocus = FOCUS_ROUTES.some(p => pathname === p || pathname?.startsWith(`${p}/`));
+  if (isEmbed || isFocus) return <>{children}</>;
 
   const showRegionBar = !REGION_BAR_HIDDEN.some(p => pathname === p || pathname?.startsWith(`${p}/`));
 

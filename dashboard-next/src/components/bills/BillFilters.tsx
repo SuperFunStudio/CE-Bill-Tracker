@@ -118,7 +118,7 @@ const CATEGORY_ALIASES: Record<string, string[]> = {
 const PACKAGING_ALIAS = 'packaging';
 
 /** Every stored value a given category's filter should match: itself plus its drifted synonyms. */
-function categoryMatchValues(category: string): string[] {
+export function categoryMatchValues(category: string): string[] {
   const extra = CATEGORY_ALIASES[category] ?? [];
   const packaging = category.endsWith('_packaging') ? [PACKAGING_ALIAS] : [];
   return [category, ...extra, ...packaging];

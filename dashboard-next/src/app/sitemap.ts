@@ -14,6 +14,7 @@ const STATIC_PATHS = [
   '/methodology/',
   '/compliance/',
   '/insights/',
+  '/circular-economy/',
   '/federal/',
   '/states/',
   '/jurisdictions/',

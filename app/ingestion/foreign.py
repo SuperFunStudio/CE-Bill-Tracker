@@ -137,6 +137,9 @@ class ForeignLaw:
     # Left None, `resolved_status_date` derives a year-only date from the id/title so every law — incl.
     # future regions — still lands dated. Set this to override with a precise date. See law_dates.
     status_date: datetime.date | None = None
+    # Date of the latest legislative step, for bill-tracking adapters (tracks_status). Enacted-law
+    # adapters leave it None. Feeds the alert stale-action gate and the "recent activity" roundups.
+    last_action_date: datetime.date | None = None
 
     @property
     def foreign_id(self) -> str:
@@ -178,6 +181,15 @@ class ForeignSourceClient(ABC):
     # tier (see the state= assignment in sync_foreign). Never a bare code — "WA" collides Western
     # Australia vs Washington; the namespaced form is collision-safe even in state-only aggregations.
     subnational: str | None = None
+    # True for adapters that track bills IN PROGRESS (not enacted law). sync_foreign then re-fetches
+    # every in-scope row of this source whose outcome isn't final, even when discovery no longer
+    # returns it (keyword discovery only sees the newest N), so a bill's status keeps moving.
+    tracks_status: bool = False
+
+    def foreign_id_for(self, source_id: str) -> str:
+        """The foreign_id a law with this source_id will be stored under (ForeignLaw.foreign_id).
+        Override when the adapter's laws span several regions (law.region != self.region)."""
+        return f"{self.region}:{self.source}:{source_id}"
 
     def __init__(self, timeout: float = 45.0):
         self._timeout = timeout
@@ -1567,7 +1579,8 @@ class BrazilPlanaltoClient(ForeignSourceClient):
 # is "responsabilidade compartilhada" / "logística reversa" via acordos setoriais, and those live in
 # ordinary PLs, not just the enacted Planalto statutes. Co-exists with BrazilPlanaltoClient — this one
 # carries source="camara" (foreign_id keyed on the proposição id). Proposições are bills in progress,
-# so status="active" unless the situation says it was transformed into a norm. Archetype A.
+# so status follows statusProposicao.codSituacao (BR_CAMARA_SITUACAO) and tracked rows are re-fetched
+# every run (tracks_status) until they reach a final outcome. Archetype A.
 #   discover: GET /proposicoes?keywords=<term>&ordem=DESC&ordenarPor=id&itens=N  -> {dados:[{id,ementa}]}
 #   bill text: GET /proposicoes/{id}  -> ementa + ementaDetalhada + keywords + statusProposicao
 # --------------------------------------------------------------------------------------------------
@@ -1587,6 +1600,34 @@ BR_CAMARA_TERMS = [
 ]
 BR_CAMARA_PER_TERM = 60   # newest N proposições per term (DESC by id), deduped across terms
 BR_CAMARA_MAX = 200       # overall discovery cap — bounds the Haiku classify spend per run
+# statusProposicao.codSituacao -> canonical bill status (the US vocabulary, app/ingestion/coordinator.py,
+# so the UI's enacted / pending / ended buckets work unchanged). Codes from the source's own list,
+# GET /referencias/proposicoes/codSituacao (pulled 2026-10-30). Anything unlisted is still moving and
+# maps to "introduced". "failed" = no longer moving: archived bills can be unarchived at the start of
+# a legislature, which is why tracked rows keep being re-fetched (tracks_status).
+BR_CAMARA_SITUACAO = {
+    1140: "enacted",                                    # Transformado em Norma Jurídica
+    937: "vetoed",                                      # Vetado totalmente
+    1150: "passed", 1160: "passed", 1070: "passed",    # awaiting sanction / sent to the executive
+    1294: "passed", 939: "passed",                      # awaiting promulgation / veto vote
+    926: "passed_chamber", 1293: "passed_chamber",      # with, or on its way to, the Senate
+    1303: "passed_chamber",
+    907: "in_committee", 915: "in_committee", 928: "in_committee", 1170: "in_committee",
+    1295: "in_committee", 1296: "in_committee", 1297: "in_committee", 1300: "in_committee",
+    1380: "in_committee",                               # rapporteur / committee-opinion stages
+    923: "failed", 930: "failed", 931: "failed",        # Arquivada / sent or awaiting the archive
+    914: "failed", 940: "failed",
+    941: "failed", 950: "failed", 1120: "failed",       # Recusado / withdrawn / returned to author
+    1222: "failed", 1292: "failed", 1230: "failed",     # prejudged / lapsed / folded into a new bill
+}
+
+
+def br_camara_status(cod_situacao) -> str:
+    """Canonical status for a Câmara proposição's situation code."""
+    try:
+        return BR_CAMARA_SITUACAO.get(int(cod_situacao), "introduced")
+    except (TypeError, ValueError):
+        return "introduced"
 
 
 class BrazilCamaraClient(ForeignSourceClient):
@@ -1596,6 +1637,7 @@ class BrazilCamaraClient(ForeignSourceClient):
 
     region = "BR"
     source = "camara"
+    tracks_status = True
 
     async def discover(self) -> list[tuple[str, str]]:
         from urllib.parse import quote
@@ -1645,12 +1687,172 @@ class BrazilCamaraClient(ForeignSourceClient):
             f"Situação: {situacao}" if situacao else "",
         ]
         full_text = "\n\n".join(p for p in parts if p)
-        status = "enacted" if "transformad" in situacao.lower() else "active"
         return ForeignLaw(
             source_id=source_id, region=self.region, source=self.source,
             title=title, full_text=full_text, source_url=BR_CAMARA_PAGE.format(id=source_id),
-            english_label=english_label, status=status,
+            english_label=english_label, status=br_camara_status(st.get("codSituacao")),
             status_date=_iso_to_date(d.get("dataApresentacao")),  # real introduction date
+            last_action_date=_iso_to_date(st.get("dataHora")),
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# EU TRIS — Technical Regulation Information System (Directive (EU) 2015/1535). Member states (and the
+# EEA states, Switzerland, Turkey) must notify draft technical rules to the Commission and wait out a
+# standstill of at least three months before adopting them, so TRIS shows national packaging, waste
+# and recycling DRAFTS months ahead of the gazette, in English, in one place. No API and no key: a
+# Drupal search form that 403s a bare POST but answers one made with the session cookie from the
+# search page and a Referer. Every match comes back on one page (no pagination). Each notification
+# lands under the NOTIFYING country (law.region), not "EU", so the Polish deposit-return repeal draft
+# is a Polish pending bill. Archetype A (live discovery).
+#   discover: POST /en/search/results  year=<y> sel_product[]=<sector ids>  -> table of
+#             <a href="/en/notification/{node}"> {year}/{num}/{CC}</a>
+#   text:     GET /en/notification/{node}  -> title, received date, standstill end, notification message
+# --------------------------------------------------------------------------------------------------
+
+TRIS_BASE = "https://technical-regulation-information-system.ec.europa.eu"
+TRIS_PAGE = TRIS_BASE + "/en/notification/{node}"
+# Search-form product-sector option ids: S10E Packaging, S20E Waste, S50E Environmentally-friendly
+# measures, S80E Recycling (pulled 2026-10-30). S00E Environment and S30E Pollution were sampled and
+# left out: road traffic, fuel quality, lead paint — noise for this corpus.
+TRIS_SECTORS = ("41", "42", "45", "48")
+TRIS_YEARS_BACK = 5   # discovery window: this year and the five before (~25 notifications a year)
+# TRIS country code -> our region. Iceland and Liechtenstein are not in the jurisdiction tree; XI is
+# the UK in respect of Northern Ireland (post-2021 notifications).
+TRIS_REGIONS = {c: c for c in (
+    "AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE "
+    "NO CH TR UK").split()} | {"XI": "UK"}
+_TRIS_ROW_RE = re.compile(r'href="/en/notification/(\d+)">\s*(\d{4}/\d{4}/[A-Z]{2})\s*</a>')
+_TRIS_REF_RE = re.compile(r"(\d{4})/(\d{4})/([A-Z]{2})")
+_TRIS_DMY_RE = re.compile(r"(\d{2})/(\d{2})/(\d{4})")
+
+
+def _tris_region(ref: str) -> str | None:
+    m = _TRIS_REF_RE.fullmatch(ref.strip())
+    return TRIS_REGIONS.get(m[3]) if m else None
+
+
+def _tris_date(label: str, text: str) -> "datetime.date | None":
+    """The DD/MM/YYYY date that follows `label` on the flattened detail page."""
+    i = text.find(label)
+    m = _TRIS_DMY_RE.search(text, i) if i >= 0 else None
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m[3]), int(m[2]), int(m[1]))
+    except ValueError:
+        return None
+
+
+def _tris_message(text: str) -> str:
+    """The numbered notification message (items 1-16), minus items 3A/3B: the contact block names
+    officials and MPs with phone numbers and e-mails, which the corpus doesn't need."""
+    start = text.find("1. MSG")
+    if start < 0:
+        return ""
+    end = text.find("**********", start)
+    msg = text[start:end if end > 0 else None]
+    return re.sub(r"\n3A\..*?(?=\n4\.)", "", msg, flags=re.S).strip()
+
+
+class EuTrisClient(ForeignSourceClient):
+    """EU TRIS draft-notification adapter. Packaging / waste / recycling drafts from every notifying
+    country, discovered live by sector and year. region="EU" names the source; each law carries the
+    notifying country as its own region, and source_id is the TRIS reference ("2026/0550/PL")."""
+
+    region = "EU"
+    source = "tris"
+
+    def __init__(self, timeout: float = 45.0):
+        super().__init__(timeout)
+        self._nodes: dict[str, str] = {}   # reference -> detail-page node id, filled by discovery
+        self._session = False
+
+    def foreign_id_for(self, source_id: str) -> str:
+        return f"{_tris_region(source_id) or self.region}:{self.source}:{source_id}"
+
+    async def _search(self, **fields) -> str:
+        if not self._session:  # the form only answers a POST that carries the search page's cookie
+            (await self.http.get(f"{TRIS_BASE}/en/search")).raise_for_status()
+            self._session = True
+        data = {k: list(v) if isinstance(v, (list, tuple)) else v for k, v in fields.items()}
+        data |= {"search_type": "full", "op": "Search"}
+        r = await self.http.post(f"{TRIS_BASE}/en/search/results", data=data,
+                                 headers={"Referer": f"{TRIS_BASE}/en/search", "Origin": TRIS_BASE})
+        r.raise_for_status()
+        return r.text
+
+    def _collect(self, page: str) -> list[str]:
+        refs = []
+        for node, ref in _TRIS_ROW_RE.findall(page):
+            if _tris_region(ref):
+                self._nodes[ref] = node
+                refs.append(ref)
+        return refs
+
+    async def discover(self) -> list[tuple[str, str]]:
+        this_year = datetime.date.today().year
+        out: dict[str, str] = {}
+        for year in range(this_year, this_year - TRIS_YEARS_BACK - 1, -1):
+            try:
+                page = await self._search(year=str(year), **{"sel_product[]": TRIS_SECTORS})
+            except httpx.HTTPError as e:
+                log.warning("tris_search_failed", year=year, error=str(e))
+                continue
+            for ref in self._collect(page):
+                out.setdefault(ref, "")
+        log.info("tris_discovered", total=len(out), years=TRIS_YEARS_BACK + 1)
+        return list(out.items())
+
+    async def _node_for(self, ref: str) -> str | None:
+        """Detail-page node id for a reference outside this run's discovery (a re-ingest by id)."""
+        if ref in self._nodes:
+            return self._nodes[ref]
+        m = _TRIS_REF_RE.fullmatch(ref)
+        if not m:
+            return None
+        try:
+            self._collect(await self._search(year=m[1], number=str(int(m[2])),
+                                             **{"country[]": m[3]}))
+        except httpx.HTTPError as e:
+            log.warning("tris_lookup_failed", ref=ref, error=str(e))
+        return self._nodes.get(ref)
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        region = _tris_region(source_id)
+        node = await self._node_for(source_id) if region else None
+        if not node:
+            log.warning("tris_unresolved", ref=source_id)
+            return None
+        url = TRIS_PAGE.format(node=node)
+        try:
+            r = await self.http.get(url, headers={"Referer": f"{TRIS_BASE}/en/search/results"})
+            r.raise_for_status()
+        except httpx.HTTPError as e:
+            log.warning("tris_fetch_failed", ref=source_id, error=str(e))
+            return None
+        page = r.text
+        main = page[page.find("<main"):page.find("</main>")]
+        text = html.unescape(_TAG_RE.sub("\n", _SCRIPT_STYLE_RE.sub("", main)))
+        text = re.sub(r"[ \t]*\n\s*", "\n", text)
+        message = _tris_message(text)
+        if not message:
+            log.warning("tris_no_message", ref=source_id)
+            return None
+        # Item 5, the line after item 4, is the draft's English title. Matched by position because
+        # the machine translation sometimes mangles the number ("5th Parliamentary Draft Act …").
+        title_m = re.search(r"^4\..*\n(?:5(?:\.|th)?\s*)?(\S.*)$", message, re.M)
+        title = title_m[1].strip() if title_m else ""
+        received = _tris_date("Date received", text)
+        standstill = _tris_date("End of Standstill", text)
+        head = [f"TRIS notification {source_id} — draft technical regulation notified under "
+                "Directive (EU) 2015/1535 (not yet adopted)", title,
+                f"End of standstill: {standstill.isoformat()}" if standstill else ""]
+        return ForeignLaw(
+            source_id=source_id, region=region, source=self.source,
+            title=title or source_id, full_text="\n\n".join(p for p in [*head, message] if p),
+            source_url=url, english_label=english_label, status="introduced",
+            status_date=received, last_action_date=received,
         )
 
 
@@ -5209,6 +5411,7 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "AT": AustriaRisClient,
     "BR": BrazilPlanaltoClient,
     "BR_CAMARA": BrazilCamaraClient,   # region="BR", source="camara" — live proposições
+    "EU_TRIS": EuTrisClient,           # source="tris" — drafts, stored under the notifying country
     "CH": SwitzerlandFedlexClient,
     "PL": PolandEliClient,
     "KR": KoreaLawGoKrClient,
@@ -5285,6 +5488,14 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "BE_WAL": BelgiumWalloniaFaolexClient,
 }
 
+# Outcomes a tracked bill can't move on from, so the tracks_status refresh stops re-fetching it.
+# "failed" is NOT final: an archived Brazilian bill can be unarchived when a new legislature opens.
+FINAL_STATUSES = ("enacted", "vetoed", "repealed")
+# Before codSituacao mapping the Câmara adapter stored every pending bill as "active". Moving one of
+# those to a still-pending status is a relabel, not legislative movement, so it emits no alert.
+_LEGACY_PENDING = "active"
+_PENDING_STATUSES = {"introduced", "in_committee"}
+
 
 async def sync_foreign(
     region: str,
@@ -5302,6 +5513,9 @@ async def sync_foreign(
     - changed_only: re-fetch everything but classify only laws that are new or whose stored text
       changed (an amended consolidated text), and never a human-reviewed row — the re-check mode for
       seed-list adapters, which can't discover new laws but do see their listed laws amended.
+    - a bill-tracking adapter (client.tracks_status) also re-fetches its in-scope rows that haven't
+      reached a FINAL_STATUSES outcome, in every mode, and records a status_change BillChange when
+      one moves. Those rows are re-classified only if their text changed.
     Foreign acts bypass the US keyword gate (curated source); the Haiku confidence floor decides
     ce_relevant. Commits every CHECKPOINT laws so a long run is checkpointed and re-runnable.
     """
@@ -5310,7 +5524,7 @@ async def sync_foreign(
     from app.classification.pipeline import ClassificationPipeline
     from app.config import settings
     from app.database import AsyncSessionLocal
-    from app.models import Bill, BillText
+    from app.models import Bill, BillChange, BillText
 
     client_cls = FOREIGN_CLIENTS.get(region)
     if client_cls is None:
@@ -5330,15 +5544,37 @@ async def sync_foreign(
                         )
                     ).scalars().all()
                 )
-            prefix = f"{client.region}:{client.source}:"
-            candidates = [(sid, lbl) for sid, lbl in candidates if prefix + sid not in existing]
+            candidates = [(sid, lbl) for sid, lbl in candidates
+                          if client.foreign_id_for(sid) not in existing]
         if max_laws is not None:
             candidates = candidates[:max_laws]
+        # Bill-tracking sources: re-fetch every in-scope row whose outcome isn't final, whether or not
+        # discovery returned it, so status keeps up. Outside the max_laws cap: a re-fetch only costs a
+        # GET, and only rows whose text changed are re-classified (see to_classify below).
+        refresh: set[str] = set()
+        if client.tracks_status:
+            prefix = f"{client.region}:{client.source}:"
+            seen = {sid for sid, _ in candidates}
+            async with AsyncSessionLocal() as db:
+                tracked = (
+                    await db.execute(
+                        select(Bill.foreign_id).where(
+                            Bill.foreign_id.like(prefix + "%"),
+                            Bill.ce_relevant.is_(True),
+                            Bill.status.not_in(FINAL_STATUSES),
+                        )
+                    )
+                ).scalars().all()
+            refresh = {fid[len(prefix):] for fid in tracked} - seen
+            candidates += [(sid, "") for sid in sorted(refresh)]
 
-        log.info("foreign_sync_start", region=region, to_process=len(candidates), only_new=only_new)
+        log.info("foreign_sync_start", region=region, to_process=len(candidates), only_new=only_new,
+                 refresh=len(refresh))
 
         ingested: list[int] = []
         changed: list[int] = []  # new, or text differs from what was stored
+        refreshed_ids: set[int] = set()
+        status_changes = 0
         fetched = skipped = 0
         CHECKPOINT = 25
         total = len(candidates)
@@ -5355,7 +5591,9 @@ async def sync_foreign(
                 # National law → state == region; a sub-national client (BC, NSW, …) stamps its
                 # namespaced code ("CA-BC") so federations break out into the sub-national tier.
                 state_code = client.subnational or law.region
-                if bill is None:
+                is_new = bill is None
+                old_status = None if is_new else bill.status
+                if is_new:
                     bill = Bill(foreign_id=law.foreign_id, region=law.region, state=state_code)
                     db.add(bill)
                 bill.region = law.region
@@ -5369,7 +5607,24 @@ async def sync_foreign(
                 # precise one — so foreign law is no longer dateless on the year charts. `or` guards an
                 # already-set date from being cleared when a re-run can't re-derive (JP/CN residual).
                 bill.status_date = law.resolved_status_date or bill.status_date
+                bill.last_action_date = law.last_action_date or bill.last_action_date
                 await db.flush()
+                if source_id in refresh:
+                    refreshed_ids.add(bill.id)
+                # Same gate as the OpenStates upsert: an already-tracked, in-scope bill whose status
+                # moved. run_alert_dispatch decides whether it's fresh enough to email (stale-action
+                # gate on last_action_date), so a catch-up correction is recorded but not sent.
+                if (
+                    client.tracks_status and not is_new and bill.ce_relevant
+                    and old_status != law.status
+                    and not (old_status == _LEGACY_PENDING and law.status in _PENDING_STATUSES)
+                ):
+                    db.add(BillChange(bill_id=bill.id, change_type="status_change",
+                                      old_value={"status": old_status},
+                                      new_value={"status": law.status}))
+                    status_changes += 1
+                    log.info("foreign_status_change", region=region, foreign_id=law.foreign_id,
+                             old=old_status, new=law.status)
 
                 bt = (
                     await db.execute(select(BillText).where(BillText.bill_id == bill.id))
@@ -5382,7 +5637,7 @@ async def sync_foreign(
                     if bt.text is not None:
                         log.info("foreign_text_changed", region=region, foreign_id=law.foreign_id,
                                  old_chars=len(bt.text), new_chars=len(new_text))
-                    if not (changed_only and bill.reviewed):
+                    if not ((changed_only or bill.id in refreshed_ids) and bill.reviewed):
                         changed.append(bill.id)
                 bt.text = new_text
                 bt.char_len = len(bt.text)
@@ -5395,9 +5650,14 @@ async def sync_foreign(
 
     summary = {"region": region, "found": found, "discovered": len(candidates), "fetched": fetched,
                "skipped": skipped, "ingested": len(ingested), "changed": len(changed),
+               "refreshed": len(refreshed_ids), "status_changes": status_changes,
                "classified": 0, "relevant": 0}
 
-    to_classify = changed if changed_only else ingested
+    # A status-refreshed row is re-classified only when its text changed; a human-reviewed one never.
+    changed_set = set(changed)
+    to_classify = changed if changed_only else [
+        i for i in ingested if i not in refreshed_ids or i in changed_set]
+    summary["to_classify"] = len(to_classify)
     if classify and to_classify:
         chunk = max(1, settings.max_haiku_calls_per_run)
         for i in range(0, len(to_classify), chunk):

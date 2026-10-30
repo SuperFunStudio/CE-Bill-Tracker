@@ -252,7 +252,7 @@ class Settings(BaseSettings):
     enable_foreign_ingestion: bool = False
     foreign_ingestion_regions: list[str] = [
         "JP", "JP_ORD", "UK", "DE", "NL", "SE", "PL", "CN", "CN_GOV", "CA", "CA_BC",
-        "BR_CAMARA", "RW", "SL", "AU", "FR", "FR_CODE", "MX", "ID",
+        "BR_CAMARA", "RW", "SL", "AU", "FR", "FR_CODE", "MX", "ID", "EU_TRIS",
     ]
     foreign_refresh_interval_days: int = 7
     # Seed-list adapters (fixed curated ids) can't surface NEW laws, but the consolidated texts they

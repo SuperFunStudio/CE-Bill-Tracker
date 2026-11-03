@@ -532,6 +532,8 @@ FR_SEED_LAWS: list[dict] = [
      "en": "Loi 2023-305 — fusion des filières REP (REP scheme consolidation)"},
     {"cid": "JORFTEXT000050749111",
      "en": "Décret 2024-1166 — institution d'une filière REP"},
+    {"cid": "JORFTEXT000037547946",
+     "en": "Loi EGalim 2018-938 — agriculture and food; food-waste measures for catering and restaurants"},
 ]
 
 # Circular-economy / EPR search phrases for /search discovery — the FR analog of EUR-Lex's EuroVoc
@@ -848,6 +850,18 @@ FR_CODE_TERMS = ["responsabilité élargie producteur", "éco-organisme", "écon
 # Article-number prefixes to keep — L541-10* is the REP filière core ("et seq."). Broaden later to the
 # rest of the L541 chapter (objectives, prevention, consumer info/labeling) if desired.
 FR_CODE_PREFIXES = ("L541-10",)
+# Individual articles outside the REP core, kept whatever the search returns: article number ->
+# (French subject for the title, English label). Resolved by number at discovery, because the LEGIARTI
+# id changes with every amended version.
+FR_CODE_SEED_ARTICLES = {
+    "L541-15-7": ("contenants pour emporter les restes et vente à emporter",
+                  "France Code de l'environnement — restaurants must provide reusable or recyclable "
+                  "containers for leftovers on request (doggy bag); takeaway may use the customer's own "
+                  "container"),
+    "L541-21-1": ("tri à la source des biodéchets",
+                  "France Code de l'environnement — mandatory source separation of bio-waste (food waste) "
+                  "for all producers, businesses included, since 31 Dec 2023"),
+}
 FR_CODE_PAGESIZE = 50
 FR_CODE_MAX_PAGES = 6
 
@@ -903,9 +917,44 @@ class LegifranceCodeClient(LegifranceClient):
             log.warning("fr_code_search_failed", term=term, page=page, error=str(e))
             return {}
 
+    async def _resolve_article(self, num: str) -> str | None:
+        """LEGIARTI id of the in-force version of a Code de l'environnement article, by its number."""
+        from datetime import datetime, timezone
+
+        token = await self._ensure_token()
+        if not token:
+            return None
+        body = {
+            "fond": "CODE_DATE",
+            "recherche": {
+                "champs": [{"typeChamp": "NUM_ARTICLE", "criteres": [
+                    {"typeRecherche": "EXACTE", "valeur": num, "operateur": "ET"}], "operateur": "ET"}],
+                "filtres": [{"facette": "NOM_CODE", "valeurs": [CENV_NAME]},
+                            {"facette": "DATE_VERSION",
+                             "singleDate": int(datetime.now(timezone.utc).timestamp() * 1000)}],
+                "pageNumber": 1, "pageSize": 5, "operateur": "ET",
+                "sort": "PERTINENCE", "typePagination": "ARTICLE",
+            },
+        }
+        try:
+            r = await self.http.post(
+                f"{LF_API_BASE}/search", json=body,
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            )
+            r.raise_for_status()
+            found: dict[str, str] = {}
+            _walk_extracts((r.json() or {}).get("results") or [], found)
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("fr_code_resolve_failed", num=num, error=str(e))
+            return None
+        return found.get(num)
+
     async def discover(self) -> list[tuple[str, str]]:
         self._artid: dict[str, str] = {}  # source_id -> LEGIARTI (for fetch)
         nums: dict[str, str] = {}          # article number -> LEGIARTI
+        for num in FR_CODE_SEED_ARTICLES:
+            if aid := await self._resolve_article(num):
+                nums[num] = aid
         for term in FR_CODE_TERMS:
             for page in range(1, FR_CODE_MAX_PAGES + 1):
                 data = await self._search_code(term, page)
@@ -918,10 +967,10 @@ class LegifranceCodeClient(LegifranceClient):
                     break  # no new articles on this page — extracts exhausted
         out: dict[str, str] = {}
         for num, aid in nums.items():
-            if any(num.startswith(p) for p in FR_CODE_PREFIXES):
+            if num in FR_CODE_SEED_ARTICLES or any(num.startswith(p) for p in FR_CODE_PREFIXES):
                 sid = f"cenv/{num}"
                 self._artid[sid] = aid
-                out[sid] = ""
+                out[sid] = FR_CODE_SEED_ARTICLES.get(num, ("", ""))[1]
         log.info("fr_code_discovered", kept=len(out), scanned=len(nums))
         return list(out.items())
 
@@ -950,15 +999,18 @@ class LegifranceCodeClient(LegifranceClient):
             log.warning("fr_code_thin", source_id=source_id, chars=len(text))
             return None
         num = article.get("num") or source_id
+        subject, seed_label = FR_CODE_SEED_ARTICLES.get(
+            num, ("responsabilité élargie du producteur",
+                  # Consistent English EPR framing so Haiku has signal even on short codified articles.
+                  "France Code de l'environnement — Extended Producer Responsibility (REP) provision"))
         return ForeignLaw(
             source_id=source_id,
             region=self.region,
             source=self.source,
-            title=f"Code de l'environnement, article {num} (responsabilité élargie du producteur)",
+            title=f"Code de l'environnement, article {num} ({subject})",
             full_text=text,
             source_url=f"https://www.legifrance.gouv.fr/codes/article_lc/{aid}",
-            # Consistent English EPR framing so Haiku has signal even on short codified articles.
-            english_label="France Code de l'environnement — Extended Producer Responsibility (REP) provision",
+            english_label=seed_label,
             status_date=_epoch_ms_to_date(article.get("dateDebut")),  # current-version start (epoch ms)
         )
 
@@ -990,6 +1042,9 @@ DE_SEED_LAWS: list[dict] = [
     {"slug": "elektrostoffv", "en": "Hazardous Substances in EEE Ordinance (ElektroStoffV — RoHS)"},
     {"slug": "altholzv", "en": "Waste Wood Ordinance (AltholzV)"},
     {"slug": "bioabfv", "en": "Bio-Waste Ordinance (BioAbfV)"},
+    {"slug": "gewabfv_2017",
+     "en": "Commercial Waste Ordinance (GewAbfV) — separate collection of commercial bio-waste, incl. "
+           "food waste from restaurants, with documentation"},
 ]
 
 # TOC title sweep (German analog of UK_DISCOVERY_TERMS): precise EPR/circular-economy compound terms.
@@ -1538,7 +1593,19 @@ BR_SEED_LAWS: list[dict] = [
      "en": "Decree 12.688/2025 — reverse logistics & recycled content for plastic packaging"},
     {"path": "_ato2019-2022/2021/lei/L14260.htm",
      "en": "Law 14.260/2021 — incentives for recycling"},
+    # Planalto's firewall blocks non-browser clients (it answers 200 with an "Acesso Negado" page), so
+    # this seed reads the Câmara's official copy instead; the path stays the foreign_id. start/end trim
+    # the legin site chrome around the law text.
+    {"path": "_ato2023-2026/2025/lei/L15224.htm", "date": "2025-09-30",
+     "url": "https://www2.camara.leg.br/legin/fed/lei/2025/"
+            "lei-15224-30-setembro-2025-798048-publicacaooriginal-176570-pl.html",
+     "start": "Art. 1º", "end": "Este texto não substitui",
+     "en": "Law 15.224/2025 — National Policy to Combat Food Loss and Waste (PNCPDA): voluntary food "
+           "donation, donor liability shield, Selo Doador de Alimentos"},
 ]
+_BR_SEED_BY_PATH = {s["path"]: s for s in BR_SEED_LAWS}
+# Planalto's F5 firewall page ("Acesso Negado! Esta requisição foi bloqueada."), served with HTTP 200.
+_BR_BLOCKED_RE = re.compile(r"Acesso Negado|requisi[çc][ãa]o foi bloqueada", re.I)
 
 
 class BrazilPlanaltoClient(ForeignSourceClient):
@@ -1553,23 +1620,38 @@ class BrazilPlanaltoClient(ForeignSourceClient):
         return [(s["path"], s["en"]) for s in BR_SEED_LAWS]
 
     async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        seed = _BR_SEED_BY_PATH.get(source_id, {})
+        url = seed.get("url") or f"{BR_BASE}/{source_id}"
         try:
-            r = await self.http.get(f"{BR_BASE}/{source_id}")
+            r = await self.http.get(url)
             r.raise_for_status()
         except httpx.HTTPError as e:
             log.warning("br_fetch_failed", path=source_id, error=str(e))
             return None
-        # Planalto is ISO-8859-1 but often mislabeled — latin-1 decode never raises and is correct here.
-        # Drop <script> blocks: its F5 bot-defense script carries a per-request token, which otherwise
-        # lands in the stored text and reads as an amendment on every refresh.
-        full_text = _strip_tags(_SCRIPT_STYLE_RE.sub(" ", r.content.decode("latin-1", "replace")))
+        # Planalto is ISO-8859-1 but often mislabeled — latin-1 decode never raises and is correct here;
+        # a mirror seed declares its own charset. Drop <script> blocks: Planalto's F5 bot-defense script
+        # carries a per-request token, which otherwise lands in the stored text and reads as an amendment
+        # on every refresh.
+        html = r.text if seed.get("url") else r.content.decode("latin-1", "replace")
+        full_text = _strip_tags(_SCRIPT_STYLE_RE.sub(" ", html))
+        if _BR_BLOCKED_RE.search(full_text[:500]):
+            # Never store the firewall page: it would overwrite the law's text on refresh.
+            log.warning("br_blocked", path=source_id, url=url)
+            return None
+        if seed.get("start"):
+            i = full_text.find(seed["start"])
+            j = full_text.find(seed["end"], i) if seed.get("end") and i >= 0 else -1
+            if i < 0:
+                log.warning("br_markers_missing", path=source_id, url=url)
+                return None
+            full_text = full_text[i:j] if j > i else full_text[i:]
         if len(full_text) < 100:
             log.warning("br_thin_text", path=source_id, chars=len(full_text))
             return None
         return ForeignLaw(
             source_id=source_id, region=self.region, source=self.source,
             title=english_label or source_id, full_text=full_text,
-            source_url=f"{BR_BASE}/{source_id}", english_label=english_label,
+            source_url=url, english_label=english_label, status_date=_iso_to_date(seed.get("date")),
         )
 
 
@@ -1693,6 +1775,144 @@ class BrazilCamaraClient(ForeignSourceClient):
             english_label=english_label, status=br_camara_status(st.get("codSituacao")),
             status_date=_iso_to_date(d.get("dataApresentacao")),  # real introduction date
             last_action_date=_iso_to_date(st.get("dataHora")),
+        )
+
+
+# --------------------------------------------------------------------------------------------------
+# Brazil — Senado Federal Dados Abertos (legis.senado.leg.br/dadosabertos). The Senate half of the
+# federal pipeline: bills that START in the Senate (PL 2524/2022, the plastics framework, is one), which
+# the Câmara feed never sees until they are sent across. Only Senate-originated bills are kept
+# (objetivo "Iniciadora"): a Câmara bill under Senate review ("Revisora") is already a source="camara"
+# row. Status follows siglaSituacaoAtual (BR_SENADO_SITUACAO); tracked rows are re-fetched every run
+# (tracks_status). Built on /processo — the older /materia/pesquisa service is deprecated. Archetype A.
+#   discover: GET /processo?termo=<term>&tramitouLegislaturaAtual=S  -> [{id, identificacao, objetivo}]
+#   bill text: GET /processo/{id}  -> ementa + indexação + classificações + situação + norma gerada
+# --------------------------------------------------------------------------------------------------
+
+BR_SENADO_API = "https://legis.senado.leg.br/dadosabertos"
+BR_SENADO_PAGE = "https://www25.senado.leg.br/web/atividade/materias/-/materia/{codigo}"
+# `termo` matches the process's indexing keywords (indexação), not the full text, so it takes the
+# plain nouns as well as the statutory phrases. Probed 2026-10-30: ~75 kept bills across these terms.
+BR_SENADO_TERMS = [
+    "logística reversa",
+    "responsabilidade compartilhada",
+    "economia circular",
+    "resíduos sólidos",
+    "plástico",
+    "embalagem",
+    "reciclagem",
+]
+# Bill types only: the keyword index also returns requerimentos, amendments and veto messages. PLS is
+# the pre-2019 Senate bill. MPVs are left to the Câmara feed, which carries them too.
+BR_SENADO_SIGLAS = {"PL", "PLP", "PLS", "PEC"}
+BR_SENADO_MAX = 200
+# siglaSituacaoAtual -> canonical status, from GET /processo/tipos-situacao (pulled 2026-10-30). Floor
+# stages count as in_committee (still inside the originating chamber), as in the US coordinator.
+# Anything unlisted (awaiting dispatch, read in plenary, unarchived) maps to "introduced".
+BR_SENADO_SITUACAO = {
+    "TNJR": "enacted", "TNJRVETO": "enacted",           # Transformada em Norma Jurídica (± partial veto)
+    "VTDA": "vetoed",
+    "RMSAN": "passed", "RMPRO": "passed",               # sent to sanction / promulgation
+    "RMPROPENDENTE": "passed", "RMGC": "passed",
+    "RMCD": "passed_chamber", "AGCD": "passed_chamber",  # sent to / awaiting the Câmara
+    "APRVD": "passed_chamber", "APRVD(DT)": "passed_chamber",
+    "AGDREL": "in_committee", "RELATOR": "in_committee", "PRONTPAUT": "in_committee",
+    "INPAUTA": "in_committee", "PEDVISTA": "in_committee", "AGAUDPUB": "in_committee",
+    "AUDIÊNCIA": "in_committee", "AUDPUBREALIZ": "in_committee", "APRVPAR": "in_committee",
+    "APRVSUB": "in_committee", "AGTSUP(DT)": "in_committee", "APRCD(DT)": "in_committee",
+    "AGREMD": "in_committee", "EPREM": "in_committee", "AGIND": "in_committee",
+    "AGINCO": "in_committee", "AGPAR": "in_committee", "AGLPAR": "in_committee",
+    "MATDESP": "in_committee", "SBRTA": "in_committee",
+    "PRONDEPLEN": "in_committee", "AGDDO": "in_committee", "INCLOD": "in_committee",
+    "INCLOD(PAR": "in_committee",
+    "ARQV": "failed", "ARQVD": "failed", "ARQV_CD": "failed",  # archived (incl. at the Câmara)
+    "RJTDA": "failed", "RJTDA(DT)": "failed", "RTPA": "failed",
+    "PRJDA": "failed", "PREJFINLEG": "failed", "TRMENC": "failed",
+    "SEFICA": "failed", "PROC_DESCONSTITUIDO": "failed", "INADMITIDA": "failed",
+}
+
+
+def br_senado_status(sigla_situacao) -> str:
+    """Canonical status for a Senado process's current-situation code."""
+    return BR_SENADO_SITUACAO.get((sigla_situacao or "").strip(), "introduced")
+
+
+class BrazilSenadoClient(ForeignSourceClient):
+    """Senado Federal Dados Abertos adapter. Senate-originated federal bills discovered live by keyword,
+    JSON, no key. region="BR", source="senado" — co-exists with the Câmara and Planalto adapters."""
+
+    region = "BR"
+    source = "senado"
+    tracks_status = True
+
+    async def discover(self) -> list[tuple[str, str]]:
+        from urllib.parse import quote
+
+        out: dict[str, str] = {}  # processo id -> ""
+        for term in BR_SENADO_TERMS:
+            url = f"{BR_SENADO_API}/processo?termo={quote(term)}&tramitouLegislaturaAtual=S"
+            try:
+                resp = await self.http.get(url, headers={"Accept": "application/json"})
+                resp.raise_for_status()
+                rows = resp.json() or []
+            except (httpx.HTTPError, ValueError) as e:
+                log.warning("br_senado_search_failed", term=term, error=str(e))
+                continue
+            for r in rows:
+                sigla = (r.get("identificacao") or "").split(" ", 1)[0]
+                if r.get("id") and r.get("objetivo") == "Iniciadora" and sigla in BR_SENADO_SIGLAS:
+                    out.setdefault(str(r["id"]), "")
+        candidates = list(out.items())[:BR_SENADO_MAX]
+        log.info("br_senado_discovered", total=len(candidates), terms=len(BR_SENADO_TERMS))
+        return candidates
+
+    async def fetch(self, source_id: str, english_label: str = "") -> ForeignLaw | None:
+        try:
+            resp = await self.http.get(f"{BR_SENADO_API}/processo/{source_id}",
+                                       headers={"Accept": "application/json"})
+            resp.raise_for_status()
+            d = resp.json() or {}
+        except (httpx.HTTPError, ValueError) as e:
+            log.warning("br_senado_fetch_failed", id=source_id, error=str(e))
+            return None
+        ementa = ((d.get("conteudo") or {}).get("ementa") or "").strip()
+        if not ementa:
+            log.warning("br_senado_no_ementa", id=source_id)
+            return None
+        doc = d.get("documento") or {}
+        situacao = (d.get("situacaoAtual") or "").strip()
+        norma = d.get("normaGerada") or {}
+        classes = "; ".join(c["descricaoHierarquia"] for c in d.get("classificacoes") or []
+                            if c.get("descricaoHierarquia"))
+        authors = ", ".join(a["autor"] for a in d.get("autoriaIniciativa") or [] if a.get("autor"))
+        # Body for the classifier, mirroring the Câmara one: summary + the Senate's own index terms.
+        parts = [
+            f"{d.get('descricaoSigla') or d.get('sigla') or ''} {d.get('identificacao') or ''}".strip(),
+            ementa,
+            f"Indexação: {' '.join((doc.get('indexacao') or '').split())}" if doc.get("indexacao") else "",
+            f"Classificação: {classes}" if classes else "",
+            f"Autoria: {authors}" if authors else "",
+            f"Situação: {situacao}" if situacao else "",
+            f"Norma gerada: {norma.get('descricao') or norma.get('identificacao')}"
+            if (norma.get("descricao") or norma.get("identificacao")) else "",
+        ]
+        full_text = "\n\n".join(p for p in parts if p)
+        codigo = d.get("codigoMateria")
+        deliberacao = d.get("deliberacao") or {}
+        status = br_senado_status(d.get("siglaSituacaoAtual"))
+        if not d.get("siglaSituacaoAtual") and d.get("tramitando") == "Não":
+            # Closed processes (e.g. PLS archived at the end of a legislature) carry no current
+            # situation; the outcome is in `deliberacao` and `normaGerada` instead.
+            status = "enacted" if norma else "failed"
+        return ForeignLaw(
+            source_id=source_id, region=self.region, source=self.source,
+            title=(d.get("identificacao") or "").strip() or f"Senado processo {source_id}",
+            full_text=full_text,
+            source_url=(BR_SENADO_PAGE.format(codigo=codigo) if codigo
+                        else f"{BR_SENADO_API}/processo/{source_id}"),
+            english_label=english_label, status=status,
+            status_date=_iso_to_date(doc.get("dataApresentacao") or d.get("dataInicioEfetivo")),
+            last_action_date=_iso_to_date(d.get("dataSituacaoAtual") or deliberacao.get("data")),
         )
 
 
@@ -2029,6 +2249,9 @@ MX_SEED_LAWS: list[dict] = [
      "en": "Regulation of the LGPGIR — management-plan (plan de manejo) registration and content"},
     {"abbr": "LGEEPA", "date": "1988-01-28",
      "en": "General Law of Ecological Balance & Environmental Protection (LGEEPA)"},
+    {"abbr": "LGAAS", "date": "2024-04-17",
+     "en": "General Law on Adequate and Sustainable Food (LGAAS) — food loss and waste; Art. 55 bars "
+           "commercial establishments from discarding edible food (per a regulation not yet issued)"},
 ]
 # LeyesBiblio PDFs carry no machine-readable enactment date the adapter can parse cheaply, so pin the
 # DOF publication date of each seeded law (abbr -> ISO date) rather than leave it dateless on the charts.
@@ -2268,6 +2491,7 @@ PL_DISCOVERY_TERMS = [
     "bateriach i akumulatorach",                 # batteries & accumulators
     "pojazdach wycofanych z eksploatacji",       # end-of-life vehicles
     "rozszerzonej odpowiedzialności producenta", # extended producer responsibility
+    "marnowaniu żywności",                       # food waste (2019 act; donation duty for large shops)
 ]
 
 
@@ -4289,6 +4513,15 @@ IN_SEED_LAWS: list[dict] = [
      "material": "batteries", "date": "2022-08-24"},
     {"id": "183723", "en": "India Solid Waste Management Rules, 2016",
      "material": "waste", "date": "2016-04-08"},
+    # Not in FAOLEX yet: the gazette copy (S.O. 388(E), 27 Jan 2026; in force 1 Apr 2026) as published
+    # with MoEFCC's PIB release. Bilingual like the FAOLEX PDFs, so the English line filter applies.
+    {"id": "swm-2026", "date": "2026-01-27",
+     "url": "https://static.pib.gov.in/WriteReadData/specificdocs/documents/2026/jan/doc2026129773501.pdf",
+     "page": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2219676",
+     "en": "India Solid Waste Management Rules, 2026 (S.O. 388(E)) — four-stream segregation; bulk waste "
+           "generators (20,000 m², 40,000 L water or 100 kg waste a day) process wet waste on site or "
+           "buy EBWGR certificates",
+     "material": "waste"},
 ]
 # TODO(IN): the Environment (Protection) Act 1986 parent is still not seeded (ind227252/227253 are only
 # its 2023/24 notifications). Not EPR-specific so low priority; add via the seed `url` override or an
@@ -4972,6 +5205,10 @@ IT_SEED_LAWS: list[dict] = [
      "en": "Decree on end-of-life vehicles (ELV, EPR)", "material": "vehicles"},
     {"coord": "decreto.legislativo:2021-11-08;196",
      "en": "Decree on single-use plastic products (SUP Directive)", "material": "plastics"},
+    # Converted with amendments by L. 5 ottobre 2026, n. 173; the permalink serves the converted text.
+    {"coord": "decreto.legge:2026-08-07;143",
+     "en": "Decree-law on mandatory compostability of certain packaging (PPWR Art. 9(2)(b); "
+           "HoReCa dine-in and condiment packaging)", "material": "packaging"},
 ]
 
 
@@ -5411,6 +5648,7 @@ FOREIGN_CLIENTS: dict[str, type[ForeignSourceClient]] = {
     "AT": AustriaRisClient,
     "BR": BrazilPlanaltoClient,
     "BR_CAMARA": BrazilCamaraClient,   # region="BR", source="camara" — live proposições
+    "BR_SENADO": BrazilSenadoClient,   # region="BR", source="senado" — Senate-originated bills
     "EU_TRIS": EuTrisClient,           # source="tris" — drafts, stored under the notifying country
     "CH": SwitzerlandFedlexClient,
     "PL": PolandEliClient,

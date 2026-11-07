@@ -9,7 +9,6 @@ import {
   billSlug,
   billHref,
   fixEncoding,
-  formatDate,
   formatInstrumentType,
   resolveSourceLink,
 } from '@/lib/utils';
@@ -19,7 +18,7 @@ import { BillComplianceLayers } from '@/components/bills/BillComplianceLayers';
 import { BillImpact } from '@/components/bills/BillImpact';
 import { NextSteps } from '@/components/compliance/NextSteps';
 import { ShareBillButton } from '@/components/bills/ShareBillButton';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { LiveLastAction, LiveStatusBadge } from '@/components/bills/LiveBillStatus';
 import { WatchStar } from '@/components/watchlist/WatchStar';
 
 const SITE_URL = 'https://www.atlascircular.com';
@@ -215,7 +214,7 @@ export default async function BillPage({ params }: { params: { id: string; slug:
               {bill.bill_number && (
                 <span className="text-text-muted font-mono text-sm">{bill.bill_number}</span>
               )}
-              <StatusBadge status={bill.status} showCaption dashWhenEmpty={false} />
+              <LiveStatusBadge billId={bill.id} status={bill.status} lastAction={bill.last_action_date || bill.status_date} />
             </div>
             <div className="flex items-center gap-3 shrink-0">
               <ShareBillButton bill={bill} />
@@ -250,7 +249,7 @@ export default async function BillPage({ params }: { params: { id: string; slug:
           </div>
           <div>
             <dt className="inline">Last action: </dt>
-            <dd className="inline text-text-secondary">{formatDate(bill.last_action_date || bill.status_date)}</dd>
+            <dd className="inline text-text-secondary"><LiveLastAction billId={bill.id} status={bill.status} lastAction={bill.last_action_date || bill.status_date} /></dd>
           </div>
         </dl>
 

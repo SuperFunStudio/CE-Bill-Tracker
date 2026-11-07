@@ -12,7 +12,7 @@ from app.config import settings
 from app.ingestion.docket import is_docket_shell
 from app.ingestion.federal_register import FederalRegisterClient
 from app.ingestion.legiscan import ALL_STATES, LegiScanClient, compute_bill_hash
-from app.ingestion.openstates import OpenStatesClient
+from app.ingestion.openstates import OpenStatesClient, fix_dead_host
 from app.models import Bill, BillChange, FederalAction
 
 log = structlog.get_logger()
@@ -257,7 +257,7 @@ def _pick_source_url(sources: list[dict]) -> str | None:
             rank = 0
         if rank > best_rank:
             best, best_rank = url, rank
-    return best
+    return fix_dead_host(best) if best else best
 
 
 def _compute_openstates_change_hash(bill_data: dict) -> str:
@@ -546,9 +546,13 @@ class IngestionCoordinator:
                         distance <= 366 * 24 * 3600,
                     ).order_by(distance.asc()).limit(1)
                 )).scalar_one_or_none()
-            if existing is not None:
-                if existing.openstates_id == openstates_id:
-                    return "cross_referenced"
+            # Only a LegiScan-ONLY row (no openstates_id yet) is cross-referenced and left alone. A
+            # row that already carries an openstates_id is an OpenStates row — this one or a
+            # separate same-numbered bill — so fall through to the normal upsert. (Returning when
+            # the ids matched froze every row holding both ids — the historical seed, and every
+            # bill the LegiScan status sync stamps an id on — at its status when the id was
+            # attached; overwriting a different openstates_id would break its unique constraint.)
+            if existing is not None and existing.openstates_id is None:
                 existing.openstates_id = openstates_id
                 existing.last_fetched_at = datetime.now(timezone.utc)
                 log.debug("openstates_cross_referenced",
@@ -578,6 +582,12 @@ class IngestionCoordinator:
             source_url = _pick_source_url(sources)
             last_action_date = _parse_date(bill_data.get("latest_action_date"))
             status = _infer_openstates_status(bill_data)
+            # Never move a bill off "enacted". The OpenStates inference is a heuristic (action
+            # classifications, then free text), and a bill the LegiScan status sync marked enacted
+            # from a chaptering record can still infer lower here — which would both regress it and
+            # email subscribers a bogus "enacted -> in committee" change.
+            if stored_row is not None and stored_row.status in ("enacted", "signed")                     and status != stored_row.status:
+                status = stored_row.status
 
             # A pre-filing docket shell (MA HD-/SD-, KY BR- with no action yet) is the same text as
             # the bill we already track under its filed number — storing it double-counts the bill
@@ -824,6 +834,62 @@ class IngestionCoordinator:
             "openstates_queries_completed": queries_completed,
             "openstates_queries_swept_total": len(cursor.swept_at) if cursor else None,
         }
+
+    async def run_openstates_refetch(self, db: AsyncSession, max_calls: int) -> dict:
+        """Re-fetch tracked, still-open, in-scope bills by id, oldest-fetched first.
+
+        Discovery (run_openstates_cycle) only touches a bill when one of its search queries comes
+        back round, every ~2 months on the free tier, so a status could sit wrong for weeks. This
+        spends a small fixed slice of the daily quota re-reading the bills we already track. Bills
+        LegiScan couldn't match (no legiscan_bill_id) go first, since the LegiScan status sync
+        already covers the rest. Each bill goes through the normal upsert, so a moved status emits
+        the usual status_change event. last_fetched_at is stamped even when the upsert skips an
+        unchanged bill, so the queue keeps rotating instead of re-reading the same rows nightly.
+        Stops at the first 429.
+        """
+        from sqlalchemy import text as sql_text
+
+        if max_calls <= 0:
+            return {"refetch_calls": 0, "refetch_updated": 0, "refetch_throttled": False}
+        rows = (await db.execute(sql_text(
+            "select id, state, openstates_id from bills "
+            "where region = 'US' and ce_relevant = true and openstates_id like 'ocd-bill/%' "
+            "and coalesce(status, 'introduced') not in ('enacted','signed','vetoed','failed') "
+            "and last_action_date >= current_date - 800 "
+            "order by (legiscan_bill_id is null) desc, last_fetched_at asc nulls first "
+            "limit :n"
+        ), {"n": max_calls})).all()
+
+        delay = settings.openstates_request_delay_seconds
+        updated = errors = 0
+        async with OpenStatesClient() as client:
+            for r in rows:
+                if client.api_calls >= max_calls or client.throttled:
+                    break
+                try:
+                    data = await client.get_bill(
+                        r.openstates_id, include=["sources", "abstracts", "actions"]
+                    )
+                except Exception as e:  # noqa: BLE001
+                    errors += 1
+                    log.warning("openstates_refetch_failed", bill_id=r.id, error=str(e))
+                    if client.throttled:
+                        break
+                    continue
+                if await self._upsert_openstates_bill(db, data, r.state) == "upserted":
+                    updated += 1
+                await db.execute(
+                    Bill.__table__.update().where(Bill.id == r.id)
+                    .values(last_fetched_at=datetime.now(timezone.utc))
+                )
+                await db.commit()
+                await asyncio.sleep(delay)
+
+        summary = {"refetch_calls": client.api_calls, "refetch_candidates": len(rows),
+                   "refetch_updated": updated, "refetch_errors": errors,
+                   "refetch_throttled": client.throttled}
+        log.info("openstates_refetch_complete", **summary)
+        return summary
 
     async def run_federal_cycle(self, db: AsyncSession) -> dict:
         new_count = 0

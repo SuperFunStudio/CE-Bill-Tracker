@@ -114,3 +114,37 @@ class TestStatusChangeEmission:
         outcome, db = await _run(_stored(status="introduced", ce_relevant=None))
         assert outcome == "upserted"
         assert [o for o in db.added if isinstance(o, BillChange)] == []
+
+
+_COMMITTEE_BILL = {
+    **_ENACTED_BILL,
+    "latest_action_description": "Referred to committee",
+    "actions": [{"classification": ["referral-committee"]}],
+}
+
+
+class TestEnactedIsSticky:
+    async def test_enacted_never_regresses(self):
+        # LegiScan marked it enacted from the chaptering record; OpenStates' heuristic still says
+        # committee. The row must stay enacted and no bogus "enacted -> in_committee" event fires.
+        outcome, db = await _run(_stored(status="enacted"), bill_data=_COMMITTEE_BILL)
+        assert outcome == "upserted"
+        assert [o for o in db.added if isinstance(o, BillChange)] == []
+
+
+class TestCrossReferenceFallThrough:
+    async def test_row_holding_both_ids_still_refreshes(self):
+        # The dedup lookup finds a row with a legiscan_bill_id AND this openstates_id. It used to
+        # return "cross_referenced" and never update status; now it upserts and emits the change.
+        same_row = SimpleNamespace(openstates_id=_ENACTED_BILL["id"], legiscan_bill_id=1976451)
+        db = _FakeDB([same_row, _stored(id=7, status="introduced"), None])
+        outcome = await IngestionCoordinator()._upsert_openstates_bill(db, _ENACTED_BILL, "CA")
+        assert outcome == "upserted"
+        assert [c.new_value for c in db.added if isinstance(c, BillChange)] == [{"status": "enacted"}]
+
+    async def test_legiscan_only_row_is_cross_referenced(self):
+        legiscan_row = SimpleNamespace(openstates_id=None, legiscan_bill_id=5, last_fetched_at=None)
+        db = _FakeDB([legiscan_row])
+        outcome = await IngestionCoordinator()._upsert_openstates_bill(db, _ENACTED_BILL, "CA")
+        assert outcome == "cross_referenced"
+        assert legiscan_row.openstates_id == _ENACTED_BILL["id"]

@@ -265,6 +265,18 @@ async def run_ingestion_cycle(state_filter: str | None = None) -> None:
     else:
         log.info("legiscan_ingestion_skipped", reason="enable_legiscan_ingestion=false")
 
+    # Status refresh for bills we already track — LegiScan first (one master list per state covers
+    # every bill), so the OpenStates refetch below can focus on the bills LegiScan couldn't match.
+    if settings.enable_legiscan_status_sync and not state_filter:
+        from app.ingestion.legiscan import LegiScanClient
+        from app.ingestion.legiscan_status import run_legiscan_status_sync
+
+        try:
+            async with AsyncSessionLocal() as db, LegiScanClient() as ls_client:
+                await run_legiscan_status_sync(db, ls_client)
+        except Exception as e:  # noqa: BLE001 — never block OpenStates on a LegiScan outage
+            log.error("legiscan_status_sync_failed", error=str(e))
+
     if settings.enable_openstates_ingestion:
         from datetime import datetime, timedelta, timezone
         updated_since = datetime.now(timezone.utc) - timedelta(
@@ -272,6 +284,23 @@ async def run_ingestion_cycle(state_filter: str | None = None) -> None:
         )
         async with AsyncSessionLocal() as db:
             coordinator = IngestionCoordinator()
+            # Split the shared daily quota (settings.openstates_daily_call_budget): a slice to
+            # re-read tracked open bills, a reserve left untouched for the 06:30 text refresh, and
+            # the rest for discovery.
+            budget = settings.openstates_daily_call_budget
+            refetch_used = 0
+            if not state_filter:
+                try:
+                    refetch = await coordinator.run_openstates_refetch(
+                        db, settings.openstates_refetch_calls
+                    )
+                    refetch_used = refetch["refetch_calls"]
+                except Exception as e:  # noqa: BLE001
+                    log.error("openstates_refetch_crashed", error=str(e))
+                    await db.rollback()
+            discovery_calls = max(
+                0, budget - refetch_used - settings.openstates_text_refresh_calls
+            )
             # resume: the free tier allows ~250 calls/day against ~16k for a full sweep, so the
             # nightly run continues the persisted rotation instead of restarting at query 1.
             # updated_since only applies to state-filtered runs, which skip the rotation.
@@ -279,6 +308,7 @@ async def run_ingestion_cycle(state_filter: str | None = None) -> None:
                 db,
                 state_filter=state_filter,
                 updated_since=updated_since,
+                max_api_calls=discovery_calls,
                 resume=True,
             )
             log.info("openstates_cycle_complete", **os_summary)
@@ -1704,10 +1734,14 @@ async def run_bill_text_refresh_cycle() -> None:
     ):
         async with AsyncSessionLocal() as db:
             for b in rows:
+                # Shared daily quota: stop using the OpenStates API rung once this job has spent its
+                # share or been throttled. The other rungs (NY, LegiScan, source_url) carry on.
+                allow_os = (os_client.api_calls < settings.openstates_text_refresh_calls
+                            and not os_client.throttled)
                 try:
                     full_text, src = await fetch_clean_text(
                         ls_client, os_client, b, settings.openstates_request_delay_seconds,
-                        ny_client=ny_client,
+                        ny_client=ny_client, allow_openstates_api=allow_os,
                     )
                 except Exception as e:  # noqa: BLE001
                     log.warning("bill_text_refresh_fetch_failed", bill_id=b.id, error=str(e))
@@ -1741,7 +1775,9 @@ async def run_bill_text_refresh_cycle() -> None:
                     await db.rollback()
                     log.warning("bill_text_refresh_write_failed", bill_id=b.id, error=str(e))
 
-    log.info("bill_text_refresh_complete", wrote=wrote, no_text=no_text, **by_source)
+    log.info("bill_text_refresh_complete", wrote=wrote, no_text=no_text,
+             openstates_calls=os_client.api_calls, openstates_throttled=os_client.throttled,
+             **by_source)
 
 
 async def run_eurlex_cycle() -> None:

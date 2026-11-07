@@ -234,6 +234,7 @@ async def fetch_clean_text(
     b,
     os_delay: float = 0.0,
     ny_client: NYSenateClient | None = None,
+    allow_openstates_api: bool = True,
 ) -> tuple[str, str]:
     """Fetch a bill's full text and return ``(clean_text, source)``.
 
@@ -268,7 +269,7 @@ async def fetch_clean_text(
                 return txt, SOURCE_LEGISCAN
     except Exception:  # noqa: BLE001
         pass
-    if b.openstates_id and not str(b.openstates_id).startswith("hist:"):
+    if allow_openstates_api and b.openstates_id and not str(b.openstates_id).startswith("hist:"):
         if os_delay:
             await asyncio.sleep(os_delay)  # respect OpenStates free-tier rate limit
         txt = clean_text(await os_client.get_bill_text(b.openstates_id))

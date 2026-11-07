@@ -33,6 +33,22 @@ _DOC_HEADERS = {
 }
 
 
+# Legislature hosts that have moved. OpenStates still hands out the old ones, which no longer
+# resolve: beta.ilga.gov (Illinois' preview site, retired) failed DNS on every fetch — 248 errors in
+# the week to 2026-11-07 — and every Illinois "View source" link built from it was dead.
+_MOVED_HOSTS = {"beta.ilga.gov": "www.ilga.gov"}
+
+
+def fix_dead_host(url: str) -> str:
+    """Rewrite a URL on a retired legislature host to its current host (path and query kept)."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return url
+    new_host = _MOVED_HOSTS.get(parsed.netloc.lower())
+    return parsed._replace(netloc=new_host).geturl() if new_host else url
+
+
 def _canonical_doc_url(url: str) -> str:
     """Rewrite known JavaScript-shell document URLs to a server-rendered text endpoint.
 
@@ -40,6 +56,7 @@ def _canonical_doc_url(url: str) -> str:
     bill text, so extraction got nothing for every CA bill. billTextClient.xhtml serves
     the full text inline in the page for the same bill_id, so rewrite to that.
     """
+    url = fix_dead_host(url)
     try:
         parsed = urllib.parse.urlparse(url)
     except ValueError:
@@ -133,6 +150,11 @@ class OpenStatesClient:
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or settings.open_states_api_key
         self._client: httpx.AsyncClient | None = None
+        # Every request against the daily quota (retries included) and whether we've been
+        # throttled, so callers sharing the ~250/day free-tier budget can stop early instead of
+        # spending an hour collecting 429s (the 06:30 text refresh did exactly that daily).
+        self.api_calls = 0
+        self.throttled = False
 
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
@@ -145,6 +167,11 @@ class OpenStatesClient:
     async def __aexit__(self, *args):
         if self._client:
             await self._client.aclose()
+
+    def _note(self, resp: httpx.Response) -> None:
+        self.api_calls += 1
+        if resp.status_code == 429:
+            self.throttled = True
 
     @retry_with_backoff(max_attempts=3, base_delay=2.0)
     async def search_bills(
@@ -174,6 +201,7 @@ class OpenStatesClient:
         if updated_since:
             params["updated_since"] = updated_since.date().isoformat()
         resp = await self._client.get("/bills", params=params)
+        self._note(resp)
         resp.raise_for_status()
         return resp.json()
 
@@ -183,6 +211,7 @@ class OpenStatesClient:
             raise RuntimeError("Use as async context manager")
         params = {"include": include} if include else None
         resp = await self._client.get(f"/bills/{bill_id}", params=params)
+        self._note(resp)
         resp.raise_for_status()
         return resp.json()
 

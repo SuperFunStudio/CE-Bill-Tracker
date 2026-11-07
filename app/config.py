@@ -232,6 +232,15 @@ class Settings(BaseSettings):
     # How far back the nightly rotation searches a query it has never swept before (see
     # app/ingestion/openstates_cursor.py). After its first sweep a query searches from its last one.
     openstates_resume_fallback_days: int = 90
+    # The free-tier key allows ~250 calls/day, shared by three jobs. Without a split the 02:00
+    # discovery run spent all of it and the 06:30 text refresh 429'd on every call. Discovery gets
+    # what's left after the two reserves (250 - 30 - 40 = 180). Raise the budget if OpenStates
+    # grants a higher tier.
+    openstates_daily_call_budget: int = 250
+    # Nightly per-bill re-read of tracked open bills (IngestionCoordinator.run_openstates_refetch).
+    openstates_refetch_calls: int = 30
+    # Ceiling on OpenStates calls the 06:30 text refresh may make (it also stops on the first 429).
+    openstates_text_refresh_calls: int = 40
 
     # EUR-Lex / CELLAR — EU-central circular-economy law (region="EU"). When on, run_eurlex_cycle
     # weekly re-runs the SPARQL discovery and ingests newly-published in-force acts (only_new mode),
@@ -284,6 +293,11 @@ class Settings(BaseSettings):
     # paid API key is added later. Disabled until then.
     enable_legiscan_ingestion: bool = False
     max_legiscan_calls_per_run: int = 5000
+    # Status-only sync from LegiScan master lists (app/ingestion/legiscan_status.py): ~150 calls/day
+    # re-check every open, in-scope US state bill. Separate from enable_legiscan_ingestion (full
+    # discovery + classification, still off). Verified 2026-11-07 the free key returns each state's
+    # own sessions; the "WV data for every state" note above was the master-list index bug.
+    enable_legiscan_status_sync: bool = False
 
     # Feature flags — keep False to avoid LLM costs during development
     enable_llm_classification: bool = False
